@@ -1,0 +1,32 @@
+# Research repositories (reference only)
+research/
+
+# Development artifacts  
+.AGENT/
+.BACKLOG/
+
+# Node modules if any
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp

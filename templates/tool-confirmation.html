@@ -1,0 +1,43 @@
+<form class="simulacrum-tool-confirmation-dialog">
+    <p class="dialog-message"></p>
+
+    <div class="form-group">
+        <label>Tool Name:</label>
+        <span class="tool-name"></span>
+    </div>
+
+    <div class="form-group">
+        <label>Tool Description:</label>
+        <span class="tool-description"></span>
+    </div>
+
+    <div class="form-group">
+        <label>Parameters:</label>
+        <div class="parameters-json-container">
+            <pre class="parameters-json"></pre>
+            <button type="button" class="expand-json-button"><i class="fas fa-expand-alt"></i> Expand</button>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Expected Changes Preview:</label>
+        <div class="changes-preview-container">
+            <pre class="changes-preview">(Preview not yet available)</pre>
+        </div>
+    </div>
+
+    <footer class="sheet-footer flexrow">
+        <button type="button" data-action="yes-once">
+            <i class="fas fa-check"></i> Yes, once
+        </button>
+        <button type="button" data-action="yes-always">
+            <i class="fas fa-check-double"></i> Yes, always
+        </button>
+        <button type="button" data-action="modify">
+            <i class="fas fa-edit"></i> Modify
+        </button>
+        <button type="button" data-action="cancel">
+            <i class="fas fa-times"></i> Cancel
+        </button>
+    </footer>
+</form>
