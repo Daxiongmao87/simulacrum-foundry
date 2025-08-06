@@ -1,25 +1,674 @@
-import { ChatModal } from "../fimlib/components/chat-modal.js";
+import { ChatModal, MarkdownParser } from "../fimlib/main.js";
 import { SimulacrumAIService } from "./ai-service.js";
 
 /**
- * Extended ChatModal class for Simulacrum AI integration
+ * SimulacrumChatModal - Uses FIMLib's ChatModal through composition for AI chat interface
+ * Based on the proven divination-foundry pattern
  */
-export class SimulacrumChatModal extends ChatModal {
+export class SimulacrumChatModal {
+    /**
+     * The currently active chat instances
+     * @type {Map<string, SimulacrumChatModal>}
+     */
+    static instances = new Map();
+
     constructor(options = {}) {
-        super(options);
-        this.aiService = null;
-        this.isProcessing = false;
+        this.options = foundry.utils.mergeObject({
+            title: "Simulacrum - Campaign Assistant",
+            width: 600,
+            height: 500,
+            history: [],
+            id: null
+        }, options);
+
+        this.history = this.options.history;
+        this.id = this.options.id || foundry.utils.randomID();
+        this.processing = false;
         this.abortController = null;
-        this.messages = [];
-        this.contextDocuments = []; // New: Array to store documents added to context
+
+        // Context documents array
+        this.contextDocuments = [];
+
+        // Initialize the chat window using FIMLib's ChatModal (composition, not inheritance)
+        this.chatWindow = new ChatModal({
+            title: this.options.title,
+            width: this.options.width,
+            height: this.options.height,
+            showAvatars: true,
+            showCornerText: true
+        });
+
+        // Set up the context items container
+        this._setupContextContainerUI();
+
+        // Initialize AI service
+        this.aiService = null;
+
+        // Display welcome message
+        this._displayWelcomeMessage();
+
+        // Register this instance
+        SimulacrumChatModal.instances.set(this.id, this);
+
+        // Override the chat window's _onSendMessage method to intercept messages
+        const originalSendMethod = this.chatWindow._onSendMessage;
+        this.chatWindow._onSendMessage = (html) => {
+            // If currently processing, this should cancel instead of send
+            if (this.processing) {
+                this._cancelCurrentOperation();
+                this._addCancelMessage();
+                return;
+            }
+            
+            const input = html.find('textarea.chat-input');
+            const message = input.val().trim();
+            
+            if (message) {
+                input.val('');
+                this._handleUserMessage(message);
+            }
+        };
     }
 
     /**
-     * Adds a FoundryVTT document to the Simulacrum context.
-     * @param {Document} document The FoundryVTT document to add.
+     * Get a formatted timestamp string for the current time
+     * @returns {string} - Formatted timestamp
+     * @private
+     */
+    _getTimestamp() {
+        const now = new Date();
+        return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    /**
+     * Open a new chat window or bring an existing one to focus
+     * @param {Object} options - Options to pass to the SimulacrumChatModal constructor
+     * @returns {SimulacrumChatModal} - The chat instance
+     */
+    static openChat(options = {}) {
+        // Check permission first - require GM level access
+        if (game.user.role < CONST.USER_ROLES.GAMEMASTER) {
+            ui.notifications.error("You don't have permission to use Simulacrum.");
+            return null;
+        }
+
+        const id = options.id || 'default';
+
+        // If we have an existing chat instance with this id
+        if (SimulacrumChatModal.instances.has(id)) {
+            const chat = SimulacrumChatModal.instances.get(id);
+            
+            // If the window is open, just focus it
+            if (chat.chatWindow?.element?.is(":visible")) {
+                chat.chatWindow.bringToTop();
+                return chat;
+            } else {
+                // Window exists but is closed - rerender to preserve history
+                chat.render(true);
+                return chat;
+            }
+        }
+
+        // Create a new chat with either the provided id or 'default'
+        const chat = new SimulacrumChatModal({...options, id});
+        chat.render(true);
+        return chat;
+    }
+
+    /**
+     * Render the chat window
+     * @param {boolean} [force=false] - Whether to force re-rendering
+     */
+    render(force = false) {
+        this.chatWindow.render(true, {
+            focus: true,
+            height: this.options.height,
+            width: this.options.width
+        });
+        
+        // Re-setup context container after re-render
+        this._setupContextContainerUI();
+        
+        // Re-setup copy buttons after re-render
+        this._setupCopyButtons();
+    }
+
+    /**
+     * Close the chat window and clean up
+     */
+    close() {
+        this._cancelCurrentOperation();
+
+        // Close the window but don't delete from instances (allows reopening)
+        if (this.chatWindow) {
+            this.chatWindow.close();
+        }
+    }
+
+    /**
+     * Cancel any current AI operation
+     * @private
+     */
+    _cancelCurrentOperation() {
+        if (this.abortController) {
+            console.log('Simulacrum | Cancelling current AI operation');
+            this.abortController.abort();
+            this.abortController = null;
+        }
+        
+        this.processing = false;
+    }
+
+    /**
+     * Add a cancellation message to the chat
+     * @private
+     */
+    _addCancelMessage() {
+        this.chatWindow.addMessage({
+            content: '<p class="simulacrum-system"><i>Request cancelled by user</i></p>',
+            sender: 'System',
+            cornerText: this._getTimestamp(),
+            img: "icons/svg/clockwork.svg"
+        });
+    }
+
+    /**
+     * Set up the context items container between conversation and input
+     * @private
+     */
+    _setupContextContainerUI() {
+        setTimeout(() => {
+            let contextContainer = $(this.chatWindow.element).find('.auxiliary-content-container');
+            if (!contextContainer.length) {
+                // Find the main chat content area
+                const chatContent = $(this.chatWindow.element).find('.chat-content');
+                // Find the input container
+                const inputContainer = chatContent.find('.chat-input-container');
+
+                // Create the auxiliary container
+                contextContainer = $('<div class="auxiliary-content-container"><div class="simulacrum-context-items"></div></div>');
+                
+                // Insert it before the input container
+                inputContainer.before(contextContainer);
+            }
+            this._updateContextItemsUI();
+        }, 100);
+    }
+
+    /**
+     * Update the context items in the UI
+     * @private
+     */
+    _updateContextItemsUI() {
+        const contextItemsContainer = $(this.chatWindow.element).find('.auxiliary-content-container .simulacrum-context-items');
+        if (!contextItemsContainer.length) return; 
+        
+        // Clear existing items
+        contextItemsContainer.empty();
+        
+        // If there are no items, hide the container
+        const auxiliaryContainer = $(this.chatWindow.element).find('.auxiliary-content-container');
+        if (this.contextDocuments.length === 0) {
+            auxiliaryContainer.hide();
+            return;
+        }
+        
+        // Show the container
+        auxiliaryContainer.show();
+        
+        // Add each context item
+        this.contextDocuments.forEach(doc => {
+            let icon, label;
+            // Determine icon and label based on document type
+            if (doc.documentName === 'JournalEntry') {
+                icon = 'fa-book';
+                label = `Journal: ${doc.name}`;
+            } else if (doc.documentName === 'Scene') {
+                icon = 'fa-map';
+                label = `Scene: ${doc.name}`;
+            } else if (doc.documentName === 'Actor') {
+                icon = 'fa-user';
+                label = `Actor: ${doc.name}`;
+            } else if (doc.documentName === 'Item') {
+                icon = 'fa-suitcase';
+                label = `Item: ${doc.name}`;
+            } else {
+                icon = 'fa-file-alt';
+                label = doc.name || 'Context';
+            }
+            
+            // Create the context item element
+            const contextItem = $(`
+                <div class="simulacrum-context-item" data-uuid="${doc.uuid}">
+                  <i class="fas ${icon} simulacrum-context-item-icon"></i>
+                  <span class="simulacrum-context-item-label">${label}</span>
+                  <i class="fas fa-times simulacrum-context-item-remove"></i>
+                </div>
+            `);
+            
+            // Add click handler for the remove button
+            contextItem.find('.simulacrum-context-item-remove').click(ev => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                this.removeDocumentContext(doc.uuid);
+            });
+            
+            // Add the item to the container
+            contextItemsContainer.append(contextItem);
+        });
+    }
+
+    /**
+     * Remove a context document from the chat
+     * @param {string} uuid - The UUID of the document to remove
+     */
+    removeDocumentContext(uuid) {
+        const initialLength = this.contextDocuments.length;
+        this.contextDocuments = this.contextDocuments.filter(doc => doc.uuid !== uuid);
+        
+        if (this.contextDocuments.length < initialLength) {
+            this._updateContextItemsUI();
+            ui.notifications.info("Removed context document");
+        }
+    }
+
+    /**
+     * Display a welcome message in the chat
+     * @private
+     */
+    _displayWelcomeMessage() {
+        // Create greeting message
+        const greetingMessage = `Greetings! I am Simulacrum, your AI-powered campaign assistant. I can help you manage your FoundryVTT documents, answer questions about your campaign, and assist with game preparation.`;
+        
+        // Add to visual chat only if the history is empty
+        if (this.history.length === 0) {
+            this.chatWindow.addMessage({
+                content: `<p>${greetingMessage}</p>`,
+                sender: 'Simulacrum',
+                cornerText: this._getTimestamp(),
+                img: "modules/simulacrum/assets/simulacrum-avatar.png"
+            });
+            
+            // Add to conversation history for API context
+            this.history.push({
+                role: 'assistant',
+                content: greetingMessage
+            });
+        }
+        
+        // Set up copy button for the welcome message
+        this._setupCopyButtons();
+    }
+
+    /**
+     * Set up copy buttons for assistant messages
+     * This adds a copy button to each assistant message
+     * @private
+     */
+    _setupCopyButtons() {
+        // Wait a short time for DOM to update
+        setTimeout(() => {
+            // Find all assistant messages in this chat window
+            const assistantMessages = $(this.chatWindow.element)
+                .find('.chat-message')
+                .filter(function() {
+                    // Find messages where sender is Simulacrum
+                    return $(this).find('.message-sender .title').text() === 'Simulacrum';
+                });
+            
+            // Process each message to add copy button if not already present
+            assistantMessages.each((i, message) => {
+                const $message = $(message);
+                const messageId = $message.data('message-id');
+                
+                // Skip if this message already has a copy button
+                if ($message.find('.simulacrum-copy-btn').length) return;
+                
+                // Create a copy button
+                const copyButton = $(
+                    `<button class="simulacrum-copy-btn" title="Copy response to clipboard" data-message-id="${messageId}">
+                      <i class="fas fa-copy"></i>
+                    </button>`
+                );
+                
+                // Create tooltip element
+                const tooltip = $(
+                    `<div class="simulacrum-copy-tooltip">Copied!</div>`
+                );
+                
+                // Add the button to the message header's metadata section
+                const metadataSection = $message.find('.message-metadata');
+                metadataSection.append(copyButton);
+                metadataSection.css('position', 'relative').append(tooltip);
+                
+                // Add click handler to copy message content
+                copyButton.on('click', async (event) => {
+                    // Get the message content (excluding any potential reasoning section)
+                    let contentEl = $message.find('.message-content');
+                    
+                    // If there's a simulacrum-response section, prefer that
+                    const responseSection = contentEl.find('.simulacrum-response');
+                    if (responseSection.length) {
+                        contentEl = responseSection;
+                    }
+                    
+                    try {
+                        await this._copyMessageContent(contentEl[0], tooltip, copyButton);
+                    } catch (err) {
+                        console.error('Simulacrum | Failed to copy text: ', err);
+                        ui.notifications.error("Failed to copy message to clipboard");
+                    }
+                    
+                    // Prevent event bubbling
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+            });
+        }, 150);
+    }
+    
+    /**
+     * Copy message content to clipboard with proper formatting
+     * @param {HTMLElement} contentElement - The element containing the message content
+     * @param {jQuery} tooltip - The tooltip element to show feedback
+     * @param {jQuery} button - The button element for visual feedback
+     * @private
+     */
+    async _copyMessageContent(contentElement, tooltip, button) {
+        if (!contentElement) return;
+        
+        try {
+            // Get both HTML and plain text versions
+            const htmlContent = contentElement.innerHTML;
+            
+            // Create a temporary element to get plain text with preserved formatting
+            const temp = document.createElement('div');
+            temp.innerHTML = htmlContent;
+            
+            // Process the element to convert some HTML to plain text equivalent
+            this._processElementForTextCopy(temp);
+            
+            // Get the processed plain text
+            const plainText = temp.innerText || temp.textContent || '';
+            
+            // Trim whitespace
+            const trimmedText = plainText.trim();
+
+            // Try to use the Clipboard API to copy both formats if available
+            if (navigator.clipboard && navigator.clipboard.write) {
+                const clipboardItem = new ClipboardItem({
+                    'text/html': new Blob([htmlContent], { type: 'text/html' }),
+                    'text/plain': new Blob([trimmedText], { type: 'text/plain' })
+                });
+                
+                await navigator.clipboard.write([clipboardItem]);
+            } else {
+                await navigator.clipboard.writeText(trimmedText);
+            }
+            
+            // Show success feedback
+            button.addClass('copied');
+            tooltip.addClass('visible');
+            
+            // Reset after a delay
+            setTimeout(() => {
+                button.removeClass('copied');
+                tooltip.removeClass('visible');
+            }, 2000);
+            
+        } catch (err) {
+            console.error('Simulacrum | Copy operation failed:', err);
+            throw err;
+        }
+    }
+
+    /**
+     * Process an element to convert HTML to plain text equivalents
+     * @param {HTMLElement} element - The element to process
+     * @private 
+     */
+    _processElementForTextCopy(element) {
+        if (!element) return;
+        
+        // Process heading tags to add # symbols
+        const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headings.forEach(heading => {
+            const level = parseInt(heading.tagName.substring(1));
+            const prefix = '#'.repeat(level) + ' ';
+            heading.prepend(prefix);
+        });
+        
+        // Process code blocks to preserve formatting
+        const codeBlocks = element.querySelectorAll('pre');
+        codeBlocks.forEach(block => {
+            block.style.whiteSpace = 'pre';
+        });
+        
+        // Process list items to add bullets or numbers
+        const lists = element.querySelectorAll('ul, ol');
+        lists.forEach(list => {
+            const isOrdered = list.tagName.toLowerCase() === 'ol';
+            let counter = 1;
+            
+            Array.from(list.children).forEach(item => {
+                if (isOrdered) {
+                    item.prepend(`${counter++}. `);
+                } else {
+                    item.prepend('• ');
+                }
+            });
+        });
+        
+        // Process blockquotes to add > prefix
+        const blockquotes = element.querySelectorAll('blockquote');
+        blockquotes.forEach(quote => {
+            quote.prepend('> ');
+        });
+        
+        // Make sure links show their URLs
+        const links = element.querySelectorAll('a');
+        links.forEach(link => {
+            if (link.href && link.textContent && !link.textContent.includes(link.href)) {
+                link.textContent += ` (${link.href})`;
+            }
+        });
+        
+        // Ensure proper line breaks
+        const paragraphs = element.querySelectorAll('p');
+        paragraphs.forEach(p => {
+            if (p.nextElementSibling) {
+                p.append(document.createTextNode('\n\n'));
+            }
+        });
+    }
+
+    /**
+     * Handle a user message and generate a response
+     * @param {string} message - The user's message
+     * @private
+     */
+    async _handleUserMessage(message) {
+        try {
+            if (this.processing) return;
+            this.processing = true;
+            
+            // Get user info
+            const userName = game.user.name;
+            const userAvatar = game.user.avatar || 'icons/svg/mystery-man.svg';
+            
+            // Add user message to visual chat
+            this.chatWindow.addMessage({
+                content: `<p>${message}</p>`,
+                sender: userName,
+                cornerText: this._getTimestamp(),
+                isCurrentUser: true,
+                img: userAvatar
+            });
+            
+            // Add to conversation history
+            this.history.push({
+                role: 'user',
+                content: message
+            });
+            
+            // Initialize AI service if needed
+            if (!this.aiService) {
+                this.aiService = new SimulacrumAIService(game.simulacrum.toolRegistry);
+            }
+
+            // Create abort controller for cancellation
+            this.abortController = new AbortController();
+            
+            // Prepare for thinking indicator
+            let thinkingMessage = null;
+            let thinkingTimeout = null;
+            
+            // Generate a random delay between 500-1000ms for thinking indicator
+            const thinkingDelay = Math.floor(Math.random() * 501) + 500;
+            
+            // Set up timeout for showing thinking indicator
+            thinkingTimeout = setTimeout(() => {
+                // Show thinking indicator after delay
+                thinkingMessage = this.chatWindow.addMessage({
+                    content: `<p><i>Processing your request...</i></p>`,
+                    sender: 'Simulacrum',
+                    cornerText: this._getTimestamp(),
+                    img: "modules/simulacrum/assets/simulacrum-avatar.png"
+                });
+            }, thinkingDelay);
+
+            // Add placeholder for assistant response
+            let assistantMessage = null;
+
+            // Send to AI service with streaming
+            await this.aiService.sendMessage(
+                message,
+                (chunk, type) => {
+                    // Clear timeout if we get first chunk before thinking indicator
+                    clearTimeout(thinkingTimeout);
+                    
+                    // Remove thinking indicator if it was shown
+                    if (thinkingMessage) {
+                        thinkingMessage.remove();
+                        thinkingMessage = null;
+                    }
+
+                    // Pass assistantMessage by reference via object wrapper
+                    const messageRef = { current: assistantMessage };
+                    this._onStreamChunk(chunk, type, messageRef);
+                    assistantMessage = messageRef.current;
+                },
+                (finalMessage, functionCalls) => {
+                    this._onStreamComplete(finalMessage, functionCalls);
+                },
+                this.abortController.signal
+            );
+
+        } catch (error) {
+            console.error('Error sending message:', error);
+            
+            // Add error message to chat
+            this.chatWindow.addMessage({
+                content: `<p class="simulacrum-error">Error: ${error.message}</p>`,
+                sender: 'Simulacrum',
+                cornerText: this._getTimestamp(),
+                img: "modules/simulacrum/assets/simulacrum-avatar.png"
+            });
+        } finally {
+            this.processing = false;
+            this.abortController = null;
+        }
+    }
+
+    /**
+     * Handle streaming chunks from AI service
+     * @param {string} chunk - The content chunk
+     * @param {string} type - The type of chunk (text, tool_result, error)
+     * @param {Object} messageRef - Object wrapper with current property for assistant message
+     * @private
+     */
+    _onStreamChunk(chunk, type, messageRef) {
+        if (type === 'text') {
+            // If this is the first text chunk, create the assistant message
+            if (!messageRef.current) {
+                messageRef.current = this.chatWindow.addMessage({
+                    content: `<div class="simulacrum-response">${MarkdownParser.parse(chunk)}</div>`,
+                    sender: 'Simulacrum',
+                    cornerText: this._getTimestamp(),
+                    img: "modules/simulacrum/assets/simulacrum-avatar.png"
+                });
+            } else {
+                // Append to existing message
+                const responseDiv = $(messageRef.current).find('.simulacrum-response');
+                responseDiv.append(MarkdownParser.parse(chunk));
+            }
+        } else if (type === 'tool_result') {
+            // Display tool execution result
+            this._displayToolResult(chunk, messageRef.current);
+        } else if (type === 'error') {
+            // Display error message
+            this.chatWindow.addMessage({
+                content: `<p class="simulacrum-error">Error: ${chunk}</p>`,
+                sender: 'Simulacrum',
+                cornerText: this._getTimestamp(),
+                img: "modules/simulacrum/assets/simulacrum-avatar.png"
+            });
+        }
+    }
+
+    /**
+     * Handle completion of streaming response
+     * @param {string} finalMessage - The complete response message
+     * @param {Array} functionCalls - Any function calls that were executed
+     * @private
+     */
+    _onStreamComplete(finalMessage, functionCalls) {
+        // Add final message to conversation history
+        if (finalMessage) {
+            this.history.push({
+                role: 'assistant',
+                content: finalMessage
+            });
+        }
+
+        console.log('Stream complete:', { finalMessage, functionCalls });
+    }
+
+    /**
+     * Display tool execution result
+     * @param {Object} result - The tool execution result
+     * @param {Object} messageElement - The message element to append to
+     * @private
+     */
+    _displayToolResult(result, messageElement) {
+        let resultHtml = '<div class="simulacrum-tool-result">';
+        
+        if (result.success) {
+            resultHtml += `<div class="tool-success">✓ ${result.toolName || 'Tool'} executed successfully</div>`;
+            if (result.data) {
+                resultHtml += `<pre>${JSON.stringify(result.data, null, 2)}</pre>`;
+            }
+        } else {
+            resultHtml += `<div class="tool-error">✗ ${result.toolName || 'Tool'} execution failed: ${result.error}</div>`;
+        }
+        
+        resultHtml += '</div>';
+        
+        // Add tool result as a separate message
+        this.chatWindow.addMessage({
+            content: resultHtml,
+            sender: 'Simulacrum',
+            cornerText: this._getTimestamp(),
+            img: "modules/simulacrum/assets/simulacrum-avatar.png"
+        });
+    }
+
+    /**
+     * Add a FoundryVTT document to the Simulacrum context
+     * @param {Document} document - The FoundryVTT document to add
      */
     addDocumentContext(document) {
-        if (!document || !(document instanceof Document)) {
+        if (!document || !(document instanceof foundry.abstract.Document)) {
             console.error("Simulacrum | Invalid document provided for context.", document);
             ui.notifications.error("Simulacrum | Failed to add document to context: Invalid document.");
             return;
@@ -33,226 +682,20 @@ export class SimulacrumChatModal extends ChatModal {
 
         this.contextDocuments.push(document);
         console.log(`Simulacrum | Added document to context: ${document.name} (${document.uuid})`, this.contextDocuments);
-        // Future: Potentially send this to the AI service for context management
+        ui.notifications.info(`Added ${document.name} to context`);
     }
 
-    static get defaultOptions() {
-        const options = super.defaultOptions;
-        options.template = "modules/simulacrum/templates/chat-modal.html";
-        options.title = "Simulacrum - Campaign Assistant";
-        options.width = 600;
-        options.height = 500;
-        options.resizable = true;
-        options.classes = ['simulacrum-chat-modal'];
-        return options;
-    }
-
-    getData() {
-        return {
-            ...super.getData(),
-            messages: this.messages,
-            isProcessing: this.isProcessing,
-            placeholder: this.isProcessing ? "Processing..." : "Type your message..."
-        };
-    }
-
-    activateListeners(html) {
-        super.activateListeners(html);
-        
-        // Override send button functionality
-        html.find('.chat-send').off('click').on('click', this._onSendOrCancel.bind(this));
-        
-        // Handle Enter key in textarea
-        html.find('.chat-input textarea').on('keydown', (event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                this._onSendOrCancel();
-            }
-        });
-
-        // Auto-resize textarea
-        html.find('.chat-input textarea').on('input', function() {
-            this.style.height = 'auto';
-            this.style.height = this.scrollHeight + 'px';
-        });
-    }
-
-    async _onSendOrCancel() {
-        if (this.isProcessing) {
-            // Cancel current operation
-            this._cancelRequest();
-        } else {
-            // Send new message
-            await this._sendMessage();
-        }
-    }
-
-    async _sendMessage() {
-        const textarea = this.element.find('.chat-input textarea');
-        const message = textarea.val().trim();
-        
-        if (!message || this.isProcessing) return;
-
-        // Add user message to display
-        this._addMessage('user', message);
-        textarea.val('');
-
-        // Update UI state
-        this.isProcessing = true;
-        this._updateSendButton();
-        
-        // Create abort controller
-        this.abortController = new AbortController();
-
-        try {
-            // Initialize AI service if needed
-            if (!this.aiService) {
-                this.aiService = new SimulacrumAIService(game.simulacrum.toolRegistry);
-            }
-
-            // Add assistant message placeholder
-            const assistantMessageId = this._addMessage('assistant', '');
-
-            // Send to AI service
-            await this.aiService.sendMessage(
-                message,
-                (chunk, type) => this._onStreamChunk(chunk, type, assistantMessageId),
-                (message, functionCalls) => this._onStreamComplete(message, functionCalls),
-                this.abortController.signal
-            );
-
-        } catch (error) {
-            console.error('Error sending message:', error);
-            this._addMessage('assistant', `Error: ${error.message}`);
-        } finally {
-            this.isProcessing = false;
-            this._updateSendButton();
-            this.abortController = null;
-        }
-    }
-
-    _cancelRequest() {
-        if (this.abortController) {
-            this.abortController.abort();
-            this.abortController = null;
-        }
-        
-        this.isProcessing = false;
-        this._updateSendButton();
-        
-        // Add cancellation message
-        this._addMessage('system', 'Request cancelled by user.');
-    }
-
-    _updateSendButton() {
-        const sendButton = this.element.find('.chat-send');
-        if (this.isProcessing) {
-            sendButton.html('<i class="fas fa-stop"></i>').attr('title', 'Cancel');
-        } else {
-            sendButton.html('<i class="fas fa-paper-plane"></i>').attr('title', 'Send');
-        }
-    }
-
-    _onStreamChunk(chunk, type, messageId) {
-        const messageElement = this.element.find(`[data-message-id="${messageId}"]`);
-        
-        if (type === 'text') {
-            // Append text chunk to message content
-            const contentElement = messageElement.find('.message-content');
-            if (contentElement.length === 0) {
-                messageElement.append('<div class="message-content"></div>');
-            }
-            contentElement.append(chunk);
-            this._scrollToBottom();
-        } else if (type === 'tool_result') {
-            // Display tool execution result
-            this._displayToolResult(chunk, messageElement);
-        } else if (type === 'error') {
-            // Display error message
-            messageElement.find('.message-content').append(`<div class="error">${chunk}</div>`);
-        }
-    }
-
-    _onStreamComplete(message, functionCalls) {
-        console.log('Stream complete:', { message, functionCalls });
-        // Handle any final processing
-    }
-
-    _addMessage(role, content) {
-        const messageId = foundry.utils.randomID();
-        const timestamp = new Date().toLocaleTimeString();
-        
-        const message = {
-            _id: messageId,
-            role: role,
-            content: content,
-            timestamp: timestamp,
-            sender: role === 'user' ? game.user.name : 'Simulacrum',
-            cssClass: `message-${role}`
-        };
-
-        this.messages.push(message);
-
-        // Add to DOM if modal is rendered
-        if (this.rendered) {
-            const messageHtml = this._renderMessage(message);
-            this.element.find('.message-list').append(messageHtml);
-            this._scrollToBottom();
-        }
-
-        return messageId;
-    }
-
-    _renderMessage(message) {
-        return `
-            <div class="chat-message message ${message.cssClass}" data-message-id="${message._id}">
-                <header class="message-header">
-                    <h4 class="message-sender">
-                        <span class="name-stacked">
-                            <span class="title">${message.sender}</span>
-                        </span>
-                    </h4>
-                    <span class="message-metadata">
-                        <span class="message-timestamp">${message.timestamp}</span>
-                    </span>
-                </header>
-                <div class="message-content">${message.content}</div>
-            </div>
-        `;
-    }
-
-    _displayToolResult(result, messageElement) {
-        let resultHtml = '<div class="tool-result">';
-        if (result.success) {
-            resultHtml += `<div class="tool-success">✓ Tool executed successfully</div>`;
-            if (result.data) {
-                resultHtml += `<pre>${JSON.stringify(result.data, null, 2)}</pre>`;
-            }
-        } else {
-            resultHtml += `<div class="tool-error">✗ Tool execution failed: ${result.error}</div>`;
-        }
-        resultHtml += '</div>';
-        
-        messageElement.find('.message-content').append(resultHtml);
-        this._scrollToBottom();
-    }
-
-    _scrollToBottom() {
-        const messageContainer = this.element.find('.message-list');
-        if (messageContainer.length) {
-            messageContainer.scrollTop(messageContainer[0].scrollHeight);
-        }
-    }
-
+    /**
+     * Clear chat history
+     */
     clearHistory() {
-        this.messages = [];
+        this.history = [];
+        this.contextDocuments = [];
+        
         if (this.aiService) {
             this.aiService.clearHistory();
         }
         
-        // Clear DOM
-        if (this.rendered) {
-            this.element.find('.message-list').empty();
-        }
+        ui.notifications.info("Chat history cleared");
     }
 }
