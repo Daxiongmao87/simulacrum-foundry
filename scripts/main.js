@@ -22,7 +22,7 @@ import { ContextManager } from "./context-manager.js";
 import { setupGlobalErrorHandling } from "./error-handling.js";
 import "./tool-test.js"; // Load testing functions
 
-let simulacrumChatModal; // Declare globally to be accessible in ready hook
+
 let toolRegistry; // Global tool registry
 let aiService; // Global AI service
 let contextManager; // Global context manager
@@ -77,8 +77,7 @@ Hooks.once('ready', () => {
 
     // Only instantiate chat UI if user has permission
     if (SimulacrumSettings.hasSimulacrumPermission(game.user)) {
-        simulacrumChatModal = new SimulacrumChatModal();
-        ui.simulacrum = simulacrumChatModal;
+        ui.simulacrum = new SimulacrumChatModal();
     } else {
         ui.notifications.warn("Simulacrum | You do not have permission to access Simulacrum.");
     }
@@ -92,8 +91,7 @@ Hooks.once('ready', () => {
         </a>`);
         
         button.on('click', () => {
-            ui.simulacrum.addDocumentContext(app.document);
-            ui.notifications.info(`Added ${app.document.name} to Simulacrum context`);
+            ui.simulacrum.render(true);
         });
         
         html.find('.window-title').append(button);
@@ -144,12 +142,7 @@ Hooks.on('renderSceneControls', (app, html, data) => {
             event.preventDefault();
             event.stopPropagation();
             
-            if (ui.simulacrum) {
-                ui.simulacrum.render(true);
-            } else {
-                console.log('ui.simulacrum not found');
-                ui.notifications.warn('Simulacrum chat not initialized');
-            }
+            ui.simulacrum.render(true);
             
             return false;
         });
