@@ -68,3 +68,62 @@
     opacity: 0.6;
     background: rgba(128, 128, 128, 0.1);
 }
+
+/* Simulacrum Theme Variables: Cyberpunk AI palette */
+:root {
+  --simulacrum-cyan: #00FFFF;
+  --simulacrum-cyan-light: #CCFFFF;
+  --simulacrum-cyan-dark: #008B8B;
+  --simulacrum-disabled: #888888;
+  --simulacrum-glow: rgba(0, 255, 255, 0.4);
+}
+
+/* Scene Control Button Styling - Main Robot Icon */
+.scene-control[data-control="simulacrum"] i.fas.fa-robot,
+.control-tool[data-tool="chat"] i.fas.fa-robot {
+  color: #fff;
+  text-shadow: 0 0 5px var(--simulacrum-cyan), 0 0 10px var(--simulacrum-glow);
+  transition: all 0.3s ease;
+}
+
+.scene-control[data-control="simulacrum"]:hover i.fas.fa-robot,
+.control-tool[data-tool="chat"]:hover i.fas.fa-robot {
+  color: #fff;
+  text-shadow: 0 0 8px var(--simulacrum-cyan), 0 0 15px var(--simulacrum-cyan), 0 0 20px rgba(0, 255, 255, 0.7);
+  transform: scale(1.1);
+}
+
+/* Chat Control Button Styling */
+.simulacrum-chat-control {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.simulacrum-chat-control i {
+  color: white;
+  text-shadow: 0 0 5px var(--simulacrum-cyan), 0 0 10px var(--simulacrum-glow);
+  transition: all 0.3s ease;
+}
+
+.simulacrum-chat-control:hover i {
+  color: #fff;
+  text-shadow: 0 0 8px var(--simulacrum-cyan), 0 0 15px var(--simulacrum-cyan), 0 0 20px rgba(0, 255, 255, 0.7);
+  transform: scale(1.1);
+}
+
+/* Disabled State Styling */
+.simulacrum-chat-control.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.simulacrum-chat-control.disabled i {
+  color: var(--simulacrum-disabled);
+  text-shadow: none;
+}
+
+.simulacrum-chat-control.disabled:hover i {
+  color: var(--simulacrum-disabled);
+  text-shadow: none;
+  transform: none;
+}

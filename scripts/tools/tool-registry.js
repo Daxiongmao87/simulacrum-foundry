@@ -1,4 +1,3 @@
-import { Dialog } from 'foundry';
 import { SimulacrumSettings } from '../settings.js';
 
 /**

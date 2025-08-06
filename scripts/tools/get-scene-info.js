@@ -1,4 +1,4 @@
-import { hasPermission } from '../settings.js';
+import { SimulacrumSettings } from '../settings.js';
 import { Tool } from './tool-registry.js';
 
 export class GetSceneInfoTool extends Tool {

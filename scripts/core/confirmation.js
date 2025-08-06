@@ -1,4 +1,4 @@
-import { Dialog } from "foundry";
+// Dialog is globally available in FoundryVTT
 
 export class SimulacrumConfirmationService {
     constructor() {

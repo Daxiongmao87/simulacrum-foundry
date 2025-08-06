@@ -1,3 +1,5 @@
+console.log('Simulacrum | Main.js loading...');
+
 import { SimulacrumSettings } from "./settings.js";
 import { SimulacrumChatModal } from "./chat/simulacrum-chat.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
@@ -81,21 +83,6 @@ Hooks.once('ready', () => {
         ui.notifications.warn("Simulacrum | You do not have permission to access Simulacrum.");
     }
 
-    // Add a hook for scene controls (placeholder for future buttons)
-    Hooks.on('renderSceneControls', (controls) => {
-        if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) {
-            return;
-        }
-        // Example: Add a button to scene controls if needed
-        // controls.add({
-        //     name: "simulacrum",
-        //     title: "Simulacrum Chat",
-        //     icon: "fas fa-robot",
-        //     button: true,
-        //     onClick: () => ui.simulacrum.render(true)
-        // });
-    });
-
     // Hook for adding robot context buttons to document sheets
     Hooks.on('renderDocumentSheet', (app, html, data) => {
         if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) return;
@@ -112,4 +99,66 @@ Hooks.once('ready', () => {
         html.find('.window-title').append(button);
     });
 });
+
+console.log('Simulacrum | Setting up hooks...');
+
+// Add Simulacrum button to chat controls
+Hooks.on('renderChatLog', (app, html, data) => {
+    console.log('Simulacrum | renderChatLog hook fired!');
+    
+    // Create the button that matches chat control styling
+    const simulacrumButton = $(`
+        <label class="chat-control-icon simulacrum-chat-control" 
+               data-tooltip="Open Simulacrum AI Assistant">
+            <i class="fas fa-robot"></i>
+        </label>
+    `);
+    
+    // Add click event to open Simulacrum chat
+    simulacrumButton.click(ev => {
+        ev.preventDefault();
+        console.log('Simulacrum | Chat button clicked');
+        if (ui.simulacrum) {
+            ui.simulacrum.render(true);
+        } else {
+            console.log('ui.simulacrum not found');
+        }
+    });
+    
+    // Add the button to chat controls
+    const controlButtons = html.find('.control-buttons');
+    controlButtons.prepend(simulacrumButton);
+    console.log('Simulacrum | Chat button added');
+});
+
+// Add Simulacrum as a top-level scene control (like Token, Measurement, etc.)
+Hooks.on('getSceneControlButtons', (controls) => {
+    console.log('Simulacrum | getSceneControlButtons hook fired! Controls:', controls);
+    
+    // Add Simulacrum as its own control group
+    controls.push({
+        name: "simulacrum",
+        title: "Simulacrum AI Assistant", 
+        icon: "fas fa-robot",
+        layer: "controls",
+        tools: [{
+            name: "chat",
+            title: "Open Simulacrum AI Assistant",
+            icon: "fas fa-robot",
+            button: true,
+            onClick: () => {
+                console.log('Simulacrum | Scene control button clicked');
+                if (ui.simulacrum) {
+                    ui.simulacrum.render(true);
+                } else {
+                    console.log('ui.simulacrum not found');
+                }
+            }
+        }]
+    });
+    
+    console.log('Simulacrum | Scene control added to controls array', controls);
+});
+
+console.log('Simulacrum | Hooks setup complete');
 

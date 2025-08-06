@@ -1,5 +1,5 @@
 import { Tool } from './tool-registry.js';
-import { hasPermission } from '../settings.js';
+import { SimulacrumSettings } from '../settings.js';
 
 export class GetUserPreferencesTool extends Tool {
   constructor() {

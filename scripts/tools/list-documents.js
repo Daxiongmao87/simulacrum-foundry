@@ -1,6 +1,6 @@
 import { Tool } from './tool-registry.js';
 import DocumentDiscovery from './discovery-tools.js';
-import { hasPermission } from '../settings.js';
+import { SimulacrumSettings } from '../settings.js';
 
 export class ListDocumentsTool extends Tool {
   constructor() {
