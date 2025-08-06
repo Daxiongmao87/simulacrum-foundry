@@ -102,62 +102,65 @@ Hooks.once('ready', () => {
 
 console.log('Simulacrum | Setting up hooks...');
 
-// Add Simulacrum button to chat controls
-Hooks.on('renderChatLog', (app, html, data) => {
-    console.log('Simulacrum | renderChatLog hook fired!');
-    
-    // Create the button that matches chat control styling
-    const simulacrumButton = $(`
-        <label class="chat-control-icon simulacrum-chat-control" 
-               data-tooltip="Open Simulacrum AI Assistant">
-            <i class="fas fa-robot"></i>
-        </label>
-    `);
-    
-    // Add click event to open Simulacrum chat
-    simulacrumButton.click(ev => {
-        ev.preventDefault();
-        console.log('Simulacrum | Chat button clicked');
-        if (ui.simulacrum) {
-            ui.simulacrum.render(true);
-        } else {
-            console.log('ui.simulacrum not found');
-        }
-    });
-    
-    // Add the button to chat controls
-    const controlButtons = html.find('.control-buttons');
-    controlButtons.prepend(simulacrumButton);
-    console.log('Simulacrum | Chat button added');
-});
 
-// Add Simulacrum as a top-level scene control (like Token, Measurement, etc.)
-Hooks.on('getSceneControlButtons', (controls) => {
-    console.log('Simulacrum | getSceneControlButtons hook fired! Controls:', controls);
+// Manually inject Simulacrum button as first item in scene controls tablist
+Hooks.on('renderSceneControls', (app, html, data) => {
+    console.log('Simulacrum | renderSceneControls hook fired');
     
-    // Add Simulacrum as its own control group
-    controls.push({
-        name: "simulacrum",
-        title: "Simulacrum AI Assistant", 
-        icon: "fas fa-robot",
-        layer: "controls",
-        tools: [{
-            name: "chat",
-            title: "Open Simulacrum AI Assistant",
-            icon: "fas fa-robot",
-            button: true,
-            onClick: () => {
-                console.log('Simulacrum | Scene control button clicked');
-                if (ui.simulacrum) {
-                    ui.simulacrum.render(true);
-                } else {
-                    console.log('ui.simulacrum not found');
-                }
+    // Only add if user has permission
+    if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) {
+        console.log('Simulacrum | User lacks permission for scene control');
+        return;
+    }
+    
+    // Check if we already added the button to avoid duplicates
+    if (html.find('.scene-control[data-control="simulacrum"]').length > 0) {
+        console.log('Simulacrum | Button already exists, skipping');
+        return;
+    }
+    
+    // Find the main controls tablist
+    const tablist = html.find('ol.main-controls[role="tablist"]');
+    
+    if (tablist.length) {
+        console.log('Simulacrum | Found main-controls tablist, injecting button');
+        
+        // Create the Simulacrum button matching the exact HTML structure
+        const simulacrumButton = $(`
+            <li class="scene-control" 
+                data-control="simulacrum" 
+                data-canvas-layer="controls" 
+                aria-label="Simulacrum AI Assistant" 
+                role="tab" 
+                aria-controls="tools-panel-simulacrum" 
+                data-tooltip="Simulacrum AI Assistant">
+                <i class="fas fa-robot"></i>
+            </li>
+        `);
+        
+        // Add click handler for direct chat opening
+        simulacrumButton.on('click', (event) => {
+            console.log('Simulacrum | Direct button clicked');
+            event.preventDefault();
+            event.stopPropagation();
+            
+            if (ui.simulacrum) {
+                ui.simulacrum.render(true);
+            } else {
+                console.log('ui.simulacrum not found');
+                ui.notifications.warn('Simulacrum chat not initialized');
             }
-        }]
-    });
-    
-    console.log('Simulacrum | Scene control added to controls array', controls);
+            
+            return false;
+        });
+        
+        // Append as the last item in the tablist
+        tablist.append(simulacrumButton);
+        
+        console.log('Simulacrum | Button injected as first scene control');
+    } else {
+        console.log('Simulacrum | Could not find main-controls tablist');
+    }
 });
 
 console.log('Simulacrum | Hooks setup complete');

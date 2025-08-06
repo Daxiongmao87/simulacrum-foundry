@@ -127,3 +127,13 @@
   text-shadow: none;
   transform: none;
 }
+
+/* Hide the tools panel for Simulacrum - we want direct click behavior */
+#tools-panel-simulacrum {
+  display: none !important;
+}
+
+/* Make the scene control button cursor indicate it's directly clickable */
+.scene-control[data-control="simulacrum"] {
+  cursor: pointer;
+}
