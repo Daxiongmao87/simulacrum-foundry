@@ -1,5 +1,6 @@
 import { ChatModal, MarkdownParser } from "../fimlib/main.js";
 import { SimulacrumAIService } from "./ai-service.js";
+import { getChatModalClass } from "../main.js";
 
 /**
  * SimulacrumChatModal - Uses FIMLib's ChatModal through composition for AI chat interface
@@ -29,8 +30,11 @@ export class SimulacrumChatModal {
         // Context documents array
         this.contextDocuments = [];
 
-        // Initialize the chat window using FIMLib's ChatModal (composition, not inheritance)
-        this.chatWindow = new ChatModal({
+        // Get the appropriate ChatModal class (the extended version with correct template)
+        const ModalClass = getChatModalClass();
+        
+        // Initialize the chat window using our custom modal class
+        this.chatWindow = new ModalClass({
             title: this.options.title,
             width: this.options.width,
             height: this.options.height,

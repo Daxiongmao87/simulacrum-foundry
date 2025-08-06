@@ -3,6 +3,7 @@ console.log('Simulacrum | Main.js loading...');
 import { SimulacrumSettings } from "./settings.js";
 import { SimulacrumChatModal } from "./chat/simulacrum-chat.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
+import { ChatModal } from "./fimlib/main.js";
 
 // Import all tools
 import { CreateDocumentTool } from "./tools/create-document.js";
@@ -27,8 +28,28 @@ let toolRegistry; // Global tool registry
 let aiService; // Global AI service
 let contextManager; // Global context manager
 
+// Global variable to store our extended ChatModal class
+let SimulacrumChatModalClass = null;
+
+/**
+ * Returns the correct ChatModal class for Simulacrum
+ * @returns {Class} - The ChatModal class to use
+ */
+export function getChatModalClass() {
+    return SimulacrumChatModalClass || ChatModal;
+}
+
 Hooks.once('init', () => {
     console.log('Simulacrum | Initializing Simulacrum Module');
+    
+    // Extend the ChatModal class with our own version that has the correct template path
+    SimulacrumChatModalClass = class extends ChatModal {
+        static get defaultOptions() {
+            const options = super.defaultOptions;
+            options.template = "modules/simulacrum/scripts/fimlib/templates/chat-modal.html";
+            return options;
+        }
+    };
 
     // Register module settings
     SimulacrumSettings.register();
