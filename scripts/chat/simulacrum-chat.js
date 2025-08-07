@@ -42,8 +42,12 @@ export class SimulacrumChatModal {
             showCornerText: true
         });
 
-        // Set up the context items container
-        this._setupContextContainerUI();
+        // Listen for YOLO mode changes to update UI
+        Hooks.on('updateSetting', (setting) => {
+            if (setting.key === 'simulacrum.yoloMode') {
+                this._updateYoloIndicator();
+            }
+        });
 
         // Initialize AI service
         this.aiService = null;
@@ -541,32 +545,36 @@ export class SimulacrumChatModal {
                 });
             }, thinkingDelay);
 
-            // Add placeholder for assistant response
-            let assistantMessage = null;
-
-            // Send to AI service with streaming
-            await this.aiService.sendMessage(
+            // Send to AI service and get response
+            const aiResponse = await this.aiService.sendMessage(
                 message,
-                (chunk, type) => {
-                    // Clear timeout if we get first chunk before thinking indicator
-                    clearTimeout(thinkingTimeout);
-                    
-                    // Remove thinking indicator if it was shown
-                    if (thinkingMessage) {
-                        thinkingMessage.remove();
-                        thinkingMessage = null;
-                    }
-
-                    // Pass assistantMessage by reference via object wrapper
-                    const messageRef = { current: assistantMessage };
-                    this._onStreamChunk(chunk, type, messageRef);
-                    assistantMessage = messageRef.current;
-                },
-                (finalMessage, functionCalls) => {
-                    this._onStreamComplete(finalMessage, functionCalls);
-                },
+                null, // onChunk callback not used
+                null, // onComplete callback not used  
                 this.abortController.signal
             );
+
+            // Clear timeout since we got response
+            clearTimeout(thinkingTimeout);
+            
+            // Remove thinking indicator if it was shown
+            if (thinkingMessage) {
+                thinkingMessage.remove();
+                thinkingMessage = null;
+            }
+
+            // Add AI response to history
+            this.history.push({
+                role: 'assistant',
+                content: aiResponse
+            });
+
+            // Display the response
+            this.chatWindow.addMessage({
+                content: `<div class="simulacrum-response"><p>${aiResponse}</p></div>`,
+                sender: 'Simulacrum',
+                cornerText: this._getTimestamp(),
+                img: "modules/simulacrum/assets/simulacrum-avatar.png"
+            });
 
         } catch (error) {
             console.error('Error sending message:', error);

@@ -32,6 +32,15 @@ export class SimulacrumAIService {
         role: 'user',
         content: userMessage
       });
+      
+      console.log('📜 Simulacrum | Conversation history updated:', {
+        totalMessages: this.conversationHistory.length,
+        lastMessage: {
+          role: 'user',
+          contentLength: userMessage.length,
+          contentPreview: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : '')
+        }
+      });
 
       // Prepare request
       const baseEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
@@ -41,11 +50,14 @@ export class SimulacrumAIService {
       const contextLength = game.settings.get('simulacrum', 'contextLength');
       const apiKey = game.settings.get('simulacrum', 'apiKey');
 
-      console.log('Simulacrum | Request details:', {
+      console.log('🔍 Simulacrum | AI Service Debug - Request Setup:', {
         apiEndpoint,
         modelName,
         hasApiKey: !!apiKey,
-        apiKeyLength: apiKey?.length || 0
+        apiKeyLength: apiKey?.length || 0,
+        contextLength,
+        systemPromptLength: (systemPrompt || this.getDefaultSystemPrompt()).length,
+        historyMessages: this.conversationHistory.length
       });
 
       // Build messages array with system prompt
@@ -67,7 +79,35 @@ export class SimulacrumAIService {
         temperature: 0.7
       };
 
+      // DEBUG: Log complete request payload
+      console.log('📤 Simulacrum | Outgoing Request Payload:', {
+        url: apiEndpoint,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey ? '[REDACTED]' : '[MISSING]'}`,
+          'User-Agent': navigator.userAgent
+        },
+        body: {
+          ...requestBody,
+          messages: requestBody.messages.map((msg, idx) => ({
+            index: idx,
+            role: msg.role,
+            contentLength: msg.content?.length || 0,
+            contentPreview: msg.content?.substring(0, 100) + (msg.content?.length > 100 ? '...' : ''),
+            hasToolCalls: !!msg.function_calls
+          }))
+        }
+      });
+
+      // DEBUG: Log raw request body (first 2000 chars)
+      const requestBodyStr = JSON.stringify(requestBody, null, 2);
+      console.log('📝 Simulacrum | Raw Request Body (first 2000 chars):', requestBodyStr.substring(0, 2000) + (requestBodyStr.length > 2000 ? '...[TRUNCATED]' : ''));
+
       // Make streaming request
+      console.log('⏳ Simulacrum | Sending request to API...');
+      const startTime = Date.now();
+      
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -78,13 +118,71 @@ export class SimulacrumAIService {
         signal: abortSignal
       });
 
+      const responseTime = Date.now() - startTime;
+      console.log('📡 Simulacrum | Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        responseTime: `${responseTime}ms`,
+        headers: Object.fromEntries(response.headers.entries()),
+        ok: response.ok
+      });
+
       if (!response.ok) {
-        throw new Error(`AI API error: ${response.status} ${response.statusText}`);
+        // Try to get error response body for debugging
+        let errorBody = 'No error details available';
+        try {
+          errorBody = await response.text();
+          console.error('❌ Simulacrum | API Error Response Body:', errorBody);
+        } catch (e) {
+          console.error('❌ Simulacrum | Could not read error response:', e);
+        }
+        
+        const error = new Error(`AI API error: ${response.status} ${response.statusText}`);
+        console.error('❌ Simulacrum | API Request Failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: apiEndpoint,
+          errorBody
+        });
+        throw error;
       }
 
       // Get JSON response
       const data = await response.json();
-      const aiResponse = data.choices[0].message.content;
+      
+      // DEBUG: Log complete response payload
+      console.log('📥 Simulacrum | Response Payload:', {
+        id: data.id,
+        object: data.object,
+        created: data.created,
+        model: data.model,
+        choices: data.choices?.map((choice, idx) => ({
+          index: idx,
+          finishReason: choice.finish_reason,
+          messageRole: choice.message?.role,
+          messageContentLength: choice.message?.content?.length || 0,
+          messageContentPreview: choice.message?.content?.substring(0, 200) + (choice.message?.content?.length > 200 ? '...' : ''),
+          hasFunctionCall: !!choice.message?.function_call,
+          hasToolCalls: !!choice.message?.tool_calls
+        })),
+        usage: data.usage,
+        systemFingerprint: data.system_fingerprint
+      });
+      
+      // DEBUG: Log raw response (first 3000 chars)
+      const responseStr = JSON.stringify(data, null, 2);
+      console.log('📄 Simulacrum | Raw Response (first 3000 chars):', responseStr.substring(0, 3000) + (responseStr.length > 3000 ? '...[TRUNCATED]' : ''));
+      
+      const aiResponse = data.choices?.[0]?.message?.content;
+      
+      if (!aiResponse) {
+        console.warn('⚠️ Simulacrum | No AI response content found in:', data);
+      }
+      
+      console.log('✅ Simulacrum | AI Response extracted:', {
+        responseLength: aiResponse?.length || 0,
+        responsePreview: aiResponse?.substring(0, 100) + (aiResponse?.length > 100 ? '...' : '')
+      });
       
       if (onComplete) {
         onComplete(aiResponse);
@@ -94,9 +192,14 @@ export class SimulacrumAIService {
 
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('AI request cancelled by user');
+        console.log('🚫 Simulacrum | AI request cancelled by user');
       } else {
-        console.error('AI Service Error:', error);
+        console.error('💥 Simulacrum | AI Service Error:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          cause: error.cause
+        });
         throw error;
       }
     }
@@ -201,28 +304,78 @@ export class SimulacrumAIService {
    * Execute a tool call from AI
    */
   async executeToolCall(toolName, parameters) {
+    console.log('🔧 Simulacrum | Tool Call Debug - Starting execution:', {
+      toolName,
+      parameters,
+      parametersType: typeof parameters,
+      parametersKeys: Object.keys(parameters || {}),
+      toolRegistrySize: this.toolRegistry?.tools?.size || 0
+    });
+    
     try {
       const tool = this.toolRegistry.getTool(toolName);
       
+      console.log('🛠️ Simulacrum | Tool retrieved:', {
+        toolName,
+        toolFound: !!tool,
+        toolType: typeof tool,
+        toolMethods: tool ? Object.getOwnPropertyNames(Object.getPrototypeOf(tool)) : []
+      });
+      
       // Check if confirmation is needed (unless YOLO mode)
       const yoloMode = game.settings.get('simulacrum', 'yoloMode');
+      console.log('🎯 Simulacrum | Tool confirmation check:', {
+        yoloMode,
+        needsConfirmation: tool.shouldConfirmExecute ? tool.shouldConfirmExecute() : 'method not available'
+      });
+      
       if (!yoloMode && tool.shouldConfirmExecute()) {
+        console.log('⏳ Simulacrum | Requesting user confirmation for tool execution...');
         const confirmed = await this.toolRegistry.confirmExecution(
           game.user, 
           toolName, 
           parameters
         );
         
+        console.log('✅/❌ Simulacrum | User confirmation result:', confirmed);
+        
         if (!confirmed) {
+          console.log('🚫 Simulacrum | Tool execution cancelled by user');
           return { success: false, error: 'Tool execution cancelled by user' };
         }
       }
 
       // Execute the tool
+      console.log('⚡ Simulacrum | Executing tool:', toolName);
+      const startTime = Date.now();
+      
       const result = await tool.execute(parameters);
+      
+      const executionTime = Date.now() - startTime;
+      console.log('✅ Simulacrum | Tool execution completed:', {
+        toolName,
+        executionTime: `${executionTime}ms`,
+        resultType: typeof result,
+        resultKeys: result && typeof result === 'object' ? Object.keys(result) : [],
+        success: result?.success,
+        hasError: !!result?.error
+      });
+      
+      // DEBUG: Log result preview
+      const resultStr = JSON.stringify(result, null, 2);
+      console.log('📋 Simulacrum | Tool Result (first 1000 chars):', resultStr.substring(0, 1000) + (resultStr.length > 1000 ? '...[TRUNCATED]' : ''));
+      
       return result;
 
     } catch (error) {
+      console.error('💥 Simulacrum | Tool execution error:', {
+        toolName,
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        parameters
+      });
+      
       return {
         success: false,
         error: {
@@ -240,6 +393,15 @@ export class SimulacrumAIService {
     // Simple implementation - take recent messages up to context limit
     // In production, would implement proper token counting and truncation
     const recentHistory = this.conversationHistory.slice(-10);
+    
+    console.log('📊 Simulacrum | Context history prepared:', {
+      maxTokens,
+      totalHistoryMessages: this.conversationHistory.length,
+      contextMessages: recentHistory.length,
+      contextMessageRoles: recentHistory.map(msg => msg.role),
+      totalContextLength: recentHistory.reduce((sum, msg) => sum + (msg.content?.length || 0), 0)
+    });
+    
     return recentHistory;
   }
 

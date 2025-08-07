@@ -243,9 +243,11 @@ Hooks.on('renderSceneControls', (app, html, data) => {
             event.preventDefault();
             event.stopPropagation();
             
-            // Only open if not disabled
-            if (connectionState !== 'disabled') {
+            // Only open if not disabled and ui.simulacrum exists
+            if (connectionState !== 'disabled' && ui.simulacrum) {
                 ui.simulacrum.render(true);
+            } else if (!ui.simulacrum) {
+                ui.notifications.warn('Simulacrum | Chat interface not available. Check permissions.');
             } else {
                 ui.notifications.warn('Simulacrum | Cannot open. API endpoint not configured.');
             }

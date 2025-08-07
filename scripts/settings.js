@@ -136,6 +136,13 @@ export class SimulacrumSettings {
             config: true,
             type: Boolean,
             default: false,
+            onChange: value => {
+                // Revert if user lacks permission
+                if (!SimulacrumSettings.hasPermission(game.user)) {
+                    ui.notifications.warn('Only GM/Assistant GM can modify YOLO mode');
+                    game.settings.set('simulacrum', 'yoloMode', !value);
+                }
+            }
         });
 
         // Register a hook to convert the systemPrompt setting to a textarea
