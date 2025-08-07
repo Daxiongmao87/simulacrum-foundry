@@ -4,12 +4,11 @@ import { SimulacrumSettings } from "./settings.js";
 import { SimulacrumChatModal } from "./chat/simulacrum-chat.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
 import { ChatModal } from "./fimlib/main.js";
+import { DocumentDiscoveryEngine } from "./core/document-discovery-engine.js";
+import { GenericCRUDTools } from "./core/generic-crud-tools.js";
 
 // Import all tools
-import { CreateDocumentTool } from "./tools/create-document.js";
-import { ReadDocumentTool } from "./tools/read-document.js";
-import { UpdateDocumentTool } from "./tools/update-document.js";
-import { DeleteDocumentTool } from "./tools/delete-document.js";
+import { CreateDocumentTool, ReadDocumentTool, UpdateDocumentTool, DeleteDocumentTool } from "./tools/crud-tools.js";
 import { ListDocumentsTool } from "./tools/list-documents.js";
 import { SearchDocumentsTool } from "./tools/search-documents.js";
 import { GetWorldInfoTool } from "./tools/get-world-info.js";
@@ -22,6 +21,8 @@ import { SimulacrumAIService } from "./chat/ai-service.js";
 import { ContextManager } from "./context-manager.js";
 import { setupGlobalErrorHandling } from "./error-handling.js";
 import "./tool-test.js"; // Load testing functions
+import { AgenticLoopController } from "./core/agentic-loop-controller.js";
+import { SimulacrumToolScheduler } from "./core/tool-scheduler.js";
 
 
 let toolRegistry; // Global tool registry
@@ -128,11 +129,18 @@ Hooks.once('init', () => {
     toolRegistry = new ToolRegistry();
     
     try {
-        // Register all 12 core tools (9 original + 3 context tools)
-        toolRegistry.registerTool(new CreateDocumentTool());
-        toolRegistry.registerTool(new ReadDocumentTool());
-        toolRegistry.registerTool(new UpdateDocumentTool());
-        toolRegistry.registerTool(new DeleteDocumentTool());
+        // Initialize context manager
+        contextManager = new ContextManager();
+
+        // Initialize document discovery engine and generic CRUD tools
+        const documentDiscoveryEngine = new DocumentDiscoveryEngine();
+        const genericCrudTools = new GenericCRUDTools(documentDiscoveryEngine);
+
+        // Register all core tools
+        toolRegistry.registerTool(new CreateDocumentTool(genericCrudTools));
+        toolRegistry.registerTool(new ReadDocumentTool(genericCrudTools));
+        toolRegistry.registerTool(new UpdateDocumentTool(genericCrudTools));
+        toolRegistry.registerTool(new DeleteDocumentTool(genericCrudTools));
         toolRegistry.registerTool(new ListDocumentsTool());
         toolRegistry.registerTool(new SearchDocumentsTool());
         toolRegistry.registerTool(new GetWorldInfoTool());
@@ -142,16 +150,21 @@ Hooks.once('init', () => {
         toolRegistry.registerTool(new ListContextTool());
         toolRegistry.registerTool(new ClearContextTool());
         
-        console.log('Simulacrum | All 12 core tools registered successfully');
-        
-        // Initialize context manager
-        contextManager = new ContextManager();
+        console.log('Simulacrum | All core tools registered successfully');
         
         // Initialize AI service
         aiService = new SimulacrumAIService(toolRegistry);
 
-        // Make tool registry, AI service, and context manager globally accessible
-        game.simulacrum = { toolRegistry, aiService, contextManager };
+        // Initialize Tool Scheduler
+        const toolScheduler = new SimulacrumToolScheduler(toolRegistry);
+
+        // Initialize Agentic Loop Controller
+        const agenticLoopController = new AgenticLoopController(aiService, toolScheduler);
+
+        // Make tool registry, AI service, context manager, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
+        game.simulacrum = { toolRegistry, aiService, contextManager, documentDiscoveryEngine, genericCrudTools, agenticLoopController };
+        console.log('Simulacrum | game.simulacrum initialized:', game.simulacrum);
+        console.log('Simulacrum | Properties of game.simulacrum:', Object.keys(game.simulacrum));
         
     } catch (error) {
         console.error('Simulacrum | Failed to register tools:', error);
@@ -161,8 +174,11 @@ Hooks.once('init', () => {
     console.log('Simulacrum | Settings, ChatModal, and Tools registered.');
 });
 
-Hooks.once('ready', () => {
+Hooks.once('ready', async () => {
     console.log('Simulacrum | Simulacrum Module Ready');
+
+    // Fetch models now that game is ready
+    await SimulacrumSettings.fetchModelsAndContextWindows();
 
     // Only instantiate chat UI if user has permission
     if (SimulacrumSettings.hasSimulacrumPermission(game.user)) {

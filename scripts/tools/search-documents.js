@@ -6,7 +6,7 @@ export class SearchDocumentsTool extends Tool {
   constructor() {
     super(
       'search_documents',
-      'Searches for documents by content or properties',
+      'Searches for documents by content or properties with pagination.',
       {
         type: 'object',
         properties: {
@@ -18,7 +18,8 @@ export class SearchDocumentsTool extends Tool {
             description: 'Fields to search in (name, description, etc.)',
             default: ['name']
           },
-          limit: { type: 'number', description: 'Maximum results to return', default: 20 }
+          limit: { type: 'number', description: 'Maximum results to return', default: 20 },
+          offset: { type: 'number', description: 'Number of results to skip for pagination', default: 0 }
         },
         required: ['documentType', 'query']
       }
@@ -27,7 +28,7 @@ export class SearchDocumentsTool extends Tool {
   
   async execute(params) {
     try {
-      const { documentType, query, searchFields = ['name'], limit = 20 } = params;
+      const { documentType, query, searchFields = ['name'], limit = 20, offset = 0 } = params;
       const searchQuery = query.toLowerCase();
       
       // Use DocumentDiscovery to find target collection
@@ -78,9 +79,9 @@ export class SearchDocumentsTool extends Tool {
         }
       }
       
-      // Sort by relevance and apply limit
+      // Sort by relevance and apply limit and offset
       searchResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
-      const limitedResults = searchResults.slice(0, limit);
+      const limitedResults = searchResults.slice(offset, offset + limit);
       
       return {
         success: true,

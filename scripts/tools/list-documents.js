@@ -6,12 +6,13 @@ export class ListDocumentsTool extends Tool {
   constructor() {
     super(
       'list_document_types',
-      'Lists documents of specified type with optional filtering',
+      'Lists documents of specified type with optional filtering and pagination.',
       {
         type: 'object',
         properties: {
           documentType: { type: 'string', description: 'Type of documents to list' },
           limit: { type: 'number', description: 'Maximum number of documents to return', default: 50 },
+          offset: { type: 'number', description: 'Number of documents to skip for pagination', default: 0 },
           filter: { type: 'object', description: 'Filter criteria for documents' }
         },
         required: ['documentType']
@@ -21,7 +22,7 @@ export class ListDocumentsTool extends Tool {
   
   async execute(params) {
     try {
-      const { documentType, limit = 50, filter = {} } = params;
+      const { documentType, limit = 50, offset = 0, filter = {} } = params;
       
       // Use DocumentDiscovery to find target collection
       const { collection, filterByType } = DocumentDiscovery.findCollection(documentType);
@@ -46,8 +47,8 @@ export class ListDocumentsTool extends Tool {
         });
       }
       
-      // Apply limit
-      const limitedDocuments = documents.slice(0, limit);
+      // Apply limit and offset
+      const limitedDocuments = documents.slice(offset, offset + limit);
       
       return {
         success: true,

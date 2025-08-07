@@ -3,7 +3,64 @@ import { SettingsManagementConfig } from "./settings/settings-management-config.
 
 export class SimulacrumSettings {
 
-    static register() {
+    /**
+     * Fetches available models and their context windows from the configured API endpoint.
+     * Stores the result in a game setting.
+     * @returns {Promise<void>}
+     */
+    static async fetchModelsAndContextWindows() {
+        const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+        const apiKey = game.settings.get('simulacrum', 'apiKey');
+        const modelsUrl = `${apiEndpoint}/models`;
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(modelsUrl, { headers });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(`Failed to fetch models: ${response.status} ${response.statusText} - ${errorBody}`);
+            }
+
+            const data = await response.json();
+            const models = data.data || [];
+
+            const availableModels = models.map(model => {
+                // Attempt to find context window from various common fields
+                const contextWindow = model.context_window || model.max_tokens || model.max_input_tokens || 32000; // Default to 32k if not found
+                return {
+                    id: model.id,
+                    contextWindow: contextWindow
+                };
+            });
+
+            await game.settings.set('simulacrum', 'availableModels', availableModels);
+            ui.notifications.info('Simulacrum: Successfully fetched available models.');
+            console.log('Simulacrum | Available models fetched:', availableModels);
+
+        } catch (error) {
+            const errorMessage = (error && typeof error === 'object' && 'message' in error) ? error.message : String(error);
+            console.error('Simulacrum | Error fetching models:', error);
+            console.error(`Simulacrum: Failed to fetch models: ${errorMessage}`);
+            await game.settings.set('simulacrum', 'availableModels', []); // Clear models on error
+        }
+    }
+
+    static async register() {
+        // Register a setting to store available models and their context windows
+        game.settings.register('simulacrum', 'availableModels', {
+            scope: 'world',
+            config: false, // Not directly configurable by user, populated by fetchModelsAndContextWindows
+            type: Array,
+            default: [],
+        });
+
         // OpenAI API endpoint
         game.settings.register('simulacrum', 'apiEndpoint', {
             name: 'SIMULACRUM.SettingApiEndpointName',
@@ -12,10 +69,14 @@ export class SimulacrumSettings {
             config: true,
             type: String,
             default: 'http://localhost:11434/v1',
-            onChange: value => {
+            onChange: async value => {
                 if (value && !value.includes('/v1')) {
                     ui.notifications.warn('SIMULACRUM.SettingApiEndpointWarn');
                 }
+                // Re-fetch models if API endpoint changes
+                await SimulacrumSettings.fetchModelsAndContextWindows();
+                // Re-render settings config to update model/context length fields
+                ui.settings.render(true);
             }
         });
 
@@ -30,13 +91,28 @@ export class SimulacrumSettings {
         });
 
         // Model Name
+        const availableModels = game.settings.get('simulacrum', 'availableModels');
+        const modelChoices = { 'custom': 'SIMULACRUM.CustomModelOption' }; // Always allow custom
+        availableModels.forEach(model => {
+            modelChoices[model.id] = model.id;
+        });
+
         game.settings.register('simulacrum', 'modelName', {
             name: 'SIMULACRUM.SettingModelNameName',
             hint: 'SIMULACRUM.SettingModelNameHint',
             scope: 'world',
             config: true,
             type: String,
-            default: 'gpt-4',
+            choices: modelChoices,
+            default: availableModels.length > 0 ? availableModels[0].id : 'custom',
+            onChange: async value => {
+                const selectedModel = availableModels.find(model => model.id === value);
+                if (selectedModel) {
+                    await game.settings.set('simulacrum', 'contextLength', selectedModel.contextWindow);
+                }
+                // Re-render settings config to update context length field and input type
+                ui.settings.render(true);
+            }
         });
 
         // Context Length
@@ -145,8 +221,9 @@ export class SimulacrumSettings {
             }
         });
 
-        // Register a hook to convert the systemPrompt setting to a textarea
+        // Register a hook to convert the systemPrompt setting to a textarea and handle dynamic model/context length inputs
         Hooks.on("renderSettingsConfig", (app, html) => {
+            // Handle systemPrompt as textarea
             const systemPromptSetting = html.find('[name="simulacrum.systemPrompt"]');
             if (systemPromptSetting.length) {
                 const currentValue = systemPromptSetting.val();
@@ -156,7 +233,37 @@ export class SimulacrumSettings {
                     .val(currentValue);
                 systemPromptSetting.replaceWith(textarea);
             }
+
+            // Handle dynamic modelName and contextLength inputs
+            const modelNameSetting = html.find('[name="simulacrum.modelName"]');
+            const contextLengthSetting = html.find('[name="simulacrum.contextLength"]');
+
+            if (modelNameSetting.length && contextLengthSetting.length) {
+                const currentModel = modelNameSetting.val();
+                const availableModels = game.settings.get('simulacrum', 'availableModels');
+
+                // If current model is 'custom' or no models are available, make contextLength editable
+                if (currentModel === 'custom' || availableModels.length === 0) {
+                    contextLengthSetting.prop('readonly', false);
+                    contextLengthSetting.attr('type', 'number'); // Ensure it's a number input
+                } else {
+                    contextLengthSetting.prop('readonly', true);
+                    contextLengthSetting.attr('type', 'text'); // Display as text when read-only
+                }
+
+                // If no models are available, change modelName to text input
+                if (availableModels.length === 0) {
+                    const currentModelValue = modelNameSetting.val();
+                    const textInput = $('<input>')
+                        .attr('type', 'text')
+                        .attr('name', 'simulacrum.modelName')
+                        .val(currentModelValue);
+                    modelNameSetting.replaceWith(textInput);
+                }
+            }
         });
+
+        // Note: fetchModelsAndContextWindows will be called from main.js ready hook
     }
 
     static hasPermission(user) {

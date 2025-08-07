@@ -10,22 +10,26 @@ export class CreateDocumentTool extends Tool {
         type: 'object',
         properties: {
           documentType: { type: 'string', description: 'Type of document to create' },
-          documentData: { type: 'object', description: 'Data for the new document' }
+          name: { type: 'string', description: 'The name of the new document.' },
+          data: { type: 'object', description: 'Optional: Additional data to initialize the document with, as a JSON object.' }
         },
-        required: ['documentType', 'documentData']
+        required: ['documentType', 'name']
       }
     );
   }
   
   async execute(params) {
+    console.log(`Simulacrum | CreateDocumentTool: execute method called with params:`, params);
     try {
-      const { documentType, documentData } = params;
+      const { documentType, name, data } = params;
       
       // Use DocumentDiscovery to find target collection
       const { collection } = DocumentDiscovery.findCollection(documentType);
+      console.log(`Simulacrum | CreateDocumentTool: Found collection for ${documentType}:`, collection.name);
       
       // Create the document using Foundry API
-      const createdDocument = await collection.documentClass.create(documentData);
+      const createdDocument = await collection.documentClass.create({ name, ...data });
+      console.log(`Simulacrum | CreateDocumentTool: Document created successfully:`, createdDocument);
       
       return {
         success: true,
@@ -38,6 +42,7 @@ export class CreateDocumentTool extends Tool {
       };
       
     } catch (error) {
+      console.error(`Simulacrum | CreateDocumentTool: Failed to create ${params.documentType}:`, error);
       return {
         success: false,
         error: {

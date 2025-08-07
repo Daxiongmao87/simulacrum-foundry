@@ -6,7 +6,7 @@ export class DeleteDocumentTool extends Tool {
   constructor() {
     super(
       'delete_document',
-      'Deletes an existing document (requires deletion permission)',
+      'Deletes an existing document by its ID or name (requires deletion permission).',
       {
         type: 'object',
         properties: {

@@ -324,3 +324,83 @@ Test dynamic document discovery with:
 5. **Support team collaboration** - Help intern when needed, escalate architectural questions
 
 Your role is crucial to delivering a robust, well-architected solution that synthesizes proven patterns into a cohesive FoundryVTT module.
+
+## Implementation Progress
+
+### 2025-08-07 - Task Started
+- Assigned user story: Implement Story 22: Agentic Loop Controller.
+- Key patterns identified: `AgenticLoopController` class structure, `AgenticContext` class, integration with `SimulacrumAIService`, `SimulacrumToolScheduler`, `JSONResponseParser`.
+- Implementation approach:
+    1.  Created `scripts/core/agentic-context.js` to manage conversational history and tool results.
+    2.  Created `scripts/core/agentic-loop-controller.js` to orchestrate the AI -> Tool -> AI cycle.
+    3.  Renamed `abort()` to `abortAllTools()` in `scripts/core/tool-scheduler.js` for consistency.
+    4.  Integrated `AgenticLoopController` into `scripts/main.js` by importing and making it globally accessible.
+- Files modified:
+    - `scripts/core/agentic-context.js` (new file)
+    - `scripts/core/agentic-loop-controller.js` (new file)
+    - `scripts/core/tool-scheduler.js`
+    - `scripts/main.js`
+
+### 2025-08-07 - Development Notes
+- `AgenticContext` now handles user messages, AI responses, tool results, and errors, providing a `toChatPrompt()` method for AI input.
+- `AgenticLoopController` manages the flow, including placeholders, tool execution, and basic error handling.
+- `SimulacrumToolScheduler.abortAllTools()` is now correctly called for cancellation.
+- `AgenticLoopController` is initialized and exposed globally in `main.js`.
+
+### 2025-08-07 - Completion Status
+- [x] Core functionality implemented
+- [x] Error handling added (basic in loop controller)
+- [ ] User feedback implemented (placeholders are console logs/notifications, needs UI integration)
+- [ ] Integration testing completed (Requires manual verification in FoundryVTT)
+- [x] Documentation updated
+
+### 2025-08-07 - Handoff Notes
+- Implementation complete: Yes
+- Known issues: UI integration for placeholders and progress display is currently basic (console logs and notifications) and needs further development.
+- Next steps needed: Manual verification in FoundryVTT to confirm the agentic loop functions correctly, and further UI integration for a better user experience.
+
+### 2025-08-07 - Task Started
+- Assigned user story: Fix import error in `agentic-loop-controller.js`.
+- Key patterns identified: ES6 module import/export.
+- Implementation approach: Corrected the import name from `JSONResponseParser` to `AgentResponseParser` in `scripts/core/agentic-loop-controller.js`.
+
+### 2025-08-07 - Development Notes
+- Confirmed the export name in `scripts/core/json-response-parser.js` is `AgentResponseParser`.
+- Updated the import statement and the constructor initialization in `scripts/core/agentic-loop-controller.js` to use `AgentResponseParser`.
+- Files modified: `scripts/core/agentic-loop-controller.js`
+
+### 2025-08-07 - Completion Status
+- [x] Core functionality implemented
+- [ ] Error handling added (N/A for this change)
+- [ ] User feedback implemented (N/A for this change)
+- [ ] Integration testing completed (Requires manual verification in FoundryVTT)
+- [x] Documentation updated
+
+### 2025-08-07 - Handoff Notes
+- Implementation complete: Yes
+- Known issues: None.
+- Next steps needed: Manual verification in FoundryVTT to confirm the import error is resolved.
+
+### 2025-08-07 - Task Started
+- Assigned user story: Fix 'invalid message content type' error in AI service.
+- Key patterns identified: OpenAI API message format, `SimulacrumAIService` class, `processStreamingResponse` method, `getContextualHistory` method.
+- Implementation approach:
+    1.  Renamed `function_calls` to `tool_calls` when pushing assistant messages to `conversationHistory` in `processStreamingResponse`.
+    2.  Modified `getContextualHistory` to ensure that if a message has `tool_calls`, its `content` is explicitly set to an empty string.
+- Files modified: `scripts/chat/ai-service.js`
+
+### 2025-08-07 - Development Notes
+- The `function_calls` field was updated to `tool_calls` to align with the latest OpenAI API specification.
+- Ensured that messages containing `tool_calls` have an empty string for their `content` field to prevent API errors related to content type.
+
+### 2025-08-07 - Completion Status
+- [x] Core functionality implemented
+- [x] Error handling added (implicit by ensuring correct message format)
+- [ ] User feedback implemented (N/A for this change)
+- [ ] Integration testing completed (Requires manual verification in FoundryVTT)
+- [x] Documentation updated
+
+### 2025-08-07 - Handoff Notes
+- Implementation complete: Yes
+- Known issues: None.
+- Next steps needed: Manual verification in FoundryVTT to confirm the API request format is correct and the 'invalid message content type' error is resolved.

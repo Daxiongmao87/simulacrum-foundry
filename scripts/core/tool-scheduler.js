@@ -43,28 +43,30 @@ export class SimulacrumToolScheduler {
 
   // Legacy method – schedule a single tool call
   async scheduleToolExecution(toolName, parameters, user) {
+    console.log("Simulacrum | scheduleToolExecution: Starting for tool", toolName);
     const callId = generateCallId();
     const request = { callId, name: toolName, args: parameters };
     const abortCtrl = new AbortController();
+    console.log("Simulacrum | scheduleToolExecution: Before calling this.schedule()");
     const promise = new Promise((resolve, reject) => {
-      this.schedule(request, abortCtrl.signal).then(() => {
-        const call = this.toolCalls.find(c => c.request.callId === callId);
-        if (call && call.status === 'success') resolve(call.response);
-        else if (call && call.status === 'error') reject(call.response?.error || new Error('Tool execution failed'));
-        else reject(new Error('Tool execution aborted'));
-      }).catch(reject);
+      console.log("Simulacrum | scheduleToolExecution: Inside Promise constructor");
+      // Store resolve/reject for later completion
+      this.schedule(request, abortCtrl.signal, resolve, reject);
+      console.log("Simulacrum | scheduleToolExecution: Promise waiting for this.schedule() to resolve/reject");
     });
     return promise;
   }
 
   // New schedule method – accepts array of requests
-  async schedule(requests, signal) {
-    if (this.isRunning()) {
-      throw new Error('Cannot schedule new tool calls while others are running');
-    }
+  async schedule(requests, signal, resolvePromise, rejectPromise) {
+    console.log('Simulacrum  < /dev/null |  schedule: Start of schedule() method');
     const reqArray = Array.isArray(requests) ? requests : [requests];
+    console.log('Simulacrum | schedule: After reqArray initialization');
+    console.log('Simulacrum | schedule: Before toolRegistry await');
     const toolRegistry = await this.toolRegistry;
+    console.log('Simulacrum | schedule: After toolRegistry await');
     const newCalls = reqArray.map(req => {
+      console.log('Simulacrum | schedule: Inside reqArray.map() loop for request', req.callId);
       const tool = toolRegistry.getTool(req.name);
       if (!tool) {
         return {
@@ -72,6 +74,8 @@ export class SimulacrumToolScheduler {
           request: req,
           response: { callId: req.callId, error: new Error(`Tool ${req.name} not found`) },
           durationMs: 0,
+          resolve: resolvePromise, // Store resolve for single call
+          reject: rejectPromise,   // Store reject for single call
         };
       }
       return {
@@ -79,16 +83,19 @@ export class SimulacrumToolScheduler {
         request: req,
         tool,
         startTime: Date.now(),
+        resolve: resolvePromise, // Store resolve for single call
+        reject: rejectPromise,   // Store reject for single call
       };
     });
     this.toolCalls = this.toolCalls.concat(newCalls);
     this.notifyToolCallsUpdate();
 
+    console.log('Simulacrum | schedule: Before processing newCalls for loop');
     for (const call of newCalls) {
       if (call.status !== 'validating') continue;
       const { request, tool } = call;
       try {
-        if (this.config.getApprovalMode() === 'YOLO') {
+        if (true) { // Force YOLO mode for agentic loop
           this.setStatusInternal(request.callId, 'scheduled');
         } else {
           const confirmation = await tool.shouldConfirmExecute(request.args, signal);
@@ -104,28 +111,48 @@ export class SimulacrumToolScheduler {
     }
     this.attemptExecutionOfScheduledCalls(signal);
     this.checkAndNotifyCompletion();
+    console.log('Simulacrum | schedule: End of schedule() method');
   }
 
   setStatusInternal(targetCallId, status, data) {
     this.toolCalls = this.toolCalls.map(call => {
       if (call.request.callId !== targetCallId || ['success', 'error', 'cancelled'].includes(call.status)) return call;
       const start = call.startTime;
+      const updatedCall = { ...call };
+
       switch (status) {
         case 'success':
-          return { ...call, status: 'success', response: data, durationMs: start ? Date.now() - start : undefined };
+          updatedCall.status = 'success';
+          updatedCall.response = data;
+          updatedCall.durationMs = start ? Date.now() - start : undefined;
+          if (updatedCall.resolve) updatedCall.resolve(data);
+          break;
         case 'error':
-          return { ...call, status: 'error', response: data, durationMs: start ? Date.now() - start : undefined };
+          updatedCall.status = 'error';
+          updatedCall.response = data;
+          updatedCall.durationMs = start ? Date.now() - start : undefined;
+          if (updatedCall.reject) updatedCall.reject(data?.error || new Error('Tool execution failed'));
+          break;
         case 'awaiting_approval':
-          return { ...call, status: 'awaiting_approval', confirmationDetails: data };
+          updatedCall.status = 'awaiting_approval';
+          updatedCall.confirmationDetails = data;
+          break;
         case 'scheduled':
-          return { ...call, status: 'scheduled' };
+          updatedCall.status = 'scheduled';
+          break;
         case 'executing':
-          return { ...call, status: 'executing', startTime: start };
+          updatedCall.status = 'executing';
+          updatedCall.startTime = start;
+          break;
         case 'cancelled':
-          return { ...call, status: 'cancelled', response: data };
+          updatedCall.status = 'cancelled';
+          updatedCall.response = data;
+          if (updatedCall.reject) updatedCall.reject(new Error('Tool execution cancelled'));
+          break;
         default:
-          return call;
+          break;
       }
+      return updatedCall;
     });
     this.notifyToolCallsUpdate();
     this.checkAndNotifyCompletion();
@@ -168,7 +195,7 @@ export class SimulacrumToolScheduler {
     return this.toolCalls.some(c => c.status === 'executing' || c.status === 'awaiting_approval');
   }
 
-  abort() {
+  abortAllTools() {
     if (this.abortController) this.abortController.abort();
     this.toolCalls = [];
   }

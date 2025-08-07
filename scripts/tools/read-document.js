@@ -5,7 +5,7 @@ export class ReadDocumentTool extends Tool {
   constructor() {
     super(
       'read_document',
-      'Reads an existing document by ID or name',
+      'Reads an existing document by its ID or name.',
       {
         type: 'object',
         properties: {

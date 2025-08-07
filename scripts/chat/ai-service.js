@@ -8,17 +8,66 @@ export class SimulacrumAIService {
   }
 
   /**
-   * Generate OpenAI-compatible function schemas from tool registry
+   * Generate OpenAI-compatible function schemas from tool registry,
+   * including dynamically discovered document types for create_document tool.
    */
-  generateToolSchemas() {
+  async generateToolSchemas() {
     const schemas = [];
+
+    // Add schemas for all registered tools, excluding 'create_document' if it's already in the registry
+    // The 'create_document' tool schema will be dynamically generated below.
     for (const [name, tool] of this.toolRegistry.tools.entries()) {
-      schemas.push({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameterSchema
-      });
+      if (name !== 'create_document') {
+        schemas.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameterSchema
+        });
+      }
     }
+
+    // Dynamically add create_document tool schema based on available document types
+    try {
+      const creatableTypes = await game.simulacrum.documentDiscoveryEngine.getCreatableDocumentTypes();
+      const enumValues = Object.keys(creatableTypes);
+
+      if (enumValues.length > 0) {
+        schemas.push({
+          name: "create_document",
+          description: "Create a new FoundryVTT document (e.g., Actor, Item, Scene, JournalEntry).",
+          parameters: {
+            type: "object",
+            properties: {
+              documentType: {
+                type: "string",
+                enum: enumValues,
+                description: "The type of document to create (e.g., 'Actor', 'Item', 'Scene', 'JournalEntry', or a specific subtype like 'character', 'weapon')."
+              },
+              data: {
+                type: "object",
+                description: "Additional data to initialize the document with, as a JSON object. This MUST include the 'name' of the document and MAY include a 'type' for subtypes (e.g., 'npc' for an Actor).",
+                properties: {
+                  name: {
+                    type: "string",
+                    description: "The name of the new document."
+                  },
+                  type: {
+                    type: "string",
+                    description: "Optional: The specific subtype of the document (e.g., 'npc' for an Actor, 'weapon' for an Item). This is often required for certain documentTypes."
+                  }
+                },
+                required: ["name"]
+              }
+            },
+            required: ["documentType", "data"]
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Simulacrum | Failed to generate create_document tool schema:", error);
+      // Optionally, add a fallback schema or handle the error gracefully
+    }
+
     return schemas;
   }
 
@@ -38,7 +87,7 @@ export class SimulacrumAIService {
         lastMessage: {
           role: 'user',
           contentLength: userMessage.length,
-          contentPreview: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : '')
+          contentPreview: (userMessage ?? '').substring(0, 100) + ((userMessage ?? '').length > 100 ? '...' : '')
         }
       });
 
@@ -64,7 +113,7 @@ export class SimulacrumAIService {
       const messages = [
         {
           role: 'system',
-          content: systemPrompt || this.getDefaultSystemPrompt()
+          content: (typeof systemPrompt === 'string' && systemPrompt.length > 0) ? systemPrompt : await this.getDefaultSystemPrompt()
         },
         ...this.getContextualHistory(contextLength),
         {
@@ -93,8 +142,8 @@ export class SimulacrumAIService {
           messages: requestBody.messages.map((msg, idx) => ({
             index: idx,
             role: msg.role,
-            contentLength: msg.content?.length || 0,
-            contentPreview: msg.content?.substring(0, 100) + (msg.content?.length > 100 ? '...' : ''),
+            contentLength: String(msg.content ?? '').length || 0,
+            contentPreview: String(msg.content ?? '').substring(0, 100) + (String(msg.content ?? '').length > 100 ? '...' : ''),
             hasToolCalls: !!msg.function_calls
           }))
         }
@@ -244,18 +293,20 @@ export class SimulacrumAIService {
               }
 
               if (delta?.function_call) {
+                // If a function call is present, ensure content is empty as per OpenAI API spec
+                currentMessage.content = ''; 
                 // Handle function call streaming
                 const functionCall = delta.function_call;
                 if (functionCall.name) {
                   functionCalls.push({
-                    name: functionCall.name,
-                    arguments: functionCall.arguments || ''
+                    tool_name: functionCall.name,
+                    parameters: functionCall.arguments || ''
                   });
                 } else if (functionCall.arguments) {
                   // Append to last function call arguments
                   const lastCall = functionCalls[functionCalls.length - 1];
                   if (lastCall) {
-                    lastCall.arguments += functionCall.arguments;
+                    lastCall.parameters += functionCall.arguments;
                   }
                 }
               }
@@ -286,7 +337,7 @@ export class SimulacrumAIService {
         this.conversationHistory.push({
           role: 'assistant',
           content: currentMessage.content,
-          function_calls: functionCalls
+          tool_calls: functionCalls
         });
       }
 
@@ -393,32 +444,115 @@ export class SimulacrumAIService {
     // Simple implementation - take recent messages up to context limit
     // In production, would implement proper token counting and truncation
     const recentHistory = this.conversationHistory.slice(-10);
+
+    // Ensure content is an empty string if tool_calls are present
+    const formattedHistory = recentHistory.map(msg => {
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        return { ...msg, content: '' }; // Set content to empty string if tool_calls exist
+      }
+      return msg;
+    });
     
     console.log('📊 Simulacrum | Context history prepared:', {
       maxTokens,
       totalHistoryMessages: this.conversationHistory.length,
-      contextMessages: recentHistory.length,
-      contextMessageRoles: recentHistory.map(msg => msg.role),
-      totalContextLength: recentHistory.reduce((sum, msg) => sum + (msg.content?.length || 0), 0)
+      contextMessages: formattedHistory.length,
+      contextMessageRoles: formattedHistory.map(msg => msg.role),
+      totalContextLength: formattedHistory.reduce((sum, msg) => sum + (msg.content?.length || 0), 0)
     });
     
-    return recentHistory;
+    return formattedHistory;
   }
 
   /**
-   * Default system prompt for Simulacrum
+   * Default system prompt for Simulacrum - enforces JSON response format for agentic behavior
    */
-  getDefaultSystemPrompt() {
-    return `You are Simulacrum, an AI campaign assistant for FoundryVTT Game Masters. You help manage campaigns by:
+  async getDefaultSystemPrompt() {
+    const toolSchemas = await this.generateToolSchemas();
+    const toolList = toolSchemas.map(schema => {
+      let params = '';
+      if (schema.parameters && schema.parameters.properties) {
+        params = Object.keys(schema.parameters.properties).map(key => {
+          const prop = schema.parameters.properties[key];
+          return `${key}: ${prop.type}${prop.enum ? ` (${prop.enum.join(', ')})` : ''}`; 
+        }).join(', ');
+      }
+      return `- ${schema.name}(${params}): ${schema.description}`;
+    }).join('\n');
+    
+    return `You are Simulacrum, an AI campaign assistant for FoundryVTT. You MUST always respond in this exact JSON format:
 
-- Creating, reading, updating, and deleting game documents (actors, items, scenes, journals, etc.)
-- Providing information about the current world, scenes, and game state
-- Assisting with campaign management and organization
+{
+    "message": "Your response to the user",
+    "tool_calls": [
+        {
+            "tool_name": "exact_tool_name",
+            "parameters": {"param1": "value1"},
+            "reasoning": "Why you're using this specific tool"
+        }
+    ],
+    "continuation": {
+        "in_progress": true/false,
+        "gerund": "Single descriptive word ending in -ing"
+    }
+}
 
-You have access to tools for document operations. Always use tools when users request document manipulation. Be helpful, concise, and focused on practical campaign assistance.
+MANDATORY RULES:
+- You MUST respond in valid JSON format only
+- If you provide tool_calls, you MUST set in_progress: true (tools need to execute first)
+- Only set in_progress: false when NO tools are needed and task is complete
+- tool_calls can be empty array [] if no tools needed
+- reasoning is MANDATORY for each tool call - explain why you chose this tool
+- in_progress: true means you will continue working, false means task complete
+- gerund is MANDATORY if in_progress=true, null if in_progress=false
+- Use gerunds: Creating, Analyzing, Configuring, Updating, Searching, Processing, Validating, Optimizing, Placing, Generating, Calculating, Reviewing, Organizing, Monitoring, Executing, Investigating, Planning, Building, Testing, Implementing
 
+AVAILABLE TOOLS:
+${toolList || 'No tools currently available'}
+
+EXAMPLES:
+
+Good response (with tool):
+{
+    "message": "I'll create a new NPC actor for your tavern scene.",
+    "tool_calls": [
+        {
+            "tool_name": "create_document",
+            "parameters": {"documentType": "Actor", "data": {"name": "Innkeeper Bob", "type": "npc"}},
+            "reasoning": "Creating an NPC actor to populate the tavern scene as requested"
+        }
+    ],
+    "continuation": {
+        "in_progress": true,
+        "gerund": "Creating"
+    }
+}
+
+Good response (no tools):
+{
+    "message": "The tavern scene looks great! Your NPC has been successfully added.",
+    "tool_calls": [],
+    "continuation": {
+        "in_progress": false,
+        "gerund": null
+    }
+}
+
+ERROR RECOVERY: If you cannot provide valid JSON, respond with:
+{
+    "message": "I apologize, I encountered a formatting error. Could you please rephrase your request?",
+    "tool_calls": [],
+    "continuation": {
+        "in_progress": false,
+        "gerund": null
+    }
+}
+
+CONTEXT:
 Current world: ${game.world?.title || 'Unknown'}
-System: ${game.system?.title || 'Unknown'} v${game.system?.version || '?'}`;
+System: ${game.system?.title || 'Unknown'} v${game.system?.version || '?'} 
+
+Remember: You MUST respond in JSON format. No exceptions.`;
   }
 
   /**

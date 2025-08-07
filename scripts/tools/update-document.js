@@ -6,7 +6,7 @@ export class UpdateDocumentTool extends Tool {
   constructor() {
     super(
       'update_document',
-      'Updates an existing document with new data',
+      'Updates an existing document with new data by its ID or name.',
       {
         type: 'object',
         properties: {

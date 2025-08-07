@@ -161,14 +161,17 @@ export class ErrorLogger {
    * Log error with context
    */
   logError(error, context = {}) {
+    // Ensure error is an object, even if null/undefined is passed
+    const safeError = error || {};
+
     const logEntry = {
       timestamp: new Date().toISOString(),
       error: {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        severity: error.severity,
-        stack: error.stack
+        name: safeError.name || 'UnknownError',
+        message: safeError.message || 'An unknown error occurred.',
+        code: safeError.code || 'UNKNOWN_ERROR_CODE',
+        severity: safeError.severity || 'error',
+        stack: safeError.stack || 'No stack trace available'
       },
       context: {
         ...context,
@@ -222,20 +225,20 @@ export class ErrorLogger {
     
     switch (error.severity) {
       case 'critical':
-        console.error(message, { error, context });
+        console.error(message, logEntry);
         break;
       case 'error':
-        console.error(message, { error, context });
+        console.error(message, logEntry);
         break;
       case 'warning':
-        console.warn(message, { error, context });
+        console.warn(message, logEntry);
         break;
       case 'info':
-        console.info(message, { error, context });
+        console.info(message, logEntry);
         break;
       default:
         if (this.debugMode) {
-          console.debug(message, { error, context });
+          console.debug(message, logEntry);
         }
     }
   }
@@ -274,6 +277,7 @@ export function setupGlobalErrorHandling() {
   
   // Global error handler
   window.addEventListener('error', (event) => {
+    const originalError = event.error || {}; // Ensure originalError is an object
     const error = new SimulacrumError(
       event.message || 'Unknown JavaScript error',
       'JAVASCRIPT_ERROR',
@@ -282,7 +286,7 @@ export function setupGlobalErrorHandling() {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        stack: event.error?.stack
+        stack: originalError.stack // Access stack safely
       }
     );
     
@@ -291,11 +295,12 @@ export function setupGlobalErrorHandling() {
   
   // Unhandled promise rejection handler
   window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason || {}; // Ensure reason is an object
     const error = new SimulacrumError(
-      event.reason?.message || 'Unhandled promise rejection',
+      reason.message || String(reason) || 'Unhandled promise rejection',
       'PROMISE_REJECTION',
       'error',
-      { reason: event.reason }
+      { reason: reason }
     );
     
     errorLogger.logError(error);

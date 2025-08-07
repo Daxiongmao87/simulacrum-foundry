@@ -1,5 +1,6 @@
 import { ChatModal, MarkdownParser } from "../fimlib/main.js";
 import { SimulacrumAIService } from "./ai-service.js";
+import { AgenticLoopController } from "../core/agentic-loop-controller.js";
 import { getChatModalClass } from "../main.js";
 
 /**
