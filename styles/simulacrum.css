@@ -1,243 +1,70 @@
-/* Simulacrum Chat Interface Styles */
+/* Base styles for the Simulacrum module */
 
-.simulacrum-chat-modal .message-user {
-    background: rgba(100, 150, 255, 0.1);
-    border-left: 3px solid #6496ff;
+/* General styling for the chat modal */
+.simulacrum-chat-modal {
+    /* Add your base styles here */
 }
 
-.simulacrum-chat-modal .message-assistant {
-    background: rgba(80, 200, 120, 0.1);
-    border-left: 3px solid #50c878;
+/* Styling for the chat messages */
+.simulacrum-chat-message {
+    /* Add your message specific styles here */
 }
 
-.simulacrum-chat-modal .message-system {
-    background: rgba(255, 165, 0, 0.1);
-    border-left: 3px solid #ffa500;
-    font-style: italic;
+/* Styling for the input area */
+.simulacrum-chat-input {
+    /* Add your input specific styles here */
 }
 
-.simulacrum-chat-modal .tool-result {
-    margin-top: 10px;
-    padding: 10px;
-    background: rgba(200, 200, 200, 0.1);
-    border: 1px solid #ccc;
-    border-radius: 4px;
+/* Styling for the send button */
+.simulacrum-send-button {
+    /* Add your send button specific styles here */
 }
 
-.simulacrum-chat-modal .tool-result-header {
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: #666;
-}
-
-.simulacrum-chat-modal .tool-result-content pre {
-    background: rgba(0, 0, 0, 0.1);
-    padding: 8px;
-    border-radius: 3px;
-    font-size: 12px;
-    overflow-x: auto;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.simulacrum-chat-modal .chat-send.processing {
-    background: #ff6b6b;
-    border-color: #ff5252;
-    animation: pulse 1.5s infinite;
-}
-
-.simulacrum-chat-modal .chat-send.processing:hover {
-    background: #ff5252;
-}
-
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
-}
-
-.simulacrum-chat-modal .error {
-    color: #ff6b6b;
-    background: rgba(255, 107, 107, 0.1);
-    padding: 8px;
-    border-radius: 4px;
-    margin-top: 5px;
-}
-
-.simulacrum-chat-modal .chat-input textarea:disabled {
-    opacity: 0.6;
-    background: rgba(128, 128, 128, 0.1);
-}
-
-/* Simulacrum Theme Variables: Cyberpunk AI palette */
-:root {
-  --simulacrum-cyan: #00FFFF;
-  --simulacrum-cyan-light: #CCFFFF;
-  --simulacrum-cyan-dark: #008B8B;
-  --simulacrum-disabled: #888888;
-  --simulacrum-glow: rgba(0, 255, 255, 0.4);
-}
-
-/* Scene Control Button Styling - Main Robot Icon */
-.scene-control[data-control="simulacrum"] i.fas.fa-robot,
-.control-tool[data-tool="chat"] i.fas.fa-robot {
-  color: #fff;
-  text-shadow: 0 0 5px var(--simulacrum-cyan), 0 0 10px var(--simulacrum-glow);
-  transition: all 0.3s ease;
-}
-
-.scene-control[data-control="simulacrum"]:hover i.fas.fa-robot,
-.control-tool[data-tool="chat"]:hover i.fas.fa-robot {
-  color: #fff;
-  text-shadow: 0 0 8px var(--simulacrum-cyan), 0 0 15px var(--simulacrum-cyan), 0 0 20px rgba(0, 255, 255, 0.7);
-  transform: scale(1.1);
-}
-
-/* Chat Control Button Styling */
-.simulacrum-chat-control {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.simulacrum-chat-control i {
-  color: white;
-  text-shadow: 0 0 5px var(--simulacrum-cyan), 0 0 10px var(--simulacrum-glow);
-  transition: all 0.3s ease;
-}
-
-.simulacrum-chat-control:hover i {
-  color: #fff;
-  text-shadow: 0 0 8px var(--simulacrum-cyan), 0 0 15px var(--simulacrum-cyan), 0 0 20px rgba(0, 255, 255, 0.7);
-  transform: scale(1.1);
-}
-
-/* Disabled State Styling */
-.simulacrum-chat-control.disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.simulacrum-chat-control.disabled i {
-  color: var(--simulacrum-disabled);
-  text-shadow: none;
-}
-
-.simulacrum-chat-control.disabled:hover i {
-  color: var(--simulacrum-disabled);
-  text-shadow: none;
-  transform: none;
-}
-
-/* Hide the tools panel for Simulacrum - we want direct click behavior */
-#tools-panel-simulacrum {
-  display: none !important;
-}
-
-/* Make the scene control button cursor indicate it's directly clickable */
-.scene-control[data-control="simulacrum"] {
-  cursor: pointer;
-}
-
-/* Auxiliary Content Container for Context Items */
-.auxiliary-content-container {
-    padding: 8px;
-    background: rgba(0, 0, 0, 0.1);
-    border-top: 1px solid var(--color-border-dark);
-    border-bottom: 1px solid var(--color-border-dark);
-    margin-bottom: 8px;
-}
-
-.simulacrum-context-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    padding: 2px;
-}
-
-.simulacrum-context-item {
-    display: flex;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.05);
-    border: 1px solid var(--color-border-dark);
-    border-radius: 3px;
-    padding: 2px 5px;
-    margin-bottom: 0; /* Adjusted to fit flex container better */
-    font-size: 0.8em;
-    white-space: nowrap;
-    transition: all 0.2s ease;
-}
-
-.simulacrum-context-item:hover {
-    background-color: rgba(0, 0, 0, 0.08);
-}
-
-.simulacrum-context-item-icon {
-    margin-right: 3px;
-}
-
-.simulacrum-context-item-remove {
+/* Styling for the context button on document sheets */
+.simulacrum-context {
     margin-left: 5px;
+    font-size: 14px;
+    color: #f0f0f0; /* Light gray */
     cursor: pointer;
-    color: var(--color-text-dark-secondary);
-    transition: color 0.2s ease;
+    transition: color 0.2s ease-in-out;
 }
 
-.simulacrum-context-item-remove:hover {
-    color: var(--color-level-error);
+.simulacrum-context:hover {
+    color: #ff6400; /* Orange */
 }
 
-/* Copy Button Styling */
-.simulacrum-copy-btn {
-  width: auto;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--simulacrum-cyan-dark); /* Using Simulacrum theme color */
-  margin-left: 5px;
-  font-size: 0.8em;
-  padding: 2px 5px;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* Scene control button styling */
+.scene-control[data-control="simulacrum"] {
+    /* Base styles for the button */
 }
 
-/* Hide legacy copy buttons */
-.copy-message-btn,
-.message-copy-btn {
-  display: none !important;
+/* Specific states for the Simulacrum button */
+.scene-control[data-control="simulacrum"].simulacrum-disabled {
+    color: #888; /* Grayed out */
+    cursor: not-allowed;
 }
 
-.simulacrum-copy-btn:hover {
-  background-color: rgba(0, 255, 255, 0.1); /* Using Simulacrum theme color */
+.scene-control[data-control="simulacrum"].simulacrum-red {
+    color: #e74c3c; /* Red */
 }
 
-.simulacrum-copy-btn.copied {
-  color: #2e7d32; /* Green for copied feedback */
+.scene-control[data-control="simulacrum"].simulacrum-yellow {
+    color: #f1c40f; /* Yellow */
 }
 
-.simulacrum-copy-btn i {
-  font-size: 14px;
+.scene-control[data-control="simulacrum"].simulacrum-mithril {
+    color: #87ceeb; /* Sky blue / baby blue */
+    text-shadow: 0 0 8px #c0c0c0, 0 0 12px #c0c0c0; /* Silver glow */
 }
 
-/* Copy Button Tooltip */
-.simulacrum-copy-tooltip {
-  position: absolute;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  transform: translateY(-100%);
-  top: -5px;
-  right: 0;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  z-index: 100;
+/* Tooltip adjustments for better visibility */
+.scene-control[data-control="simulacrum"][data-tooltip]:hover::before {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    border: 1px solid #333;
 }
 
-.simulacrum-copy-tooltip.visible {
-  opacity: 1;
+/* Ensure the icon is styled correctly */
+.scene-control[data-control="simulacrum"] i {
+    /* Any specific icon styling if needed */
 }

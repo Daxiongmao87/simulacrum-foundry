@@ -123,11 +123,62 @@ When implementing specific functionality, refer to:
 - Settings system: `research/divination-foundry/scripts/settings.js`
 - API integration: `research/divination-foundry/scripts/api.js`
 
+## CRITICAL LESSONS LEARNED - AVOID PAST FAILURES
+
+### What Went Wrong During Chat Modal Implementation
+During implementation of the chat interface, Claude Code made repeated critical errors that must be avoided:
+
+#### Error Pattern 1: Ignoring Direct Instructions
+- **User repeatedly said**: "Compare divination-foundry implementation vs ours and find differences"
+- **Claude did**: Made theoretical assumptions and implemented fixes without comparing actual code
+- **Lesson**: ALWAYS do exactly what the user asks first, before making any assumptions
+
+#### Error Pattern 2: False Confidence Without Evidence
+- **Problem**: Claimed fixes were complete 5+ times without testing or verification
+- **Result**: Wasted hours on wrong solutions while real issue remained unfixed
+- **Lesson**: Never claim something is "fixed" without concrete evidence it works
+
+#### Error Pattern 3: Missing Architecture Fundamentals
+- **Critical Miss**: FIMLib is used as a git submodule in divination-foundry, not embedded code
+- **Wrong Approach**: Tried to fix embedded copy instead of using proper submodule architecture
+- **Root Cause**: Template path resolution failed because embedded FIMLib had wrong module references
+- **Lesson**: Understand the ENTIRE architecture before making changes
+
+#### Error Pattern 4: Theoretical vs Empirical Approach
+- **Wrong**: Analyzing code and making logical deductions about what should work
+- **Right**: Directly comparing working vs broken implementations line by line
+- **Lesson**: When something works in one place but not another, compare implementations exactly
+
+### Mandatory Debugging Protocol
+
+When facing UI/layout issues:
+1. **STOP making assumptions**
+2. **Find a working reference implementation**  
+3. **Compare line-by-line differences between working vs broken**
+4. **Identify exact architectural differences (submodules, dependencies, file paths)**
+5. **Fix the architecture first, CSS/JS second**
+6. **Test each change individually**
+7. **Never claim "fixed" without user confirmation**
+
+### Architecture Understanding Requirements
+- **FIMLib Integration**: MUST use as git submodule, not embedded copy
+- **Template Paths**: Must reference `modules/fimlib/...` not `modules/simulacrum/scripts/fimlib/...`
+- **Dependency Chain**: Understand how submodules become available as separate modules in Foundry
+- **Reference Implementation**: Always compare against working divination-foundry patterns
+
+### Communication Protocol
+- **User frustration indicates**: Claude is not following instructions or missing something fundamental
+- **When user says "do X"**: Do X first, analyze later
+- **Multiple failed attempts**: Step back and ask user to clarify what's being missed
+- **Never assume**: Always verify architectural assumptions against working implementations
+
 ## Validation Checklist
 
 Before any major implementation:
-1. Cross-reference patterns against all four research repositories
-2. Verify system-agnostic compatibility (test with D&D 5e, PF2e concepts)
-3. Confirm permission system restricts to GM/Assistant GM only
-4. Validate tool confirmation system shows operation details
-5. Test dynamic document type discovery across different systems
+1. **MANDATORY**: Compare against working reference implementation first
+2. Cross-reference patterns against all four research repositories  
+3. Verify system-agnostic compatibility (test with D&D 5e, PF2e concepts)
+4. Confirm permission system restricts to GM/Assistant GM only
+5. Validate tool confirmation system shows operation details
+6. Test dynamic document type discovery across different systems
+7. **MANDATORY**: Get user confirmation that fixes actually work before claiming completion
