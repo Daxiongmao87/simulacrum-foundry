@@ -42,13 +42,22 @@ let isSimulacrumConfigured = false;
  */
 async function checkEndpointAccessibility() {
     console.log('Simulacrum | Checking API endpoint accessibility...');
-    const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+    
+    let apiEndpoint;
+    try {
+        apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+    } catch (error) {
+        console.warn('Simulacrum | Could not retrieve API endpoint setting:', error);
+        connectionState = 'disabled';
+        isSimulacrumConfigured = false;
+        ui.controls.render();
+        return;
+    }
     
     if (!apiEndpoint || apiEndpoint.trim() === '') {
         connectionState = 'disabled';
         isSimulacrumConfigured = false;
         console.log('Simulacrum | API endpoint not configured.');
-        ui.notifications.info('Simulacrum | API endpoint not configured. Please set it in module settings.');
     } else {
         isSimulacrumConfigured = true;
         connectionState = 'checking';
@@ -60,16 +69,16 @@ async function checkEndpointAccessibility() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-            const response = await fetch(apiEndpoint, {
-                method: 'GET', // Using GET as HEAD might not be supported by all OpenAI-compatible endpoints
+            const response = await fetch(`${apiEndpoint}/chat/completions`, {
+                method: 'HEAD',
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
 
-            if (response.ok) {
+            if (response.ok || response.status === 405) {
+                // 405 Method Not Allowed is fine - means server is responding
                 connectionState = 'accessible';
                 console.log('Simulacrum | API endpoint is accessible.');
-                // ui.notifications.info('Simulacrum | API endpoint is accessible.');
             } else {
                 connectionState = 'inaccessible';
                 console.warn(`Simulacrum | API endpoint returned status: ${response.status}`);

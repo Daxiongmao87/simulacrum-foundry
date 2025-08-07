@@ -11,12 +11,22 @@ export class SimulacrumSettings {
             scope: 'world',
             config: true,
             type: String,
-            default: 'https://api.openai.com/v1',
+            default: 'http://localhost:11434/v1',
             onChange: value => {
                 if (value && !value.includes('/v1')) {
                     ui.notifications.warn('SIMULACRUM.SettingApiEndpointWarn');
                 }
             }
+        });
+
+        // API Key
+        game.settings.register('simulacrum', 'apiKey', {
+            name: 'SIMULACRUM.SettingApiKeyName',
+            hint: 'SIMULACRUM.SettingApiKeyHint',
+            scope: 'world',
+            config: true,
+            type: String,
+            default: '',
         });
 
         // Model Name

@@ -38,23 +38,29 @@
     /* Base styles for the button */
 }
 
-/* Specific states for the Simulacrum button */
-.scene-control[data-control="simulacrum"].simulacrum-disabled {
+/* Specific states for the Simulacrum button - target the icon */
+.scene-control[data-control="simulacrum"].simulacrum-disabled i {
     color: #888; /* Grayed out */
+    text-shadow: none;
+}
+
+.scene-control[data-control="simulacrum"].simulacrum-disabled {
     cursor: not-allowed;
 }
 
-.scene-control[data-control="simulacrum"].simulacrum-red {
+.scene-control[data-control="simulacrum"].simulacrum-red i {
     color: #e74c3c; /* Red */
+    text-shadow: none;
 }
 
-.scene-control[data-control="simulacrum"].simulacrum-yellow {
+.scene-control[data-control="simulacrum"].simulacrum-yellow i {
     color: #f1c40f; /* Yellow */
+    text-shadow: none;
 }
 
-.scene-control[data-control="simulacrum"].simulacrum-mithril {
+.scene-control[data-control="simulacrum"].simulacrum-mithril i {
     color: #87ceeb; /* Sky blue / baby blue */
-    text-shadow: 0 0 8px #c0c0c0, 0 0 12px #c0c0c0; /* Silver glow */
+    text-shadow: 0 0 8px #ffffff, 0 0 12px #ffffff; /* White glow */
 }
 
 /* Tooltip adjustments for better visibility */

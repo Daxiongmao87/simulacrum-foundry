@@ -34,10 +34,19 @@ export class SimulacrumAIService {
       });
 
       // Prepare request
-      const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+      const baseEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+      const apiEndpoint = `${baseEndpoint}/chat/completions`;
       const modelName = game.settings.get('simulacrum', 'modelName');
       const systemPrompt = game.settings.get('simulacrum', 'systemPrompt');
       const contextLength = game.settings.get('simulacrum', 'contextLength');
+      const apiKey = game.settings.get('simulacrum', 'apiKey');
+
+      console.log('Simulacrum | Request details:', {
+        apiEndpoint,
+        modelName,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey?.length || 0
+      });
 
       // Build messages array with system prompt
       const messages = [
@@ -55,9 +64,6 @@ export class SimulacrumAIService {
       const requestBody = {
         model: modelName,
         messages: messages,
-        functions: this.generateToolSchemas(),
-        function_call: 'auto',
-        stream: true,
         temperature: 0.7
       };
 
@@ -66,7 +72,7 @@ export class SimulacrumAIService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${game.settings.get('simulacrum', 'apiKey') || ''}`
+          'Authorization': `Bearer ${apiKey || ''}`
         },
         body: JSON.stringify(requestBody),
         signal: abortSignal
@@ -76,8 +82,15 @@ export class SimulacrumAIService {
         throw new Error(`AI API error: ${response.status} ${response.statusText}`);
       }
 
-      // Process streaming response
-      await this.processStreamingResponse(response, onChunk, onComplete, abortSignal);
+      // Get JSON response
+      const data = await response.json();
+      const aiResponse = data.choices[0].message.content;
+      
+      if (onComplete) {
+        onComplete(aiResponse);
+      }
+      
+      return aiResponse;
 
     } catch (error) {
       if (error.name === 'AbortError') {
