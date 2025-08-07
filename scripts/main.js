@@ -13,7 +13,7 @@ import { DeleteDocumentTool } from "./tools/delete-document.js";
 import { ListDocumentsTool } from "./tools/list-documents.js";
 import { SearchDocumentsTool } from "./tools/search-documents.js";
 import { GetWorldInfoTool } from "./tools/get-world-info.js";
-import { GetSceneInfoTool }m from "./tools/get-scene-info.js";
+import { GetSceneInfoTool } from "./tools/get-scene-info.js";
 import { GetUserPreferencesTool } from "./tools/get-user-preferences.js";
 import { AddDocumentContextTool } from "./tools/add-document-context.js";
 import { ListContextTool } from "./tools/list-context.js";
