@@ -11,38 +11,51 @@ export class SimulacrumSettings {
     static async fetchModelsAndContextWindows() {
         const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
         const apiKey = game.settings.get('simulacrum', 'apiKey');
-        const modelsUrl = `${apiEndpoint}/models`;
 
         try {
-            const headers = {
-                'Content-Type': 'application/json',
-            };
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
+            // Use the new ModelDetector system that supports both Ollama and OpenAI
+            const modelDetector = game.simulacrum?.ModelDetector ? new game.simulacrum.ModelDetector() : null;
+            if (!modelDetector) {
+                console.warn('Simulacrum | ModelDetector not available, falling back to empty models');
+                await game.settings.set('simulacrum', 'availableModels', []);
+                return;
             }
 
-            const response = await fetch(modelsUrl, { headers });
+            const detection = await modelDetector.detectModels(apiEndpoint, apiKey);
+            
+            if (detection.detectable && detection.models.length > 0) {
+                // Convert detected models to the format expected by settings system
+                const availableModels = [];
+                
+                for (const model of detection.models) {
+                    let contextWindow = 32000; // Default
+                    
+                    // For Ollama models, try to get actual context window
+                    if (detection.type === 'ollama') {
+                        try {
+                            const contextWindowDetector = game.simulacrum?.ContextWindowDetector ? 
+                                new game.simulacrum.ContextWindowDetector() : null;
+                            if (contextWindowDetector) {
+                                contextWindow = await contextWindowDetector.getContextWindow(apiEndpoint, model.id);
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to get context window for ${model.id}:`, error);
+                        }
+                    }
+                    
+                    availableModels.push({
+                        id: model.id,
+                        contextWindow: contextWindow
+                    });
+                }
 
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(`Failed to fetch models: ${response.status} ${response.statusText} - ${errorBody}`);
+                await game.settings.set('simulacrum', 'availableModels', availableModels);
+                ui.notifications.info(`Simulacrum: Successfully fetched ${availableModels.length} available models from ${detection.type} API.`);
+                console.log('Simulacrum | Available models fetched:', availableModels);
+            } else {
+                console.warn('Simulacrum | No models detected or API not accessible');
+                await game.settings.set('simulacrum', 'availableModels', []);
             }
-
-            const data = await response.json();
-            const models = data.data || [];
-
-            const availableModels = models.map(model => {
-                // Attempt to find context window from various common fields
-                const contextWindow = model.context_window || model.max_tokens || model.max_input_tokens || 32000; // Default to 32k if not found
-                return {
-                    id: model.id,
-                    contextWindow: contextWindow
-                };
-            });
-
-            await game.settings.set('simulacrum', 'availableModels', availableModels);
-            ui.notifications.info('Simulacrum: Successfully fetched available models.');
-            console.log('Simulacrum | Available models fetched:', availableModels);
 
         } catch (error) {
             const errorMessage = (error && typeof error === 'object' && 'message' in error) ? error.message : String(error);

@@ -52,17 +52,52 @@ export class DynamicModelSelector {
      * @param {jQuery} html - Settings UI HTML
      */
     enhanceSettingsUI(html) {
-        console.log('🤖 Enhancing settings UI with dynamic model selection');
+        console.log('DEBUG: enhanceSettingsUI called');
+        console.log('DEBUG: html length:', html.length);
         
-        // Find model name setting
-        const modelSetting = html.find('input[name="simulacrum.modelName"]');
-        if (modelSetting.length === 0) {
-            console.warn('⚠️ Model name setting not found in UI');
+        // Look for ANY simulacrum settings
+        const simulacrumElements = html.find('[name^="simulacrum."]');
+        console.log('DEBUG: Found simulacrum elements:', simulacrumElements.length);
+        
+        // Look specifically for model select
+        const modelSelect = html.find('select[name="simulacrum.modelName"]');
+        console.log('DEBUG: Model select found:', modelSelect.length > 0);
+        if (modelSelect.length > 0) {
+            console.log('DEBUG: Model select element exists');
+        }
+
+        if (modelSelect.length > 0) {
+            this.settingElement = modelSelect.closest('.form-group');
+            this.modelInput = modelSelect;
+        } else {
+            console.log('DEBUG: No model select found, skipping setup');
             return;
         }
 
-        this.settingElement = modelSetting.closest('.form-group');
-        this.modelInput = modelSetting;
+        // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
+        html.on('change', 'select[name="simulacrum.modelName"]', async (e) => {
+            const selectedValue = e.target.value;
+            console.log('DEBUG: Model dropdown changed to:', selectedValue);
+            
+            // Get the model's context window
+            const availableModels = game.settings.get('simulacrum', 'availableModels');
+            const selectedModel = availableModels.find(model => model.id === selectedValue);
+            
+            if (selectedModel) {
+                console.log('DEBUG: Updating context length to:', selectedModel.contextWindow);
+                
+                // Update the context length field in the UI immediately
+                const contextInput = html.find('input[name="simulacrum.contextLength"]');
+                if (contextInput.length > 0) {
+                    contextInput.val(selectedModel.contextWindow);
+                    console.log('DEBUG: Context length field updated in UI');
+                }
+                
+                // Also update the setting for persistence
+                await game.settings.set('simulacrum', 'contextLength', selectedModel.contextWindow);
+                console.log('DEBUG: Context length setting updated');
+            }
+        });
 
         // Initially hide the setting
         this.hideModelSetting();
@@ -179,13 +214,8 @@ export class DynamicModelSelector {
             select.value = currentValue;
         }
 
-        // Handle selection changes
-        select.addEventListener('change', (e) => {
-            console.log(`🔥 DROPDOWN CHANGE EVENT FIRED! Selected value: ${e.target.value}`);
-            console.log('🔥 Event target:', e.target);
-            console.log('🔥 Calling onModelSelectionChange...');
-            this.onModelSelectionChange(e.target.value);
-        });
+        // Use event delegation through the form container to survive FoundryVTT DOM changes
+        select.setAttribute('data-simulacrum-model-select', 'true');
 
         console.log('🔥 CREATED SELECT ELEMENT:', select);
         console.log('🔥 SELECT HAS EVENT LISTENERS:', select.hasAttribute('data-has-listeners'));
