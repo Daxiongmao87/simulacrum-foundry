@@ -88,6 +88,12 @@ export class DynamicContextWindowSetting {
      * @param {string} value - New API endpoint value
      */
     onApiEndpointChange(value) {
+        // Skip if UI elements not ready
+        if (!this.contextInput) {
+            console.log('🔄 UI not ready, skipping API endpoint change');
+            return;
+        }
+
         // Clear previous timer
         clearTimeout(this.debounceTimer);
 
@@ -405,6 +411,12 @@ export class DynamicContextWindowSetting {
      * Update UI based on current settings (for initialization)
      */
     async updateUIFromCurrentSettings() {
+        // Only proceed if UI elements are available
+        if (!this.contextInput) {
+            console.log('🔄 UI elements not ready yet, skipping initial update');
+            return;
+        }
+
         const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
         if (apiEndpoint) {
             console.log('🔄 Updating UI from current settings');

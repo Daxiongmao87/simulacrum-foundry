@@ -63,16 +63,29 @@ export class ContextWindowDetector {
                 return result;
             }
 
-            // Test api/show endpoint (Ollama-style)
+            // Test api/show endpoint (Ollama-style) 
+            // First try to get current model name for testing
+            let testModelName = 'test-model';
+            try {
+                const currentModel = game.settings.get('simulacrum', 'modelName');
+                if (currentModel) {
+                    testModelName = currentModel;
+                }
+            } catch (error) {
+                // Use default test name if settings not available
+            }
+
             const showEndpoint = apiEndpoint.replace('/v1', '/api/show');
             const showResponse = await fetch(showEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: 'test-model' }),
+                body: JSON.stringify({ name: testModelName }),
                 timeout: 5000
             });
 
-            if (showResponse.status !== 404) {
+            // For Ollama: 200 = success, 400/500 = model not found, 404 = endpoint not found
+            // For OpenAI: 404/405 = endpoint doesn't exist
+            if (showResponse.status === 200 || (showResponse.status >= 400 && showResponse.status < 500 && showResponse.status !== 404 && showResponse.status !== 405)) {
                 // Ollama-style API detected
                 const result = {
                     type: 'ollama',
