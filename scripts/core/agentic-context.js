@@ -168,4 +168,62 @@ export class AgenticContext {
     clear() {
         this.history = [];
     }
+
+    /**
+     * Gets the context history as an array of messages for compaction
+     * @returns {Array} Array of message objects with role and content
+     */
+    getMessagesArray() {
+        return this.history.map(item => ({
+            role: this._mapTypeToRole(item.type),
+            content: item.content,
+            timestamp: item.timestamp,
+            isCompacted: item.isCompacted || false
+        }));
+    }
+
+    /**
+     * Replaces the entire message history with a new compacted array
+     * @param {Array} messages - New array of messages
+     */
+    replaceMessagesArray(messages) {
+        this.history = messages.map(msg => ({
+            type: this._mapRoleToType(msg.role),
+            content: msg.content,
+            timestamp: msg.timestamp || new Date().toISOString(),
+            isCompacted: msg.isCompacted || false
+        }));
+    }
+
+    /**
+     * Maps internal context types to chat message roles
+     * @param {string} type - Internal context type
+     * @returns {string} Chat message role
+     * @private
+     */
+    _mapTypeToRole(type) {
+        switch (type) {
+            case 'user': return 'user';
+            case 'ai': return 'assistant';
+            case 'system': return 'system';
+            case 'tool_result': return 'system';
+            case 'error': return 'system';
+            default: return 'system';
+        }
+    }
+
+    /**
+     * Maps chat message roles to internal context types
+     * @param {string} role - Chat message role
+     * @returns {string} Internal context type
+     * @private
+     */
+    _mapRoleToType(role) {
+        switch (role) {
+            case 'user': return 'user';
+            case 'assistant': return 'ai';
+            case 'system': return 'system';
+            default: return 'system';
+        }
+    }
 }

@@ -5,6 +5,7 @@ import { SimulacrumToolScheduler } from './tool-scheduler.js';
 import { AgentResponseParser } from './json-response-parser.js';
 import { AgenticContext } from './agentic-context.js';
 import { TokenTracker, formatToolResultsForAI } from './token-tracker.js';
+import { ContextCompaction } from './context-compaction.js';
 
 /**
  * Manages the autonomous AI -> Tool -> AI cycle based on continuation state.
@@ -52,6 +53,12 @@ export class AgenticLoopController {
          * @private
          */
         this.tokenTracker = new TokenTracker();
+
+        /**
+         * @type {ContextCompaction}
+         * @private
+         */
+        this.contextCompaction = new ContextCompaction(aiService);
     }
 
     /**
@@ -143,13 +150,15 @@ export class AgenticLoopController {
         this.cancelled = false;
         let context = this.initializeContext(userMessage);
 
-        // Initialize token tracker with context window from settings
+        // Initialize token tracker and context compaction with context window from settings
         try {
             const contextWindow = game.settings.get('simulacrum', 'contextWindow') || 8192;
             this.tokenTracker.setMaxTokens(contextWindow);
+            this.contextCompaction.setMaxTokens(contextWindow);
         } catch (error) {
             console.warn('Simulacrum | Could not get context window setting, using default 8192');
             this.tokenTracker.setMaxTokens(8192);
+            this.contextCompaction.setMaxTokens(8192);
         }
 
         // Show initial thinking placeholder
@@ -161,6 +170,16 @@ export class AgenticLoopController {
         while (!this.cancelled && iteration < MAX_ITERATIONS) {
             iteration++;
             try {
+                // Check for context window compaction before sending to AI
+                const chatHistory = context.getMessagesArray();
+                const compactedHistory = await this.contextCompaction.checkAndCompact(chatHistory, this.tokenTracker);
+                
+                // Update context if compaction occurred
+                if (compactedHistory !== chatHistory) {
+                    console.log(`Simulacrum | Context compacted from ${chatHistory.length} to ${compactedHistory.length} messages`);
+                    context.replaceMessagesArray(compactedHistory);
+                }
+                
                 // Get AI response with accumulated context
                 const chatPrompt = await context.toChatPrompt(); // Ensure to await if toChatPrompt is async
                 console.log(`Simulacrum | Iteration ${iteration}: Fetching AI response with prompt:`, chatPrompt);
