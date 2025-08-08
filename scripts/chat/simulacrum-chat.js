@@ -653,8 +653,14 @@ export class SimulacrumChatModal {
             this.showPlaceholder("Thinking");
             console.log('Simulacrum | Placeholder shown, current placeholder:', this.currentPlaceholder);
 
+            // Set this chat as the context for the agentic loop controller
+            game.simulacrum.agenticLoopController.setChatContext(this);
+            
             // Use agentic loop controller for complex workflows
             await game.simulacrum.agenticLoopController.processUserRequest(message);
+            
+            // Clear the chat context from the agentic loop controller
+            game.simulacrum.agenticLoopController.clearChatContext();
             
             // Remove cancel button when processing is complete
             this.removeCancelButton();
@@ -678,6 +684,10 @@ export class SimulacrumChatModal {
         } finally {
             this.processing = false;
             this.abortController = null;
+            // Clear the chat context from the agentic loop controller
+            if (game.simulacrum && game.simulacrum.agenticLoopController) {
+                game.simulacrum.agenticLoopController.clearChatContext();
+            }
             // Ensure placeholder is cleared
             this.clearCurrentPlaceholder();
             // Ensure cancel button is removed

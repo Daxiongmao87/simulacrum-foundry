@@ -25,6 +25,12 @@ export class AgenticLoopController {
         this.cancelled = false;
 
         /**
+         * @type {Object|null}
+         * @private
+         */
+        this.currentChatContext = null;
+
+        /**
          * @type {SimulacrumAIService}
          * @private
          */
@@ -62,6 +68,21 @@ export class AgenticLoopController {
     }
 
     /**
+     * Sets the current chat context for UI operations
+     * @param {Object} chatContext - The chat instance to use for UI operations
+     */
+    setChatContext(chatContext) {
+        this.currentChatContext = chatContext;
+    }
+
+    /**
+     * Clears the current chat context
+     */
+    clearChatContext() {
+        this.currentChatContext = null;
+    }
+
+    /**
      * Initializes the context for a new user request.
      * @param {string} userMessage - The initial message from the user.
      * @returns {AgenticContext} The initialized context.
@@ -80,9 +101,13 @@ export class AgenticLoopController {
      * @private
      */
     showPlaceholder(message) {
-        // TODO: Integrate with actual UI for progress display
-        ui.notifications.info(`Simulacrum | ${message}...`);
-        console.log(`Simulacrum | Placeholder: ${message}`);
+        if (this.currentChatContext && this.currentChatContext.showPlaceholder) {
+            this.currentChatContext.showPlaceholder(message);
+        } else {
+            // Fallback to notifications
+            ui.notifications.info(`Simulacrum | ${message}...`);
+            console.log(`Simulacrum | Placeholder: ${message}`);
+        }
     }
 
     /**
@@ -91,9 +116,13 @@ export class AgenticLoopController {
      * @private
      */
     replacePlaceholderWithMessage(message) {
-        // TODO: Integrate with actual UI to replace placeholder
-        ui.notifications.info(`Simulacrum | AI Response: ${message}`);
-        console.log(`Simulacrum | AI Response: ${message}`);
+        if (this.currentChatContext && this.currentChatContext.replacePlaceholderWithMessage) {
+            this.currentChatContext.replacePlaceholderWithMessage(message);
+        } else {
+            // Fallback to notifications
+            ui.notifications.info(`Simulacrum | AI Response: ${message}`);
+            console.log(`Simulacrum | AI Response: ${message}`);
+        }
     }
 
     /**

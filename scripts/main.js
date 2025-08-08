@@ -126,36 +126,6 @@ Hooks.once('init', () => {
             return options;
         }
         
-        /**
-         * Override addMessage to return a removable jQuery element
-         */
-        addMessage(message, render = true) {
-            // Call parent addMessage
-            super.addMessage(message, render);
-            
-            // Return a jQuery element with remove method that finds and removes the message by ID
-            const messageId = message._id || this._getLastMessageId();
-            const removeableElement = {
-                remove: () => {
-                    if (this.element) {
-                        const messageElement = $(this.element).find(`[data-message-id="${messageId}"]`);
-                        if (messageElement.length) {
-                            messageElement.remove();
-                        }
-                    }
-                }
-            };
-            
-            return removeableElement;
-        }
-        
-        /**
-         * Helper to get the ID of the last message added
-         */
-        _getLastMessageId() {
-            const messages = ChatModal.data.messages;
-            return messages.length > 0 ? messages[messages.length - 1]._id : null;
-        }
     };
 
     // Register module settings
