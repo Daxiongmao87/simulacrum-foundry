@@ -181,6 +181,9 @@ export class DynamicModelSelector {
 
         // Handle selection changes
         select.addEventListener('change', (e) => {
+            console.log(`🔥 DROPDOWN CHANGE EVENT FIRED! Selected value: ${e.target.value}`);
+            console.log('🔥 Event target:', e.target);
+            console.log('🔥 Calling onModelSelectionChange...');
             this.onModelSelectionChange(e.target.value);
         });
 
@@ -239,7 +242,8 @@ export class DynamicModelSelector {
      * @param {string} value - Selected model value
      */
     async onModelSelectionChange(value) {
-        console.log(`🤖 Model selection changed: ${value}`);
+        console.log(`🔥 onModelSelectionChange called with value: ${value}`);
+        console.log(`🔥 this object:`, this);
 
         if (value === '__custom__') {
             this.showCustomInput();
