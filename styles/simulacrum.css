@@ -207,3 +207,11 @@
 .chat-messages .chat-message:has(.simulacrum-placeholder) .message-header {
     display: none;
 }
+
+/* Clean styling for the placeholder content itself */
+.simulacrum-placeholder {
+    background: none;
+    border-left: none;
+    margin: 0;
+    padding: 0;
+}
