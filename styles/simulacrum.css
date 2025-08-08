@@ -170,3 +170,20 @@
 .simulacrum-cancel-btn i {
     font-size: 12px;
 }
+
+/* Red tint for cancel button while preserving original button styling */
+.simulacrum-cancel-tint {
+    filter: hue-rotate(0deg) saturate(1.5) brightness(0.9);
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+}
+
+.simulacrum-cancel-tint:hover {
+    background-color: #c82333 !important;
+    border-color: #c82333 !important;
+}
+
+.simulacrum-cancel-tint:active {
+    background-color: #bd2130 !important;
+    border-color: #bd2130 !important;
+}

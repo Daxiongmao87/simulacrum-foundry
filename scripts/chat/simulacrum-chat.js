@@ -579,10 +579,11 @@ export class SimulacrumChatModal {
                 sendButton.data('original-title', sendButton.attr('title'));
             }
             
-            // Transform to cancel button - ONLY change icon and title, keep all styling classes
+            // Transform to cancel button - change icon, title, and add red tint
             sendButton.html('<i class="fas fa-times"></i>');
             sendButton.attr('title', 'Cancel Operation');
-            // Don't change classes - keep exact same styling
+            // Add red tint class while keeping all original styling classes
+            sendButton.addClass('simulacrum-cancel-tint');
         }
     }
     
@@ -601,7 +602,8 @@ export class SimulacrumChatModal {
             if (originalHtml) {
                 sendButton.html(originalHtml);
                 sendButton.attr('title', originalTitle || 'Send Message');
-                // Classes never changed, so no need to restore them
+                // Remove red tint class to restore original appearance
+                sendButton.removeClass('simulacrum-cancel-tint');
                 
                 // Clear stored data
                 sendButton.removeData('original-html');
