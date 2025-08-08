@@ -114,6 +114,12 @@ export class DynamicContextWindowSetting {
                 const detection = await this.detector.detectEndpointType(value);
                 this.currentDetection = detection;
                 await this.updateContextWindowUI(detection);
+                
+                // Also trigger model detection
+                const apiKey = game.settings.get('simulacrum', 'apiKey');
+                if (game.simulacrum?.dynamicModelSelector) {
+                    await game.simulacrum.dynamicModelSelector.updateModelSelection(value, apiKey);
+                }
             } catch (error) {
                 console.error('🔥 Context window detection failed:', error);
                 this.showErrorState(error.message);

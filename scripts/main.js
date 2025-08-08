@@ -28,6 +28,8 @@ import { showProgress, showProgressWithOptions, updateProgressText, createProgre
 import { ContextCompaction } from "./core/context-compaction.js";
 import { ContextWindowDetector } from "./core/context-window-detector.js";
 import { DynamicContextWindowSetting } from "./ui/dynamic-context-window-setting.js";
+import { ModelDetector } from "./core/model-detector.js";
+import { DynamicModelSelector } from "./ui/dynamic-model-selector.js";
 
 
 let toolRegistry; // Global tool registry
@@ -201,8 +203,12 @@ Hooks.once('init', () => {
         const dynamicContextWindowSetting = new DynamicContextWindowSetting();
         dynamicContextWindowSetting.initialize();
 
+        // Initialize Dynamic Model Selector
+        const dynamicModelSelector = new DynamicModelSelector();
+        dynamicModelSelector.initialize();
+
         // Make tool registry, AI service, context manager, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
-        game.simulacrum = { toolRegistry, aiService, contextManager, documentDiscoveryEngine, genericCrudTools, agenticLoopController, TokenTracker, formatToolResultsForAI, showProgress, showProgressWithOptions, updateProgressText, createProgressContainer, ContextCompaction, ContextWindowDetector, DynamicContextWindowSetting, dynamicContextWindowSetting };
+        game.simulacrum = { toolRegistry, aiService, contextManager, documentDiscoveryEngine, genericCrudTools, agenticLoopController, TokenTracker, formatToolResultsForAI, showProgress, showProgressWithOptions, updateProgressText, createProgressContainer, ContextCompaction, ContextWindowDetector, DynamicContextWindowSetting, dynamicContextWindowSetting, ModelDetector, DynamicModelSelector, dynamicModelSelector };
         console.log('Simulacrum | game.simulacrum initialized:', game.simulacrum);
         console.log('Simulacrum | Properties of game.simulacrum:', Object.keys(game.simulacrum));
         
