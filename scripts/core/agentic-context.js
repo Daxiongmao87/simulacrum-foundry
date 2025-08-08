@@ -1,7 +1,7 @@
 // scripts/core/agentic-context.js
 
 /**
- * @typedef {'user' | 'ai' | 'tool_result' | 'error'}
+ * @typedef {'user' | 'ai' | 'tool_result' | 'error' | 'system'}
  */
 
 /**
@@ -94,6 +94,18 @@ export class AgenticContext {
     }
 
     /**
+     * Adds a system message to the context history for AI context only.
+     * @param {string} message - The system message (not visible to user).
+     */
+    addSystemMessage(message) {
+        this.history.push({
+            type: 'system',
+            content: message,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
      * Formats the entire context history into a chat prompt suitable for the AI.
      * @returns {Promise<string>} A promise that resolves to the formatted chat prompt.
      */
@@ -122,6 +134,9 @@ export class AgenticContext {
                     break;
                 case 'error':
                     prompt += `System Error: ${item.content}\n`;
+                    break;
+                case 'system':
+                    prompt += `System: ${item.content}\n`;
                     break;
             }
         }

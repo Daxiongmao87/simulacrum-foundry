@@ -4,6 +4,7 @@ import { SimulacrumAIService } from '../chat/ai-service.js';
 import { SimulacrumToolScheduler } from './tool-scheduler.js';
 import { AgentResponseParser } from './json-response-parser.js';
 import { AgenticContext } from './agentic-context.js';
+import { TokenTracker, formatToolResultsForAI } from './token-tracker.js';
 
 /**
  * Manages the autonomous AI -> Tool -> AI cycle based on continuation state.
@@ -45,6 +46,12 @@ export class AgenticLoopController {
          * @private
          */
         this.currentContext = null;
+
+        /**
+         * @type {TokenTracker}
+         * @private
+         */
+        this.tokenTracker = new TokenTracker();
     }
 
     /**
@@ -101,18 +108,28 @@ export class AgenticLoopController {
     async executeTools(toolCalls) {
         const toolResults = [];
         console.log("Simulacrum | Starting tool execution...");
+        
         for (const toolCall of toolCalls) {
             console.log(`Simulacrum | Attempting to execute tool: ${toolCall.tool_name} with parameters:`, toolCall.parameters);
             try {
                 const result = await this.toolScheduler.scheduleToolExecution(toolCall.tool_name, toolCall.parameters, game.user);
                 console.log(`Simulacrum | Tool ${toolCall.tool_name} executed successfully. Result:`, result);
-                toolResults.push({ tool_name: toolCall.tool_name, result: result });
+                toolResults.push({ 
+                    toolName: toolCall.tool_name, 
+                    success: true, 
+                    result: result 
+                });
             } catch (error) {
                 console.error(`Simulacrum | Tool execution failed for ${toolCall.tool_name}:`, error);
                 ui.notifications.error(`Simulacrum | Tool execution failed for ${toolCall.tool_name}: ${error.message}`);
-                toolResults.push({ tool_name: toolCall.tool_name, error: error.message });
+                toolResults.push({ 
+                    toolName: toolCall.tool_name, 
+                    success: false, 
+                    error: error.message 
+                });
             }
         }
+        
         console.log("Simulacrum | All tool executions completed.");
         return toolResults;
     }
@@ -125,6 +142,15 @@ export class AgenticLoopController {
     async processUserRequest(userMessage) {
         this.cancelled = false;
         let context = this.initializeContext(userMessage);
+
+        // Initialize token tracker with context window from settings
+        try {
+            const contextWindow = game.settings.get('simulacrum', 'contextWindow') || 8192;
+            this.tokenTracker.setMaxTokens(contextWindow);
+        } catch (error) {
+            console.warn('Simulacrum | Could not get context window setting, using default 8192');
+            this.tokenTracker.setMaxTokens(8192);
+        }
 
         // Show initial thinking placeholder
         this.showPlaceholder("Thinking");
@@ -140,6 +166,11 @@ export class AgenticLoopController {
                 console.log(`Simulacrum | Iteration ${iteration}: Fetching AI response with prompt:`, chatPrompt);
                 const response = await this.aiService.sendMessage(chatPrompt);
                 console.log(`Simulacrum | Iteration ${iteration}: Raw AI response:`, response);
+                
+                // Update token tracking from API response
+                this.tokenTracker.updateFromResponse(response);
+                console.log(`Simulacrum | Token usage stats:`, this.tokenTracker.getContextWindowStats());
+                
                 const parsed = await this.responseParser.parseAgentResponse(response);
                 console.log(`Simulacrum | Iteration ${iteration}: Parsed JSON response:`, parsed);
 
@@ -175,6 +206,17 @@ export class AgenticLoopController {
                 if (parsed.tool_calls && parsed.tool_calls.length > 0) {
                     console.log(`Simulacrum | Iteration ${iteration}: Tool calls identified:`, parsed.tool_calls);
                     const toolResults = await this.executeTools(parsed.tool_calls);
+                    
+                    // Format tool results for AI context
+                    const formattedResults = formatToolResultsForAI(toolResults, this.tokenTracker);
+                    
+                    // Add tool results to context for AI (not visible to user)
+                    if (formattedResults) {
+                        context.addSystemMessage(`Tool execution results:\n${formattedResults}`);
+                        console.log(`Simulacrum | Tool results added to AI context (${formattedResults.length} chars)`);
+                    }
+                    
+                    // Add raw tool results to context for backward compatibility
                     context.addToolResults(toolResults);
                     console.log(`Simulacrum | Iteration ${iteration}: Tool execution results:`, toolResults);
                 } else {
