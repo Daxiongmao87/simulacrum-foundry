@@ -577,10 +577,9 @@ export class SimulacrumChatModal {
             if (!sendButton.data('original-html')) {
                 sendButton.data('original-html', sendButton.html());
                 sendButton.data('original-title', sendButton.attr('title'));
-                sendButton.data('original-class', sendButton.attr('class'));
             }
             
-            // Transform to cancel button
+            // Transform to cancel button - keep same classes for consistent styling
             sendButton.html('<i class="fas fa-times"></i>');
             sendButton.attr('title', 'Cancel Operation');
             sendButton.removeClass('chat-send').addClass('simulacrum-cancel-btn');
@@ -598,17 +597,15 @@ export class SimulacrumChatModal {
             // Restore original button state
             const originalHtml = cancelButton.data('original-html');
             const originalTitle = cancelButton.data('original-title');
-            const originalClass = cancelButton.data('original-class');
             
             if (originalHtml) {
                 cancelButton.html(originalHtml);
                 cancelButton.attr('title', originalTitle || 'Send Message');
-                cancelButton.attr('class', originalClass || 'button foundry-im chat-send');
+                cancelButton.removeClass('simulacrum-cancel-btn').addClass('chat-send');
                 
                 // Clear stored data
                 cancelButton.removeData('original-html');
-                cancelButton.removeData('original-title'); 
-                cancelButton.removeData('original-class');
+                cancelButton.removeData('original-title');
             }
         }
     }
