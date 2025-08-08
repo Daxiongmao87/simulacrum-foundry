@@ -35,8 +35,6 @@ export class SimulacrumChatModal {
         // Placeholder message management
         this.currentPlaceholder = null;
         
-        // Cancel button management
-        this.currentCancelButton = null;
 
         // Get the appropriate ChatModal class (the extended version with correct template)
         const ModalClass = getChatModalClass();
@@ -72,7 +70,6 @@ export class SimulacrumChatModal {
             // If currently processing, this should cancel instead of send
             if (this.processing) {
                 this._cancelCurrentOperation();
-                this._addCancelMessage();
                 return;
             }
             
@@ -173,19 +170,25 @@ export class SimulacrumChatModal {
         }
         
         this.processing = false;
-    }
-
-    /**
-     * Add a cancellation message to the chat
-     * @private
-     */
-    _addCancelMessage() {
+        
+        // Transform cancel button back to send button
+        this.transformCancelButtonToSend();
+        
+        // Clear any active placeholder
+        this.clearCurrentPlaceholder();
+        
+        // Add cancellation message to chat
         this.chatWindow.addMessage({
             content: '<p class="simulacrum-system"><i>Request cancelled by user</i></p>',
             sender: 'System',
             cornerText: this._getTimestamp(),
             img: "icons/svg/clockwork.svg"
         });
+        
+        // Clear chat context from agentic loop controller
+        if (game.simulacrum && game.simulacrum.agenticLoopController) {
+            game.simulacrum.agenticLoopController.clearChatContext();
+        }
     }
 
     /**
@@ -563,48 +566,50 @@ export class SimulacrumChatModal {
     }
     
     /**
-     * Add cancel button to chat interface during processing
+     * Transform send button to cancel button during processing
      */
-    addCancelButton() {
-        // Remove any existing cancel button first
-        this.removeCancelButton();
+    transformSendButtonToCancel() {
+        if (!this.chatWindow.element) return;
         
-        const cancelButtonHtml = `
-            <div class="simulacrum-cancel-container" id="simulacrum-cancel-${this.id}">
-                <button class="simulacrum-cancel-btn" onclick="window.simulacrumCancelWorkflow('${this.id}')">
-                    <i class="fas fa-times"></i> Cancel Operation
-                </button>
-            </div>
-        `;
-        
-        this.currentCancelButton = this.chatWindow.addMessage({
-            content: cancelButtonHtml,
-            sender: 'System',
-            cornerText: this._getTimestamp(),
-            img: "icons/svg/cancel.svg"
-        });
-        
-        // Store cancel function globally
-        window.simulacrumCancelWorkflow = (chatId) => {
-            if (chatId === this.id && game.simulacrum.agenticLoopController) {
-                game.simulacrum.agenticLoopController.cancel();
-                this.removeCancelButton();
+        const sendButton = $(this.chatWindow.element).find('.chat-send');
+        if (sendButton.length) {
+            // Store original button state
+            if (!sendButton.data('original-html')) {
+                sendButton.data('original-html', sendButton.html());
+                sendButton.data('original-title', sendButton.attr('title'));
+                sendButton.data('original-class', sendButton.attr('class'));
             }
-        };
+            
+            // Transform to cancel button
+            sendButton.html('<i class="fas fa-times"></i>');
+            sendButton.attr('title', 'Cancel Operation');
+            sendButton.removeClass('chat-send').addClass('simulacrum-cancel-btn');
+        }
     }
     
     /**
-     * Remove cancel button from chat interface
+     * Transform cancel button back to send button
      */
-    removeCancelButton() {
-        if (this.currentCancelButton) {
-            this.currentCancelButton.remove();
-            this.currentCancelButton = null;
-        }
+    transformCancelButtonToSend() {
+        if (!this.chatWindow.element) return;
         
-        // Clean up global function
-        if (window.simulacrumCancelWorkflow) {
-            delete window.simulacrumCancelWorkflow;
+        const cancelButton = $(this.chatWindow.element).find('.simulacrum-cancel-btn');
+        if (cancelButton.length) {
+            // Restore original button state
+            const originalHtml = cancelButton.data('original-html');
+            const originalTitle = cancelButton.data('original-title');
+            const originalClass = cancelButton.data('original-class');
+            
+            if (originalHtml) {
+                cancelButton.html(originalHtml);
+                cancelButton.attr('title', originalTitle || 'Send Message');
+                cancelButton.attr('class', originalClass || 'button foundry-im chat-send');
+                
+                // Clear stored data
+                cancelButton.removeData('original-html');
+                cancelButton.removeData('original-title'); 
+                cancelButton.removeData('original-class');
+            }
         }
     }
 
@@ -645,8 +650,8 @@ export class SimulacrumChatModal {
             // Create abort controller for cancellation
             this.abortController = new AbortController();
             
-            // Add cancel button during processing
-            this.addCancelButton();
+            // Transform send button to cancel button during processing
+            this.transformSendButtonToCancel();
             
             // Show initial placeholder
             console.log('Simulacrum | About to show placeholder');
@@ -662,8 +667,8 @@ export class SimulacrumChatModal {
             // Clear the chat context from the agentic loop controller
             game.simulacrum.agenticLoopController.clearChatContext();
             
-            // Remove cancel button when processing is complete
-            this.removeCancelButton();
+            // Transform cancel button back to send button when processing is complete
+            this.transformCancelButtonToSend();
 
         } catch (error) {
             console.error('Error sending message:', error);
@@ -671,8 +676,8 @@ export class SimulacrumChatModal {
             // Clear any active placeholder on error
             this.clearCurrentPlaceholder();
             
-            // Remove cancel button on error
-            this.removeCancelButton();
+            // Transform cancel button back to send button on error
+            this.transformCancelButtonToSend();
             
             // Add error message to chat
             this.chatWindow.addMessage({
@@ -690,8 +695,8 @@ export class SimulacrumChatModal {
             }
             // Ensure placeholder is cleared
             this.clearCurrentPlaceholder();
-            // Ensure cancel button is removed
-            this.removeCancelButton();
+            // Ensure cancel button is transformed back to send button
+            this.transformCancelButtonToSend();
         }
     }
 
