@@ -250,8 +250,8 @@ export class DynamicModelSelector {
                 // Update the setting
                 await game.settings.set('simulacrum', 'modelName', value);
                 
-                // Trigger context window update
-                this.triggerContextWindowUpdate(value);
+                // Immediately trigger context window update with force refresh
+                await this.triggerContextWindowUpdateImmediate(value);
             }
         }
     }
@@ -359,6 +359,66 @@ export class DynamicModelSelector {
         if (game.simulacrum?.dynamicContextWindowSetting) {
             console.log(`🔗 Triggering context window update for model: ${modelName}`);
             game.simulacrum.dynamicContextWindowSetting.onModelChange(modelName);
+        }
+    }
+
+    /**
+     * Trigger immediate context window update with UI refresh
+     * @param {string} modelName - Model name that changed
+     */
+    async triggerContextWindowUpdateImmediate(modelName) {
+        console.log(`⚡ Immediate context window update for model: ${modelName}`);
+        
+        const contextWindowSetting = game.simulacrum?.dynamicContextWindowSetting;
+        if (!contextWindowSetting) {
+            console.warn('⚠️ Dynamic context window setting not available');
+            return;
+        }
+
+        // Check if we can auto-detect context window
+        if (!contextWindowSetting.currentDetection?.supportsDetection) {
+            console.log('ℹ️ Context window auto-detection not supported for this API');
+            return;
+        }
+
+        try {
+            // Get the current API endpoint
+            const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+            if (!apiEndpoint) {
+                console.warn('⚠️ No API endpoint configured');
+                return;
+            }
+
+            // Show loading on context window field
+            contextWindowSetting.showLoadingState();
+
+            // Detect context window for the new model
+            const contextWindow = await contextWindowSetting.detector.getContextWindow(apiEndpoint, modelName);
+            console.log(`🎯 Detected context window: ${contextWindow} tokens for ${modelName}`);
+
+            // Update the UI field immediately
+            contextWindowSetting.updateDetectedValue(contextWindow);
+
+            // Update the setting if not overridden
+            const isOverridden = contextWindowSetting.overrideCheckbox && 
+                                contextWindowSetting.overrideCheckbox.is(':checked');
+            
+            if (!isOverridden) {
+                await game.settings.set('simulacrum', 'contextWindow', contextWindow);
+                console.log(`💾 Updated context window setting to: ${contextWindow}`);
+            } else {
+                console.log(`🔒 Context window override enabled, display updated but setting not changed`);
+            }
+
+            contextWindowSetting.hideLoadingState();
+            
+            // Update the auto-detected indicator
+            contextWindowSetting.removeAutoDetectedIndicator();
+            contextWindowSetting.addAutoDetectedIndicator(contextWindow);
+
+        } catch (error) {
+            console.error('🔥 Immediate context window update failed:', error);
+            contextWindowSetting.hideLoadingState();
         }
     }
 
