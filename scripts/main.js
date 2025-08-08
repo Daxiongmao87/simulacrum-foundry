@@ -140,9 +140,14 @@ Hooks.once('init', () => {
         // Initialize context manager
         contextManager = new ContextManager();
 
-        // Initialize document discovery engine and generic CRUD tools
+        // Initialize document discovery engine
         const documentDiscoveryEngine = new DocumentDiscoveryEngine();
-        const genericCrudTools = new GenericCRUDTools(documentDiscoveryEngine);
+        
+        // Initialize AI service first (needed for GenericCRUDTools validation error recovery)
+        aiService = new SimulacrumAIService(toolRegistry);
+        
+        // Initialize generic CRUD tools with AI service
+        const genericCrudTools = new GenericCRUDTools(documentDiscoveryEngine, aiService);
 
         // Register all core tools
         toolRegistry.registerTool(new CreateDocumentTool(genericCrudTools));
@@ -159,9 +164,6 @@ Hooks.once('init', () => {
         toolRegistry.registerTool(new ClearContextTool());
         
         console.log('Simulacrum | All core tools registered successfully');
-        
-        // Initialize AI service
-        aiService = new SimulacrumAIService(toolRegistry);
 
         // Initialize Tool Scheduler
         const toolScheduler = new SimulacrumToolScheduler(toolRegistry);

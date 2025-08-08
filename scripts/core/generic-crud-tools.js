@@ -6,6 +6,7 @@
  */
 
 import { DocumentDiscoveryEngine } from './document-discovery-engine.js';
+import { ValidationErrorRecovery } from '../tools/validation-error-recovery.js';
 
 /**
  * A class providing generic CRUD operations for FoundryVTT documents.
@@ -16,11 +17,13 @@ export class GenericCRUDTools {
   /**
    * @param {DocumentDiscoveryEngine} discoveryEngine An instance of DocumentDiscoveryEngine.
    */
-  constructor(discoveryEngine) {
+  constructor(discoveryEngine, aiService = null) {
     if (!discoveryEngine || !(discoveryEngine instanceof DocumentDiscoveryEngine)) {
       throw new Error("Simulacrum | GenericCRUDTools requires an instance of DocumentDiscoveryEngine.");
     }
     this.discoveryEngine = discoveryEngine;
+    this.aiService = aiService;
+    this.validationErrorRecovery = aiService ? new ValidationErrorRecovery(aiService) : null;
   }
 
   /**
@@ -48,6 +51,25 @@ export class GenericCRUDTools {
       ui.notifications.info(`Simulacrum | Created ${collection}${subtype ? ` (${subtype})` : ''}: ${result.name}`);
       return result;
     } catch (error) {
+      // Attempt AI retry if validation error and AI service available
+      if (this.isValidationError(error) && this.validationErrorRecovery) {
+        try {
+          console.log(`Simulacrum | Attempting AI retry for validation error: ${error.message}`);
+          const correctionPrompt = await this.validationErrorRecovery.buildValidationErrorPrompt(
+            error.message, 
+            data, 
+            documentType
+          );
+          
+          // Note: This would need proper integration with the AI service flow
+          // For now, we'll log the correction prompt and still throw the original error
+          console.log(`Simulacrum | AI correction prompt:`, correctionPrompt);
+          ui.notifications.warn(`Simulacrum | Validation error detected - AI retry mechanism ready but not fully integrated`);
+        } catch (retryError) {
+          console.warn(`Simulacrum | AI retry failed:`, retryError);
+        }
+      }
+      
       ui.notifications.error(`Simulacrum | Failed to create ${documentType}: ${error.message}`);
       throw error;
     }
@@ -98,6 +120,25 @@ export class GenericCRUDTools {
       ui.notifications.info(`Simulacrum | Updated ${documentType}: ${document.name}`);
       return result;
     } catch (error) {
+      // Attempt AI retry if validation error and AI service available
+      if (this.isValidationError(error) && this.validationErrorRecovery) {
+        try {
+          console.log(`Simulacrum | Attempting AI retry for validation error: ${error.message}`);
+          const correctionPrompt = await this.validationErrorRecovery.buildValidationErrorPrompt(
+            error.message, 
+            updates, 
+            documentType
+          );
+          
+          // Note: This would need proper integration with the AI service flow
+          // For now, we'll log the correction prompt and still throw the original error
+          console.log(`Simulacrum | AI correction prompt:`, correctionPrompt);
+          ui.notifications.warn(`Simulacrum | Validation error detected - AI retry mechanism ready but not fully integrated`);
+        } catch (retryError) {
+          console.warn(`Simulacrum | AI retry failed:`, retryError);
+        }
+      }
+      
       ui.notifications.error(`Simulacrum | Failed to update ${documentType} with ID ${documentId}: ${error.message}`);
       throw error;
     }
@@ -122,5 +163,32 @@ export class GenericCRUDTools {
       ui.notifications.error(`Simulacrum | Failed to delete ${documentType} with ID ${documentId}: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Determines if an error is a FoundryVTT validation error.
+   * @param {Error} error The error to check.
+   * @returns {boolean} True if this appears to be a validation error.
+   */
+  isValidationError(error) {
+    if (!error || !error.message) return false;
+    
+    const errorMessage = error.message.toLowerCase();
+    
+    // Check for common FoundryVTT validation error patterns
+    return errorMessage.includes('validation') ||
+           errorMessage.includes('failed to create') ||
+           errorMessage.includes('failed to update') ||
+           errorMessage.includes('invalid') ||
+           errorMessage.includes('required') ||
+           errorMessage.includes('must be') ||
+           errorMessage.includes('should be') ||
+           errorMessage.includes('type error') ||
+           errorMessage.includes('schema') ||
+           // FoundryVTT specific validation error patterns
+           errorMessage.includes('cannot read properties of undefined') ||
+           errorMessage.includes('may not be undefined') ||
+           errorMessage.includes('validation errors:') ||
+           errorMessage.includes('datamodelvalidationfailure');
   }
 }
