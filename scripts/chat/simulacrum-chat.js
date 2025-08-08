@@ -579,10 +579,10 @@ export class SimulacrumChatModal {
                 sendButton.data('original-title', sendButton.attr('title'));
             }
             
-            // Transform to cancel button - keep same classes for consistent styling
+            // Transform to cancel button - ONLY change icon and title, keep all styling classes
             sendButton.html('<i class="fas fa-times"></i>');
             sendButton.attr('title', 'Cancel Operation');
-            sendButton.removeClass('chat-send').addClass('simulacrum-cancel-btn');
+            // Don't change classes - keep exact same styling
         }
     }
     
@@ -592,20 +592,20 @@ export class SimulacrumChatModal {
     transformCancelButtonToSend() {
         if (!this.chatWindow.element) return;
         
-        const cancelButton = $(this.chatWindow.element).find('.simulacrum-cancel-btn');
-        if (cancelButton.length) {
+        const sendButton = $(this.chatWindow.element).find('.chat-send');
+        if (sendButton.length) {
             // Restore original button state
-            const originalHtml = cancelButton.data('original-html');
-            const originalTitle = cancelButton.data('original-title');
+            const originalHtml = sendButton.data('original-html');
+            const originalTitle = sendButton.data('original-title');
             
             if (originalHtml) {
-                cancelButton.html(originalHtml);
-                cancelButton.attr('title', originalTitle || 'Send Message');
-                cancelButton.removeClass('simulacrum-cancel-btn').addClass('chat-send');
+                sendButton.html(originalHtml);
+                sendButton.attr('title', originalTitle || 'Send Message');
+                // Classes never changed, so no need to restore them
                 
                 // Clear stored data
-                cancelButton.removeData('original-html');
-                cancelButton.removeData('original-title');
+                sendButton.removeData('original-html');
+                sendButton.removeData('original-title');
             }
         }
     }
