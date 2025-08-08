@@ -34,6 +34,9 @@ export class SimulacrumChatModal {
         
         // Placeholder message management
         this.currentPlaceholder = null;
+        
+        // Cancel button management
+        this.currentCancelButton = null;
 
         // Get the appropriate ChatModal class (the extended version with correct template)
         const ModalClass = getChatModalClass();
@@ -558,6 +561,52 @@ export class SimulacrumChatModal {
             this.currentPlaceholder = null;
         }
     }
+    
+    /**
+     * Add cancel button to chat interface during processing
+     */
+    addCancelButton() {
+        // Remove any existing cancel button first
+        this.removeCancelButton();
+        
+        const cancelButtonHtml = `
+            <div class="simulacrum-cancel-container" id="simulacrum-cancel-${this.id}">
+                <button class="simulacrum-cancel-btn" onclick="window.simulacrumCancelWorkflow('${this.id}')">
+                    <i class="fas fa-times"></i> Cancel Operation
+                </button>
+            </div>
+        `;
+        
+        this.currentCancelButton = this.chatWindow.addMessage({
+            content: cancelButtonHtml,
+            sender: 'System',
+            cornerText: this._getTimestamp(),
+            img: "icons/svg/cancel.svg"
+        });
+        
+        // Store cancel function globally
+        window.simulacrumCancelWorkflow = (chatId) => {
+            if (chatId === this.id && game.simulacrum.agenticLoopController) {
+                game.simulacrum.agenticLoopController.cancel();
+                this.removeCancelButton();
+            }
+        };
+    }
+    
+    /**
+     * Remove cancel button from chat interface
+     */
+    removeCancelButton() {
+        if (this.currentCancelButton) {
+            this.currentCancelButton.remove();
+            this.currentCancelButton = null;
+        }
+        
+        // Clean up global function
+        if (window.simulacrumCancelWorkflow) {
+            delete window.simulacrumCancelWorkflow;
+        }
+    }
 
     /**
      * Handle a user message and generate a response
@@ -588,7 +637,7 @@ export class SimulacrumChatModal {
                 content: message
             });
             
-            // Initialize AI service if needed
+                // Initialize AI service if needed
             if (!this.aiService) {
                 this.aiService = new SimulacrumAIService(game.simulacrum.toolRegistry);
             }
@@ -596,45 +645,28 @@ export class SimulacrumChatModal {
             // Create abort controller for cancellation
             this.abortController = new AbortController();
             
+            // Add cancel button during processing
+            this.addCancelButton();
+            
             // Show initial placeholder
             console.log('Simulacrum | About to show placeholder');
             this.showPlaceholder("Thinking");
             console.log('Simulacrum | Placeholder shown, current placeholder:', this.currentPlaceholder);
 
-            // Send to AI service and get response
-            const aiResponse = await this.aiService.sendMessage(
-                message,
-                null, // onChunk callback not used
-                null, // onComplete callback not used  
-                this.abortController.signal
-            );
-
-            // Add AI response to history
-            this.history.push({
-                role: 'assistant',
-                content: aiResponse
-            });
-
-            // Replace placeholder with actual response
-            const responseContent = `<div class="simulacrum-response"><p>${aiResponse}</p></div>`;
+            // Use agentic loop controller for complex workflows
+            await game.simulacrum.agenticLoopController.processUserRequest(message);
             
-            if (this.currentPlaceholder) {
-                this.replacePlaceholderWithMessage(responseContent);
-            } else {
-                // Fallback: add as regular message if no placeholder
-                this.chatWindow.addMessage({
-                    content: responseContent,
-                    sender: 'Simulacrum',
-                    cornerText: this._getTimestamp(),
-                    img: "modules/simulacrum/assets/simulacrum-avatar.png"
-                });
-            }
+            // Remove cancel button when processing is complete
+            this.removeCancelButton();
 
         } catch (error) {
             console.error('Error sending message:', error);
             
             // Clear any active placeholder on error
             this.clearCurrentPlaceholder();
+            
+            // Remove cancel button on error
+            this.removeCancelButton();
             
             // Add error message to chat
             this.chatWindow.addMessage({
@@ -648,6 +680,8 @@ export class SimulacrumChatModal {
             this.abortController = null;
             // Ensure placeholder is cleared
             this.clearCurrentPlaceholder();
+            // Ensure cancel button is removed
+            this.removeCancelButton();
         }
     }
 
