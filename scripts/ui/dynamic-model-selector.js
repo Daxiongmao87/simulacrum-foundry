@@ -187,8 +187,15 @@ export class DynamicModelSelector {
             this.onModelSelectionChange(e.target.value);
         });
 
+        console.log('🔥 CREATED SELECT ELEMENT:', select);
+        console.log('🔥 SELECT HAS EVENT LISTENERS:', select.hasAttribute('data-has-listeners'));
+        console.log('🔥 ABOUT TO REPLACE INPUT WITH SELECT...');
+
         // Replace the input with select
         this.replaceModelInput(select);
+        
+        console.log('🔥 REPLACEMENT COMPLETE. NEW modelInput:', this.modelInput);
+        console.log('🔥 NEW modelInput DOM element:', this.modelInput[0]);
         
         // Add model info display
         this.addModelInfoDisplay(models.length);
@@ -431,18 +438,30 @@ export class DynamicModelSelector {
      * @param {HTMLElement} newElement - New input/select element
      */
     replaceModelInput(newElement) {
+        console.log('🔥 replaceModelInput called with:', newElement);
+        console.log('🔥 Current this.modelInput:', this.modelInput);
+        
         if (this.modelInput) {
             // Copy existing attributes
             const oldInput = this.modelInput[0];
+            console.log('🔥 Old input element:', oldInput);
+            
             Array.from(oldInput.attributes).forEach(attr => {
                 if (attr.name !== 'type' && attr.name !== 'name') {
+                    console.log(`🔥 Copying attribute ${attr.name}=${attr.value}`);
                     newElement.setAttribute(attr.name, attr.value);
                 }
             });
 
+            console.log('🔥 About to replace element...');
             // Replace the element
             this.modelInput.replaceWith(newElement);
             this.modelInput = $(newElement);
+            
+            console.log('🔥 Element replaced. New modelInput:', this.modelInput);
+            console.log('🔥 New element in DOM:', this.modelInput[0]);
+        } else {
+            console.error('🔥 this.modelInput is null/undefined!');
         }
     }
 
