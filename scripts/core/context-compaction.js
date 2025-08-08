@@ -89,7 +89,8 @@ export class ContextCompaction {
             return chatHistory; // No compaction possible
         }
 
-        const currentUsage = tokenTracker.getCurrentTokens();
+        const stats = tokenTracker.getContextWindowStats();
+        const currentUsage = stats.currentPromptTokens;
         const thresholdTokens = this.maxTokens * this.compactionThreshold;
 
         if (currentUsage > thresholdTokens) {

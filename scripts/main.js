@@ -26,6 +26,8 @@ import { SimulacrumToolScheduler } from "./core/tool-scheduler.js";
 import { TokenTracker, formatToolResultsForAI } from "./core/token-tracker.js";
 import { showProgress, showProgressWithOptions, updateProgressText, createProgressContainer } from "./core/progress-animation.js";
 import { ContextCompaction } from "./core/context-compaction.js";
+import { ContextWindowDetector } from "./core/context-window-detector.js";
+import { DynamicContextWindowSetting } from "./ui/dynamic-context-window-setting.js";
 
 
 let toolRegistry; // Global tool registry
@@ -195,8 +197,12 @@ Hooks.once('init', () => {
         // Initialize Agentic Loop Controller
         const agenticLoopController = new AgenticLoopController(aiService, toolScheduler);
 
+        // Initialize Dynamic Context Window Setting
+        const dynamicContextWindowSetting = new DynamicContextWindowSetting();
+        dynamicContextWindowSetting.initialize();
+
         // Make tool registry, AI service, context manager, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
-        game.simulacrum = { toolRegistry, aiService, contextManager, documentDiscoveryEngine, genericCrudTools, agenticLoopController, TokenTracker, formatToolResultsForAI, showProgress, showProgressWithOptions, updateProgressText, createProgressContainer, ContextCompaction };
+        game.simulacrum = { toolRegistry, aiService, contextManager, documentDiscoveryEngine, genericCrudTools, agenticLoopController, TokenTracker, formatToolResultsForAI, showProgress, showProgressWithOptions, updateProgressText, createProgressContainer, ContextCompaction, ContextWindowDetector, DynamicContextWindowSetting, dynamicContextWindowSetting };
         console.log('Simulacrum | game.simulacrum initialized:', game.simulacrum);
         console.log('Simulacrum | Properties of game.simulacrum:', Object.keys(game.simulacrum));
         
