@@ -188,14 +188,16 @@
     border-color: #bd2130 !important;
 }
 
-/* Special styling for placeholder messages - higher specificity than .chat-message.message */
-.chat-messages .chat-message.message.flexcol:has(.simulacrum-placeholder) {
+/* Special styling for placeholder messages - match D&D5e system specificity */
+:is(.chat-popout, #chat-log, .chat-log) .message:has(.simulacrum-placeholder),
+.chat-messages .chat-message.message.other-user:has(.simulacrum-placeholder) {
     background: transparent;
     background-image: none;
     border: none;
     box-shadow: none;
 }
 
+:is(.chat-popout, #chat-log, .chat-log) .message:has(.simulacrum-placeholder)::before,
 .chat-messages .chat-message.message.flexcol:has(.simulacrum-placeholder)::before {
     background-image: none;
     background: none;
