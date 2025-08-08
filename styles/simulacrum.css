@@ -96,6 +96,16 @@
     animation: fa-spin 2s infinite linear;
 }
 
+/* Spinning animation for progress indicators */
+@keyframes fa-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
 /* Response message styling */
 .simulacrum-response {
     display: block;
