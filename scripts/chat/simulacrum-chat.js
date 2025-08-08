@@ -523,7 +523,7 @@ export class SimulacrumChatModal {
     replacePlaceholderWithMessage(messageContent) {
         // Remove placeholder element if it exists
         if (this.currentPlaceholderId) {
-            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
             if (placeholderElement.length) {
                 placeholderElement.remove();
             }
@@ -545,7 +545,7 @@ export class SimulacrumChatModal {
      */
     updatePlaceholderGerund(newGerund) {
         if (this.currentPlaceholderId) {
-            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
             if (placeholderElement.length) {
                 const placeholderDiv = placeholderElement.find('.simulacrum-placeholder');
                 if (placeholderDiv.length) {
@@ -560,7 +560,7 @@ export class SimulacrumChatModal {
      */
     clearCurrentPlaceholder() {
         if (this.currentPlaceholderId) {
-            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
             if (placeholderElement.length) {
                 placeholderElement.remove();
             }
