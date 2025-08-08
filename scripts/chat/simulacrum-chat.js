@@ -33,7 +33,7 @@ export class SimulacrumChatModal {
         this.contextDocuments = [];
         
         // Placeholder message management
-        this.currentPlaceholderId = null;
+        this.currentPlaceholder = null;
 
         // Get the appropriate ChatModal class (the extended version with correct template)
         const ModalClass = getChatModalClass();
@@ -503,12 +503,8 @@ export class SimulacrumChatModal {
         // Clear any existing placeholder
         this.clearCurrentPlaceholder();
         
-        // Generate unique message ID for placeholder
-        this.currentPlaceholderId = foundry.utils.randomID();
-        
-        // Add placeholder message using FIMLib's addMessage method
-        this.chatWindow.addMessage({
-            _id: this.currentPlaceholderId,
+        // Add placeholder message and store the removable element
+        this.currentPlaceholder = this.chatWindow.addMessage({
             content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${gerund}...</div>`,
             sender: 'System',
             cornerText: this._getTimestamp(),
@@ -522,12 +518,9 @@ export class SimulacrumChatModal {
      */
     replacePlaceholderWithMessage(messageContent) {
         // Remove placeholder element if it exists
-        if (this.currentPlaceholderId) {
-            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
-            if (placeholderElement.length) {
-                placeholderElement.remove();
-            }
-            this.currentPlaceholderId = null;
+        if (this.currentPlaceholder) {
+            this.currentPlaceholder.remove();
+            this.currentPlaceholder = null;
         }
         
         // Add the actual AI response message
@@ -544,14 +537,15 @@ export class SimulacrumChatModal {
      * @param {string} newGerund - The new gerund to display
      */
     updatePlaceholderGerund(newGerund) {
-        if (this.currentPlaceholderId) {
-            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
-            if (placeholderElement.length) {
-                const placeholderDiv = placeholderElement.find('.simulacrum-placeholder');
-                if (placeholderDiv.length) {
-                    placeholderDiv.html(`<i class="fas fa-cog fa-spin"></i> ${newGerund}...`);
-                }
-            }
+        // For simplicity, just replace the placeholder with updated content
+        if (this.currentPlaceholder) {
+            this.currentPlaceholder.remove();
+            this.currentPlaceholder = this.chatWindow.addMessage({
+                content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${newGerund}...</div>`,
+                sender: 'System',
+                cornerText: this._getTimestamp(),
+                img: "icons/svg/clockwork.svg"
+            });
         }
     }
     
@@ -559,12 +553,9 @@ export class SimulacrumChatModal {
      * Clear the current placeholder
      */
     clearCurrentPlaceholder() {
-        if (this.currentPlaceholderId) {
-            const placeholderElement = $(this.chatWindow.element).find(`[data-message-id="${this.currentPlaceholderId}"]`);
-            if (placeholderElement.length) {
-                placeholderElement.remove();
-            }
-            this.currentPlaceholderId = null;
+        if (this.currentPlaceholder) {
+            this.currentPlaceholder.remove();
+            this.currentPlaceholder = null;
         }
     }
 
@@ -608,7 +599,7 @@ export class SimulacrumChatModal {
             // Show initial placeholder
             console.log('Simulacrum | About to show placeholder');
             this.showPlaceholder("Thinking");
-            console.log('Simulacrum | Placeholder shown, current placeholder ID:', this.currentPlaceholderId);
+            console.log('Simulacrum | Placeholder shown, current placeholder:', this.currentPlaceholder);
 
             // Send to AI service and get response
             const aiResponse = await this.aiService.sendMessage(
@@ -627,7 +618,7 @@ export class SimulacrumChatModal {
             // Replace placeholder with actual response
             const responseContent = `<div class="simulacrum-response"><p>${aiResponse}</p></div>`;
             
-            if (this.currentPlaceholderId) {
+            if (this.currentPlaceholder) {
                 this.replacePlaceholderWithMessage(responseContent);
             } else {
                 // Fallback: add as regular message if no placeholder
