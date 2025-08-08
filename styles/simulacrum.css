@@ -188,36 +188,20 @@
     border-color: #bd2130 !important;
 }
 
-/* Special styling for placeholder messages */
-.chat-message.message.flexcol:has(.simulacrum-placeholder) {
-    background: rgba(0,0,0,0) !important;
-    background-image: none !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
+/* Special styling for placeholder messages - higher specificity than .chat-message.message */
+.chat-messages .chat-message.message.flexcol:has(.simulacrum-placeholder) {
+    background: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
 }
 
-.chat-message.message.flexcol:has(.simulacrum-placeholder)::before {
-    background-image: none !important;
-    background: none !important;
-    background-color: transparent !important;
-    content: none !important;
+.chat-messages .chat-message.message.flexcol:has(.simulacrum-placeholder)::before {
+    background-image: none;
+    background: none;
+    content: none;
 }
 
-.chat-message:has(.simulacrum-placeholder) .message-header {
+.chat-messages .chat-message:has(.simulacrum-placeholder) .message-header {
     display: none;
-}
-
-/* Alternative approach - target via parent selector chain */
-div:has(.simulacrum-placeholder) {
-    background: rgba(0,0,0,0) !important;
-    background-image: none !important;
-    background-color: transparent !important;
-    border: none !important;
-}
-
-div:has(.simulacrum-placeholder)::before {
-    background: none !important;
-    background-image: none !important;
-    content: none !important;
 }
