@@ -74,3 +74,56 @@
 .scene-control[data-control="simulacrum"] i {
     /* Any specific icon styling if needed */
 }
+
+/* Placeholder message styling */
+.simulacrum-placeholder {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(66, 165, 245, 0.1);
+    border-left: 3px solid #42a5f5;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-style: italic;
+    opacity: 0.8;
+    transition: opacity 0.2s ease-in-out;
+    color: #42a5f5;
+}
+
+.simulacrum-placeholder .fa-cog {
+    color: #42a5f5;
+    margin-right: 8px;
+    animation: fa-spin 2s infinite linear;
+}
+
+/* Response message styling */
+.simulacrum-response {
+    display: block;
+    padding: 8px 12px;
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.simulacrum-response-replacement {
+    display: block;
+    padding: 8px 12px;
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    border-radius: 4px;
+    margin: 8px 0;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Fade-in animation for responses */
+@keyframes fadeIn {
+    from { 
+        opacity: 0; 
+        transform: translateY(-5px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}

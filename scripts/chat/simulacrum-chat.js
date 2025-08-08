@@ -3,6 +3,7 @@ import { SimulacrumAIService } from "./ai-service.js";
 import { AgenticLoopController } from "../core/agentic-loop-controller.js";
 import { getChatModalClass } from "../main.js";
 
+
 /**
  * SimulacrumChatModal - Uses FIMLib's ChatModal through composition for AI chat interface
  * Based on the proven divination-foundry pattern
@@ -30,6 +31,9 @@ export class SimulacrumChatModal {
 
         // Context documents array
         this.contextDocuments = [];
+        
+        // Placeholder message management
+        this.currentPlaceholderId = null;
 
         // Get the appropriate ChatModal class (the extended version with correct template)
         const ModalClass = getChatModalClass();
@@ -492,6 +496,79 @@ export class SimulacrumChatModal {
     }
 
     /**
+     * Show a placeholder message with spinning animation
+     * @param {string} gerund - The gerund to display (e.g., "Creating", "Analyzing")
+     */
+    showPlaceholder(gerund = "Thinking") {
+        // Clear any existing placeholder
+        this.clearCurrentPlaceholder();
+        
+        // Generate unique message ID for placeholder
+        this.currentPlaceholderId = foundry.utils.randomID();
+        
+        // Add placeholder message using FIMLib's addMessage method
+        this.chatWindow.addMessage({
+            _id: this.currentPlaceholderId,
+            content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${gerund}...</div>`,
+            sender: 'System',
+            cornerText: this._getTimestamp(),
+            img: "icons/svg/clockwork.svg"
+        });
+    }
+    
+    /**
+     * Replace current placeholder with a message
+     * @param {string} messageContent - HTML content of the message
+     */
+    replacePlaceholderWithMessage(messageContent) {
+        // Remove placeholder element if it exists
+        if (this.currentPlaceholderId) {
+            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            if (placeholderElement.length) {
+                placeholderElement.remove();
+            }
+            this.currentPlaceholderId = null;
+        }
+        
+        // Add the actual AI response message
+        this.chatWindow.addMessage({
+            content: messageContent,
+            sender: 'Simulacrum',
+            cornerText: this._getTimestamp(),
+            img: "modules/simulacrum/assets/simulacrum-avatar.png"
+        });
+    }
+    
+    /**
+     * Update the current placeholder's gerund
+     * @param {string} newGerund - The new gerund to display
+     */
+    updatePlaceholderGerund(newGerund) {
+        if (this.currentPlaceholderId) {
+            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            if (placeholderElement.length) {
+                const placeholderDiv = placeholderElement.find('.simulacrum-placeholder');
+                if (placeholderDiv.length) {
+                    placeholderDiv.html(`<i class="fas fa-cog fa-spin"></i> ${newGerund}...`);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Clear the current placeholder
+     */
+    clearCurrentPlaceholder() {
+        if (this.currentPlaceholderId) {
+            const placeholderElement = this.chatWindow.element.find(`[data-message-id="${this.currentPlaceholderId}"]`);
+            if (placeholderElement.length) {
+                placeholderElement.remove();
+            }
+            this.currentPlaceholderId = null;
+        }
+    }
+
+    /**
      * Handle a user message and generate a response
      * @param {string} message - The user's message
      * @private
@@ -528,23 +605,10 @@ export class SimulacrumChatModal {
             // Create abort controller for cancellation
             this.abortController = new AbortController();
             
-            // Prepare for thinking indicator
-            let thinkingMessage = null;
-            let thinkingTimeout = null;
-            
-            // Generate a random delay between 500-1000ms for thinking indicator
-            const thinkingDelay = Math.floor(Math.random() * 501) + 500;
-            
-            // Set up timeout for showing thinking indicator
-            thinkingTimeout = setTimeout(() => {
-                // Show thinking indicator after delay
-                thinkingMessage = this.chatWindow.addMessage({
-                    content: `<p><i>Processing your request...</i></p>`,
-                    sender: 'Simulacrum',
-                    cornerText: this._getTimestamp(),
-                    img: "modules/simulacrum/assets/simulacrum-avatar.png"
-                });
-            }, thinkingDelay);
+            // Show initial placeholder
+            console.log('Simulacrum | About to show placeholder');
+            this.showPlaceholder("Thinking");
+            console.log('Simulacrum | Placeholder shown, current placeholder ID:', this.currentPlaceholderId);
 
             // Send to AI service and get response
             const aiResponse = await this.aiService.sendMessage(
@@ -554,31 +618,32 @@ export class SimulacrumChatModal {
                 this.abortController.signal
             );
 
-            // Clear timeout since we got response
-            clearTimeout(thinkingTimeout);
-            
-            // Remove thinking indicator if it was shown
-            if (thinkingMessage) {
-                thinkingMessage.remove();
-                thinkingMessage = null;
-            }
-
             // Add AI response to history
             this.history.push({
                 role: 'assistant',
                 content: aiResponse
             });
 
-            // Display the response
-            this.chatWindow.addMessage({
-                content: `<div class="simulacrum-response"><p>${aiResponse}</p></div>`,
-                sender: 'Simulacrum',
-                cornerText: this._getTimestamp(),
-                img: "modules/simulacrum/assets/simulacrum-avatar.png"
-            });
+            // Replace placeholder with actual response
+            const responseContent = `<div class="simulacrum-response"><p>${aiResponse}</p></div>`;
+            
+            if (this.currentPlaceholderId) {
+                this.replacePlaceholderWithMessage(responseContent);
+            } else {
+                // Fallback: add as regular message if no placeholder
+                this.chatWindow.addMessage({
+                    content: responseContent,
+                    sender: 'Simulacrum',
+                    cornerText: this._getTimestamp(),
+                    img: "modules/simulacrum/assets/simulacrum-avatar.png"
+                });
+            }
 
         } catch (error) {
             console.error('Error sending message:', error);
+            
+            // Clear any active placeholder on error
+            this.clearCurrentPlaceholder();
             
             // Add error message to chat
             this.chatWindow.addMessage({
@@ -590,6 +655,8 @@ export class SimulacrumChatModal {
         } finally {
             this.processing = false;
             this.abortController = null;
+            // Ensure placeholder is cleared
+            this.clearCurrentPlaceholder();
         }
     }
 
