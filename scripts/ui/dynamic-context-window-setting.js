@@ -132,17 +132,23 @@ export class DynamicContextWindowSetting {
      * @param {string} modelName - Selected model name
      */
     async onModelChange(modelName) {
+        console.log(`🤖 Context window onModelChange called with: ${modelName}`);
+        console.log(`🤖 Current detection:`, this.currentDetection);
+        
         if (!this.currentDetection || !this.currentDetection.supportsDetection || !modelName) {
+            console.log(`🤖 Skipping context window update - detection: ${!!this.currentDetection}, supports: ${this.currentDetection?.supportsDetection}, model: ${!!modelName}`);
             return;
         }
 
-        console.log(`🤖 Updating context window for model: ${modelName}`);
+        console.log(`🔄 Updating context window for model: ${modelName}`);
         
         try {
             this.showLoadingState();
             
             const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
             const contextWindow = await this.detector.getContextWindow(apiEndpoint, modelName);
+            
+            console.log(`🎯 Detected context window: ${contextWindow} for model ${modelName}`);
             
             // Update the displayed value
             this.updateDetectedValue(contextWindow);
@@ -151,6 +157,9 @@ export class DynamicContextWindowSetting {
             const isOverridden = this.overrideCheckbox && this.overrideCheckbox.is(':checked');
             if (!isOverridden) {
                 await game.settings.set('simulacrum', 'contextWindow', contextWindow);
+                console.log(`💾 Updated context window setting to: ${contextWindow}`);
+            } else {
+                console.log(`🔒 Context window override enabled, not updating setting`);
             }
             
             this.hideLoadingState();
