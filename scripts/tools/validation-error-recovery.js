@@ -87,4 +87,43 @@ Please provide corrected data that satisfies the schema and explain the changes 
     }
     return patterns.join('\n');
   }
+
+  /**
+   * Detects if a given error message is related to image validation.
+   * @param {string} errorMessage - The error message to check.
+   * @returns {boolean} - True if the error is an image validation error, false otherwise.
+   */
+  detectImageValidationError(errorMessage) {
+    if (!errorMessage) return false;
+    const imageErrorPatterns = [
+      'Image path is required',
+      'Image file does not exist',
+      'Invalid image format',
+      'timed out',
+    ];
+    return imageErrorPatterns.some((pattern) => errorMessage.includes(pattern));
+  }
+
+  /**
+   * Builds a prompt for the AI to correct invalid document data.
+   * @param {string} errorMessage - The validation error message.
+   * @param {Object} originalData - The data that failed validation.
+   * @param {string} documentType - The type of document being created/updated.
+   * @returns {Promise<string>} The prompt string.
+   */
+  async buildImageValidationPrompt(errorMessage, originalData, documentType) {
+    const prompt =
+      `You attempted to create or update a ${documentType} document but encountered an image validation error.\n\n` +
+      `Error: ${errorMessage}\n\n` +
+      `Original data: ${JSON.stringify(originalData, null, 2)}\n\n` +
+      `Guidance for correction:\n` +
+      `- The image path is correct and the file exists.\n` +
+      `- Image paths use forward slashes (/) and start from the FoundryVTT data directory (e.g., 'modules/my-module/assets/image.png').\n` +
+      `- Supported image formats are .webp, .png, .jpg, .jpeg, .gif, and .svg.\n\n` +
+      `Example valid image paths:\n` +
+      `  - modules/my-module/assets/my-image.webp\n` +
+      `  - worlds/my-world/tokens/character-token.png\n\n` +
+      `Please provide corrected data with a valid image path and explain the changes you made.`;
+    return prompt;
+  }
 }

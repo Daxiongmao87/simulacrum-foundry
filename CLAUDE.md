@@ -6,6 +6,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Simulacrum is a FoundryVTT v12 module that provides an AI-powered campaign assistant for Game Masters and Assistant GMs. It synthesizes patterns from four reference repositories to create an AI agent with dynamic document CRUD capabilities, tool execution, and professional chat interface.
 
+## Development Commands
+
+### Testing and Quality Assurance
+- **Run all tests**: `npm test`
+- **Run tests with coverage**: `npm run test:coverage`
+- **Run single test file**: `npm test -- path/to/test.js`
+- **Lint code**: `npm run lint`
+- **Auto-fix linting issues**: `npm run lint:fix`
+- **Format code**: `npm run format`
+
+### Git Hooks
+- **Pre-commit**: Runs linting and formatting automatically
+- **Husky**: Manages git hooks (configured in `.husky/`)
+
+## Key Architecture Insights
+
+### Recent Major Enhancements
+
+#### 1. Dynamic Image Validation System
+- **Purpose**: Makes `img` field required for all FoundryVTT documents
+- **Implementation**: `scripts/core/image-validator.js`
+- **Key Pattern**: Modifies document schemas dynamically rather than hardcoding types
+- **Integration**: Works with existing validation error recovery system
+
+#### 2. AI-Powered Validation Error Recovery
+- **Purpose**: Automatically retry failed document operations with AI corrections
+- **Implementation**: `scripts/tools/validation-error-recovery.js`
+- **Key Pattern**: Parses validation errors and generates corrective prompts for AI
+- **Critical Feature**: Maintains consistent error format across all validation types
+
 ## Architecture Synthesis
 
 This project combines proven patterns from four repositories located in `research/`:
@@ -172,6 +202,28 @@ When facing UI/layout issues:
 - **Multiple failed attempts**: Step back and ask user to clarify what's being missed
 - **Never assume**: Always verify architectural assumptions against working implementations
 
+### Development Best Practices
+- **Test-Driven Development**: Write tests for new functionality
+- **Schema-First Validation**: Always modify schemas rather than bypassing validation
+- **Consistent Error Handling**: Use the same error format across all validation types
+- **Performance Considerations**: Cache validation results, use async operations
+- **Documentation**: Update JSDoc comments for all public methods
+
+## Testing Strategy
+
+### Core Test Coverage
+- **Unit Tests**: All utility functions and core classes (`scripts/core/`, `scripts/tools/`)
+- **Integration Tests**: Document CRUD operations with mocked FoundryVTT environment
+- **Validation Tests**: Schema modification and error recovery scenarios
+- **Mock Framework**: Uses Jest with custom FoundryVTT mocks in `scripts/test/mocks.js`
+
+### Critical Test Areas
+1. **Dynamic Schema Modification**: Test img field requirement enforcement
+2. **Validation Error Recovery**: Test AI retry mechanism with various error types  
+3. **Document Discovery**: Test across different game systems
+4. **Tool Permission System**: Test GM/Assistant GM access controls
+5. **Context Management**: Test conversation context persistence
+
 ## Validation Checklist
 
 Before any major implementation:
@@ -181,4 +233,33 @@ Before any major implementation:
 4. Confirm permission system restricts to GM/Assistant GM only
 5. Validate tool confirmation system shows operation details
 6. Test dynamic document type discovery across different systems
-7. **MANDATORY**: Get user confirmation that fixes actually work before claiming completion
+7. **Run tests**: Execute `npm test` and ensure all tests pass
+8. **Check coverage**: Ensure new code has appropriate test coverage
+9. **MANDATORY**: Get user confirmation that fixes actually work before claiming completion
+
+## Critical Implementation Patterns
+
+### Schema Modification Pattern
+```javascript
+// CORRECT: Dynamic schema modification
+const modifiedSchema = await DynamicSchemaModifier.modifySchemaForValidation(
+  DocumentClass, 
+  { img: { required: true } }
+);
+
+// WRONG: Hardcoded document type checks
+if (documentType === 'Actor') { /* hardcoded logic */ }
+```
+
+### Validation Error Consistency
+```javascript
+// CORRECT: Consistent error format for all validation types
+const errorMessage = `Error: ${nativeFoundryError}
+
+Original data: ${JSON.stringify(data)}
+
+Document schema: ${JSON.stringify(schema)}`;
+
+// WRONG: Special case error handling for images
+if (isImageError) { /* different error format */ }
+```

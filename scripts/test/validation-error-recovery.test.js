@@ -9,7 +9,7 @@ import { ValidationErrorRecovery } from '../tools/validation-error-recovery.js';
 import { GenericCRUDTools } from '../core/generic-crud-tools.js';
 import { DocumentDiscoveryEngine } from '../core/document-discovery-engine.js';
 import { ImageValidator } from '../core/image-validator.js'; // Import ImageValidator
-import { mockFilePicker } from './mocks.js';
+import { mockFilePicker, mockCONFIG, mockGame } from './mocks.js';
 
 /**
  * Mock AI service for testing
@@ -230,16 +230,10 @@ describe('ValidationErrorRecovery and Image Validation', () => {
     mockFilePicker.addFile(timeoutPath);
     mockFilePicker.setDelay(35000); // Set a delay longer than the 30-second timeout
 
-    let timeoutError = null;
-    try {
-      result = await ImageValidator.validateImagePath(timeoutPath);
-    } catch (error) {
-      timeoutError = error;
-    } finally {
-      mockFilePicker.setDelay(0); // Reset delay
-    }
-    expect(timeoutError).toBeInstanceOf(Error);
-    expect(timeoutError.message).toContain('timed out');
+    result = await ImageValidator.validateImagePath(timeoutPath);
+    expect(result.isValid).toBe(false);
+    expect(result.message).toContain('timed out');
+    mockFilePicker.setDelay(0); // Reset delay
     console.log('  ✓ ImageValidator.validateImagePath() tests passed.');
 
     // --- ImageValidator.validateDocumentImages() tests ---
@@ -354,7 +348,7 @@ describe('ValidationErrorRecovery and Image Validation', () => {
     const imageErrorMsg = 'Image path is required and cannot be empty.';
     const originalDocData = { name: 'Broken Doc', img: '' };
     const docType = 'Scene';
-    const prompt = recovery.buildImageValidationPrompt(
+    const prompt = await recovery.buildImageValidationPrompt(
       imageErrorMsg,
       originalDocData,
       docType
@@ -385,5 +379,148 @@ describe('ValidationErrorRecovery and Image Validation', () => {
     );
 
     console.log('✓ All Image Validation tests passed!');
+  }, 40000);
+
+  describe('GenericCRUDTools Image Validation Enforcement', () => {
+    let discoveryEngine;
+    let crudTools;
+    let mockAI;
+
+    beforeEach(() => {
+      mockFilePicker.clearFiles();
+      mockFilePicker.setDelay(0);
+      mockFilePicker.setError(null);
+      ui.notifications.info.mockClear();
+      ui.notifications.warn.mockClear();
+      ui.notifications.error.mockClear();
+
+      discoveryEngine = new DocumentDiscoveryEngine();
+      mockAI = new MockAIService();
+      crudTools = new GenericCRUDTools(discoveryEngine, mockAI);
+
+      // Mock CONFIG and game globals for GenericCRUDTools
+      global.CONFIG = mockCONFIG;
+      global.game = mockGame;
+
+      // Spy on the static create method of MockDocument
+      jest.spyOn(mockCONFIG.Actor.documentClass, 'create');
+      jest.spyOn(mockCONFIG.Item.documentClass, 'create');
+      jest.spyOn(mockCONFIG.Scene.documentClass, 'create');
+    });
+
+    afterEach(() => {
+      // Restore original implementations after each test
+      jest.restoreAllMocks();
+    });
+
+    test('should prevent document creation with invalid image path', async () => {
+      console.log(
+        '  Testing GenericCRUDTools preventing creation with invalid image...'
+      );
+      const invalidImagePath = 'modules/simulacrum/assets/invalid.txt'; // Invalid format
+      const docData = { name: 'Invalid Actor', img: invalidImagePath };
+
+      await expect(crudTools.createDocument('Actor', docData)).rejects.toThrow(
+        /Image validation failed for Actor: .*Invalid image format/
+      );
+      expect(ui.notifications.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Failed to create Actor: Image validation failed for Actor:'
+        )
+      );
+      // Verify that DocumentClass.create was NOT called
+      expect(mockCONFIG.Actor.documentClass.create).not.toHaveBeenCalled();
+      console.log('  ✓ Prevented document creation with invalid image path.');
+    });
+
+    test('should prevent document update with invalid image path', async () => {
+      console.log(
+        '  Testing GenericCRUDTools preventing update with invalid image...'
+      );
+      const validImagePath = 'modules/simulacrum/assets/valid.png';
+      const invalidImagePath = 'modules/simulacrum/assets/non-existent.png'; // Non-existent
+
+      mockFilePicker.addFile(validImagePath); // Add a valid image for initial document
+
+      // Mock a document that can be "read"
+      const mockDocument = new mockCONFIG.Actor.documentClass({
+        _id: 'testId',
+        name: 'Original Actor',
+        img: validImagePath,
+      });
+      jest.spyOn(crudTools, 'readDocument').mockResolvedValue(mockDocument);
+      jest.spyOn(mockDocument, 'update'); // Spy on the update method of the mock document
+
+      const updates = { img: invalidImagePath };
+
+      await expect(
+        crudTools.updateDocument('Actor', 'testId', updates)
+      ).rejects.toThrow(
+        /Image validation failed for Actor update: .*Image file does not exist/
+      );
+      expect(ui.notifications.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Failed to update Actor with ID testId: Image validation failed for Actor update:'
+        )
+      );
+      // Verify that document.update was NOT called
+      expect(mockDocument.update).not.toHaveBeenCalled();
+      console.log('  ✓ Prevented document update with invalid image path.');
+    });
+
+    test('should allow document creation with valid image path', async () => {
+      console.log(
+        '  Testing GenericCRUDTools allowing creation with valid image...'
+      );
+      const validImagePath = 'modules/simulacrum/assets/valid-new.png';
+      mockFilePicker.addFile(validImagePath);
+      const docData = { name: 'Valid Actor', img: validImagePath };
+
+      const createdDoc = await crudTools.createDocument('Actor', docData);
+      expect(createdDoc).toBeDefined();
+      expect(createdDoc.name).toBe('Valid Actor');
+      expect(createdDoc.data.img).toBe(validImagePath);
+      expect(ui.notifications.info).toHaveBeenCalledWith(
+        expect.stringContaining('Created Actor: Valid Actor')
+      );
+      expect(mockCONFIG.Actor.documentClass.create).toHaveBeenCalledWith(
+        docData
+      );
+      console.log('  ✓ Allowed document creation with valid image path.');
+    });
+
+    test('should allow document update with valid image path', async () => {
+      console.log(
+        '  Testing GenericCRUDTools allowing update with valid image...'
+      );
+      const originalImagePath = 'modules/simulacrum/assets/original.png';
+      const newValidImagePath = 'modules/simulacrum/assets/new-valid.png';
+      mockFilePicker.addFile(originalImagePath);
+      mockFilePicker.addFile(newValidImagePath);
+
+      const mockDocument = new mockCONFIG.Actor.documentClass({
+        _id: 'updateId',
+        name: 'Original Actor',
+        img: originalImagePath,
+      });
+      jest.spyOn(crudTools, 'readDocument').mockResolvedValue(mockDocument);
+      jest.spyOn(mockDocument, 'update'); // Spy on the update method of the mock document
+
+      const updates = { img: newValidImagePath, name: 'Updated Actor' };
+
+      const updatedDoc = await crudTools.updateDocument(
+        'Actor',
+        'updateId',
+        updates
+      );
+      expect(updatedDoc).toBeDefined();
+      expect(updatedDoc.name).toBe('Updated Actor');
+      expect(updatedDoc.data.img).toBe(newValidImagePath);
+      expect(ui.notifications.info).toHaveBeenCalledWith(
+        expect.stringContaining('Updated Actor: Updated Actor')
+      );
+      expect(mockDocument.update).toHaveBeenCalledWith(updates);
+      console.log('  ✓ Allowed document update with valid image path.');
+    });
   });
 });

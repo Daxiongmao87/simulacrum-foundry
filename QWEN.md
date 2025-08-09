@@ -222,12 +222,37 @@ async search(documentType, namePattern = null) {
 
 ## Testing Guidelines
 
+### Unit Testing (NEW - Jest-based)
+**Before any changes**: Run `npm test` to ensure existing functionality works
+
+#### Key Testing Patterns
+- **Mock FoundryVTT Globals**: Use `scripts/test/mocks.js` for global mocks
+- **Test File Naming**: `*.test.js` for test files
+- **Coverage Requirements**: Maintain high test coverage for new code
+- **Async Testing**: Use async/await patterns for testing async functions
+
+#### Example Test Structure
+```javascript
+import { ImageValidator } from '../core/image-validator.js';
+
+describe('ImageValidator', () => {
+  test('should validate image paths correctly', async () => {
+    const result = await ImageValidator.validateImagePath('valid/path.png');
+    expect(result.valid).toBe(true);
+  });
+});
+```
+
 ### Manual Testing Checklist
+- [ ] **Unit tests pass**: Run `npm test` - all tests must pass
+- [ ] **Code quality**: Run `npm run lint` - no linting errors
 - [ ] Module loads without errors in FoundryVTT console
 - [ ] Only GM/Assistant GM can access features
 - [ ] Settings save and load correctly
 - [ ] Chat interface opens and functions
 - [ ] Document operations work with current game system
+- [ ] **Image validation**: Test creating documents without/with images
+- [ ] **Error recovery**: Test AI retry mechanism on validation failures
 - [ ] Error messages are user-friendly
 - [ ] No browser console errors during normal operation
 

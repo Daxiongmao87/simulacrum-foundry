@@ -5,8 +5,7 @@
  */
 
 import { DocumentDiscoveryEngine } from './document-discovery-engine.js';
-import { ValidationErrorRecovery } from '../tools/validation-error-recovery.js';
-// import { ImageValidator } from './image-validator.js'; // Temporarily disabled
+import { ImageValidator } from './image-validator.js';
 
 /**
  * A class providing generic CRUD operations for FoundryVTT documents.
@@ -28,9 +27,6 @@ export class GenericCRUDTools {
     }
     this.discoveryEngine = discoveryEngine;
     this.aiService = aiService;
-    this.validationErrorRecovery = aiService
-      ? new ValidationErrorRecovery(aiService)
-      : null;
   }
 
   /**
@@ -56,15 +52,24 @@ export class GenericCRUDTools {
         );
       }
 
-      // console.log(`Simulacrum | GenericCRUDTools | Validating images for new ${documentType} document...`);
-      // ui.notifications.info(`Simulacrum | Validating images for new ${documentType} document...`);
-      // const validation = await ImageValidator.validateDocumentImages(data, documentType);
-      // if (!validation.isValid) {
-      //   const errorMessage = `Image validation failed for ${documentType}: ${validation.errors.join('; ')}`;
-      //   ui.notifications.error(`Simulacrum | ${errorMessage}`);
-      //   throw new Error(errorMessage);
-      // }
-      // ui.notifications.info(`Simulacrum | Image validation successful for new ${documentType} document.`);
+      console.log(
+        `Simulacrum | GenericCRUDTools | Validating images for new ${documentType} document...`
+      );
+      ui.notifications.info(
+        `Simulacrum | Validating images for new ${documentType} document...`
+      );
+      const validation = await ImageValidator.validateDocumentImages(
+        data,
+        documentType
+      );
+      if (!validation.isValid) {
+        const errorMessage = `Image validation failed for ${documentType}: ${validation.errors.join('; ')}`;
+        ui.notifications.error(`Simulacrum | ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+      ui.notifications.info(
+        `Simulacrum | Image validation successful for new ${documentType} document.`
+      );
 
       const result = await DocumentClass.create(data);
 
@@ -73,30 +78,6 @@ export class GenericCRUDTools {
       );
       return result;
     } catch (error) {
-      // Attempt AI retry if validation error and AI service available
-      if (this.isValidationError(error) && this.validationErrorRecovery) {
-        try {
-          console.log(
-            `Simulacrum | Attempting AI retry for validation error: ${error.message}`
-          );
-          const correctionPrompt =
-            await this.validationErrorRecovery.buildValidationErrorPrompt(
-              error.message,
-              data,
-              documentType
-            );
-
-          // Note: This would need proper integration with the AI service flow
-          // For now, we'll log the correction prompt and still throw the original error
-          console.log(`Simulacrum | AI correction prompt:`, correctionPrompt);
-          ui.notifications.warn(
-            `Simulacrum | Validation error detected - AI retry mechanism ready but not fully integrated`
-          );
-        } catch (retryError) {
-          console.warn(`Simulacrum | AI retry failed:`, retryError);
-        }
-      }
-
       ui.notifications.error(
         `Simulacrum | Failed to create ${documentType}: ${error.message}`
       );
@@ -153,15 +134,24 @@ export class GenericCRUDTools {
   async updateDocument(documentType, documentId, updates) {
     try {
       const document = await this.readDocument(documentType, documentId);
-      // console.log(`Simulacrum | GenericCRUDTools | Validating images for ${documentType} document update...`);
-      // ui.notifications.info(`Simulacrum | Validating images for ${documentType} document update...`);
-      // const validation = await ImageValidator.validateDocumentImages(updates, documentType);
-      // if (!validation.isValid) {
-      //   const errorMessage = `Image validation failed for ${documentType} update: ${validation.errors.join('; ')}`;
-      //   ui.notifications.error(`Simulacrum | ${errorMessage}`);
-      //   throw new Error(errorMessage);
-      // }
-      // ui.notifications.info(`Simulacrum | Image validation successful for ${documentType} document update.`);
+      console.log(
+        `Simulacrum | GenericCRUDTools | Validating images for ${documentType} document update...`
+      );
+      ui.notifications.info(
+        `Simulacrum | Validating images for ${documentType} document update...`
+      );
+      const validation = await ImageValidator.validateDocumentImages(
+        updates,
+        documentType
+      );
+      if (!validation.isValid) {
+        const errorMessage = `Image validation failed for ${documentType} update: ${validation.errors.join('; ')}`;
+        ui.notifications.error(`Simulacrum | ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+      ui.notifications.info(
+        `Simulacrum | Image validation successful for ${documentType} document update.`
+      );
 
       const result = await document.update(updates);
 
@@ -170,30 +160,6 @@ export class GenericCRUDTools {
       );
       return result;
     } catch (error) {
-      // Attempt AI retry if validation error and AI service available
-      if (this.isValidationError(error) && this.validationErrorRecovery) {
-        try {
-          console.log(
-            `Simulacrum | Attempting AI retry for validation error: ${error.message}`
-          );
-          const correctionPrompt =
-            await this.validationErrorRecovery.buildValidationErrorPrompt(
-              error.message,
-              updates,
-              documentType
-            );
-
-          // Note: This would need proper integration with the AI service flow
-          // For now, we'll log the correction prompt and still throw the original error
-          console.log(`Simulacrum | AI correction prompt:`, correctionPrompt);
-          ui.notifications.warn(
-            `Simulacrum | Validation error detected - AI retry mechanism ready but not fully integrated`
-          );
-        } catch (retryError) {
-          console.warn(`Simulacrum | AI retry failed:`, retryError);
-        }
-      }
-
       ui.notifications.error(
         `Simulacrum | Failed to update ${documentType} with ID ${documentId}: ${error.message}`
       );
@@ -224,34 +190,5 @@ export class GenericCRUDTools {
       );
       throw error;
     }
-  }
-
-  /**
-   * Determines if an error is a FoundryVTT validation error.
-   * @param {Error} error The error to check.
-   * @returns {boolean} True if this appears to be a validation error.
-   */
-  isValidationError(error) {
-    if (!error || !error.message) return false;
-
-    const errorMessage = error.message.toLowerCase();
-
-    // Check for common FoundryVTT validation error patterns
-    return (
-      errorMessage.includes('validation') ||
-      errorMessage.includes('failed to create') ||
-      errorMessage.includes('failed to update') ||
-      errorMessage.includes('invalid') ||
-      errorMessage.includes('required') ||
-      errorMessage.includes('must be') ||
-      errorMessage.includes('should be') ||
-      errorMessage.includes('type error') ||
-      errorMessage.includes('schema') ||
-      // FoundryVTT specific validation error patterns
-      errorMessage.includes('cannot read properties of undefined') ||
-      errorMessage.includes('may not be undefined') ||
-      errorMessage.includes('validation errors:') ||
-      errorMessage.includes('datamodelvalidationfailure')
-    );
   }
 }

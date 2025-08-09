@@ -8,6 +8,45 @@ export const mockCONST = {
   },
 };
 
+// Mock Document Class for CONFIG
+class MockDocument {
+  constructor(data) {
+    this.data = data;
+    this.name = data.name;
+    this.id = data._id || 'mockId';
+  }
+
+  async update(updates) {
+    // Simulate document update
+    Object.assign(this.data, updates);
+    this.name = this.data.name; // Update name if it's changed
+    return this;
+  }
+
+  static async create(data) {
+    // Simulate document creation
+    return new MockDocument(data);
+  }
+
+  async delete() {
+    // Simulate document deletion
+    return this;
+  }
+}
+
+export const mockCONFIG = {
+  Actor: {
+    documentClass: MockDocument,
+  },
+  Item: {
+    documentClass: MockDocument,
+  },
+  Scene: {
+    documentClass: MockDocument,
+  },
+  // Add other document types as needed for testing
+};
+
 export const mockGame = {
   user: { isGM: true, role: mockCONST.USER_ROLES.GM },
   settings: {
@@ -22,15 +61,73 @@ export const mockGame = {
     },
   },
   collections: {
-    get: (name) => {
-      // Return a simple collection mock
-      return {
-        get: (id) => ({ id, name: 'MockDoc', type: name }),
-        values: () => [
-          { id: '1', name: 'Doc1', type: name },
-          { id: '2', name: 'Doc2', type: name },
-        ],
-      };
+    _collections: new Map([
+      [
+        'Actor',
+        {
+          get: (id) => ({
+            id,
+            name: 'MockActor',
+            type: 'Actor',
+            update: async (updates) => {
+              // Simulate update on retrieved document
+              Object.assign(this, updates);
+              return this;
+            },
+          }),
+          values: () => [
+            { id: '1', name: 'Doc1', type: 'Actor' },
+            { id: '2', name: 'Doc2', type: 'Actor' },
+          ],
+        },
+      ],
+      [
+        'Item',
+        {
+          get: (id) => ({
+            id,
+            name: 'MockItem',
+            type: 'Item',
+            update: async (updates) => {
+              // Simulate update on retrieved document
+              Object.assign(this, updates);
+              return this;
+            },
+          }),
+          values: () => [
+            { id: '3', name: 'Doc3', type: 'Item' },
+            { id: '4', name: 'Doc4', type: 'Item' },
+          ],
+        },
+      ],
+      [
+        'Scene',
+        {
+          get: (id) => ({
+            id,
+            name: 'MockScene',
+            type: 'Scene',
+            update: async (updates) => {
+              // Simulate update on retrieved document
+              Object.assign(this, updates);
+              return this;
+            },
+          }),
+          values: () => [
+            { id: '5', name: 'Doc5', type: 'Scene' },
+            { id: '6', name: 'Doc6', type: 'Scene' },
+          ],
+        },
+      ],
+    ]),
+    get: function (name) {
+      return this._collections.get(name);
+    },
+    entries: function () {
+      return this._collections.entries();
+    },
+    values: function () {
+      return this._collections.values();
     },
   },
   simulacrum: {
@@ -125,3 +222,18 @@ global.FormApplication = class MockFormApplication extends global.Application {
 
 // Set up global mock for FilePicker
 global.FilePicker = mockFilePicker;
+
+// Mock global ui.notifications
+global.ui = {
+  notifications: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+};
+
+// Mock global CONFIG
+global.CONFIG = mockCONFIG;
+
+// Mock global game
+global.game = mockGame;
