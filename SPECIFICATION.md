@@ -531,15 +531,16 @@ Hooks.on('renderActorSheet', (sheet, html) => {
 ## Enhanced Validation System ✅ IMPLEMENTED (2025-08-09)
 
 ### Image Validation System ✅ COMPLETE
-**Status**: Fully implemented with comprehensive testing (GitHub Issue #17)
+**Status**: Fully implemented with comprehensive testing (GitHub Issue #17, Issue #21 FIXED)
 
 ```javascript
 class ImageValidator {
   static async validateImagePath(imagePath, options = {}) {
-    // ✅ File existence validation using FilePicker.browse API
+    // ✅ File existence validation using list_images tool integration (UPDATED 2025-08-09)
     // ✅ Format validation (.webp, .png, .jpg, .jpeg, .gif, .svg)
     // ✅ Performance caching (30-second cache duration)
     // ✅ Timeout protection (30-second limit)
+    // ✅ FIXED: Resolved false negative validation errors for accessible images
     return { valid: boolean, error?: string, cached?: boolean };
   }
   
@@ -552,7 +553,12 @@ class ImageValidator {
   
   // ✅ Cache management and performance monitoring
   static clearCache() { /* Implemented */ }
-  static getCacheStats() { /* Implemented */ }
+  
+  // ✅ ENHANCED: File existence check now uses ListImagesTool for accuracy
+  static async fileExists(path) {
+    // Uses proven list_images tool logic to avoid FilePicker.browse path issues
+    // Resolves GitHub Issue #21: False negative validation for valid images
+  }
 }
 ```
 
