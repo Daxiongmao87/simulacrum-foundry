@@ -97,4 +97,14 @@ export class DocumentDiscoveryEngine {
   async getCreatableDocumentTypes() {
     return this.getAvailableTypes();
   }
+
+  /**
+   * Gets all user-creatable document collection names.
+   * @returns {string[]} Array of document type names (e.g., ['Actor', 'Item', 'Scene'])
+   */
+  getAllDocumentTypes() {
+    return DocumentDiscoveryEngine.USER_CREATABLE_COLLECTIONS.filter(collectionName => {
+      return game.collections.has(collectionName);
+    });
+  }
 }

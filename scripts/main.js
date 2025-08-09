@@ -6,6 +6,7 @@ import { ToolRegistry } from "./tools/tool-registry.js";
 import { ChatModal } from "./fimlib/main.js";
 import { DocumentDiscoveryEngine } from "./core/document-discovery-engine.js";
 import { GenericCRUDTools } from "./core/generic-crud-tools.js";
+import { registerDynamicSchemaModifier } from "./core/dynamic-schema-modifier.js";
 
 // Import all tools
 import { CreateDocumentTool, ReadDocumentTool, UpdateDocumentTool, DeleteDocumentTool } from "./tools/crud-tools.js";
@@ -194,6 +195,9 @@ Hooks.once('init', () => {
 
 Hooks.once('ready', async () => {
     console.log('Simulacrum | Simulacrum Module Ready');
+
+    // Initialize dynamic schema modifier for image validation (now that game.collections is populated)
+    registerDynamicSchemaModifier(game.simulacrum.documentDiscoveryEngine);
 
     // Fetch models now that game is ready
     await SimulacrumSettings.fetchModelsAndContextWindows();
