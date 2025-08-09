@@ -1,0 +1,36 @@
+{
+  "name": "simulacrum-foudry",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "🤖 **A comprehensive AI-powered campaign assistant for FoundryVTT v12 Game Masters and Assistant GMs**",
+  "main": "hook-debug-test.js",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint scripts/**/*.js",
+    "lint:fix": "eslint scripts/**/*.js --fix",
+    "format": "prettier --write scripts/**/*.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "scripts/**/*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/preset-env": "^7.28.0",
+    "babel-jest": "^30.0.5",
+    "eslint": "^9.33.0",
+    "husky": "^9.1.7",
+    "jest": "^30.0.5",
+    "lint-staged": "^16.1.5",
+    "prettier": "^3.6.2"
+  },
+  "dependencies": {
+    "jest-environment-jsdom": "^30.0.5"
+  }
+}

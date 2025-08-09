@@ -1,4 +1,4 @@
-import { FoundrySchemaExtractor } from "../core/foundry-schema-extractor.js";
+import { FoundrySchemaExtractor } from '../core/foundry-schema-extractor.js';
 
 /**
  * Handles AI retry when document validation fails.
@@ -45,17 +45,17 @@ Please provide corrected data that satisfies the schema and explain the changes 
    */
   formatSchemaForAI(schema) {
     if (!schema) return 'Schema could not be retrieved.';
-    
+
     // Handle FoundryVTT schema objects which have circular references
     const simplified = {};
     for (const [key, field] of Object.entries(schema)) {
       simplified[key] = {
         type: field.constructor.name,
         required: field.required,
-        nullable: field.nullable
+        nullable: field.nullable,
       };
     }
-    
+
     return JSON.stringify(simplified, null, 2);
   }
 
@@ -65,15 +65,19 @@ Please provide corrected data that satisfies the schema and explain the changes 
    * @param {Object|null} schema
    * @returns {string}
    */
-  analyzeErrorPatterns(errorMessage, schema) {
+  analyzeErrorPatterns(errorMessage, _schema) {
     // Basic pattern matching – can be expanded later.
     if (!errorMessage) return '';
     const patterns = [];
     if (/required/.test(errorMessage)) {
-      patterns.push('Missing required field(s). Ensure all required properties are present.');
+      patterns.push(
+        'Missing required field(s). Ensure all required properties are present.'
+      );
     }
     if (/type/.test(errorMessage)) {
-      patterns.push('Field type mismatch. Verify that each field matches the expected type.');
+      patterns.push(
+        'Field type mismatch. Verify that each field matches the expected type.'
+      );
     }
     if (/enum/.test(errorMessage)) {
       patterns.push('Invalid enum value. Use one of the allowed values.');

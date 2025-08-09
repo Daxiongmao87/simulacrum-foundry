@@ -5,6 +5,12 @@ research/
 .AGENT/
 .BACKLOG/
 
+# Team member instruction files
+CLAUDE.md
+GEMINI.md
+QWEN.md
+LLXPRT.md
+
 # Node modules if any
 node_modules/
 

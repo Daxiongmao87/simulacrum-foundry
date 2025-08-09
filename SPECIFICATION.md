@@ -526,6 +526,50 @@ Hooks.on('renderActorSheet', (sheet, html) => {
 
 ---
 
+## Enhanced Validation System
+
+### Dynamic Schema Modification
+**New Feature**: Image validation system that dynamically makes `img` field required for all documents
+
+```javascript
+class DynamicSchemaModifier {
+  static async modifySchemaForValidation(DocumentClass, requirements = {}) {
+    // Clone base schema
+    // Dynamically modify field requirements (img: required = true)
+    // Apply additional validation constraints
+    return modifiedSchema;
+  }
+  
+  static async enforceImageRequirements(documentData, documentType) {
+    // Validate img field exists and is non-empty
+    // Validate file path exists in FoundryVTT data directory
+    // Validate file format is supported image type
+  }
+}
+```
+
+### Validation Error Recovery
+**New Feature**: AI-powered retry mechanism for validation failures
+
+```javascript
+class ValidationErrorRecovery {
+  static async attemptRecovery(error, originalData, documentType, maxRetries = 3) {
+    // Parse validation error details
+    // Generate corrective instructions for AI
+    // Retry with AI-suggested corrections
+    // Return successful result or final error
+  }
+  
+  static buildRetryPrompt(validationError, schema, originalData) {
+    // Create detailed correction guidance
+    // Include schema requirements
+    // Suggest specific fixes based on error type
+  }
+}
+```
+
+---
+
 ## Core Tool Definitions
 
 ### Document CRUD Tools
@@ -547,15 +591,23 @@ Hooks.on('renderActorSheet', (sheet, html) => {
    - Returns: Complete document object
 
 4. **create_document**
-   - Description: Create a new document
+   - Description: Create a new document with dynamic image validation
    - Parameters: documentType, documentData
    - Returns: Created document ID and summary
+   - **Enhanced Features**: 
+     - Dynamic schema modification (img field required)
+     - AI-powered validation error recovery
+     - File path existence validation
    - **Requires Confirmation**: Yes (unless yolo mode)
 
 5. **update_document**
-   - Description: Update existing document
+   - Description: Update existing document with enhanced validation
    - Parameters: documentType, documentId, updateData
-   - Returns: Update confirmation and summary  
+   - Returns: Update confirmation and summary
+   - **Enhanced Features**: 
+     - Schema validation with dynamic requirements
+     - Validation error recovery system
+     - Image field validation
    - **Requires Confirmation**: Yes (unless yolo mode)
 
 6. **delete_document**
