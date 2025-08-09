@@ -239,27 +239,52 @@ Before any major implementation:
 
 ## Critical Implementation Patterns
 
-### Schema Modification Pattern
+#### Image Validation Pattern ✅ IMPLEMENTED
 ```javascript
-// CORRECT: Dynamic schema modification
-const modifiedSchema = await DynamicSchemaModifier.modifySchemaForValidation(
-  DocumentClass, 
-  { img: { required: true } }
-);
+// CORRECT: Runtime image validation with caching
+const validation = await ImageValidator.validateImagePath(imagePath, {
+  timeout: 30000,
+  useCache: true
+});
+if (!validation.valid) {
+  throw new ValidationError(`Image validation failed: ${validation.error}`);
+}
 
-// WRONG: Hardcoded document type checks
-if (documentType === 'Actor') { /* hardcoded logic */ }
+// WRONG: Bypassing image validation
+if (documentData.img) { /* assuming img is valid without checking */ }
 ```
 
-### Validation Error Consistency
+#### Validation Error Recovery Pattern ✅ IMPLEMENTED
 ```javascript
-// CORRECT: Consistent error format for all validation types
-const errorMessage = `Error: ${nativeFoundryError}
+// CORRECT: Context-aware error recovery
+if (ValidationErrorRecovery.isValidationError(error)) {
+  const prompt = await ValidationErrorRecovery.buildImageValidationPrompt(
+    error, originalData, documentType
+  );
+  return await ValidationErrorRecovery.attemptRecovery(error, originalData, documentType);
+}
 
-Original data: ${JSON.stringify(data)}
+// WRONG: Generic error handling without recovery
+catch (error) { throw error; /* no recovery attempt */ }
+```
 
-Document schema: ${JSON.stringify(schema)}`;
+#### Testing Pattern ✅ IMPLEMENTED
+```javascript
+// CORRECT: Comprehensive Jest testing with mocks
+import { ImageValidator } from '../core/image-validator.js';
+import '../test/mocks.js'; // FoundryVTT environment mocks
 
-// WRONG: Special case error handling for images
-if (isImageError) { /* different error format */ }
+describe('ImageValidator', () => {
+  beforeEach(() => {
+    ImageValidator.clearCache();
+  });
+  
+  test('validates with caching', async () => {
+    const result = await ImageValidator.validateImagePath('valid/path.png');
+    expect(result.valid).toBe(true);
+  });
+});
+
+// WRONG: No testing for validation logic
+// Missing test coverage for critical functionality
 ```

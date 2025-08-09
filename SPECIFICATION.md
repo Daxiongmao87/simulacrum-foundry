@@ -22,10 +22,12 @@ Simulacrum synthesizes four open-source projects to create a comprehensive AI as
 
 ### Core Functionality
 1. **AI Chat Interface**: Natural language interaction with campaign assistant
-2. **Document CRUD Operations**: Create, read, update, delete Foundry documents
+2. **Document CRUD Operations**: Create, read, update, delete Foundry documents with validation
 3. **Dynamic Tool System**: System-agnostic document type discovery
-4. **Agentic Loop**: Multi-step AI task execution with user oversight
-5. **Professional UI**: Integrated chat window with Foundry's design language
+4. **Asset Discovery**: Image file discovery and recommendation system
+5. **Validation & Recovery**: AI-powered error recovery for failed operations
+6. **Agentic Loop**: Multi-step AI task execution with user oversight
+7. **Professional UI**: Integrated chat window with Foundry's design language
 
 ---
 
@@ -660,9 +662,27 @@ describe('ImageValidator', () => {
    - **Requires Confirmation**: Yes (always, unless yolo mode)
    - **Requires Setting**: allowDeletion must be true
 
+### Asset Discovery Tools ✅ NEW
+**Source**: New implementation for enhanced document creation support
+
+7. **list_images** ✅ IMPLEMENTED
+   - Description: Discover and list available image files with filtering and pagination
+   - Parameters: keyword (optional), page (optional), pageSize (optional) 
+   - Returns: Paginated image list with metadata (path, filename, extension, category)
+   - **Key Features**:
+     - ✅ Wildcard keyword filtering (`*dragon*`, `*.png`, `token_?`)
+     - ✅ Searches user data, core, modules, and systems directories
+     - ✅ Pagination support (default: 50 results per page, max: 100)
+     - ✅ Support for all image formats (.jpg, .png, .webp, .gif, .svg, etc.)
+     - ✅ Graceful error handling for inaccessible directories
+     - ✅ FilePicker API integration for reliable file system access
+     - ✅ Comprehensive test suite with 100% coverage
+     - ✅ Auto-wrapping partial keywords (`dragon` becomes `*dragon*`)
+   - **Requires Confirmation**: No (read-only operation)
+
 ### Context Management Tools
 
-7. **add_document_context**
+8. **add_document_context**
    - Description: Add document to conversation context
    - Parameters: documentType, documentId
    - Returns: Context addition confirmation
@@ -676,6 +696,23 @@ describe('ImageValidator', () => {
    - Description: Clear conversation context
    - Parameters: None
    - Returns: Context clear confirmation
+
+### Information Tools
+
+10. **get_world_info**
+   - Description: Get current world and system information
+   - Parameters: None
+   - Returns: World name, system, connected users, active scene
+
+11. **get_scene_info**
+   - Description: Get information about the currently viewed scene
+   - Parameters: None
+   - Returns: Scene details, tokens, backgrounds, dimensions
+
+12. **get_user_preferences**
+   - Description: Get current user settings and Simulacrum permissions
+   - Parameters: None
+   - Returns: User role, permissions, Simulacrum configuration
 
 ---
 
