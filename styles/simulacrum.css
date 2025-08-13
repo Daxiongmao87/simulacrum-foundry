@@ -1,0 +1,217 @@
+/* Base styles for the Simulacrum module */
+
+/* General styling for the chat modal */
+.simulacrum-chat-modal {
+    /* Add your base styles here */
+}
+
+/* Styling for the chat messages */
+.simulacrum-chat-message {
+    /* Add your message specific styles here */
+}
+
+/* Styling for the input area */
+.simulacrum-chat-input {
+    /* Add your input specific styles here */
+}
+
+/* Styling for the send button */
+.simulacrum-send-button {
+    /* Add your send button specific styles here */
+}
+
+/* Styling for the context button on document sheets */
+.simulacrum-context {
+    margin-left: 5px;
+    font-size: 14px;
+    color: #f0f0f0; /* Light gray */
+    cursor: pointer;
+    transition: color 0.2s ease-in-out;
+}
+
+.simulacrum-context:hover {
+    color: #ff6400; /* Orange */
+}
+
+/* Scene control button styling */
+.scene-control[data-control="simulacrum"] {
+    /* Base styles for the button */
+}
+
+/* Specific states for the Simulacrum button - target the icon */
+.scene-control[data-control="simulacrum"].simulacrum-disabled i {
+    color: #888; /* Grayed out */
+    text-shadow: none;
+}
+
+.scene-control[data-control="simulacrum"].simulacrum-disabled {
+    cursor: not-allowed;
+}
+
+.scene-control[data-control="simulacrum"].simulacrum-red i {
+    color: #e74c3c; /* Red */
+    text-shadow: none;
+}
+
+.scene-control[data-control="simulacrum"].simulacrum-yellow i {
+    color: #f1c40f; /* Yellow */
+    text-shadow: 0 0 8px #ffffff, 0 0 12px #ffffff; /* White glow */
+}
+
+.scene-control[data-control="simulacrum"].simulacrum-mithril i {
+    color: #87ceeb; /* Sky blue / baby blue */
+    text-shadow: 0 0 8px #ffffff, 0 0 12px #ffffff; /* White glow */
+}
+
+/* Tooltip adjustments for better visibility */
+.scene-control[data-control="simulacrum"][data-tooltip]:hover::before {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    border: 1px solid #333;
+}
+
+/* Ensure the icon is styled correctly */
+.scene-control[data-control="simulacrum"] i {
+    /* Any specific icon styling if needed */
+}
+
+/* Placeholder message styling */
+.simulacrum-placeholder {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(66, 165, 245, 0.1);
+    border-left: 3px solid #42a5f5;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-style: italic;
+    opacity: 0.8;
+    transition: opacity 0.2s ease-in-out;
+    color: #42a5f5;
+}
+
+.simulacrum-placeholder .fa-cog {
+    color: #42a5f5;
+    margin-right: 8px;
+    animation: fa-spin 2s infinite linear;
+}
+
+/* Spinning animation for progress indicators */
+@keyframes fa-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Response message styling */
+.simulacrum-response {
+    display: block;
+    padding: 8px 12px;
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.simulacrum-response-replacement {
+    display: block;
+    padding: 8px 12px;
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    border-radius: 4px;
+    margin: 8px 0;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Fade-in animation for responses */
+@keyframes fadeIn {
+    from { 
+        opacity: 0; 
+        transform: translateY(-5px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+/* Cancel button styling */
+.simulacrum-cancel-container {
+    display: flex;
+    justify-content: center;
+    margin: 8px 0;
+}
+
+.simulacrum-cancel-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.simulacrum-cancel-btn:hover {
+    background: #c82333;
+}
+
+.simulacrum-cancel-btn:active {
+    background: #bd2130;
+}
+
+.simulacrum-cancel-btn i {
+    font-size: 12px;
+}
+
+/* Red tint for cancel button while preserving original button styling */
+.simulacrum-cancel-tint {
+    filter: hue-rotate(0deg) saturate(1.5) brightness(0.9);
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+}
+
+.simulacrum-cancel-tint:hover {
+    background-color: #c82333 !important;
+    border-color: #c82333 !important;
+}
+
+.simulacrum-cancel-tint:active {
+    background-color: #bd2130 !important;
+    border-color: #bd2130 !important;
+}
+
+/* Special styling for placeholder messages - match D&D5e system specificity */
+:is(.chat-popout, #chat-log, .chat-log) .message:has(.simulacrum-placeholder),
+.chat-messages .chat-message.message.other-user:has(.simulacrum-placeholder) {
+    background: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+
+:is(.chat-popout, #chat-log, .chat-log) .message:has(.simulacrum-placeholder)::before,
+.chat-messages .chat-message.message.flexcol:has(.simulacrum-placeholder)::before {
+    background-image: none;
+    background: none;
+    content: none;
+}
+
+.chat-messages .chat-message:has(.simulacrum-placeholder) .message-header {
+    display: none;
+}
+
+/* Clean styling for the placeholder content itself */
+.simulacrum-placeholder {
+    background: none;
+    border-left: none;
+    margin: 0;
+    padding: 0;
+}

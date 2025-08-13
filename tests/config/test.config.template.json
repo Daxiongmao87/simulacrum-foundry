@@ -1,0 +1,10 @@
+{
+  "docker": {
+    "image": "foundryvtt/foundry:v12", 
+    "port": 30000
+  },
+  "puppeteer": {
+    "headless": true,
+    "timeout": 30000
+  }
+}

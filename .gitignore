@@ -1,0 +1,48 @@
+# Research repositories (reference only)
+research/
+
+# Development artifacts  
+.AGENT/
+.BACKLOG/
+.claude/
+
+# Team member instruction files
+CLAUDE.md
+GEMINI.md
+QWEN.md
+LLXPRT.md
+
+# Node modules if any
+node_modules/
+
+# Python virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# Artifacts
+tests/fixtures/binary_versions/

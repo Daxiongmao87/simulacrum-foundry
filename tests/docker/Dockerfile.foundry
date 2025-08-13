@@ -1,0 +1,35 @@
+# Use a slim, stable base image
+FROM debian:stable-slim
+
+# Set environment variables for non-interactive installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    unzip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build arguments
+ARG FOUNDRY_VERSION_ZIP
+ARG FOUNDRY_DATA_PATH=/data
+
+# Set working directory
+WORKDIR /app
+
+# Copy the specific FoundryVTT zip file for this build
+COPY ${FOUNDRY_VERSION_ZIP} /app/foundryvtt.zip
+
+# Unzip FoundryVTT and then remove the zip file to keep the image clean
+RUN unzip /app/foundryvtt.zip -d /app && \
+    rm /app/foundryvtt.zip
+
+# Create the data directory
+RUN mkdir -p ${FOUNDRY_DATA_PATH}
+
+# Expose the FoundryVTT port
+EXPOSE 30000
+
+# Define the command to run FoundryVTT
+CMD ["node", "resources/app/main.js", "--dataPath=${FOUNDRY_DATA_PATH}"]

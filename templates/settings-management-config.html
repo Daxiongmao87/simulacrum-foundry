@@ -1,0 +1,31 @@
+<form class="simulacrum-settings-management-config">
+    <p class="notes">{{localize "SIMULACRUM.SettingsManagementConfigHint"}}</p>
+
+    <div class="form-group">
+        <label>{{localize "SIMULACRUM.SettingApiEndpointName"}}:</label>
+        <div class="form-fields">
+            <input type="text" name="apiEndpoint" value="{{apiEndpoint}}" disabled />
+            <button type="button" class="test-connection-button">
+                <i class="fas fa-plug"></i> {{localize "SIMULACRUM.TestConnection"}}
+            </button>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>{{localize "SIMULACRUM.ExportSettings"}}:</label>
+        <div class="form-fields">
+            <button type="button" class="export-settings-button">
+                <i class="fas fa-file-export"></i> {{localize "SIMULACRUM.Export"}}
+            </button>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>{{localize "SIMULACRUM.ImportSettings"}}:</label>
+        <div class="form-fields">
+            <button type="button" class="import-settings-button">
+                <i class="fas fa-file-import"></i> {{localize "SIMULACRUM.Import"}}
+            </button>
+        </div>
+    </div>
+</form>

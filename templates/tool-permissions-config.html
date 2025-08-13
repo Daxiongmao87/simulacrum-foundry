@@ -1,0 +1,30 @@
+<form class="simulacrum-tool-permissions-config">
+    <p class="notes">{{localize "SIMULACRUM.ToolPermissionsConfigHint"}}</p>
+
+    <div class="form-group-header">
+        <div class="header-tool-name">{{localize "SIMULACRUM.ToolName"}}</div>
+        <div class="header-tool-description">{{localize "SIMULACRUM.ToolDescription"}}</div>
+        <div class="header-tool-permission">{{localize "SIMULACRUM.Permission"}}</div>
+    </div>
+
+    <ol class="tool-list">
+        {{#each tools}}
+        <li class="tool-item flexrow">
+            <div class="tool-name">{{this.name}}</div>
+            <div class="tool-description">{{this.description}}</div>
+            <div class="tool-permission">
+                <button type="button" class="permission-cycle-button permission-{{this.permission}}" data-tool-name="{{this.name}}" data-current-permission="{{this.permission}}">
+                    {{lookup ../permissions this.permission}}
+                </button>
+                <input type="hidden" name="toolPermissions.{{this.name}}" value="{{this.permission}}" />
+            </div>
+        </li>
+        {{/each}}
+    </ol>
+
+    <footer class="sheet-footer flexrow">
+        <button type="submit" name="submit">
+            <i class="fas fa-save"></i> {{localize "SIMULACRUM.SaveSettings"}}
+        </button>
+    </footer>
+</form>

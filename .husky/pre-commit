@@ -1,0 +1,5 @@
+# Run commit validation (sensitive data scan, issue reference, feature test requirements, full test suite)
+node .husky/validate-commit
+
+# Run lint-staged for code formatting
+npx lint-staged

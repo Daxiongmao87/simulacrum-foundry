@@ -1,0 +1,31 @@
+{
+  "id": "simulacrum",
+  "title": "Simulacrum - AI Campaign Assistant",
+  "description": "An AI campaign assistant for FoundryVTT Game Masters and Assistant Game Masters.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12"
+  },
+  "esmodules": ["scripts/main.js"],
+  "styles": [
+    "styles/simulacrum.css",
+    "scripts/fimlib/styles/chat-modal.css",
+    "scripts/fimlib/styles/markdown.css"
+  ],
+  "templates": [
+    "scripts/fimlib/templates/chat-modal.html"
+  ],
+  "authors": [
+    {
+      "name": "Daxiongmao87"
+    }
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ]
+}
