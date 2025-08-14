@@ -104,6 +104,15 @@ function validateCommitMessage() {
   const commitMessage = readFileSync(commitMsgFile, 'utf-8').trim();
   console.log(`📝 Commit message: "${commitMessage}"`);
   
+  // 0. Check for banned content in commit message
+  const bannedPatterns = [/claude/gi];
+  for (const pattern of bannedPatterns) {
+    if (pattern.test(commitMessage)) {
+      console.error('❌ Banned content detected in commit message');
+      process.exit(1);
+    }
+  }
+  
   // 1. Check for GitHub issue reference
   const issueNumber = extractIssueNumber(commitMessage);
   if (!issueNumber) {

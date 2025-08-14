@@ -9,11 +9,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     nodejs \
     npm \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Build arguments
 ARG FOUNDRY_VERSION_ZIP
 ARG FOUNDRY_DATA_PATH=/data
+ARG FOUNDRY_LICENSE_KEY
+
+# Set environment variables
+ENV FOUNDRY_DATA_PATH=${FOUNDRY_DATA_PATH}
+ENV FOUNDRY_LICENSE_KEY=${FOUNDRY_LICENSE_KEY}
 
 # Set working directory
 WORKDIR /app
@@ -25,11 +31,21 @@ COPY ${FOUNDRY_VERSION_ZIP} /app/foundryvtt.zip
 RUN unzip /app/foundryvtt.zip -d /app && \
     rm /app/foundryvtt.zip
 
-# Create the data directory
-RUN mkdir -p ${FOUNDRY_DATA_PATH}
+# Create necessary directories
+RUN mkdir -p ${FOUNDRY_DATA_PATH} && \
+    mkdir -p ${FOUNDRY_DATA_PATH}/Data/modules && \
+    mkdir -p ${FOUNDRY_DATA_PATH}/Data/systems && \
+    mkdir -p ${FOUNDRY_DATA_PATH}/Data/worlds
+
+# Copy entrypoint script
+COPY tests/docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Expose the FoundryVTT port
 EXPOSE 30000
 
-# Define the command to run FoundryVTT
-CMD ["node", "resources/app/main.js", "--dataPath=${FOUNDRY_DATA_PATH}"]
+# Use entrypoint script for proper initialization
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command arguments passed to entrypoint
+CMD ["--port=30000", "--headless"]

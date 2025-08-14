@@ -1,10 +1,58 @@
 {
+  "foundryLicenseKey": "${FOUNDRY_LICENSE_KEY}",
   "docker": {
-    "image": "foundryvtt/foundry:v12", 
-    "port": 30000
+    "imagePrefix": "simulacrum-foundry-test",
+    "port": 30000,
+    "dataPath": "/data",
+    "moduleMountPath": "/modules/simulacrum",
+    "systemsMountPath": "/systems"
   },
   "puppeteer": {
     "headless": true,
-    "timeout": 30000
-  }
+    "timeout": 30000,
+    "slowMo": 0,
+    "devtools": false,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "bootstrap": {
+    "timeouts": {
+      "containerStart": 30000,
+      "foundryReady": 60000,
+      "worldCreation": 45000,
+      "moduleInstall": 30000
+    },
+    "retries": {
+      "containerStart": 3,
+      "foundryConnection": 5
+    }
+  },
+  "systems": [
+    {
+      "id": "dnd5e",
+      "name": "D&D 5th Edition",
+      "downloadUrl": "https://github.com/foundryvtt/dnd5e/archive/master.zip",
+      "enabled": true
+    },
+    {
+      "id": "pf2e", 
+      "name": "Pathfinder 2nd Edition",
+      "downloadUrl": "https://github.com/foundryvtt/pf2e/archive/master.zip",
+      "enabled": false
+    }
+  ],
+  "versions": [
+    {
+      "version": "v12",
+      "zipFile": "FoundryVTT-12.343.zip",
+      "enabled": true
+    },
+    {
+      "version": "v13",
+      "zipFile": "FoundryVTT-Node-13.347.zip", 
+      "enabled": true
+    }
+  ]
 }

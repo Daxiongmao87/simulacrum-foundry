@@ -44,5 +44,22 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Artifacts
+# Testing artifacts
 tests/fixtures/binary_versions/
+tests/fixtures/downloads/
+tests/config/test.config.json
+tests/temp/
+tests/output/
+
+# Docker testing artifacts  
+tests/docker/*.log
+tests/docker/test-results/
+
+# Puppeteer testing artifacts
+tests/screenshots/
+tests/coverage/
+tests/.jest-cache/
+
+# Test environment files
+.env.test
+.env.test.local

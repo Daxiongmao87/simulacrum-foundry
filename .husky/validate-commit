@@ -469,7 +469,17 @@ async function validateTestingCoverage({ github_issue, changed_files, commit_mes
  * Get the commit message from git environment
  */
 function getCommitMessage() {
-  // The commit message will be passed as the first argument when called from prepare-commit-msg hook
+  // This hook should only be called during commit-msg phase
+  // Skip if called during pre-commit (message not available yet)
+  const hookName = process.env.HUSKY_HOOK_NAME || 'unknown';
+  
+  if (hookName === 'pre-commit') {
+    console.log('⚠️  Pre-commit hook: Skipping commit message validation (not available yet)');
+    console.log('✅ Running other validations...');
+    return null; // Signal to skip message validation
+  }
+  
+  // For commit-msg hook, the commit message file is the first argument
   if (process.argv[2]) {
     const msgFile = process.argv[2];
     if (existsSync(msgFile)) {
@@ -477,15 +487,17 @@ function getCommitMessage() {
     }
   }
   
-  // Fallback: try standard commit message file
+  // Fallback: try standard commit message file (but only for commit-msg hook)
   if (existsSync(COMMIT_MSG_FILE)) {
-    return readFileSync(COMMIT_MSG_FILE, 'utf-8').trim();
+    const content = readFileSync(COMMIT_MSG_FILE, 'utf-8').trim();
+    // Don't use stale commit messages from previous commits
+    if (content && content !== 'Initial commit') {
+      return content;
+    }
   }
   
-  // For pre-commit hook, we can't validate the message yet - skip validation
-  console.log('⚠️  Pre-commit hook: Cannot validate commit message (not available yet)');
-  console.log('✅ Running other validations...');
-  return null; // Signal to skip message validation
+  console.log('⚠️  Could not read commit message');
+  return null;
 }
 
 /**
@@ -613,106 +625,16 @@ async function main() {
   // PREVENT BANNED CONTENT - Zero tolerance enforcement
   scanForBannedContent();
   
-  const commitMessage = getCommitMessage();
+  // This script is called from pre-commit hook for security/testing validation only
+  // Commit message validation happens separately in commit-msg hook
+  console.log('⚠️  Pre-commit validation: Security and testing checks only');
+  console.log('🔒 Sensitive data check completed');
   
-  // Skip message validation if not available (pre-commit hook)
-  if (!commitMessage) {
-    console.log('⚠️  Skipping commit message validation (not available in pre-commit)');
-    console.log('🔒 Sensitive data check already completed');
-    runTestSuite();
-    console.log('🎉 Pre-commit validation successful!');
-    return;
-  }
-  
-  console.log(`📝 Commit message: "${commitMessage}"`);
-  
-  // 1. Check for GitHub issue reference
-  const issueNumber = extractIssueNumber(commitMessage);
-  if (!issueNumber) {
-    console.error('❌ Commit message must reference a GitHub issue (e.g., "Fix validation bug (#123)")');
-    console.error('💡 Use format: "Description of change (#issue-number)"');
-    process.exit(1);
-  }
-  
-  console.log(`🔗 Found GitHub issue reference: #${issueNumber}`);
-  
-  // 2. Fetch and validate GitHub issue
-  const issue = getGitHubIssue(issueNumber);
-  
-  if (issue.state.toLowerCase() !== 'open') {
-    console.error(`❌ GitHub issue #${issueNumber} is not open (state: ${issue.state})`);
-    process.exit(1);
-  }
-  
-  console.log(`📋 Issue: "${issue.title}" (${issue.state})`);
-  
-  // 2.5. MANDATORY: Check for GitHub issue labels  
-  if (!issue.labels || issue.labels.length === 0) {
-    console.error(`❌ GitHub issue #${issueNumber} has no labels`);
-    console.error('💡 ALL issues must have at least one label for proper categorization');
-    console.error('🏷️  Available labels: bug, enhancement, documentation, question, etc.');
-    console.error('📋 Add labels using: gh issue edit ' + issueNumber + ' --add-label "label-name"');
-    process.exit(1);
-  }
-  
-  console.log(`🏷️  Issue labels: ${issue.labels.map(l => l.name).join(', ')}`);
-  
-  // 3. Check for feature issue requirements
-  const changedFiles = getChangedFiles();
-  console.log(`📁 Changed files: ${changedFiles.length} files`);
-  
-  if (isFeatureIssue(issue)) {
-    console.log('🚀 Detected feature issue - checking integration test requirements...');
-    
-    const hasFeatureChanges = hasFeatureImplementationChanges(changedFiles);
-    const hasTestChanges = hasIntegrationTestChanges(changedFiles);
-    
-    if (hasFeatureChanges && !hasTestChanges) {
-      console.error('❌ Feature issue with implementation changes requires integration test updates');
-      console.error('💡 Add or modify tests in tests/integration/ directory');
-      console.error(`📋 Issue labels: ${issue.labels.map(l => l.name).join(', ')}`);
-      console.error('🔧 Changed implementation files:');
-      changedFiles
-        .filter(file => hasFeatureImplementationChanges([file]))
-        .forEach(file => console.error(`     - ${file}`));
-      process.exit(1);
-    }
-    
-    if (hasTestChanges) {
-      console.log('✅ Integration test changes detected for feature issue');
-    }
-  }
-
-  // 5. Use pre-commit-validator subagent to analyze changes against GitHub issue
-  console.log("🔍 Analyzing staged changes against GitHub issue requirements...");
-  try {
-    const subagentResult = await callPreCommitValidatorSubagent({
-      issue: issue,
-      changedFiles: changedFiles,
-      commitMessage: commitMessage
-    });
-    
-    if (!subagentResult.success) {
-      console.error("❌ Pre-commit validation analysis failed");
-      console.error(`💡 ${subagentResult.error}`);
-      console.error("🔧 Review your changes to ensure they properly address the GitHub issue requirements");
-      process.exit(1);
-    }
-    
-    console.log("✅ Staged changes align with GitHub issue requirements");
-    console.log("✅ Testing coverage is adequate for the contribution");
-  } catch (error) {
-    console.error("❌ Failed to analyze changes with pre-commit-validator subagent:", error.message);
-    console.error("🔧 This may indicate a configuration issue with the validation system");
-    process.exit(1);
-  }
-  
-  // 6. Run full test suite
+  // Run test suite (linting and available tests)
   runTestSuite();
   
-  console.log('🎉 Commit validation successful!');
-  console.log('🔒 Sensitive data protection: ACTIVE');
-  console.log(`✨ Ready to commit changes for issue #${issueNumber}`);
+  console.log('🎉 Pre-commit validation successful!');
+  console.log('💡 Commit message validation will run during commit-msg phase');
 }
 
 // Execute validation
