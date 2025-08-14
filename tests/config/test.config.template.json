@@ -2,7 +2,11 @@
   "foundryLicenseKey": "${FOUNDRY_LICENSE_KEY}",
   "docker": {
     "imagePrefix": "simulacrum-foundry-test",
-    "port": 30000,
+    "portRange": {
+      "start": 30000,
+      "end": 30010
+    },
+    "maxConcurrentInstances": 3,
     "dataPath": "/data",
     "moduleMountPath": "/modules/simulacrum",
     "systemsMountPath": "/systems"
@@ -29,30 +33,5 @@
       "foundryConnection": 5
     }
   },
-  "systems": [
-    {
-      "id": "dnd5e",
-      "name": "D&D 5th Edition",
-      "downloadUrl": "https://github.com/foundryvtt/dnd5e/archive/master.zip",
-      "enabled": true
-    },
-    {
-      "id": "pf2e", 
-      "name": "Pathfinder 2nd Edition",
-      "downloadUrl": "https://github.com/foundryvtt/pf2e/archive/master.zip",
-      "enabled": false
-    }
-  ],
-  "versions": [
-    {
-      "version": "v12",
-      "zipFile": "FoundryVTT-12.343.zip",
-      "enabled": true
-    },
-    {
-      "version": "v13",
-      "zipFile": "FoundryVTT-Node-13.347.zip", 
-      "enabled": true
-    }
-  ]
+  "systems": ["dnd5e", "pf2e"]
 }
