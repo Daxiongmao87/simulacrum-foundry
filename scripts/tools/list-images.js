@@ -55,7 +55,10 @@ export class ListImagesTool extends Tool {
       });
 
       // Dynamically discover all accessible directories instead of hardcoding
-      const allSourcePaths = await this.discoverAllSourcesAndDirectories(abortSignal, outputHandler);
+      const allSourcePaths = await this.discoverAllSourcesAndDirectories(
+        abortSignal,
+        outputHandler
+      );
       const images = await this.discoverImages(
         allSourcePaths,
         keyword,
@@ -208,7 +211,7 @@ export class ListImagesTool extends Tool {
           error
         );
       }
-      
+
       outputHandler?.({
         type: 'progress',
         message: `Scanned ${source}/${searchPath}`,

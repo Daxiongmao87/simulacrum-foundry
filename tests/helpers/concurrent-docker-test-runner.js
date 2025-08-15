@@ -278,16 +278,21 @@ export class ConcurrentDockerTestRunner {
       throw new Error(`License entry failed: ${licenseResult.details}`);
     }
     
-    // Install required game systems
+    // Install required game systems with enhanced configuration
     const systemsToInstall = ['dnd5e', 'pf2e'];
     for (const systemId of systemsToInstall) {
-      const installResult = await this.installGameSystem(page, systemId);
+      const installResult = await this.installGameSystem(page, systemId, {
+        maxRetries: 3,
+        installTimeout: 120000,  // 2 minutes for installation process
+        downloadTimeout: 300000  // 5 minutes for package download
+      });
       bootstrapResult.systemInstallation.push(installResult);
       if (!installResult.success) {
         bootstrapResult.bootstrapFailed = true;
-        bootstrapResult.failureReason = `Failed to install ${systemId}: ${installResult.details}`;
+        bootstrapResult.failureReason = `Failed to install ${systemId} after ${installResult.retryCount || 0} retries: ${installResult.details}`;
         throw new Error(bootstrapResult.failureReason);
       }
+      console.log(`System ${systemId} installation completed successfully (${installResult.retryCount || 0} retries used).`);
     }
     
     bootstrapResult.bootstrapSuccess = true;
@@ -297,64 +302,206 @@ export class ConcurrentDockerTestRunner {
   }
 
   /**
-   * Install a game system from the FoundryVTT setup screen.
+   * Install a game system from the FoundryVTT setup screen with enhanced error handling and retry logic.
+   * Based on FoundryVTT v13 source code analysis for accurate selector patterns.
    * @param {Page} page - Puppeteer page
    * @param {string} systemId - The ID of the system to install (e.g., 'dnd5e')
-   * @returns {Promise<{success: boolean, status: string, details?: string}>}
+   * @param {Object} options - Installation options
+   * @param {number} [options.maxRetries=3] - Maximum retry attempts for installation
+   * @param {number} [options.installTimeout=120000] - Timeout for package installation (2 minutes)
+   * @param {number} [options.downloadTimeout=300000] - Timeout for package download (5 minutes)
+   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
    */
-  async installGameSystem(page, systemId) {
-    console.log(`Installing game system: ${systemId}...`);
-    try {
-      // Navigate to the "Game Systems" tab
-      await page.waitForSelector('a[data-tab="systems"]', { timeout: 10000 });
-      await page.click('a[data-tab="systems"]');
-      console.log('Navigated to Game Systems tab.');
+  async installGameSystem(page, systemId, options = {}) {
+    const { 
+      maxRetries = 3, 
+      installTimeout = 120000, 
+      downloadTimeout = 300000 
+    } = options;
+    
+    console.log(`Installing game system: ${systemId} (max retries: ${maxRetries})...`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Installation attempt ${attempt}/${maxRetries} for ${systemId}`);
+        
+        // Navigate to the "Game Systems" tab using correct FoundryVTT v13 selector
+        await page.waitForSelector('a[data-tab="systems"]', { timeout: 10000 });
+        await page.click('a[data-tab="systems"]');
+        await this.sleep(1000); // Allow tab switch to complete
+        console.log('Navigated to Game Systems tab.');
 
-      // Check if system is already installed
-      const isInstalled = await page.evaluate((id) => {
-        const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
-        if (!systemRow) return false;
-        return !!systemRow.querySelector('button[data-action="uninstall"]');
-      }, systemId);
+        // Enhanced system installation check - verify both existence and installation status
+        const systemStatus = await page.evaluate((id) => {
+          const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
+          if (!systemRow) return { exists: false, installed: false };
+          
+          // Check for uninstall button (indicates installed) or update button
+          const hasUninstallButton = !!systemRow.querySelector('button[data-action="uninstall"]');
+          const hasUpdateButton = !!systemRow.querySelector('button[data-action="updatePackage"]');
+          
+          return { 
+            exists: true, 
+            installed: hasUninstallButton || hasUpdateButton,
+            element: systemRow
+          };
+        }, systemId);
 
-      if (isInstalled) {
-        console.log(`System ${systemId} is already installed.`);
-        return { success: true, status: 'already_installed' };
+        if (systemStatus.installed) {
+          console.log(`System ${systemId} is already installed.`);
+          return { success: true, status: 'already_installed', retryCount: attempt - 1 };
+        }
+
+        // Click "Install System" button - using correct camelCase selector from v13 source
+        await page.waitForSelector('button[data-action="installPackage"]', { timeout: 10000 });
+        await page.click('button[data-action="installPackage"]');
+        console.log('Clicked "Install System" button.');
+
+        // Wait for the installation dialog with better error handling
+        try {
+          await page.waitForSelector('#package-installer', { visible: true, timeout: 15000 });
+          console.log('Package installer dialog is visible.');
+        } catch (dialogError) {
+          console.warn(`Package installer dialog not found on attempt ${attempt}: ${dialogError.message}`);
+          if (attempt < maxRetries) continue;
+          throw new Error(`Package installer dialog failed to open after ${maxRetries} attempts`);
+        }
+
+        // Enhanced filter input with retry logic
+        const filterInput = await page.$('input[name="filter"]');
+        if (!filterInput) {
+          throw new Error('Package filter input not found in installer dialog');
+        }
+        
+        // Clear existing filter and type system ID
+        await filterInput.click({ clickCount: 3 }); // Select all
+        await filterInput.type(systemId, { delay: 100 });
+        await this.sleep(2000); // Wait for filtering to complete
+
+        // Enhanced package detection with multiple selector strategies
+        const packageFound = await page.evaluate((id) => {
+          // Try multiple selector patterns for finding the system package
+          const selectors = [
+            `li.package[data-package-id="${id}"]`,
+            `[data-package-id="${id}"]`,
+            `.package[data-package-id="${id}"]`
+          ];
+          
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const installButton = element.querySelector('button[data-action="install"]');
+              return { found: true, hasInstallButton: !!installButton, selector };
+            }
+          }
+          return { found: false };
+        }, systemId);
+
+        if (!packageFound.found) {
+          throw new Error(`System package ${systemId} not found in installer dialog - may not be available in repository`);
+        }
+
+        if (!packageFound.hasInstallButton) {
+          throw new Error(`System ${systemId} found but install button not available - may already be installed or incompatible`);
+        }
+
+        // Click the install button for the specific system
+        const installButtonSelector = `li.package[data-package-id="${systemId}"] button[data-action="install"]`;
+        await page.waitForSelector(installButtonSelector, { timeout: 15000 });
+        await page.click(installButtonSelector);
+        console.log(`Clicked install button for ${systemId}.`);
+
+        // Enhanced installation monitoring with progress tracking
+        console.log(`Waiting for ${systemId} installation to complete (timeout: ${downloadTimeout}ms)...`);
+        
+        // Wait for installation completion using multiple indicators
+        const installationResult = await Promise.race([
+          // Primary indicator: install button becomes disabled
+          page.waitForSelector(`li.package[data-package-id="${systemId}"] button[data-action="install"][disabled]`, 
+            { timeout: downloadTimeout })
+            .then(() => ({ success: true, method: 'button_disabled' })),
+          
+          // Secondary indicator: install button disappears (replaced with installed state)
+          page.waitForFunction((id) => {
+            const packageElement = document.querySelector(`li.package[data-package-id="${id}"]`);
+            if (!packageElement) return false;
+            const installButton = packageElement.querySelector('button[data-action="install"]:not([disabled])');
+            return !installButton; // Button is gone or disabled
+          }, { timeout: downloadTimeout }, systemId)
+            .then(() => ({ success: true, method: 'button_removed' })),
+          
+          // Timeout handler
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Installation timeout after ${downloadTimeout}ms`)), downloadTimeout + 1000)
+          )
+        ]);
+
+        console.log(`System ${systemId} installation completed via ${installationResult.method}.`);
+
+        // Close the installer dialog
+        try {
+          await page.click('#package-installer button.close, #package-installer .close');
+          await this.sleep(1000);
+        } catch (closeError) {
+          console.warn(`Could not close installer dialog: ${closeError.message}`);
+          // Try pressing Escape key as fallback
+          await page.keyboard.press('Escape');
+          await this.sleep(1000);
+        }
+
+        // Final verification: confirm system is now installed in the systems tab
+        const finalVerification = await page.evaluate((id) => {
+          const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
+          if (!systemRow) return { verified: false, reason: 'system_not_found' };
+          
+          const hasUninstallButton = !!systemRow.querySelector('button[data-action="uninstall"]');
+          const hasUpdateButton = !!systemRow.querySelector('button[data-action="updatePackage"]');
+          
+          return { 
+            verified: hasUninstallButton || hasUpdateButton,
+            reason: hasUninstallButton ? 'uninstall_button_present' : 
+                   hasUpdateButton ? 'update_button_present' : 'no_install_indicators'
+          };
+        }, systemId);
+
+        if (!finalVerification.verified) {
+          throw new Error(`System installation verification failed: ${finalVerification.reason}`);
+        }
+
+        console.log(`System ${systemId} successfully installed and verified (${finalVerification.reason}).`);
+        return { 
+          success: true, 
+          status: 'installed', 
+          retryCount: attempt - 1,
+          details: `Installation completed and verified via ${finalVerification.reason}`
+        };
+
+      } catch (error) {
+        console.error(`Installation attempt ${attempt}/${maxRetries} failed for ${systemId}: ${error.message}`);
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed
+          return { 
+            success: false, 
+            status: 'install_error', 
+            details: `Installation failed after ${maxRetries} attempts: ${error.message}`,
+            retryCount: maxRetries
+          };
+        }
+        
+        // Wait before retry with exponential backoff
+        const backoffDelay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+        console.log(`Retrying in ${backoffDelay}ms...`);
+        await this.sleep(backoffDelay);
+        
+        // Try to close any open dialogs before retry
+        try {
+          await page.keyboard.press('Escape');
+          await this.sleep(500);
+        } catch (escapeError) {
+          // Ignore escape key errors
+        }
       }
-
-      // Click "Install System"
-      await page.waitForSelector('button[data-action="install-package"]');
-      await page.click('button[data-action="install-package"]');
-      console.log('Clicked "Install System".');
-
-      // Wait for the installation dialog
-      await page.waitForSelector('#package-installer', { visible: true });
-      console.log('Package installer dialog is visible.');
-
-      // Filter for the system
-      await page.type('input[name="filter"]', systemId, { delay: 100 });
-      await this.sleep(2000); // Wait for filtering
-
-      // Find and click the install button
-      const installButtonSelector = `li.package[data-package-id="${systemId}"] button[data-action="install"]`;
-      await page.waitForSelector(installButtonSelector, { timeout: 15000 });
-      await page.click(installButtonSelector);
-      console.log(`Clicked install for ${systemId}.`);
-
-      // Wait for installation to complete
-      const installedSelector = `li.package[data-package-id="${systemId}"] button[disabled]`;
-      await page.waitForSelector(installedSelector, { timeout: 60000 }); // 1 min timeout for download
-      
-      console.log(`System ${systemId} installed successfully.`);
-
-      // Close the installer dialog
-      await page.click('#package-installer button.close');
-      await this.sleep(1000);
-
-      return { success: true, status: 'installed' };
-    } catch (error) {
-      console.error(`Failed to install system ${systemId}: ${error.message}`);
-      return { success: false, status: 'install_error', details: error.message };
     }
   }
 

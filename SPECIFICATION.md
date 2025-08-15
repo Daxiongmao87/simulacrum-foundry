@@ -48,6 +48,67 @@ Simulacrum synthesizes four open-source projects to create a comprehensive AI as
 4. **Asset Discovery**: Image file discovery and recommendation system
 5. **Validation & Recovery**: AI-powered error recovery for failed operations
 6. **Agentic Loop**: Multi-step AI task execution with user oversight
+
+---
+
+## Testing Infrastructure - Docker-based Integration Testing
+
+### System Installation Automation (Issue #45)
+
+**Purpose**: Automated game system installation during FoundryVTT container bootstrap to enable comprehensive testing across multiple game systems without manual intervention.
+
+**Implementation**: Enhanced `installGameSystem()` method in `ConcurrentDockerTestRunner` class with:
+
+#### Key Features:
+- **FoundryVTT v13 Source-based Selectors**: All selectors researched from extracted FoundryVTT v13 source code for maximum compatibility
+- **Robust Retry Logic**: Configurable retry attempts with exponential backoff (default: 3 retries)
+- **Comprehensive Installation Detection**: Multi-indicator verification including uninstall buttons and update buttons
+- **Enhanced Error Handling**: Detailed error classification with actionable error messages
+- **Configurable Timeouts**: Separate timeouts for installation process and package downloads
+- **Multiple Installation Verification**: Final verification ensures system is properly installed and available
+
+#### Technical Implementation:
+```javascript
+await installGameSystem(page, systemId, {
+  maxRetries: 3,           // Maximum retry attempts
+  installTimeout: 120000,  // 2 minutes for installation process  
+  downloadTimeout: 300000  // 5 minutes for package download
+});
+```
+
+#### Selector Research (FoundryVTT v13):
+- **Systems Tab**: `a[data-tab="systems"]` (templates/setup/setup-packages-systems.hbs:1)
+- **Install Button**: `button[data-action="installPackage"]` (camelCase - templates/setup/setup-packages-systems.hbs:7)
+- **Package Items**: `li.package[data-package-id="{id}"]` (templates/setup/parts/package-tiles.hbs:38)
+- **Install Dialog**: `#package-installer` (confirmed via source analysis)
+- **Package Install**: `button[data-action="install"]` (templates/setup/install-package/category.hbs:19)
+
+#### Installation Flow:
+1. **Navigation**: Navigate to Systems tab using v13-compatible selectors
+2. **Detection**: Check if system already installed using multiple indicators
+3. **Dialog Opening**: Open package installer with proper error handling
+4. **Package Search**: Filter and locate target system package
+5. **Installation**: Trigger installation with timeout management
+6. **Monitoring**: Monitor installation progress using multiple completion indicators
+7. **Verification**: Final verification that system is properly installed
+8. **Cleanup**: Close installer dialog with fallback mechanisms
+
+#### Integration with Bootstrap Flow:
+- Seamlessly integrates with existing license automation (Issue #40)
+- Maintains concurrent container architecture
+- Enhanced error reporting includes retry count and detailed failure reasons
+- Supports multiple game systems from configuration
+
+#### Error Handling Enhancements:
+- **Network Timeouts**: Configurable download timeouts for large packages
+- **Dialog Failures**: Retry logic with escape key fallbacks
+- **Package Not Found**: Clear error messages for unavailable systems
+- **Installation Verification**: Multiple verification methods prevent false positives
+- **Retry Strategy**: Exponential backoff with configurable maximum attempts
+
+This implementation enables fully automated FoundryVTT testing environments with game systems pre-installed, supporting the broader Docker-based integration testing infrastructure milestone.
+
+### Core Functionality (continued)
 7. **Professional UI**: Integrated chat window with Foundry's design language
 
 ---
@@ -811,7 +872,7 @@ describe('Feature Integration Tests', () => {
 
 ---
 
-## Current Development Status (Updated 2025-08-10)
+## Current Development Status (Updated 2025-08-13)
 
 ### Recent Achievements ✅
 - **GitHub Issue #21**: Image validation false negatives RESOLVED - Fixed FilePicker.browse path comparison issues (commit 30517e6)
@@ -823,23 +884,37 @@ describe('Feature Integration Tests', () => {
 - **Git Workflow**: Automated pre-commit linting and formatting ensures code quality
 - **Validation System**: Robust image validation with caching, timeout protection, and AI-powered error recovery
 
+### CRITICAL INFRASTRUCTURE ISSUES ⚠️ (Updated 2025-08-13)
+- **Testing Infrastructure**: Jest tests currently FAILING due to ES6 module configuration issues
+- **Integration Tests**: Multiple test suites failing with module import errors and server setup
+- **Development Workflow**: Only `npm run lint` and `npm run format` are VERIFIED WORKING
+- **Git Pre-commit Hooks**: ACTIVE - Enforces GitHub issue validation and code quality standards
+
 ### Active Development Priorities 
-Based on current open GitHub issues (22 issues remaining after recent closures):
+Based on current open GitHub issues (28 issues as of 2025-08-13):
 
-#### Recently Resolved ✅ (2025-08-11)
-- **Issue #2**: AI service API request formatting for local endpoints - CLOSED (commit 4813f28)
-- **Issue #12**: Broken Simulacrum icon - CLOSED (commit 58e4878)
+#### Recently Resolved ✅ (2025-08-13)
+- **Issue #18**: Image validation false negatives RESOLVED (closed)
+- **Issue #17**: FIMLib git submodule migration COMPLETED (closed)
+- **Issue #37**: AI service API request formatting FIXED (closed)
 
-#### High Priority Issues  
-- **Issue #6**: Missing Gremlin mode setting in configuration interface (PARTIALLY IMPLEMENTED)
-- **Issue #14**: AI system prompt with FoundryVTT UUID link formatting
+#### IMMEDIATE PRIORITIES: Testing Infrastructure ⚠️
+- **Jest Configuration**: Fix ES6 module import issues preventing `npm test` execution
+- **Integration Tests**: Resolve server setup and module import errors in test suites
+- **Development Reliability**: Restore comprehensive test coverage to maintain code quality
 
-#### Enhancement Issues
-- **Issue #20**: Pagination system for large result sets
-- **Issue #23**: Enhance list_images to generic list_files tool
-- **Issue #24**: Research gemini-cli agent prompt patterns
-- **Issue #25**: Enhance list_documents with keyword search
-- **Issue #26**: Implement keyword_search tool for document content
+#### High Priority UI/UX Issues
+- **Issue #36**: Placeholder messages persist in chat history after modal operations
+- **Issue #34**: Settings labels showing localization keys instead of translated text
+- **Issue #32**: AI gerund indicators show current action instead of next intended action
+- **Issue #30**: Placeholder message text should match golden theme color
+- **Issue #27**: Fix broken Simulacrum icon - use FoundryVTT core icons
+
+#### Configuration & Feature Enhancements
+- **Issue #33**: Add missing Gremlin Mode (YOLO) setting to configuration interface
+- **Issue #29**: Implement persistent chat history storage using FoundryVTT APIs
+- **Issue #25**: Update AI system prompt to use FoundryVTT UUID link format
+- **Issue #31**: Add elapsed time display to placeholder messages with right-aligned formatting
 
 ### Architecture Notes for Current Development
 - **Image Validation**: Robust system complete with comprehensive test coverage

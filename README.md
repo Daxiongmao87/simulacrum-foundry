@@ -75,14 +75,14 @@ Simulacrum synthesizes proven patterns from four open-source projects:
 
 ## Specification Compliance
 
-This implementation achieves **98% compliance** with the [comprehensive technical specification](SPECIFICATION.md):
+This implementation is actively developed by Daxiongmao87 with comprehensive [technical specification](SPECIFICATION.md):
 
-- ✅ **Complete**: All core functionality, tool system, AI integration
-- ✅ **Architecture**: Proper separation of concerns, modular design  
-- ✅ **Configuration**: All 8 required settings implemented
-- ⚠️ **Minor gaps**: Custom chat template, settings import/export
+- ✅ **Core Systems**: Document CRUD, AI integration, tool execution
+- ✅ **Architecture**: System-agnostic design, proper Foundry integration  
+- ✅ **Recent Fixes**: Image validation, FIMLib submodule, API formatting
+- 🔄 **Active Development**: 28 open issues, focusing on UI/UX improvements
 
-See the detailed [Compliance Report](SPECIFICATION_COMPLIANCE_REPORT.md) for line-by-line verification.
+**Current Focus**: Resolving chat interface issues and testing infrastructure.
 
 ## Configuration Options
 
@@ -99,6 +99,18 @@ See the detailed [Compliance Report](SPECIFICATION_COMPLIANCE_REPORT.md) for lin
 
 ## Development
 
+### 🚨 Current Development Status (Updated 2025-08-13)
+- **✅ Code Quality Tools**: `npm run lint`, `npm run format` - VERIFIED WORKING
+- **❌ Testing Infrastructure**: Jest tests currently FAILING due to ES6 module configuration issues
+- **✅ Git Workflow**: Sophisticated pre-commit hooks with GitHub issue validation
+- **✅ Major Bug Fixes**: Image validation (#18), FIMLib submodule (#17), AI API formatting (#37)
+- **📊 Active Issues**: 28 open GitHub issues - Focus on UI/UX improvements and testing infrastructure
+
+**For Developers**: 
+- **WORKING**: `npm run lint` (quality), `npm run format` (code formatting) 
+- **BROKEN**: `npm test` - DO NOT USE until Jest ES6 configuration is resolved
+- **Git Hooks**: Pre-commit validation enforces GitHub issue references in commit messages
+
 ### Project Structure
 ```
 simulacrum/
@@ -108,18 +120,44 @@ simulacrum/
 │   ├── chat/                  # AI service and chat interface
 │   ├── tools/                 # Tool implementations
 │   ├── core/                  # Execution and confirmation
-│   └── fimlib/                # Chat interface submodule
+│   └── fimlib/                # Chat interface (FIXED: Now proper git submodule)
 ├── templates/                 # Handlebars templates
 ├── styles/                    # CSS styling
 └── lang/                      # Localization
 ```
 
+### Quick Developer Setup
+
+**New to this project? Start here:**
+```bash
+# 1. Verify environment
+pwd                           # Should be in simulacrum-foudry/
+npm run lint                  # Verify development tools work
+
+# 2. Check current project status  
+gh issue list --state open --limit 10    # See active work
+git status                               # Check working directory
+
+# 3. Development priorities (Updated 2025-08-13)
+# - Fix Jest testing infrastructure (ES6 module configuration)
+# - UI/UX issues: Chat persistence (#36), settings labels (#34), theme colors (#30)  
+# - Missing Gremlin Mode setting (#33)
+# - AVOID: Integration tests until Jest configuration is resolved
+```
+
+**Critical Working Commands:**
+- ✅ `npm run lint` - Code quality validation (WORKING)
+- ✅ `npm run format` - Prettier formatting (WORKING)
+- ❌ `npm test` - Jest testing (BROKEN - ES6 module issues)
+
 ### Contributing
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Follow the existing code patterns and documentation
-4. Test thoroughly across different game systems
-5. Submit a pull request
+2. Create a feature branch: `git checkout -b feature-name`  
+3. Follow existing code patterns, focus on system-agnostic architecture
+4. Commits MUST reference GitHub issues: "Fix chat persistence (#36)"
+5. Pre-commit hooks enforce code quality and issue validation
+6. Test manually until Jest infrastructure is fixed
+7. Submit a pull request
 
 ## Compatibility
 
