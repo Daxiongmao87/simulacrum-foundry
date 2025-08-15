@@ -253,10 +253,11 @@ export class ConcurrentDockerTestRunner {
   }
 
   /**
-   * Bootstrap environment: handle license and install game systems.
+   * Bootstrap environment: handle license, install game systems, and create test world.
+   * Completes full FoundryVTT setup automation for integration testing.
    * @param {Page} page - Puppeteer page
    * @param {Object} context - Test context
-   * @returns {Promise<Object>} Bootstrap result
+   * @returns {Promise<Object>} Bootstrap result with license, system, and world creation status
    */
   async bootstrapFoundryEnvironment(page, context) {
     console.log(`Starting bootstrap for ${context.version} ${context.system}`);
@@ -268,6 +269,7 @@ export class ConcurrentDockerTestRunner {
     const bootstrapResult = {
       licenseAutomation: licenseResult,
       systemInstallation: [],
+      worldCreation: null, // Will be populated after world creation
       timestamp: new Date().toISOString(),
       container: context
     };
@@ -295,8 +297,29 @@ export class ConcurrentDockerTestRunner {
       console.log(`System ${systemId} installation completed successfully (${installResult.retryCount || 0} retries used).`);
     }
     
+    // Create test world with appropriate system (Issue #42 - World Creation Automation)
+    // This completes the bootstrap sequence by providing a ready-to-test world environment
+    const testWorldConfig = {
+      name: `Test World ${context.version}`,
+      system: context.system || 'dnd5e',
+      description: `Automated test world for ${context.version} with ${context.systemName || context.system}`
+    };
+    
+    const worldResult = await this.createWorld(page, testWorldConfig, {
+      maxRetries: 3,
+      timeout: 30000
+    });
+    bootstrapResult.worldCreation = worldResult;
+    
+    if (!worldResult.success) {
+      bootstrapResult.bootstrapFailed = true;
+      bootstrapResult.failureReason = `Failed to create test world after ${worldResult.retryCount || 0} retries: ${worldResult.details}`;
+      throw new Error(bootstrapResult.failureReason);
+    }
+    console.log(`Test world "${testWorldConfig.name}" creation completed successfully (${worldResult.retryCount || 0} retries used).`);
+    
     bootstrapResult.bootstrapSuccess = true;
-    console.log(`Bootstrap completed successfully for ${context.version} ${context.system}`);
+    console.log(`Bootstrap completed successfully for ${context.version} ${context.system} with world "${testWorldConfig.name}"`);
     
     return bootstrapResult;
   }
@@ -485,6 +508,231 @@ export class ConcurrentDockerTestRunner {
             success: false, 
             status: 'install_error', 
             details: `Installation failed after ${maxRetries} attempts: ${error.message}`,
+            retryCount: maxRetries
+          };
+        }
+        
+        // Wait before retry with exponential backoff
+        const backoffDelay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+        console.log(`Retrying in ${backoffDelay}ms...`);
+        await this.sleep(backoffDelay);
+        
+        // Try to close any open dialogs before retry
+        try {
+          await page.keyboard.press('Escape');
+          await this.sleep(500);
+        } catch (escapeError) {
+          // Ignore escape key errors
+        }
+      }
+    }
+  }
+
+  /**
+   * Create a new world in FoundryVTT setup interface with enhanced error handling and retry logic.
+   * Based on FoundryVTT v13 source code analysis for accurate selector patterns.
+   * @param {Page} page - Puppeteer page
+   * @param {Object} worldConfig - World configuration
+   * @param {string} worldConfig.name - World name (will be slugified for ID)
+   * @param {string} [worldConfig.system='dnd5e'] - Game system to use
+   * @param {string} [worldConfig.description] - World description
+   * @param {Object} options - Creation options
+   * @param {number} [options.maxRetries=3] - Maximum retry attempts
+   * @param {number} [options.timeout=30000] - Operation timeout
+   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
+   */
+  async createWorld(page, worldConfig, options = {}) {
+    const { 
+      maxRetries = 3, 
+      timeout = 30000 
+    } = options;
+    
+    const {
+      name: worldName,
+      system = 'dnd5e',
+      description = ''
+    } = worldConfig;
+    
+    if (!worldName) {
+      throw new Error('World name is required');
+    }
+    
+    console.log(`Creating world: "${worldName}" with system "${system}" (max retries: ${maxRetries})...`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`World creation attempt ${attempt}/${maxRetries} for "${worldName}"`);
+        
+        // Navigate to the "Worlds" tab using correct FoundryVTT v13 selector
+        await page.waitForSelector('a[data-tab="worlds"]', { timeout: 10000 });
+        await page.click('a[data-tab="worlds"]');
+        await this.sleep(1000); // Allow tab switch to complete
+        console.log('Navigated to Worlds tab.');
+
+        // Check if world already exists
+        const worldExists = await page.evaluate((name) => {
+          const worldSlug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+          const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
+          return !!worldRow;
+        }, worldName);
+
+        if (worldExists) {
+          console.log(`World "${worldName}" already exists.`);
+          return { success: true, status: 'already_exists', retryCount: attempt - 1 };
+        }
+
+        // Click "Create World" button using v13 source selector
+        await page.waitForSelector('button[data-action="worldCreate"]', { timeout: 10000 });
+        await page.click('button[data-action="worldCreate"]');
+        console.log('Clicked "Create World" button.');
+
+        // Wait for the WorldConfig dialog to appear
+        try {
+          await page.waitForSelector('#world-config', { visible: true, timeout: 15000 });
+          console.log('World configuration dialog is visible.');
+        } catch (dialogError) {
+          console.warn(`World config dialog not found on attempt ${attempt}: ${dialogError.message}`);
+          if (attempt < maxRetries) continue;
+          throw new Error(`World config dialog failed to open after ${maxRetries} attempts`);
+        }
+
+        // Fill in world title field
+        const titleSelector = '#world-config input[name="title"]';
+        await page.waitForSelector(titleSelector, { timeout: 10000 });
+        const titleInput = await page.$(titleSelector);
+        if (!titleInput) {
+          throw new Error('World title input not found in config dialog');
+        }
+        
+        // Clear existing title and enter new one
+        await titleInput.click({ clickCount: 3 }); // Select all
+        await titleInput.type(worldName, { delay: 50 });
+        console.log(`Entered world title: "${worldName}"`);
+        await this.sleep(500); // Allow ID generation to complete
+
+        // Select game system if dropdown exists (creation mode)
+        const systemSelector = '#world-config select[name="system"]';
+        const systemSelect = await page.$(systemSelector);
+        if (systemSelect) {
+          // Check if the desired system is available
+          const systemAvailable = await page.evaluate((selector, systemId) => {
+            const select = document.querySelector(selector);
+            if (!select) return false;
+            const option = select.querySelector(`option[value="${systemId}"]`);
+            return !!option;
+          }, systemSelector, system);
+
+          if (!systemAvailable) {
+            throw new Error(`Game system "${system}" not available in system dropdown`);
+          }
+
+          await page.select(systemSelector, system);
+          console.log(`Selected game system: "${system}"`);
+          await this.sleep(500);
+        } else {
+          console.log('System selector not found - may already be set or in edit mode');
+        }
+
+        // Fill description if provided
+        if (description) {
+          const descriptionSelector = '#world-config textarea[name="description"], #world-config input[name="description"]';
+          const descriptionInput = await page.$(descriptionSelector);
+          if (descriptionInput) {
+            await descriptionInput.click({ clickCount: 3 });
+            await descriptionInput.type(description, { delay: 30 });
+            console.log('Entered world description.');
+            await this.sleep(300);
+          }
+        }
+
+        // Submit the form
+        const submitSelector = '#world-config button[type="submit"]';
+        await page.waitForSelector(submitSelector, { timeout: 10000 });
+        await page.click(submitSelector);
+        console.log('Clicked submit button for world creation.');
+
+        // Wait for world creation to complete with multiple success indicators
+        console.log(`Waiting for world creation to complete (timeout: ${timeout}ms)...`);
+        
+        const creationResult = await Promise.race([
+          // Primary indicator: dialog closes (world created successfully)
+          page.waitForFunction(() => {
+            const dialog = document.querySelector('#world-config');
+            return !dialog || !dialog.offsetParent; // Dialog is hidden/removed
+          }, { timeout: timeout })
+            .then(() => ({ success: true, method: 'dialog_closed' })),
+          
+          // Secondary indicator: world appears in worlds list
+          page.waitForFunction((worldTitle) => {
+            const worldSlug = worldTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+            const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
+            return !!worldRow;
+          }, { timeout: timeout }, worldName)
+            .then(() => ({ success: true, method: 'world_listed' })),
+          
+          // Error indicator: error notification or validation message
+          page.waitForFunction(() => {
+            const bodyText = document.body.innerText.toLowerCase();
+            return bodyText.includes('error') || bodyText.includes('invalid') || bodyText.includes('failed');
+          }, { timeout: Math.min(timeout, 5000) })
+            .then(() => ({ success: false, method: 'error_detected' })),
+          
+          // Timeout handler
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`World creation timeout after ${timeout}ms`)), timeout + 1000)
+          )
+        ]);
+
+        if (!creationResult.success) {
+          // Get error details for better debugging
+          const errorDetails = await page.evaluate(() => {
+            const bodyText = document.body.innerText;
+            const errorMatch = bodyText.match(/(error|invalid|failed)[^.!?]*[.!?]/i);
+            return errorMatch ? errorMatch[0] : 'Unknown error detected';
+          });
+          throw new Error(`World creation failed: ${errorDetails}`);
+        }
+
+        console.log(`World "${worldName}" creation completed via ${creationResult.method}.`);
+
+        // Final verification: confirm world exists in the worlds list
+        const finalVerification = await page.evaluate((worldTitle) => {
+          const worldSlug = worldTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+          const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
+          if (!worldRow) return { verified: false, reason: 'world_not_listed' };
+          
+          // Check for launch button or edit button (indicates world exists)
+          const hasLaunchButton = !!worldRow.querySelector('button[data-action="worldLaunch"]');
+          const hasEditButton = !!worldRow.querySelector('button[data-action="worldEdit"]');
+          
+          return { 
+            verified: hasLaunchButton || hasEditButton,
+            reason: hasLaunchButton ? 'launch_button_present' : 
+                   hasEditButton ? 'edit_button_present' : 'no_world_indicators'
+          };
+        }, worldName);
+
+        if (!finalVerification.verified) {
+          throw new Error(`World creation verification failed: ${finalVerification.reason}`);
+        }
+
+        console.log(`World "${worldName}" successfully created and verified (${finalVerification.reason}).`);
+        return { 
+          success: true, 
+          status: 'created', 
+          retryCount: attempt - 1,
+          details: `World creation completed and verified via ${finalVerification.reason}`
+        };
+
+      } catch (error) {
+        console.error(`World creation attempt ${attempt}/${maxRetries} failed for "${worldName}": ${error.message}`);
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed
+          return { 
+            success: false, 
+            status: 'creation_error', 
+            details: `World creation failed after ${maxRetries} attempts: ${error.message}`,
             retryCount: maxRetries
           };
         }
