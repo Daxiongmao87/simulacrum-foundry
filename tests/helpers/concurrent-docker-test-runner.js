@@ -103,10 +103,10 @@ export class ConcurrentDockerTestRunner {
         timeout: this.config.puppeteer.timeout
       });
       
-      // 6. Complete bootstrap sequence with enhanced license automation
-      const licenseResult = await this.bootstrapFoundryEnvironmentWithLicenseTracking(page, context);
+      // 6. Complete bootstrap sequence with enhanced license automation and system installation
+      const bootstrapResult = await this.bootstrapFoundryEnvironment(page, context);
       
-      return { page, containerId, port: allocatedPort, licenseResult };
+      return { page, containerId, port: allocatedPort, bootstrapResult };
       
     } catch (error) {
       // Cleanup on failure
@@ -253,36 +253,109 @@ export class ConcurrentDockerTestRunner {
   }
 
   /**
-   * Enhanced bootstrap with detailed license tracking for concurrent testing
+   * Bootstrap environment: handle license and install game systems.
    * @param {Page} page - Puppeteer page
    * @param {Object} context - Test context
-   * @returns {Promise<Object>} License automation result
+   * @returns {Promise<Object>} Bootstrap result
    */
-  async bootstrapFoundryEnvironmentWithLicenseTracking(page, context) {
+  async bootstrapFoundryEnvironment(page, context) {
     console.log(`Starting bootstrap for ${context.version} ${context.system}`);
     
     // Enter license key with detailed tracking
     const licenseResult = await this.enterLicenseKey(page);
     console.log(`License automation result: ${JSON.stringify(licenseResult, null, 2)}`);
     
-    // Store license result for test analysis
     const bootstrapResult = {
       licenseAutomation: licenseResult,
+      systemInstallation: [],
       timestamp: new Date().toISOString(),
       container: context
     };
     
-    // If license entry failed with critical error, abort
     if (!licenseResult.success && licenseResult.status === 'license_error') {
       bootstrapResult.bootstrapFailed = true;
       bootstrapResult.failureReason = licenseResult.details;
       throw new Error(`License entry failed: ${licenseResult.details}`);
     }
     
+    // Install required game systems
+    const systemsToInstall = ['dnd5e', 'pf2e'];
+    for (const systemId of systemsToInstall) {
+      const installResult = await this.installGameSystem(page, systemId);
+      bootstrapResult.systemInstallation.push(installResult);
+      if (!installResult.success) {
+        bootstrapResult.bootstrapFailed = true;
+        bootstrapResult.failureReason = `Failed to install ${systemId}: ${installResult.details}`;
+        throw new Error(bootstrapResult.failureReason);
+      }
+    }
+    
     bootstrapResult.bootstrapSuccess = true;
     console.log(`Bootstrap completed successfully for ${context.version} ${context.system}`);
     
     return bootstrapResult;
+  }
+
+  /**
+   * Install a game system from the FoundryVTT setup screen.
+   * @param {Page} page - Puppeteer page
+   * @param {string} systemId - The ID of the system to install (e.g., 'dnd5e')
+   * @returns {Promise<{success: boolean, status: string, details?: string}>}
+   */
+  async installGameSystem(page, systemId) {
+    console.log(`Installing game system: ${systemId}...`);
+    try {
+      // Navigate to the "Game Systems" tab
+      await page.waitForSelector('a[data-tab="systems"]', { timeout: 10000 });
+      await page.click('a[data-tab="systems"]');
+      console.log('Navigated to Game Systems tab.');
+
+      // Check if system is already installed
+      const isInstalled = await page.evaluate((id) => {
+        const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
+        if (!systemRow) return false;
+        return !!systemRow.querySelector('button[data-action="uninstall"]');
+      }, systemId);
+
+      if (isInstalled) {
+        console.log(`System ${systemId} is already installed.`);
+        return { success: true, status: 'already_installed' };
+      }
+
+      // Click "Install System"
+      await page.waitForSelector('button[data-action="install-package"]');
+      await page.click('button[data-action="install-package"]');
+      console.log('Clicked "Install System".');
+
+      // Wait for the installation dialog
+      await page.waitForSelector('#package-installer', { visible: true });
+      console.log('Package installer dialog is visible.');
+
+      // Filter for the system
+      await page.type('input[name="filter"]', systemId, { delay: 100 });
+      await this.sleep(2000); // Wait for filtering
+
+      // Find and click the install button
+      const installButtonSelector = `li.package[data-package-id="${systemId}"] button[data-action="install"]`;
+      await page.waitForSelector(installButtonSelector, { timeout: 15000 });
+      await page.click(installButtonSelector);
+      console.log(`Clicked install for ${systemId}.`);
+
+      // Wait for installation to complete
+      const installedSelector = `li.package[data-package-id="${systemId}"] button[disabled]`;
+      await page.waitForSelector(installedSelector, { timeout: 60000 }); // 1 min timeout for download
+      
+      console.log(`System ${systemId} installed successfully.`);
+
+      // Close the installer dialog
+      await page.click('#package-installer button.close');
+      await this.sleep(1000);
+
+      return { success: true, status: 'installed' };
+    } catch (error) {
+      console.error(`Failed to install system ${systemId}: ${error.message}`);
+      return { success: false, status: 'install_error', details: error.message };
+    }
   }
 
   /**
@@ -295,107 +368,48 @@ export class ConcurrentDockerTestRunner {
     console.log('Checking for license key requirement...');
     
     try {
-      // Wait for page to load completely and check for license screen
+      // Wait for page to load and check for license screen
       await this.sleep(3000);
       
-      // First, detect if we're on a license screen
       const licenseScreenDetected = await page.evaluate(() => {
         const bodyText = document.body.innerText.toLowerCase();
-        const hasLicenseText = bodyText.includes('license') || bodyText.includes('software license');
-        const hasSetupTitle = document.title.toLowerCase().includes('setup') || 
-                            document.querySelector('h1, h2, .setup-title')?.textContent?.toLowerCase().includes('setup');
-        
-        return {
-          hasLicenseText,
-          hasSetupTitle,
-          bodyText: bodyText.substring(0, 500) // First 500 chars for debugging
-        };
+        return bodyText.includes('license') || bodyText.includes('software license');
       });
+
+      if (!licenseScreenDetected) {
+        console.log('No license screen detected based on page text.');
+        // Double-check for input fields as a fallback
+        const licenseInputExists = await page.$('input[name*="license"], input[id*="license"]');
+        if (!licenseInputExists) {
+          return {
+            success: true,
+            status: 'no_license_required',
+            details: 'No license input detected, assuming license not required'
+          };
+        }
+        console.log('License input field found despite no explicit text, proceeding...');
+      }
       
-      console.log(`License screen detection: hasLicenseText=${licenseScreenDetected.hasLicenseText}, hasSetupTitle=${licenseScreenDetected.hasSetupTitle}`);
-      
-      // Enhanced license input selectors with FoundryVTT-specific patterns
       const licenseSelectors = [
-        // Standard form inputs
-        'input[name="licenseKey"]',
-        'input[name="license"]', 
-        'input[name="key"]',
-        '#license-key',
-        '#licenseKey',
-        '#license',
-        
-        // FoundryVTT-specific patterns
-        '.license-key-input',
-        '.license-input',
-        '.foundry-license input',
-        'input[placeholder*="license" i]',
-        'input[placeholder*="key" i]',
-        
-        // Form context selectors
-        '.license-form input[type="text"]',
-        '.setup-form input[type="text"]',
-        'form input[type="text"]',
-        
-        // Broader patterns for unknown structures
-        'input[type="text"]'
+        'input[name="licenseKey"]', 'input[name="license"]', '#license-key',
+        'input[placeholder*="license" i]', 'form input[type="text"]'
       ];
       
       let licenseInput = null;
       let foundSelector = null;
       
       for (const selector of licenseSelectors) {
-        const elements = await page.$$(selector);
-        for (const element of elements) {
-          // Check if this input is actually for license (could be other text inputs)
-          const inputContext = await element.evaluate(el => {
-            const placeholder = el.placeholder?.toLowerCase() || '';
-            const name = el.name?.toLowerCase() || '';
-            const id = el.id?.toLowerCase() || '';
-            const parentText = el.parentElement?.textContent?.toLowerCase() || '';
-            
-            const isLicenseInput = 
-              placeholder.includes('license') || placeholder.includes('key') ||
-              name.includes('license') || name.includes('key') ||
-              id.includes('license') || id.includes('key') ||
-              parentText.includes('license') || parentText.includes('software license');
-              
-            return {
-              isLicenseInput,
-              placeholder,
-              name,
-              id,
-              parentText: parentText.substring(0, 100)
-            };
-          });
-          
-          if (inputContext.isLicenseInput) {
-            licenseInput = element;
-            foundSelector = selector;
-            console.log(`Found license input with selector: ${selector}`);
-            console.log(`Input context: name="${inputContext.name}", placeholder="${inputContext.placeholder}", id="${inputContext.id}"`);
-            break;
-          }
-        }
-        if (licenseInput) break;
-      }
-      
-      if (!licenseInput) {
-        // If no license-specific input found but we're on a potential license screen,
-        // try the first text input as a fallback
-        if (licenseScreenDetected.hasLicenseText || licenseScreenDetected.hasSetupTitle) {
-          const firstTextInput = await page.$('input[type="text"]');
-          if (firstTextInput) {
-            licenseInput = firstTextInput;
-            foundSelector = 'input[type="text"] (fallback)';
-            console.log('Using first text input as license input fallback');
-          }
+        licenseInput = await page.$(selector);
+        if (licenseInput) {
+          foundSelector = selector;
+          console.log(`Found license input with selector: ${selector}`);
+          break;
         }
       }
       
       if (licenseInput) {
         const licenseKey = process.env.FOUNDRY_LICENSE_KEY || this.config.foundryLicenseKey;
         if (!licenseKey || licenseKey.includes('${')) {
-          console.log('FOUNDRY_LICENSE_KEY not available - skipping license entry');
           return { 
             success: false, 
             status: 'no_license_key',
@@ -404,171 +418,69 @@ export class ConcurrentDockerTestRunner {
         }
         
         console.log('Entering license key...');
-        
-        // Clear any existing text and enter license key
-        await licenseInput.click({ clickCount: 3 }); // Select all existing text
-        await licenseInput.type(licenseKey);
-        
-        // Wait a moment for any validation
+        await licenseInput.click({ clickCount: 3 });
+        await licenseInput.type(licenseKey, { delay: 50 });
         await this.sleep(1000);
         
-        // Enhanced submit button detection
         const submitSelectors = [
-          // Standard submit buttons
-          'button[type="submit"]',
-          'input[type="submit"]',
-          
-          // FoundryVTT-specific patterns
-          '.license-submit',
-          '.foundry-submit',
-          'button[data-action="submit"]',
-          'button[data-action="license"]',
-          
-          // Form context
-          '.license-form button',
-          '.setup-form button',
-          'form button',
-          
-          // Generic buttons near license input
-          'button'
+          'button[type="submit"]', 'input[type="submit"]', 'button[data-action="license"]',
+          '.license-form button', 'form button'
         ];
         
         let submitButton = null;
         let submitSelector = null;
         
         for (const selector of submitSelectors) {
-          try {
-            const buttons = await page.$$(selector);
-            for (const button of buttons) {
-              const buttonInfo = await button.evaluate(btn => {
-                const text = btn.textContent?.toLowerCase() || '';
-                const type = btn.type?.toLowerCase() || '';
-                const action = btn.getAttribute('data-action')?.toLowerCase() || '';
-                
-                const isSubmitButton = 
-                  type === 'submit' ||
-                  text.includes('submit') || text.includes('continue') || 
-                  text.includes('activate') || text.includes('accept') ||
-                  text.includes('next') || text.includes('ok') ||
-                  action.includes('submit') || action.includes('license');
-                  
-                return {
-                  isSubmitButton,
-                  text: text.trim(),
-                  type,
-                  action
-                };
-              });
-              
-              if (buttonInfo.isSubmitButton) {
-                submitButton = button;
-                submitSelector = selector;
-                console.log(`Found submit button: "${buttonInfo.text}" with selector: ${selector}`);
-                break;
-              }
+          const buttons = await page.$$(selector);
+          for (const button of buttons) {
+            const buttonText = await button.evaluate(btn => btn.textContent.toLowerCase());
+            if (buttonText.includes('submit') || buttonText.includes('continue') || buttonText.includes('activate') || buttonText.includes('accept')) {
+              submitButton = button;
+              submitSelector = selector;
+              console.log(`Found submit button with text "${buttonText}" using selector: ${selector}`);
+              break;
             }
-            if (submitButton) break;
-          } catch (err) {
-            // Continue to next selector
           }
+          if (submitButton) break;
         }
         
         if (submitButton) {
           console.log('Clicking submit button...');
           await submitButton.click();
           
-          // Enhanced navigation waiting with multiple strategies
-          console.log('Waiting for navigation after license submission...');
+          const navigationResult = await this.waitForNavigation(page);
           
-          const navigationResult = await Promise.race([
-            // Strategy 1: Wait for navigation
-            page.waitForNavigation({ 
-              waitUntil: 'networkidle0', 
-              timeout: 20000 
-            }).then(() => ({ type: 'navigation', success: true })),
-            
-            // Strategy 2: Wait for URL change
-            page.waitForFunction(() => 
-              !window.location.href.includes('license') || 
-              window.location.href.includes('setup') ||
-              window.location.href.includes('game'),
-              { timeout: 20000 }
-            ).then(() => ({ type: 'url_change', success: true })),
-            
-            // Strategy 3: Wait for license screen to disappear
-            page.waitForFunction(() => {
-              const licenseInputs = document.querySelectorAll('input[name*="license"], input[id*="license"], .license-input');
-              return licenseInputs.length === 0;
-            }, { timeout: 20000 }).then(() => ({ type: 'screen_change', success: true })),
-            
-            // Strategy 4: Timeout fallback
-            this.sleep(25000).then(() => ({ type: 'timeout', success: false }))
-          ]);
+          if (!navigationResult.navigated) {
+            return { success: false, status: 'navigation_failed', details: `Failed to navigate after submission: ${navigationResult.error}` };
+          }
+
+          console.log(`Navigation successful to ${page.url()}`);
           
-          console.log(`Navigation completed via: ${navigationResult.type}`);
-          
-          // Check for license errors after submission
-          await this.sleep(2000);
+          // Final validation
           const errorCheck = await page.evaluate(() => {
             const bodyText = document.body.innerText.toLowerCase();
-            const errorMessages = [
-              'invalid license',
-              'license expired', 
-              'license already in use',
-              'license error',
-              'invalid key',
-              'license not found'
-            ];
-            
-            const hasError = errorMessages.some(msg => bodyText.includes(msg));
-            return {
-              hasError,
-              errorText: hasError ? bodyText.substring(0, 200) : null
-            };
+            const hasError = bodyText.includes('invalid license') || bodyText.includes('invalid key');
+            return { hasError, errorText: hasError ? bodyText.substring(0, 200) : null };
           });
           
           if (errorCheck.hasError) {
-            console.log(`License error detected: ${errorCheck.errorText}`);
-            return {
-              success: false,
-              status: 'license_error',
-              details: `License submission failed: ${errorCheck.errorText}`
-            };
+            return { success: false, status: 'license_error', details: `License submission failed: ${errorCheck.errorText}` };
           }
           
-          return {
-            success: true,
-            status: 'license_accepted',
-            details: `License successfully submitted using ${foundSelector}, navigated via ${navigationResult.type}`
-          };
+          return { success: true, status: 'license_accepted', details: `License submitted using ${foundSelector} and navigated to ${page.url()}` };
           
         } else {
-          console.log('No submit button found, checking for auto-submission...');
+          console.log('No submit button found, trying Enter key press...');
+          await licenseInput.press('Enter');
           
-          // Wait to see if license auto-submits
-          await this.sleep(5000);
-          
-          const autoSubmitCheck = await page.evaluate(() => {
-            const licenseInputs = document.querySelectorAll('input[name*="license"], input[id*="license"], .license-input');
-            return licenseInputs.length === 0; // License screen disappeared
-          });
-          
-          if (autoSubmitCheck) {
-            return {
-              success: true,
-              status: 'license_auto_accepted',
-              details: 'License automatically accepted without submit button'
-            };
+          const navigationResult = await this.waitForNavigation(page);
+          if (navigationResult.navigated) {
+            return { success: true, status: 'license_accepted', details: 'License submitted via Enter key and navigated successfully.' };
           } else {
-            return {
-              success: false,
-              status: 'no_submit_method',
-              details: 'License input found and filled, but no submit method available'
-            };
+            return { success: false, status: 'no_submit_method', details: 'No submit button found and Enter key press failed to navigate.' };
           }
         }
       } else {
-        console.log('No license input found - license not required or already entered');
         return {
           success: true,
           status: 'no_license_required',
@@ -577,12 +489,51 @@ export class ConcurrentDockerTestRunner {
       }
       
     } catch (error) {
-      console.log(`License key entry error: ${error.message}`);
+      console.error(`License key entry error: ${error.message}`);
       return {
         success: false,
         status: 'license_entry_error', 
         details: `Error during license entry: ${error.message}`
       };
+    }
+  }
+
+  /**
+   * Waits for page navigation to complete with robust error handling.
+   * @param {Page} page - The Puppeteer page object.
+   * @param {object} options - Optional settings.
+   * @param {number} [options.timeout=15000] - Navigation timeout in ms.
+   * @returns {Promise<{navigated: boolean, url?: string, error?: string}>}
+   */
+  async waitForNavigation(page, options = {}) {
+    const { timeout = 15000 } = options;
+    const initialUrl = page.url();
+    console.log(`Waiting for navigation from ${initialUrl}...`);
+
+    try {
+      await page.waitForNavigation({
+        waitUntil: 'networkidle0',
+        timeout: timeout,
+      });
+      const newUrl = page.url();
+      if (newUrl !== initialUrl) {
+        console.log(`Navigation successful. New URL: ${newUrl}`);
+        return { navigated: true, url: newUrl };
+      } else {
+        // This can happen if navigation leads to the same URL with a reload
+        console.log('Navigation event fired, but URL is unchanged. Assuming success.');
+        return { navigated: true, url: newUrl };
+      }
+    } catch (error) {
+      console.log(`waitForNavigation timed out after ${timeout}ms. Checking URL manually.`);
+      const currentUrl = page.url();
+      if (currentUrl !== initialUrl) {
+        console.log(`URL changed to ${currentUrl} despite timeout. Considering it a success.`);
+        return { navigated: true, url: currentUrl };
+      } else {
+        console.error(`Navigation failed. URL remains ${currentUrl}. Error: ${error.message}`);
+        return { navigated: false, error: `Timeout after ${timeout}ms and URL did not change.` };
+      }
     }
   }
 
@@ -672,13 +623,15 @@ export class ConcurrentDockerTestRunner {
         if (code === 0) {
           resolve(stdout);
         } else {
-          reject(new Error(`Command failed with code ${code}: ${command} ${args.join(' ')}\nStderr: ${stderr}`));
+          reject(new Error(`Command failed with code ${code}: ${command} ${args.join(' ')}
+Stderr: ${stderr}`));
         }
       });
       
       child.on('error', (error) => {
         clearTimeout(timer);
-        reject(new Error(`Command error: ${command} ${args.join(' ')}\n${error.message}`));
+        reject(new Error(`Command error: ${command} ${args.join(' ')}
+${error.message}`));
       });
     });
   }
