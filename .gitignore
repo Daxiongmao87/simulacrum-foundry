@@ -63,3 +63,4 @@ tests/.jest-cache/
 # Test environment files
 .env.test
 .env.test.local
+foundry-source/
