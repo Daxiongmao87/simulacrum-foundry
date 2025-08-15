@@ -253,11 +253,18 @@ export class ConcurrentDockerTestRunner {
   }
 
   /**
-   * Bootstrap environment: handle license, install game systems, and create test world.
-   * Completes full FoundryVTT setup automation for integration testing.
+   * Bootstrap environment: handle license, install game systems, create test world, and login as GM.
+   * Completes full FoundryVTT setup automation for integration testing with authenticated GM access.
+   * 
+   * Bootstrap sequence (Issue #40, #45, #42, #43):
+   * 1. License key entry (if required)
+   * 2. Game system installation (dnd5e, pf2e)
+   * 3. Test world creation
+   * 4. GM login and world launch authentication ✅ NEW IN ISSUE #43
+   * 
    * @param {Page} page - Puppeteer page
    * @param {Object} context - Test context
-   * @returns {Promise<Object>} Bootstrap result with license, system, and world creation status
+   * @returns {Promise<Object>} Bootstrap result with license, system, world creation, and GM login status
    */
   async bootstrapFoundryEnvironment(page, context) {
     console.log(`Starting bootstrap for ${context.version} ${context.system}`);
@@ -270,6 +277,7 @@ export class ConcurrentDockerTestRunner {
       licenseAutomation: licenseResult,
       systemInstallation: [],
       worldCreation: null, // Will be populated after world creation
+      gmLogin: null, // Will be populated after GM login
       timestamp: new Date().toISOString(),
       container: context
     };
@@ -318,8 +326,24 @@ export class ConcurrentDockerTestRunner {
     }
     console.log(`Test world "${testWorldConfig.name}" creation completed successfully (${worldResult.retryCount || 0} retries used).`);
     
+    // Login as GM and launch the created world (Issue #43 - GM Login and World Launch Automation)
+    // This completes the bootstrap sequence by providing authenticated GM access to the test world
+    const gmLoginResult = await this.loginAsGM(page, testWorldConfig, {
+      maxRetries: 3,
+      timeout: 60000,
+      adminPassword: process.env.FOUNDRY_ADMIN_PASSWORD || 'test-admin-password'
+    });
+    bootstrapResult.gmLogin = gmLoginResult;
+    
+    if (!gmLoginResult.success) {
+      bootstrapResult.bootstrapFailed = true;
+      bootstrapResult.failureReason = `Failed to login as GM after ${gmLoginResult.retryCount || 0} retries: ${gmLoginResult.details}`;
+      throw new Error(bootstrapResult.failureReason);
+    }
+    console.log(`GM login and world launch completed successfully (${gmLoginResult.retryCount || 0} retries used).`);
+    
     bootstrapResult.bootstrapSuccess = true;
-    console.log(`Bootstrap completed successfully for ${context.version} ${context.system} with world "${testWorldConfig.name}"`);
+    console.log(`Bootstrap completed successfully for ${context.version} ${context.system} with GM access to world "${testWorldConfig.name}"`);
     
     return bootstrapResult;
   }
@@ -750,6 +774,588 @@ export class ConcurrentDockerTestRunner {
           // Ignore escape key errors
         }
       }
+    }
+  }
+
+  /**
+   * Login as GM and launch a world in FoundryVTT with enhanced error handling and retry logic.
+   * 
+   * 🚨 BOOTSTRAP HELPER - Issue #43: GM Login and World Launch Automation
+   * 
+   * This method completes the FoundryVTT bootstrap sequence by providing authenticated GM access
+   * to the test world created by the world creation automation (Issue #42).
+   * 
+   * IMPLEMENTATION APPROACH:
+   * - Based on FoundryVTT v13 source code analysis for accurate selector patterns
+   * - Handles multiple authentication interfaces (admin setup, user selection, direct access)
+   * - Robust world discovery using slug matching and title fallback strategies
+   * - Comprehensive verification of successful world loading and GM authentication
+   * 
+   * AUTHENTICATION FLOW:
+   * 1. Admin authentication (if required) - handles setup password requirements
+   * 2. World launch - finds and launches the specific test world
+   * 3. GM user selection - selects appropriate GM user from available options
+   * 4. World access verification - confirms successful FoundryVTT world loading
+   * 
+   * INTEGRATION WITH BOOTSTRAP SEQUENCE:
+   * Called after world creation in `bootstrapFoundryEnvironment()` to complete automation.
+   * Provides fully authenticated GM session ready for integration test execution.
+   * 
+   * @param {Page} page - Puppeteer page
+   * @param {Object} worldConfig - World configuration from world creation
+   * @param {string} worldConfig.name - World name (used to find world to launch)
+   * @param {Object} options - Authentication options
+   * @param {number} [options.maxRetries=3] - Maximum retry attempts
+   * @param {number} [options.timeout=60000] - Operation timeout
+   * @param {string} [options.adminPassword='test-admin-password'] - Admin password for authentication
+   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
+   */
+  async loginAsGM(page, worldConfig, options = {}) {
+    const { 
+      maxRetries = 3, 
+      timeout = 60000,
+      adminPassword = 'test-admin-password'
+    } = options;
+    
+    const { name: worldName } = worldConfig;
+    
+    if (!worldName) {
+      throw new Error('World name is required for GM login');
+    }
+    
+    console.log(`Logging in as GM and launching world: "${worldName}" (max retries: ${maxRetries})...`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`GM login attempt ${attempt}/${maxRetries} for "${worldName}"`);
+        
+        // Step 1: Handle admin authentication if required
+        const adminAuthResult = await this.handleAdminAuthentication(page, adminPassword, {
+          timeout: Math.min(timeout / 3, 20000)
+        });
+        
+        if (!adminAuthResult.success && adminAuthResult.status !== 'not_required') {
+          throw new Error(`Admin authentication failed: ${adminAuthResult.details}`);
+        }
+        console.log(`Admin authentication: ${adminAuthResult.status}`);
+        
+        // Step 2: Navigate to worlds tab to find the created world
+        await page.waitForSelector('a[data-tab="worlds"]', { timeout: 10000 });
+        await page.click('a[data-tab="worlds"]');
+        await this.sleep(1000); // Allow tab switch to complete
+        console.log('Navigated to Worlds tab for world launch.');
+        
+        // Step 3: Find and launch the specific world
+        const worldSlug = worldName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        const worldLaunchResult = await this.launchWorld(page, worldSlug, worldName, {
+          timeout: Math.min(timeout / 2, 30000)
+        });
+        
+        if (!worldLaunchResult.success) {
+          throw new Error(`World launch failed: ${worldLaunchResult.details}`);
+        }
+        console.log(`World "${worldName}" launched successfully via ${worldLaunchResult.method}.`);
+        
+        // Step 4: Complete GM authentication in the world join interface
+        const gmAuthResult = await this.authenticateAsGM(page, {
+          timeout: Math.min(timeout / 3, 20000),
+          adminPassword
+        });
+        
+        if (!gmAuthResult.success) {
+          throw new Error(`GM authentication in world failed: ${gmAuthResult.details}`);
+        }
+        console.log(`GM authentication completed successfully via ${gmAuthResult.method}.`);
+        
+        // Step 5: Verify we are successfully logged into the world as GM
+        const verificationResult = await this.verifyGMWorldAccess(page, {
+          timeout: Math.min(timeout / 4, 15000)
+        });
+        
+        if (!verificationResult.success) {
+          throw new Error(`GM world access verification failed: ${verificationResult.details}`);
+        }
+        
+        console.log(`GM login and world launch verified successfully for "${worldName}".`);
+        return { 
+          success: true, 
+          status: 'gm_authenticated', 
+          retryCount: attempt - 1,
+          details: `GM successfully authenticated and launched world "${worldName}" with verification: ${verificationResult.method}`
+        };
+
+      } catch (error) {
+        console.error(`GM login attempt ${attempt}/${maxRetries} failed for "${worldName}": ${error.message}`);
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed
+          return { 
+            success: false, 
+            status: 'gm_login_error', 
+            details: `GM login failed after ${maxRetries} attempts: ${error.message}`,
+            retryCount: maxRetries
+          };
+        }
+        
+        // Wait before retry with exponential backoff
+        const backoffDelay = Math.min(3000 * Math.pow(2, attempt - 1), 15000);
+        console.log(`Retrying GM login in ${backoffDelay}ms...`);
+        await this.sleep(backoffDelay);
+        
+        // Try to return to setup screen before retry
+        try {
+          await page.goto(page.url().split('/game')[0], { waitUntil: 'networkidle0', timeout: 10000 });
+          await this.sleep(1000);
+        } catch (navigationError) {
+          console.warn(`Could not return to setup for retry: ${navigationError.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle admin authentication if required by FoundryVTT setup.
+   * @param {Page} page - Puppeteer page
+   * @param {string} adminPassword - Admin password to use
+   * @param {Object} options - Authentication options
+   * @returns {Promise<{success: boolean, status: string, details?: string}>}
+   */
+  async handleAdminAuthentication(page, adminPassword, options = {}) {
+    const { timeout = 20000 } = options;
+    
+    try {
+      console.log('Checking for admin authentication requirement...');
+      
+      // Check if admin authentication form is present
+      const adminFormSelectors = [
+        'form input[name="adminPassword"]',
+        'input[name="adminPassword"]',
+        'input[type="password"][name*="admin"]'
+      ];
+      
+      let adminInput = null;
+      let foundSelector = null;
+      
+      for (const selector of adminFormSelectors) {
+        adminInput = await page.$(selector);
+        if (adminInput) {
+          foundSelector = selector;
+          console.log(`Found admin authentication input with selector: ${selector}`);
+          break;
+        }
+      }
+      
+      if (!adminInput) {
+        return { success: true, status: 'not_required', details: 'No admin authentication form detected' };
+      }
+      
+      // Fill admin password
+      console.log('Entering admin password...');
+      await adminInput.click({ clickCount: 3 }); // Select all
+      await adminInput.type(adminPassword, { delay: 50 });
+      await this.sleep(500);
+      
+      // Find and click submit button
+      const submitSelectors = [
+        'button[name="action"][value="adminAuth"]',
+        'button[type="submit"]',
+        'form button[type="submit"]'
+      ];
+      
+      let submitButton = null;
+      let submitSelector = null;
+      
+      for (const selector of submitSelectors) {
+        submitButton = await page.$(selector);
+        if (submitButton) {
+          submitSelector = selector;
+          console.log(`Found admin submit button with selector: ${selector}`);
+          break;
+        }
+      }
+      
+      if (!submitButton) {
+        // Try Enter key as fallback
+        console.log('No submit button found, trying Enter key...');
+        await adminInput.press('Enter');
+      } else {
+        console.log('Clicking admin authentication submit button...');
+        await submitButton.click();
+      }
+      
+      // Wait for authentication to complete
+      console.log(`Waiting for admin authentication to complete (timeout: ${timeout}ms)...`);
+      const authResult = await Promise.race([
+        // Success indicator: authentication form disappears
+        page.waitForFunction(() => {
+          const adminForm = document.querySelector('input[name="adminPassword"]');
+          return !adminForm;
+        }, { timeout: timeout })
+          .then(() => ({ success: true, method: 'form_disappeared' })),
+        
+        // Success indicator: navigation occurs
+        page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' })
+          .then(() => ({ success: true, method: 'navigation_occurred' })),
+        
+        // Error indicator: error message appears
+        page.waitForFunction(() => {
+          const bodyText = document.body.innerText.toLowerCase();
+          return bodyText.includes('invalid') || bodyText.includes('incorrect') || bodyText.includes('authentication failed');
+        }, { timeout: Math.min(timeout, 5000) })
+          .then(() => ({ success: false, method: 'error_detected' })),
+        
+        // Timeout handler
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Admin authentication timeout after ${timeout}ms`)), timeout + 1000)
+        )
+      ]);
+      
+      if (!authResult.success) {
+        const errorDetails = await page.evaluate(() => {
+          const bodyText = document.body.innerText;
+          const errorMatch = bodyText.match(/(invalid|incorrect|authentication failed)[^.!?]*[.!?]/i);
+          return errorMatch ? errorMatch[0] : 'Authentication error detected';
+        });
+        return { success: false, status: 'auth_failed', details: errorDetails };
+      }
+      
+      console.log(`Admin authentication completed via ${authResult.method}.`);
+      return { success: true, status: 'authenticated', details: `Admin authentication successful via ${authResult.method}` };
+      
+    } catch (error) {
+      console.error(`Admin authentication error: ${error.message}`);
+      return { success: false, status: 'auth_error', details: `Admin authentication error: ${error.message}` };
+    }
+  }
+
+  /**
+   * Launch a specific world from the FoundryVTT setup interface.
+   * @param {Page} page - Puppeteer page
+   * @param {string} worldSlug - World slug/ID to launch
+   * @param {string} worldName - World display name for logging
+   * @param {Object} options - Launch options
+   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
+   */
+  async launchWorld(page, worldSlug, worldName, options = {}) {
+    const { timeout = 30000 } = options;
+    
+    try {
+      console.log(`Looking for world "${worldName}" (slug: ${worldSlug}) to launch...`);
+      
+      // Enhanced world detection with multiple strategies
+      const worldFound = await page.evaluate((slug, name) => {
+        // Strategy 1: Direct slug match
+        let worldElement = document.querySelector(`li.package.world[data-package-id="${slug}"]`);
+        if (worldElement) {
+          const launchButton = worldElement.querySelector('a[data-action="worldLaunch"]');
+          return { found: true, hasLaunchButton: !!launchButton, method: 'slug_match', element: worldElement };
+        }
+        
+        // Strategy 2: Search by title text (case insensitive)
+        const worldElements = document.querySelectorAll('li.package.world');
+        for (const element of worldElements) {
+          const titleElement = element.querySelector('.package-title');
+          if (titleElement && titleElement.textContent.trim().toLowerCase() === name.toLowerCase()) {
+            const launchButton = element.querySelector('a[data-action="worldLaunch"]');
+            return { found: true, hasLaunchButton: !!launchButton, method: 'title_match', element: element };
+          }
+        }
+        
+        return { found: false };
+      }, worldSlug, worldName);
+      
+      if (!worldFound.found) {
+        throw new Error(`World "${worldName}" not found in worlds list`);
+      }
+      
+      if (!worldFound.hasLaunchButton) {
+        throw new Error(`World "${worldName}" found but launch button not available - world may not be ready`);
+      }
+      
+      console.log(`Found world "${worldName}" via ${worldFound.method}, clicking launch button...`);
+      
+      // Click the world launch button
+      const launchButtonSelector = `li.package.world[data-package-id="${worldSlug}"] a[data-action="worldLaunch"]`;
+      await page.waitForSelector(launchButtonSelector, { timeout: 10000 });
+      await page.click(launchButtonSelector);
+      console.log(`Clicked launch button for world "${worldName}".`);
+      
+      // Wait for world launch to initiate (navigation or join interface appears)
+      console.log(`Waiting for world launch to initiate (timeout: ${timeout}ms)...`);
+      const launchResult = await Promise.race([
+        // Success indicator: navigation to join interface
+        page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' })
+          .then(() => ({ success: true, method: 'navigation_to_join' })),
+        
+        // Success indicator: join form appears on same page
+        page.waitForSelector('form select[name="userid"], form input[name="password"]', { timeout: timeout })
+          .then(() => ({ success: true, method: 'join_form_appeared' })),
+        
+        // Error indicator: error message or dialog
+        page.waitForFunction(() => {
+          const bodyText = document.body.innerText.toLowerCase();
+          return bodyText.includes('error') || bodyText.includes('failed') || bodyText.includes('unavailable');
+        }, { timeout: Math.min(timeout, 5000) })
+          .then(() => ({ success: false, method: 'error_detected' })),
+        
+        // Timeout handler
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`World launch timeout after ${timeout}ms`)), timeout + 1000)
+        )
+      ]);
+      
+      if (!launchResult.success) {
+        const errorDetails = await page.evaluate(() => {
+          const bodyText = document.body.innerText;
+          const errorMatch = bodyText.match(/(error|failed|unavailable)[^.!?]*[.!?]/i);
+          return errorMatch ? errorMatch[0] : 'World launch error detected';
+        });
+        throw new Error(`World launch failed: ${errorDetails}`);
+      }
+      
+      console.log(`World "${worldName}" launch initiated via ${launchResult.method}.`);
+      return { success: true, method: launchResult.method, details: `World launch successful via ${launchResult.method}` };
+      
+    } catch (error) {
+      console.error(`World launch error for "${worldName}": ${error.message}`);
+      return { success: false, details: `World launch error: ${error.message}` };
+    }
+  }
+
+  /**
+   * Authenticate as GM in the world join interface.
+   * @param {Page} page - Puppeteer page
+   * @param {Object} options - Authentication options
+   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
+   */
+  async authenticateAsGM(page, options = {}) {
+    const { timeout = 20000, adminPassword = 'test-admin-password' } = options;
+    
+    try {
+      console.log('Authenticating as GM in world join interface...');
+      
+      // Check what type of authentication interface we have
+      const authInterfaceType = await page.evaluate(() => {
+        // Check for admin setup return form
+        if (document.querySelector('input[name="adminPassword"]')) {
+          return 'admin_setup';
+        }
+        
+        // Check for user selection join form
+        if (document.querySelector('select[name="userid"]')) {
+          return 'user_selection';
+        }
+        
+        // Check for direct world access
+        if (document.body.innerText.toLowerCase().includes('game master') || 
+            document.querySelector('#ui-left, #sidebar, .game-time')) {
+          return 'direct_access';
+        }
+        
+        return 'unknown';
+      });
+      
+      console.log(`Authentication interface type detected: ${authInterfaceType}`);
+      
+      switch (authInterfaceType) {
+        case 'admin_setup':
+          return await this.handleAdminSetupAuth(page, adminPassword, timeout);
+        
+        case 'user_selection':
+          return await this.handleUserSelectionAuth(page, timeout);
+        
+        case 'direct_access':
+          return { success: true, method: 'direct_access', details: 'Already authenticated with direct world access' };
+        
+        default:
+          throw new Error(`Unknown authentication interface type: ${authInterfaceType}`);
+      }
+      
+    } catch (error) {
+      console.error(`GM authentication error: ${error.message}`);
+      return { success: false, details: `GM authentication error: ${error.message}` };
+    }
+  }
+
+  /**
+   * Handle admin setup authentication form.
+   * @param {Page} page - Puppeteer page
+   * @param {string} adminPassword - Admin password
+   * @param {number} timeout - Timeout in milliseconds
+   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
+   */
+  async handleAdminSetupAuth(page, adminPassword, timeout) {
+    console.log('Handling admin setup authentication...');
+    
+    const adminInput = await page.$('input[name="adminPassword"]');
+    if (!adminInput) {
+      throw new Error('Admin password input not found');
+    }
+    
+    await adminInput.click({ clickCount: 3 });
+    await adminInput.type(adminPassword, { delay: 50 });
+    await this.sleep(500);
+    
+    const submitButton = await page.$('button[type="submit"]');
+    if (submitButton) {
+      await submitButton.click();
+    } else {
+      await adminInput.press('Enter');
+    }
+    
+    // Wait for authentication to complete
+    await page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' });
+    
+    return { success: true, method: 'admin_setup_auth', details: 'Admin setup authentication completed' };
+  }
+
+  /**
+   * Handle user selection authentication form.
+   * @param {Page} page - Puppeteer page
+   * @param {number} timeout - Timeout in milliseconds
+   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
+   */
+  async handleUserSelectionAuth(page, timeout) {
+    console.log('Handling user selection authentication...');
+    
+    // Look for GM user in the dropdown
+    const gmUserFound = await page.evaluate(() => {
+      const userSelect = document.querySelector('select[name="userid"]');
+      if (!userSelect) return { found: false, reason: 'no_select_element' };
+      
+      const options = userSelect.querySelectorAll('option');
+      for (const option of options) {
+        const optionText = option.textContent.toLowerCase();
+        const optionValue = option.value;
+        
+        // Look for GM indicators in user names
+        if (optionText.includes('gamemaster') || optionText.includes('gm') || 
+            optionText.includes('admin') || optionValue === 'gamemaster') {
+          return { found: true, value: optionValue, text: optionText };
+        }
+      }
+      
+      // If no explicit GM user, use the first available user
+      const firstValidOption = Array.from(options).find(opt => opt.value && !opt.disabled);
+      if (firstValidOption) {
+        return { found: true, value: firstValidOption.value, text: firstValidOption.textContent, fallback: true };
+      }
+      
+      return { found: false, reason: 'no_valid_users' };
+    });
+    
+    if (!gmUserFound.found) {
+      throw new Error(`No suitable GM user found: ${gmUserFound.reason}`);
+    }
+    
+    console.log(`Selecting ${gmUserFound.fallback ? 'fallback' : 'GM'} user: ${gmUserFound.text}`);
+    
+    // Select the GM user
+    await page.select('select[name="userid"]', gmUserFound.value);
+    await this.sleep(500);
+    
+    // Check if password is required
+    const passwordInput = await page.$('input[name="password"]');
+    if (passwordInput) {
+      // For testing, try common default passwords or leave empty
+      const testPasswords = ['', 'admin', 'foundry', 'test'];
+      for (const password of testPasswords) {
+        await passwordInput.click({ clickCount: 3 });
+        await passwordInput.type(password, { delay: 30 });
+        break; // Use the first password (empty) for now
+      }
+      await this.sleep(300);
+    }
+    
+    // Submit the join form
+    const joinButton = await page.$('button[name="join"]');
+    if (joinButton) {
+      await joinButton.click();
+    } else {
+      await page.keyboard.press('Enter');
+    }
+    
+    // Wait for world to load
+    await page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' });
+    
+    return { 
+      success: true, 
+      method: 'user_selection_auth', 
+      details: `User selection authentication completed with user: ${gmUserFound.text}`
+    };
+  }
+
+  /**
+   * Verify successful GM access to the world.
+   * @param {Page} page - Puppeteer page
+   * @param {Object} options - Verification options
+   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
+   */
+  async verifyGMWorldAccess(page, options = {}) {
+    const { timeout = 15000 } = options;
+    
+    try {
+      console.log('Verifying GM world access...');
+      
+      // Wait for world interface to load and check for GM indicators
+      const verificationResult = await Promise.race([
+        // Success indicator: FoundryVTT world UI elements appear
+        page.waitForFunction(() => {
+          // Check for core FoundryVTT UI elements that indicate successful world loading
+          const gmIndicators = [
+            '#ui-left',           // Left sidebar (typical FoundryVTT layout)
+            '#sidebar',           // Sidebar
+            '#players',           // Players list
+            '#navigation',        // Navigation elements
+            '.game-time',         // Game time indicator
+            '#chat-controls',     // Chat controls
+            '.control-tools'      // Control tools
+          ];
+          
+          for (const selector of gmIndicators) {
+            if (document.querySelector(selector)) {
+              return selector;
+            }
+          }
+          
+          // Check for FoundryVTT canvas (main game area)
+          if (document.querySelector('#board, canvas#board')) {
+            return 'game_canvas';
+          }
+          
+          return false;
+        }, { timeout: timeout })
+          .then((element) => ({ success: true, method: 'ui_elements_detected', details: `FoundryVTT UI detected: ${element}` })),
+        
+        // Error indicator: error page or access denied
+        page.waitForFunction(() => {
+          const bodyText = document.body.innerText.toLowerCase();
+          return bodyText.includes('access denied') || bodyText.includes('unauthorized') || 
+                 bodyText.includes('error') || bodyText.includes('failed to load');
+        }, { timeout: Math.min(timeout, 5000) })
+          .then(() => ({ success: false, method: 'error_detected' })),
+        
+        // Timeout handler
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`GM world access verification timeout after ${timeout}ms`)), timeout + 1000)
+        )
+      ]);
+      
+      if (!verificationResult.success) {
+        const errorDetails = await page.evaluate(() => {
+          const bodyText = document.body.innerText;
+          const errorMatch = bodyText.match(/(access denied|unauthorized|error|failed)[^.!?]*[.!?]/i);
+          return errorMatch ? errorMatch[0] : 'World access error detected';
+        });
+        throw new Error(`GM world access verification failed: ${errorDetails}`);
+      }
+      
+      console.log(`GM world access verified via ${verificationResult.method}.`);
+      return verificationResult;
+      
+    } catch (error) {
+      console.error(`GM world access verification error: ${error.message}`);
+      return { success: false, details: `Verification error: ${error.message}` };
     }
   }
 

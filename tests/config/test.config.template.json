@@ -1,5 +1,6 @@
 {
   "foundryLicenseKey": "${FOUNDRY_LICENSE_KEY}",
+  "foundryAdminPassword": "${FOUNDRY_ADMIN_PASSWORD}",
   "docker": {
     "imagePrefix": "simulacrum-foundry-test",
     "portRange": {
@@ -26,7 +27,8 @@
       "containerStart": 30000,
       "foundryReady": 60000,
       "worldCreation": 45000,
-      "moduleInstall": 30000
+      "moduleInstall": 30000,
+      "gmLogin": 60000
     },
     "retries": {
       "containerStart": 3,
