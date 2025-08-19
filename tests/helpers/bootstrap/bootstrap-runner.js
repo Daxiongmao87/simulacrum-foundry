@@ -8,7 +8,7 @@
  * for each combination, using the existing working Docker setup.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
@@ -69,13 +69,24 @@ class BootstrapRunner {
   }
 
   getZipFileForVersion(version) {
-    // Map version to actual zip file names based on available files
-    const versionMap = {
-      'v13': 'FoundryVTT-Node-13.347.zip',
-      'v12': 'FoundryVTT-Node-12.331.zip' // Add more as needed
-    };
-    
-    return versionMap[version] || `FoundryVTT-Node-${version.substring(1)}.zip`;
+    // Dynamically discover zip file in version folder
+    const versionPath = join('tests/fixtures/binary_versions', version);
+    try {
+      const entries = readdirSync(versionPath);
+      const zipFiles = entries.filter(entry => entry.endsWith('.zip'));
+      
+      if (zipFiles.length === 0) {
+        throw new Error(`No zip files found in ${versionPath}`);
+      }
+      
+      if (zipFiles.length > 1) {
+        console.warn(`⚠️ Multiple zip files found in ${versionPath}, using first: ${zipFiles[0]}`);
+      }
+      
+      return zipFiles[0];
+    } catch (error) {
+      throw new Error(`Failed to discover zip file for ${version}: ${error.message}`);
+    }
   }
 
   async discoverAvailableVersions() {
