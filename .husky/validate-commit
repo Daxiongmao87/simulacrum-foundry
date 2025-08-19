@@ -131,85 +131,9 @@ function isExemptFromBannedContentScan(filePath) {
 }
 
 /**
- * CRITICAL SECURITY: Scan staged files for sensitive data
- * This prevents the exact type of disaster that exposed the user's FoundryVTT license
+ * Note: Sensitive data validation now handled in pre-commit hook
+ * This script only runs during commit-msg hook for message validation
  */
-function scanForSensitiveData() {
-  console.log('🔒 CRITICAL: Scanning for sensitive data...');
-  
-  const changedFiles = getChangedFiles();
-  const violations = [];
-  
-  for (const file of changedFiles) {
-    try {
-      // Get the staged content of the file
-      const stagedContent = execSync(`git diff --cached ${file}`, { encoding: 'utf-8' });
-      
-      // Check if this is newly added content (+ lines)
-      const addedLines = stagedContent
-        .split('\n')
-        .filter(line => line.startsWith('+') && !line.startsWith('+++'))
-        .map(line => line.substring(1)); // Remove the + prefix
-      
-      // Scan each added line for sensitive data patterns
-      for (let lineIndex = 0; lineIndex < addedLines.length; lineIndex++) {
-        const line = addedLines[lineIndex];
-        
-        for (const sensitivePattern of SENSITIVE_DATA_PATTERNS) {
-          const matches = line.match(sensitivePattern.pattern);
-          if (matches) {
-            violations.push({
-              file: file,
-              line: lineIndex + 1,
-              pattern: sensitivePattern.description,
-              severity: sensitivePattern.severity,
-              content: line.trim(),
-              matches: matches
-            });
-          }
-        }
-      }
-    } catch (error) {
-      // Skip files that can't be read (binary files, deleted files, etc.)
-      continue;
-    }
-  }
-  
-  if (violations.length > 0) {
-    console.error('');
-    console.error('🚨 CRITICAL SECURITY VIOLATION: SENSITIVE DATA DETECTED! 🚨');
-    console.error('');
-    console.error('❌ The following sensitive data patterns were found in staged changes:');
-    console.error('');
-    
-    for (const violation of violations) {
-      console.error(`📁 File: ${violation.file}`);
-      console.error(`📍 Line: ${violation.line}`);
-      console.error(`🏷️  Type: ${violation.pattern} (${violation.severity})`);
-      console.error(`💥 Content: ${violation.content}`);
-      if (violation.matches.length > 0) {
-        console.error(`🎯 Detected: ${violation.matches.join(', ')}`);
-      }
-      console.error('');
-    }
-    
-    console.error('🚨 COMMIT BLOCKED - SENSITIVE DATA MUST BE REMOVED');
-    console.error('');
-    console.error('📋 REQUIRED ACTIONS:');
-    console.error('1. 🔄 Remove all sensitive data from staged files');
-    console.error('2. 🔐 Use environment variables for secrets (e.g., ${FOUNDRY_LICENSE_KEY})');
-    console.error('3. 📝 Update .gitignore to prevent future sensitive file commits');
-    console.error('4. 🗑️  Use "git reset HEAD <file>" to unstage sensitive files');
-    console.error('');
-    console.error('⚠️  REMEMBER: Once committed to Git, this data would be PUBLIC FOREVER');
-    console.error('💡 Never hardcode credentials - always use environment variables');
-    console.error('');
-    
-    process.exit(1);
-  }
-  
-  console.log('✅ No sensitive data detected in staged changes');
-}
 
 /**
  * PREVENT BANNED CONTENT: Scan for zero-tolerance forbidden content
@@ -617,24 +541,20 @@ function runTestSuite() {
  * Main validation logic
  */
 async function main() {
-  console.log('🔍 Validating commit...');
-  
-  // CRITICAL SECURITY CHECK - Must be FIRST to prevent sensitive data exposure
-  scanForSensitiveData();
+  console.log('🔍 Post-commit validation...');
   
   // PREVENT BANNED CONTENT - Zero tolerance enforcement
   scanForBannedContent();
   
-  // This script is called from pre-commit hook for security/testing validation only
-  // Commit message validation happens separately in commit-msg hook
-  console.log('⚠️  Pre-commit validation: Security and testing checks only');
-  console.log('🔒 Sensitive data check completed');
+  // This script is called AFTER commit for post-commit validation only
+  // Sensitive data validation happens in pre-commit hook
+  // Commit message validation happens in commit-msg hook
+  console.log('📊 Post-commit validation: Content policy enforcement');
   
   // Run test suite (linting and available tests)
   runTestSuite();
   
-  console.log('🎉 Pre-commit validation successful!');
-  console.log('💡 Commit message validation will run during commit-msg phase');
+  console.log('🎉 Post-commit validation successful!');
 }
 
 // Execute validation

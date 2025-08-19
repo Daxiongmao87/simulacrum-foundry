@@ -1,14 +1,17 @@
 /**
- * Concurrent DockerTestRunner Framework
+ * Concurrent DockerTestRunner Framework (Refactored)
  * 
  * Enhanced DockerTestRunner with dynamic port allocation and concurrent container support.
  * Fixes the critical architectural flaw where all containers tried to use port 30000.
+ * 
+ * REFACTORED: Bootstrap helpers extracted to modular components for better maintainability.
  * 
  * Key Features:
  * - Dynamic port allocation (30000-30010 range)
  * - Instance limiting (max 3 concurrent containers)
  * - Queue system for test execution
  * - True multi-version parallel testing
+ * - Modular bootstrap helper architecture
  */
 
 import { spawn } from 'child_process';
@@ -17,6 +20,12 @@ import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 import { loadTestConfig } from './test-config.js';
 import { PortManager } from './port-manager.js';
+import { enterLicenseKey } from './bootstrap/license-helper.js';
+import { installGameSystem } from './bootstrap/system-installation-helper.js';
+import { createWorld } from './bootstrap/world-creation-helper.js';
+import { loginAsGM } from './bootstrap/gm-login-helper.js';
+import { validateReadyState } from './bootstrap/ready-state-helper.js';
+import { sleep, waitForNavigation, runCommand } from './bootstrap/shared-utilities.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,148 +37,158 @@ export class ConcurrentDockerTestRunner {
   constructor() {
     this.config = loadTestConfig();
     this.containers = new Map(); // containerId -> { port, startTime, ... }
-    this.browsers = new Map();
+    this.browsers = new Map(); // containerId -> browser instance
+    this.testQueue = []; // Test queue for concurrent execution
     
-    // Initialize global PortManager if not already done
+    // Initialize global port manager if not exists
     if (!globalPortManager) {
       globalPortManager = new PortManager(this.config);
     }
     this.portManager = globalPortManager;
-    
-    console.log('ConcurrentDockerTestRunner initialized with port management');
   }
 
   /**
-   * Run tests across versions/systems with concurrent execution support
-   * @param {string} testName - Name of the test
-   * @param {Function} testFn - Test function (page, context) => Promise<void>
+   * Main test runner - executes tests across all enabled versions concurrently
+   * @param {string} testName - Test name for logging
+   * @param {Function} testFn - Test function to execute
    */
   testAcrossVersions(testName, testFn) {
+    // Get enabled configurations from test config
     const enabledVersions = this.config.versions.filter(v => v.enabled);
     const enabledSystems = this.config.systems.filter(s => s.enabled);
     
-    enabledVersions.forEach(version => {
-      enabledSystems.forEach(system => {
-        const fullTestName = `${testName} (FoundryVTT ${version.version} + ${system.name})`;
-        
-        test(fullTestName, async () => {
-          const context = {
-            version: version.version,
-            versionZip: version.zipFile,
-            system: system.id,
-            systemName: system.name,
-            systemUrl: system.downloadUrl
-          };
+    // Generate test contexts (cartesian product of versions and systems)
+    const testContexts = [];
+    for (const version of enabledVersions) {
+      for (const system of enabledSystems) {
+        testContexts.push({
+          version: version.tag,
+          system: system.id,
+          systemName: system.name,
+          systemManifestUrl: system.manifestUrl,
+          systemDownloadUrl: system.downloadUrl,
+          dockerImage: version.image
+        });
+      }
+    }
+
+    // Create test suite for each context
+    describe(`${testName} - Concurrent Multi-Version Testing`, () => {
+      testContexts.forEach(context => {
+        it(`${testName} (${context.version} - ${context.systemName})`, async function() {
+          this.timeout(this.config?.bootstrap?.timeouts?.foundryReady + 60000); // Extra time for concurrent operations
           
-          const { page, containerId, port } = await this.setupTestEnvironment(context);
-          
-          try {
-            await testFn(page, { ...context, port });
-          } finally {
-            await this.cleanupTestEnvironment(containerId);
-          }
+          const testResult = await testFn(context);
+          return testResult;
         }, this.config.bootstrap.timeouts.foundryReady + 60000); // Extra time for concurrent operations
       });
     });
   }
 
   /**
-   * Setup test environment with dynamic port allocation and enhanced license automation
-   * @param {Object} context - Test context with version and system info
-   * @returns {Promise<{page: Page, containerId: string, port: number, licenseResult?: Object}>}
+   * Set up test environment with dynamic port allocation
+   * @param {Object} context - Test context containing version and system info
+   * @returns {Promise<{page: Page, port: number, containerId: string}>}
    */
   async setupTestEnvironment(context) {
+    // Generate unique container ID
     const containerId = `${this.config.docker.imagePrefix}-${context.version}-${context.system}-${Date.now()}`;
-    let allocatedPort = null;
+    
+    // Allocate port
+    const port = await this.portManager.allocatePort(containerId);
+    console.log(`Setting up test environment for ${context.version} ${context.system} on port ${port}`);
     
     try {
-      // 1. Allocate port for this container
-      allocatedPort = await this.portManager.allocatePort(containerId);
-      console.log(`Allocated port ${allocatedPort} for ${containerId}`);
+      // Build and start container
+      console.log(`📦 Step 1: Building and starting Docker container...`);
+      await this.buildAndStartContainer(containerId, context, port);
       
-      // 2. Build and start Docker container with allocated port
-      await this.buildAndStartContainer(containerId, context, allocatedPort);
+      // Wait for FoundryVTT to be ready
+      console.log(`⏳ Step 2: Waiting for FoundryVTT server to be ready...`);
+      await this.waitForFoundryReady(containerId, port);
       
-      // 3. Wait for FoundryVTT to be ready on allocated port
-      await this.waitForFoundryReady(containerId, allocatedPort);
-      
-      // 4. Launch Puppeteer and connect
-      const { browser, page } = await this.launchPuppeteer();
+      // Launch Puppeteer and connect to container
+      console.log(`🌐 Step 3: Launching browser and connecting to FoundryVTT...`);
+      const browser = await this.launchPuppeteer();
       this.browsers.set(containerId, browser);
       
-      // 5. Navigate to FoundryVTT on allocated port
-      await page.goto(`http://localhost:${allocatedPort}`, {
+      const page = await browser.newPage();
+      await page.goto(`http://localhost:${port}`, { 
         waitUntil: 'networkidle0',
         timeout: this.config.puppeteer.timeout
       });
       
-      // 6. Complete bootstrap sequence with enhanced license automation and system installation
+      // Automatically run bootstrap sequence
+      console.log(`✅ Test environment ready for ${context.version} ${context.system} on port ${port}`);
+      console.log(`🚀 Step 4: Starting automatic bootstrap sequence...`);
+      
       const bootstrapResult = await this.bootstrapFoundryEnvironment(page, context);
       
-      return { page, containerId, port: allocatedPort, bootstrapResult };
+      console.log(`🎯 Bootstrap sequence completed with status: ${bootstrapResult.bootstrapSuccess ? 'SUCCESS' : 'FAILED'}`);
+      
+      return { page, port, containerId, bootstrapResult };
       
     } catch (error) {
-      // Cleanup on failure
-      if (allocatedPort) {
-        this.portManager.releasePort(containerId, allocatedPort);
-      }
+      // Clean up on error
       await this.cleanupTestEnvironment(containerId);
-      throw new Error(`Test environment setup failed: ${error.message}`);
+      throw error;
     }
   }
 
   /**
-   * Build and start Docker container with dynamic port
+   * Build and start a FoundryVTT container with the specified configuration
    * @param {string} containerId - Unique container identifier
    * @param {Object} context - Test context
-   * @param {number} port - Allocated port for this container
+   * @param {number} port - Port to bind container to
    */
   async buildAndStartContainer(containerId, context, port) {
-    const projectRoot = join(__dirname, '..', '..');
-    const versionZipPath = join(projectRoot, 'tests', 'fixtures', 'binary_versions', context.version, context.versionZip);
+    const projectRoot = join(__dirname, '../..');
     
-    // Check if ZIP file exists
-    const fs = await import('fs');
-    if (!fs.existsSync(versionZipPath)) {
-      throw new Error(`FoundryVTT ZIP file not found: ${versionZipPath}`);
-    }
-    
-    // Get license key from environment or config  
+    // Get license key for container setup
     const licenseKey = process.env.FOUNDRY_LICENSE_KEY || this.config.foundryLicenseKey;
-    
     if (!licenseKey || licenseKey.includes('${')) {
-      console.warn('FOUNDRY_LICENSE_KEY not set - Docker tests may fail at license screen');
-      console.warn('Set FOUNDRY_LICENSE_KEY environment variable with your FoundryVTT license');
+      throw new Error('FoundryVTT license key is required. Set FOUNDRY_LICENSE_KEY environment variable.');
     }
+
+    console.log(`🐳 Building Docker container: ${containerId}`);
     
-    // Build Docker image
+    // Determine ZIP file path based on version context  
+    const foundryZipPath = context.versionZip 
+      ? `tests/fixtures/binary_versions/${context.version}/${context.versionZip}`
+      : `tests/fixtures/binary_versions/${context.version}/FoundryVTT-Node-${context.version.replace('v', '')}.347.zip`;
+    
+    console.log(`📦 Using ZIP: ${foundryZipPath}`);
+    console.log(`🔑 License key configured: ${licenseKey.substring(0, 8)}...`);
+    
+    // Build container with context-specific image and correct Dockerfile path
     const buildArgs = [
       'build',
-      '-t', `${containerId}:latest`,
-      '--build-arg', `FOUNDRY_VERSION_ZIP=tests/fixtures/binary_versions/${context.version}/${context.versionZip}`,
-      '--build-arg', `FOUNDRY_LICENSE_KEY=${licenseKey || 'MISSING_LICENSE_KEY'}`,
       '-f', 'tests/docker/Dockerfile.foundry',
+      '-t', containerId,
+      '--build-arg', `FOUNDRY_VERSION_ZIP=${foundryZipPath}`,
+      '--build-arg', `FOUNDRY_LICENSE_KEY=${licenseKey}`,
       '.'
     ];
     
-    console.log(`Building Docker image for ${context.version} on port ${port}...`);
-    await this.runCommand('docker', buildArgs, {
+    console.log(`🔨 Running: docker build -f tests/docker/Dockerfile.foundry -t ${containerId} ...`);
+    await runCommand('docker', buildArgs, {
       cwd: projectRoot,
       timeout: this.config.bootstrap.timeouts.containerStart
     });
+    console.log(`✅ Docker build completed for ${containerId}`);
+
+    console.log(`🚀 Starting container ${containerId} on port ${port}...`);
     
-    // Start container with dynamic port mapping
+    // Start container with port mapping and volume mounts
     const runArgs = [
-      'run',
-      '-d',
+      'run', '-d',
       '--name', containerId,
-      '-p', `${port}:30000`, // Map allocated port to container's internal port 30000
+      '-p', `${port}:30000`,
       '-v', `${projectRoot}:${this.config.docker.moduleMountPath}`,
-      `${containerId}:latest`
+      containerId
     ];
     
-    console.log(`Starting container ${containerId} on port ${port}...`);
-    await this.runCommand('docker', runArgs, {
+    await runCommand('docker', runArgs, {
       timeout: this.config.bootstrap.timeouts.containerStart
     });
     
@@ -184,95 +203,101 @@ export class ConcurrentDockerTestRunner {
   }
 
   /**
-   * Wait for FoundryVTT server to be ready on specific port
+   * Wait for FoundryVTT to be ready in the container
    * @param {string} containerId - Container identifier
    * @param {number} port - Port to check
    */
   async waitForFoundryReady(containerId, port) {
-    const maxRetries = this.config.bootstrap.retries.foundryConnection;
-    const retryDelay = 2000;
-    
-    console.log(`Waiting for FoundryVTT to be ready on port ${port}...`);
-    
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        // First check if container is still running
-        const containerStatus = await this.runCommand('docker', ['ps', '-q', '-f', `name=${containerId}`], { timeout: 5000 });
-        if (!containerStatus.trim()) {
-          throw new Error(`Container ${containerId} is not running`);
-        }
-        
-        // Try to connect to FoundryVTT on allocated port
-        const response = await fetch(`http://localhost:${port}`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (response.ok) {
-          console.log(`FoundryVTT ready on port ${port}`);
-          return;
-        }
-        
-        console.log(`Attempt ${i + 1}/${maxRetries}: FoundryVTT not ready on port ${port} (status: ${response.status})`);
-      } catch (error) {
-        console.log(`Attempt ${i + 1}/${maxRetries}: Connection failed on port ${port} (${error.message})`);
-      }
+    const startTime = Date.now();
+    const overallTimeout = this.config?.bootstrap?.timeouts?.foundryReady || 60000; // total time budget
+    const pollInterval = 2000; // check every 2 seconds
+    let attempt = 0;
+
+    console.log(`⏳ Waiting for FoundryVTT to be ready on port ${port} (timeout: ${overallTimeout/1000}s)...`);
+
+    while (Date.now() - startTime < overallTimeout) {
+      attempt++;
+      const elapsed = Date.now() - startTime;
       
-      if (i < maxRetries - 1) {
-        await this.sleep(retryDelay);
+      try {
+        console.log(`   📍 Attempt ${attempt} (${Math.floor(elapsed/1000)}s elapsed): Checking container status...`);
+        
+        // Check if container is still running
+        const containerStatus = await runCommand('docker', ['ps', '--filter', `name=${containerId}`, '--format', '{{.Status}}'], { timeout: 5000 });
+        if (!containerStatus.includes('Up')) {
+          // Container stopped, get logs for debugging
+          console.log(`❌ Container ${containerId} stopped unexpectedly, getting logs...`);
+          const logs = await runCommand('docker', ['logs', '--tail', '30', containerId], { timeout: 8000 });
+          throw new Error(`Container ${containerId} stopped unexpectedly. Logs: ${logs}`);
+        }
+        console.log(`   ✅ Container is running`);
+
+        // Try to reach FoundryVTT web interface using curl HEAD request
+        console.log(`   🌐 Testing HTTP connection to localhost:${port}...`);
+        try {
+          const curlOutput = await runCommand('curl', ['-I', '-s', `http://localhost:${port}`], { timeout: 5000 });
+          console.log(`   📡 HTTP Response: ${curlOutput.split('\n')[0]}`);
+          
+          // Check for successful HTTP responses (200 OK or 302 redirect to license page)
+          if (curlOutput.includes('HTTP/1.1 200') || curlOutput.includes('HTTP/1.0 200')) {
+            console.log(`✅ FoundryVTT ready on port ${port} after ${Math.floor(elapsed/1000)}s (HTTP 200 OK)`);
+            return;
+          } else if (curlOutput.includes('HTTP/1.1 302') || curlOutput.includes('HTTP/1.0 302')) {
+            console.log(`✅ FoundryVTT ready on port ${port} after ${Math.floor(elapsed/1000)}s (HTTP 302 redirect to license)`);
+            return;
+          } else {
+            console.log(`   ⏳ HTTP connection not ready (${curlOutput.split('\n')[0] || 'no response'}), continuing to wait...`);
+          }
+        } catch (curlError) {
+          console.log(`   ⏳ HTTP connection failed (${curlError.message.substring(0, 50)}), continuing to wait...`);
+        }
+      } catch (error) {
+        console.log(`   ⚠️  Connection attempt failed: ${error.message.substring(0, 100)}`);
       }
+
+      await sleep(pollInterval);
     }
-    
-    // Get container logs for debugging
-    try {
-      const logs = await this.runCommand('docker', ['logs', '--tail', '50', containerId], { timeout: 10000 });
-      console.error(`Container logs for ${containerId}:`, logs);
-    } catch (logError) {
-      console.error('Could not get container logs:', logError.message);
-    }
-    
-    throw new Error(`FoundryVTT server not ready on port ${port} after ${maxRetries} retries`);
+
+    console.log(`❌ FoundryVTT readiness timeout after ${Math.floor((Date.now() - startTime)/1000)}s`);
+    throw new Error(`FoundryVTT not ready after ${overallTimeout}ms on port ${port}`);
   }
 
   /**
-   * Launch Puppeteer browser
-   * @returns {Promise<{browser: Browser, page: Page}>}
+   * Launch Puppeteer with optimized settings for FoundryVTT
+   * @returns {Promise<Browser>} Puppeteer browser instance
    */
   async launchPuppeteer() {
-    const browser = await puppeteer.launch({
+    // Base args required for Docker/containerized environments
+    const baseArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox'
+    ];
+    
+    // Merge with any additional args from config
+    const configArgs = this.config.puppeteer.args || [];
+    const allArgs = [...baseArgs, ...configArgs];
+    
+    return await puppeteer.launch({
       headless: this.config.puppeteer.headless,
-      slowMo: this.config.puppeteer.slowMo,
-      devtools: this.config.puppeteer.devtools,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: allArgs,
+      defaultViewport: { width: 1280, height: 720 }
     });
-    
-    const page = await browser.newPage();
-    await page.setViewport(this.config.puppeteer.viewport);
-    
-    return { browser, page };
   }
 
   /**
-   * Bootstrap environment: handle license, install game systems, create test world, and login as GM.
-   * Completes full FoundryVTT setup automation for integration testing with authenticated GM access.
-   * 
-   * Bootstrap sequence (Issue #40, #45, #42, #43):
-   * 1. License key entry (if required)
-   * 2. Game system installation (dnd5e, pf2e)
-   * 3. Test world creation
-   * 4. GM login and world launch authentication ✅ NEW IN ISSUE #43
-   * 
+   * Bootstrap FoundryVTT environment with all required setup steps using modular helpers
    * @param {Page} page - Puppeteer page
    * @param {Object} context - Test context
    * @returns {Promise<Object>} Bootstrap result with license, system, world creation, and GM login status
    */
   async bootstrapFoundryEnvironment(page, context) {
-    console.log(`Starting bootstrap for ${context.version} ${context.system}`);
+    console.log(`🚀 Starting FoundryVTT bootstrap sequence for ${context.version} ${context.system}...`);
     
-    // Enter license key with detailed tracking
-    const licenseResult = await this.enterLicenseKey(page);
-    console.log(`License automation result: ${JSON.stringify(licenseResult, null, 2)}`);
-    
+    // Step 1: License automation
+    console.log(`🔑 Step 1: Handling license key automation...`);
+    const licenseResult = await enterLicenseKey(page, this.config);
+    console.log(`   📋 License result: ${licenseResult.status} - ${licenseResult.details || 'No details'}`);
+
     const bootstrapResult = {
       licenseAutomation: licenseResult,
       systemInstallation: [],
@@ -288,47 +313,45 @@ export class ConcurrentDockerTestRunner {
       throw new Error(`License entry failed: ${licenseResult.details}`);
     }
     
-    // Install required game systems with enhanced configuration
-    const systemsToInstall = ['dnd5e', 'pf2e'];
-    for (const systemId of systemsToInstall) {
-      const installResult = await this.installGameSystem(page, systemId, {
-        maxRetries: 3,
-        installTimeout: 120000,  // 2 minutes for installation process
-        downloadTimeout: 300000  // 5 minutes for package download
-      });
-      bootstrapResult.systemInstallation.push(installResult);
-      if (!installResult.success) {
-        bootstrapResult.bootstrapFailed = true;
-        bootstrapResult.failureReason = `Failed to install ${systemId} after ${installResult.retryCount || 0} retries: ${installResult.details}`;
-        throw new Error(bootstrapResult.failureReason);
-      }
-      console.log(`System ${systemId} installation completed successfully (${installResult.retryCount || 0} retries used).`);
-    }
+    // Step 2: Install the game system specified in the context
+    console.log(`🎲 Step 2: Installing game system '${context.system}'...`);
+    const installResult = await installGameSystem(page, context.system, context.systemManifestUrl, context.systemDownloadUrl);
     
-    // Create test world with appropriate system (Issue #42 - World Creation Automation)
-    // This completes the bootstrap sequence by providing a ready-to-test world environment
+    bootstrapResult.systemInstallation.push(installResult);
+    if (!installResult.success) {
+      console.log(`   ❌ System ${context.system} installation failed: ${installResult.details}`);
+      bootstrapResult.bootstrapFailed = true;
+      bootstrapResult.failureReason = `Failed to install ${context.system} after ${installResult.retryCount || 0} retries: ${installResult.details}`;
+      throw new Error(bootstrapResult.failureReason);
+    }
+    console.log(`   ✅ System ${context.system} installation completed (${installResult.retryCount || 0} retries used)`);
+    
+    // Step 3: Create test world
+    console.log(`🌍 Step 3: Creating test world...`);
     const testWorldConfig = {
       name: `Test World ${context.version}`,
       system: context.system || 'dnd5e',
       description: `Automated test world for ${context.version} with ${context.systemName || context.system}`
     };
+    console.log(`   📋 World config: "${testWorldConfig.name}" using ${testWorldConfig.system}`);
     
-    const worldResult = await this.createWorld(page, testWorldConfig, {
+    const worldResult = await createWorld(page, testWorldConfig, {
       maxRetries: 3,
       timeout: 30000
     });
     bootstrapResult.worldCreation = worldResult;
     
     if (!worldResult.success) {
+      console.log(`   ❌ World creation failed: ${worldResult.details}`);
       bootstrapResult.bootstrapFailed = true;
       bootstrapResult.failureReason = `Failed to create test world after ${worldResult.retryCount || 0} retries: ${worldResult.details}`;
       throw new Error(bootstrapResult.failureReason);
     }
-    console.log(`Test world "${testWorldConfig.name}" creation completed successfully (${worldResult.retryCount || 0} retries used).`);
+    console.log(`   ✅ World "${testWorldConfig.name}" created successfully (${worldResult.retryCount || 0} retries used)`);
     
-    // Login as GM and launch the created world (Issue #43 - GM Login and World Launch Automation)
-    // This completes the bootstrap sequence by providing authenticated GM access to the test world
-    const gmLoginResult = await this.loginAsGM(page, testWorldConfig, {
+    // Step 4: GM login and world launch
+    console.log(`👑 Step 4: Logging in as GM and launching world...`);
+    const gmLoginResult = await loginAsGM(page, testWorldConfig, {
       maxRetries: 3,
       timeout: 60000,
       adminPassword: process.env.FOUNDRY_ADMIN_PASSWORD || 'test-admin-password'
@@ -336,15 +359,16 @@ export class ConcurrentDockerTestRunner {
     bootstrapResult.gmLogin = gmLoginResult;
     
     if (!gmLoginResult.success) {
+      console.log(`   ❌ GM login failed: ${gmLoginResult.details}`);
       bootstrapResult.bootstrapFailed = true;
       bootstrapResult.failureReason = `Failed to login as GM after ${gmLoginResult.retryCount || 0} retries: ${gmLoginResult.details}`;
       throw new Error(bootstrapResult.failureReason);
     }
-    console.log(`GM login and world launch completed successfully (${gmLoginResult.retryCount || 0} retries used).`);
+    console.log(`   ✅ GM login and world launch completed (${gmLoginResult.retryCount || 0} retries used)`);
     
-    // Final Step: Validate ready state to ensure environment is fully prepared for testing (Issue #44)
-    // This completes the bootstrap sequence by confirming all components are ready for module testing
-    const readyStateResult = await this.validateReadyState(page, {
+    // Step 5: Ready state validation
+    console.log(`🎯 Step 5: Validating ready state for testing...`);
+    const readyStateResult = await validateReadyState(page, {
       timeout: 30000,
       componentTimeout: 5000,
       requireCanvas: true,
@@ -353,1206 +377,18 @@ export class ConcurrentDockerTestRunner {
     bootstrapResult.readyStateValidation = readyStateResult;
     
     if (!readyStateResult.success) {
+      console.log(`   ❌ Ready state validation failed: ${readyStateResult.details}`);
       bootstrapResult.bootstrapFailed = true;
       bootstrapResult.failureReason = `Ready state validation failed: ${readyStateResult.details}`;
       throw new Error(bootstrapResult.failureReason);
     }
-    console.log(`Ready state validation completed successfully: ${readyStateResult.details}`);
+    console.log(`   ✅ Ready state validation completed: ${readyStateResult.details}`);
     
     bootstrapResult.bootstrapSuccess = true;
-    console.log(`Bootstrap completed successfully for ${context.version} ${context.system} with validated ready state for testing`);
+    console.log(`🎉 Bootstrap completed successfully for ${context.version} ${context.system}!`);
+    console.log(`📊 Bootstrap summary: License(${licenseResult.status}), Systems(${enabledSystems.length} installed), World(created), GM(authenticated), Ready(validated)`);
     
     return bootstrapResult;
-  }
-
-  /**
-   * Install a game system from the FoundryVTT setup screen with enhanced error handling and retry logic.
-   * Based on FoundryVTT v13 source code analysis for accurate selector patterns.
-   * @param {Page} page - Puppeteer page
-   * @param {string} systemId - The ID of the system to install (e.g., 'dnd5e')
-   * @param {Object} options - Installation options
-   * @param {number} [options.maxRetries=3] - Maximum retry attempts for installation
-   * @param {number} [options.installTimeout=120000] - Timeout for package installation (2 minutes)
-   * @param {number} [options.downloadTimeout=300000] - Timeout for package download (5 minutes)
-   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
-   */
-  async installGameSystem(page, systemId, options = {}) {
-    const { 
-      maxRetries = 3, 
-      installTimeout = 120000, 
-      downloadTimeout = 300000 
-    } = options;
-    
-    console.log(`Installing game system: ${systemId} (max retries: ${maxRetries})...`);
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`Installation attempt ${attempt}/${maxRetries} for ${systemId}`);
-        
-        // Navigate to the "Game Systems" tab using correct FoundryVTT v13 selector
-        await page.waitForSelector('a[data-tab="systems"]', { timeout: 10000 });
-        await page.click('a[data-tab="systems"]');
-        await this.sleep(1000); // Allow tab switch to complete
-        console.log('Navigated to Game Systems tab.');
-
-        // Enhanced system installation check - verify both existence and installation status
-        const systemStatus = await page.evaluate((id) => {
-          const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
-          if (!systemRow) return { exists: false, installed: false };
-          
-          // Check for uninstall button (indicates installed) or update button
-          const hasUninstallButton = !!systemRow.querySelector('button[data-action="uninstall"]');
-          const hasUpdateButton = !!systemRow.querySelector('button[data-action="updatePackage"]');
-          
-          return { 
-            exists: true, 
-            installed: hasUninstallButton || hasUpdateButton,
-            element: systemRow
-          };
-        }, systemId);
-
-        if (systemStatus.installed) {
-          console.log(`System ${systemId} is already installed.`);
-          return { success: true, status: 'already_installed', retryCount: attempt - 1 };
-        }
-
-        // Click "Install System" button - using correct camelCase selector from v13 source
-        await page.waitForSelector('button[data-action="installPackage"]', { timeout: 10000 });
-        await page.click('button[data-action="installPackage"]');
-        console.log('Clicked "Install System" button.');
-
-        // Wait for the installation dialog with better error handling
-        try {
-          await page.waitForSelector('#package-installer', { visible: true, timeout: 15000 });
-          console.log('Package installer dialog is visible.');
-        } catch (dialogError) {
-          console.warn(`Package installer dialog not found on attempt ${attempt}: ${dialogError.message}`);
-          if (attempt < maxRetries) continue;
-          throw new Error(`Package installer dialog failed to open after ${maxRetries} attempts`);
-        }
-
-        // Enhanced filter input with retry logic
-        const filterInput = await page.$('input[name="filter"]');
-        if (!filterInput) {
-          throw new Error('Package filter input not found in installer dialog');
-        }
-        
-        // Clear existing filter and type system ID
-        await filterInput.click({ clickCount: 3 }); // Select all
-        await filterInput.type(systemId, { delay: 100 });
-        await this.sleep(2000); // Wait for filtering to complete
-
-        // Enhanced package detection with multiple selector strategies
-        const packageFound = await page.evaluate((id) => {
-          // Try multiple selector patterns for finding the system package
-          const selectors = [
-            `li.package[data-package-id="${id}"]`,
-            `[data-package-id="${id}"]`,
-            `.package[data-package-id="${id}"]`
-          ];
-          
-          for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            if (element) {
-              const installButton = element.querySelector('button[data-action="install"]');
-              return { found: true, hasInstallButton: !!installButton, selector };
-            }
-          }
-          return { found: false };
-        }, systemId);
-
-        if (!packageFound.found) {
-          throw new Error(`System package ${systemId} not found in installer dialog - may not be available in repository`);
-        }
-
-        if (!packageFound.hasInstallButton) {
-          throw new Error(`System ${systemId} found but install button not available - may already be installed or incompatible`);
-        }
-
-        // Click the install button for the specific system
-        const installButtonSelector = `li.package[data-package-id="${systemId}"] button[data-action="install"]`;
-        await page.waitForSelector(installButtonSelector, { timeout: 15000 });
-        await page.click(installButtonSelector);
-        console.log(`Clicked install button for ${systemId}.`);
-
-        // Enhanced installation monitoring with progress tracking
-        console.log(`Waiting for ${systemId} installation to complete (timeout: ${downloadTimeout}ms)...`);
-        
-        // Wait for installation completion using multiple indicators
-        const installationResult = await Promise.race([
-          // Primary indicator: install button becomes disabled
-          page.waitForSelector(`li.package[data-package-id="${systemId}"] button[data-action="install"][disabled]`, 
-            { timeout: downloadTimeout })
-            .then(() => ({ success: true, method: 'button_disabled' })),
-          
-          // Secondary indicator: install button disappears (replaced with installed state)
-          page.waitForFunction((id) => {
-            const packageElement = document.querySelector(`li.package[data-package-id="${id}"]`);
-            if (!packageElement) return false;
-            const installButton = packageElement.querySelector('button[data-action="install"]:not([disabled])');
-            return !installButton; // Button is gone or disabled
-          }, { timeout: downloadTimeout }, systemId)
-            .then(() => ({ success: true, method: 'button_removed' })),
-          
-          // Timeout handler
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`Installation timeout after ${downloadTimeout}ms`)), downloadTimeout + 1000)
-          )
-        ]);
-
-        console.log(`System ${systemId} installation completed via ${installationResult.method}.`);
-
-        // Close the installer dialog
-        try {
-          await page.click('#package-installer button.close, #package-installer .close');
-          await this.sleep(1000);
-        } catch (closeError) {
-          console.warn(`Could not close installer dialog: ${closeError.message}`);
-          // Try pressing Escape key as fallback
-          await page.keyboard.press('Escape');
-          await this.sleep(1000);
-        }
-
-        // Final verification: confirm system is now installed in the systems tab
-        const finalVerification = await page.evaluate((id) => {
-          const systemRow = document.querySelector(`li.package[data-package-id="${id}"]`);
-          if (!systemRow) return { verified: false, reason: 'system_not_found' };
-          
-          const hasUninstallButton = !!systemRow.querySelector('button[data-action="uninstall"]');
-          const hasUpdateButton = !!systemRow.querySelector('button[data-action="updatePackage"]');
-          
-          return { 
-            verified: hasUninstallButton || hasUpdateButton,
-            reason: hasUninstallButton ? 'uninstall_button_present' : 
-                   hasUpdateButton ? 'update_button_present' : 'no_install_indicators'
-          };
-        }, systemId);
-
-        if (!finalVerification.verified) {
-          throw new Error(`System installation verification failed: ${finalVerification.reason}`);
-        }
-
-        console.log(`System ${systemId} successfully installed and verified (${finalVerification.reason}).`);
-        return { 
-          success: true, 
-          status: 'installed', 
-          retryCount: attempt - 1,
-          details: `Installation completed and verified via ${finalVerification.reason}`
-        };
-
-      } catch (error) {
-        console.error(`Installation attempt ${attempt}/${maxRetries} failed for ${systemId}: ${error.message}`);
-        
-        if (attempt === maxRetries) {
-          // Final attempt failed
-          return { 
-            success: false, 
-            status: 'install_error', 
-            details: `Installation failed after ${maxRetries} attempts: ${error.message}`,
-            retryCount: maxRetries
-          };
-        }
-        
-        // Wait before retry with exponential backoff
-        const backoffDelay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
-        console.log(`Retrying in ${backoffDelay}ms...`);
-        await this.sleep(backoffDelay);
-        
-        // Try to close any open dialogs before retry
-        try {
-          await page.keyboard.press('Escape');
-          await this.sleep(500);
-        } catch (escapeError) {
-          // Ignore escape key errors
-        }
-      }
-    }
-  }
-
-  /**
-   * Create a new world in FoundryVTT setup interface with enhanced error handling and retry logic.
-   * Based on FoundryVTT v13 source code analysis for accurate selector patterns.
-   * @param {Page} page - Puppeteer page
-   * @param {Object} worldConfig - World configuration
-   * @param {string} worldConfig.name - World name (will be slugified for ID)
-   * @param {string} [worldConfig.system='dnd5e'] - Game system to use
-   * @param {string} [worldConfig.description] - World description
-   * @param {Object} options - Creation options
-   * @param {number} [options.maxRetries=3] - Maximum retry attempts
-   * @param {number} [options.timeout=30000] - Operation timeout
-   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
-   */
-  async createWorld(page, worldConfig, options = {}) {
-    const { 
-      maxRetries = 3, 
-      timeout = 30000 
-    } = options;
-    
-    const {
-      name: worldName,
-      system = 'dnd5e',
-      description = ''
-    } = worldConfig;
-    
-    if (!worldName) {
-      throw new Error('World name is required');
-    }
-    
-    console.log(`Creating world: "${worldName}" with system "${system}" (max retries: ${maxRetries})...`);
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`World creation attempt ${attempt}/${maxRetries} for "${worldName}"`);
-        
-        // Navigate to the "Worlds" tab using correct FoundryVTT v13 selector
-        await page.waitForSelector('a[data-tab="worlds"]', { timeout: 10000 });
-        await page.click('a[data-tab="worlds"]');
-        await this.sleep(1000); // Allow tab switch to complete
-        console.log('Navigated to Worlds tab.');
-
-        // Check if world already exists
-        const worldExists = await page.evaluate((name) => {
-          const worldSlug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-          const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
-          return !!worldRow;
-        }, worldName);
-
-        if (worldExists) {
-          console.log(`World "${worldName}" already exists.`);
-          return { success: true, status: 'already_exists', retryCount: attempt - 1 };
-        }
-
-        // Click "Create World" button using v13 source selector
-        await page.waitForSelector('button[data-action="worldCreate"]', { timeout: 10000 });
-        await page.click('button[data-action="worldCreate"]');
-        console.log('Clicked "Create World" button.');
-
-        // Wait for the WorldConfig dialog to appear
-        try {
-          await page.waitForSelector('#world-config', { visible: true, timeout: 15000 });
-          console.log('World configuration dialog is visible.');
-        } catch (dialogError) {
-          console.warn(`World config dialog not found on attempt ${attempt}: ${dialogError.message}`);
-          if (attempt < maxRetries) continue;
-          throw new Error(`World config dialog failed to open after ${maxRetries} attempts`);
-        }
-
-        // Fill in world title field
-        const titleSelector = '#world-config input[name="title"]';
-        await page.waitForSelector(titleSelector, { timeout: 10000 });
-        const titleInput = await page.$(titleSelector);
-        if (!titleInput) {
-          throw new Error('World title input not found in config dialog');
-        }
-        
-        // Clear existing title and enter new one
-        await titleInput.click({ clickCount: 3 }); // Select all
-        await titleInput.type(worldName, { delay: 50 });
-        console.log(`Entered world title: "${worldName}"`);
-        await this.sleep(500); // Allow ID generation to complete
-
-        // Select game system if dropdown exists (creation mode)
-        const systemSelector = '#world-config select[name="system"]';
-        const systemSelect = await page.$(systemSelector);
-        if (systemSelect) {
-          // Check if the desired system is available
-          const systemAvailable = await page.evaluate((selector, systemId) => {
-            const select = document.querySelector(selector);
-            if (!select) return false;
-            const option = select.querySelector(`option[value="${systemId}"]`);
-            return !!option;
-          }, systemSelector, system);
-
-          if (!systemAvailable) {
-            throw new Error(`Game system "${system}" not available in system dropdown`);
-          }
-
-          await page.select(systemSelector, system);
-          console.log(`Selected game system: "${system}"`);
-          await this.sleep(500);
-        } else {
-          console.log('System selector not found - may already be set or in edit mode');
-        }
-
-        // Fill description if provided
-        if (description) {
-          const descriptionSelector = '#world-config textarea[name="description"], #world-config input[name="description"]';
-          const descriptionInput = await page.$(descriptionSelector);
-          if (descriptionInput) {
-            await descriptionInput.click({ clickCount: 3 });
-            await descriptionInput.type(description, { delay: 30 });
-            console.log('Entered world description.');
-            await this.sleep(300);
-          }
-        }
-
-        // Submit the form
-        const submitSelector = '#world-config button[type="submit"]';
-        await page.waitForSelector(submitSelector, { timeout: 10000 });
-        await page.click(submitSelector);
-        console.log('Clicked submit button for world creation.');
-
-        // Wait for world creation to complete with multiple success indicators
-        console.log(`Waiting for world creation to complete (timeout: ${timeout}ms)...`);
-        
-        const creationResult = await Promise.race([
-          // Primary indicator: dialog closes (world created successfully)
-          page.waitForFunction(() => {
-            const dialog = document.querySelector('#world-config');
-            return !dialog || !dialog.offsetParent; // Dialog is hidden/removed
-          }, { timeout: timeout })
-            .then(() => ({ success: true, method: 'dialog_closed' })),
-          
-          // Secondary indicator: world appears in worlds list
-          page.waitForFunction((worldTitle) => {
-            const worldSlug = worldTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-            const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
-            return !!worldRow;
-          }, { timeout: timeout }, worldName)
-            .then(() => ({ success: true, method: 'world_listed' })),
-          
-          // Error indicator: error notification or validation message
-          page.waitForFunction(() => {
-            const bodyText = document.body.innerText.toLowerCase();
-            return bodyText.includes('error') || bodyText.includes('invalid') || bodyText.includes('failed');
-          }, { timeout: Math.min(timeout, 5000) })
-            .then(() => ({ success: false, method: 'error_detected' })),
-          
-          // Timeout handler
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`World creation timeout after ${timeout}ms`)), timeout + 1000)
-          )
-        ]);
-
-        if (!creationResult.success) {
-          // Get error details for better debugging
-          const errorDetails = await page.evaluate(() => {
-            const bodyText = document.body.innerText;
-            const errorMatch = bodyText.match(/(error|invalid|failed)[^.!?]*[.!?]/i);
-            return errorMatch ? errorMatch[0] : 'Unknown error detected';
-          });
-          throw new Error(`World creation failed: ${errorDetails}`);
-        }
-
-        console.log(`World "${worldName}" creation completed via ${creationResult.method}.`);
-
-        // Final verification: confirm world exists in the worlds list
-        const finalVerification = await page.evaluate((worldTitle) => {
-          const worldSlug = worldTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-          const worldRow = document.querySelector(`li.package[data-package-id="${worldSlug}"]`);
-          if (!worldRow) return { verified: false, reason: 'world_not_listed' };
-          
-          // Check for launch button or edit button (indicates world exists)
-          const hasLaunchButton = !!worldRow.querySelector('button[data-action="worldLaunch"]');
-          const hasEditButton = !!worldRow.querySelector('button[data-action="worldEdit"]');
-          
-          return { 
-            verified: hasLaunchButton || hasEditButton,
-            reason: hasLaunchButton ? 'launch_button_present' : 
-                   hasEditButton ? 'edit_button_present' : 'no_world_indicators'
-          };
-        }, worldName);
-
-        if (!finalVerification.verified) {
-          throw new Error(`World creation verification failed: ${finalVerification.reason}`);
-        }
-
-        console.log(`World "${worldName}" successfully created and verified (${finalVerification.reason}).`);
-        return { 
-          success: true, 
-          status: 'created', 
-          retryCount: attempt - 1,
-          details: `World creation completed and verified via ${finalVerification.reason}`
-        };
-
-      } catch (error) {
-        console.error(`World creation attempt ${attempt}/${maxRetries} failed for "${worldName}": ${error.message}`);
-        
-        if (attempt === maxRetries) {
-          // Final attempt failed
-          return { 
-            success: false, 
-            status: 'creation_error', 
-            details: `World creation failed after ${maxRetries} attempts: ${error.message}`,
-            retryCount: maxRetries
-          };
-        }
-        
-        // Wait before retry with exponential backoff
-        const backoffDelay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
-        console.log(`Retrying in ${backoffDelay}ms...`);
-        await this.sleep(backoffDelay);
-        
-        // Try to close any open dialogs before retry
-        try {
-          await page.keyboard.press('Escape');
-          await this.sleep(500);
-        } catch (escapeError) {
-          // Ignore escape key errors
-        }
-      }
-    }
-  }
-
-  /**
-   * Login as GM and launch a world in FoundryVTT with enhanced error handling and retry logic.
-   * 
-   * 🚨 BOOTSTRAP HELPER - Issue #43: GM Login and World Launch Automation
-   * 
-   * This method completes the FoundryVTT bootstrap sequence by providing authenticated GM access
-   * to the test world created by the world creation automation (Issue #42).
-   * 
-   * IMPLEMENTATION APPROACH:
-   * - Based on FoundryVTT v13 source code analysis for accurate selector patterns
-   * - Handles multiple authentication interfaces (admin setup, user selection, direct access)
-   * - Robust world discovery using slug matching and title fallback strategies
-   * - Comprehensive verification of successful world loading and GM authentication
-   * 
-   * AUTHENTICATION FLOW:
-   * 1. Admin authentication (if required) - handles setup password requirements
-   * 2. World launch - finds and launches the specific test world
-   * 3. GM user selection - selects appropriate GM user from available options
-   * 4. World access verification - confirms successful FoundryVTT world loading
-   * 
-   * INTEGRATION WITH BOOTSTRAP SEQUENCE:
-   * Called after world creation in `bootstrapFoundryEnvironment()` to complete automation.
-   * Provides fully authenticated GM session ready for integration test execution.
-   * 
-   * @param {Page} page - Puppeteer page
-   * @param {Object} worldConfig - World configuration from world creation
-   * @param {string} worldConfig.name - World name (used to find world to launch)
-   * @param {Object} options - Authentication options
-   * @param {number} [options.maxRetries=3] - Maximum retry attempts
-   * @param {number} [options.timeout=60000] - Operation timeout
-   * @param {string} [options.adminPassword='test-admin-password'] - Admin password for authentication
-   * @returns {Promise<{success: boolean, status: string, details?: string, retryCount?: number}>}
-   */
-  async loginAsGM(page, worldConfig, options = {}) {
-    const { 
-      maxRetries = 3, 
-      timeout = 60000,
-      adminPassword = 'test-admin-password'
-    } = options;
-    
-    const { name: worldName } = worldConfig;
-    
-    if (!worldName) {
-      throw new Error('World name is required for GM login');
-    }
-    
-    console.log(`Logging in as GM and launching world: "${worldName}" (max retries: ${maxRetries})...`);
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`GM login attempt ${attempt}/${maxRetries} for "${worldName}"`);
-        
-        // Step 1: Handle admin authentication if required
-        const adminAuthResult = await this.handleAdminAuthentication(page, adminPassword, {
-          timeout: Math.min(timeout / 3, 20000)
-        });
-        
-        if (!adminAuthResult.success && adminAuthResult.status !== 'not_required') {
-          throw new Error(`Admin authentication failed: ${adminAuthResult.details}`);
-        }
-        console.log(`Admin authentication: ${adminAuthResult.status}`);
-        
-        // Step 2: Navigate to worlds tab to find the created world
-        await page.waitForSelector('a[data-tab="worlds"]', { timeout: 10000 });
-        await page.click('a[data-tab="worlds"]');
-        await this.sleep(1000); // Allow tab switch to complete
-        console.log('Navigated to Worlds tab for world launch.');
-        
-        // Step 3: Find and launch the specific world
-        const worldSlug = worldName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-        const worldLaunchResult = await this.launchWorld(page, worldSlug, worldName, {
-          timeout: Math.min(timeout / 2, 30000)
-        });
-        
-        if (!worldLaunchResult.success) {
-          throw new Error(`World launch failed: ${worldLaunchResult.details}`);
-        }
-        console.log(`World "${worldName}" launched successfully via ${worldLaunchResult.method}.`);
-        
-        // Step 4: Complete GM authentication in the world join interface
-        const gmAuthResult = await this.authenticateAsGM(page, {
-          timeout: Math.min(timeout / 3, 20000),
-          adminPassword
-        });
-        
-        if (!gmAuthResult.success) {
-          throw new Error(`GM authentication in world failed: ${gmAuthResult.details}`);
-        }
-        console.log(`GM authentication completed successfully via ${gmAuthResult.method}.`);
-        
-        // Step 5: Verify we are successfully logged into the world as GM
-        const verificationResult = await this.verifyGMWorldAccess(page, {
-          timeout: Math.min(timeout / 4, 15000)
-        });
-        
-        if (!verificationResult.success) {
-          throw new Error(`GM world access verification failed: ${verificationResult.details}`);
-        }
-        
-        console.log(`GM login and world launch verified successfully for "${worldName}".`);
-        return { 
-          success: true, 
-          status: 'gm_authenticated', 
-          retryCount: attempt - 1,
-          details: `GM successfully authenticated and launched world "${worldName}" with verification: ${verificationResult.method}`
-        };
-
-      } catch (error) {
-        console.error(`GM login attempt ${attempt}/${maxRetries} failed for "${worldName}": ${error.message}`);
-        
-        if (attempt === maxRetries) {
-          // Final attempt failed
-          return { 
-            success: false, 
-            status: 'gm_login_error', 
-            details: `GM login failed after ${maxRetries} attempts: ${error.message}`,
-            retryCount: maxRetries
-          };
-        }
-        
-        // Wait before retry with exponential backoff
-        const backoffDelay = Math.min(3000 * Math.pow(2, attempt - 1), 15000);
-        console.log(`Retrying GM login in ${backoffDelay}ms...`);
-        await this.sleep(backoffDelay);
-        
-        // Try to return to setup screen before retry
-        try {
-          await page.goto(page.url().split('/game')[0], { waitUntil: 'networkidle0', timeout: 10000 });
-          await this.sleep(1000);
-        } catch (navigationError) {
-          console.warn(`Could not return to setup for retry: ${navigationError.message}`);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handle admin authentication if required by FoundryVTT setup.
-   * @param {Page} page - Puppeteer page
-   * @param {string} adminPassword - Admin password to use
-   * @param {Object} options - Authentication options
-   * @returns {Promise<{success: boolean, status: string, details?: string}>}
-   */
-  async handleAdminAuthentication(page, adminPassword, options = {}) {
-    const { timeout = 20000 } = options;
-    
-    try {
-      console.log('Checking for admin authentication requirement...');
-      
-      // Check if admin authentication form is present
-      const adminFormSelectors = [
-        'form input[name="adminPassword"]',
-        'input[name="adminPassword"]',
-        'input[type="password"][name*="admin"]'
-      ];
-      
-      let adminInput = null;
-      let foundSelector = null;
-      
-      for (const selector of adminFormSelectors) {
-        adminInput = await page.$(selector);
-        if (adminInput) {
-          foundSelector = selector;
-          console.log(`Found admin authentication input with selector: ${selector}`);
-          break;
-        }
-      }
-      
-      if (!adminInput) {
-        return { success: true, status: 'not_required', details: 'No admin authentication form detected' };
-      }
-      
-      // Fill admin password
-      console.log('Entering admin password...');
-      await adminInput.click({ clickCount: 3 }); // Select all
-      await adminInput.type(adminPassword, { delay: 50 });
-      await this.sleep(500);
-      
-      // Find and click submit button
-      const submitSelectors = [
-        'button[name="action"][value="adminAuth"]',
-        'button[type="submit"]',
-        'form button[type="submit"]'
-      ];
-      
-      let submitButton = null;
-      let submitSelector = null;
-      
-      for (const selector of submitSelectors) {
-        submitButton = await page.$(selector);
-        if (submitButton) {
-          submitSelector = selector;
-          console.log(`Found admin submit button with selector: ${selector}`);
-          break;
-        }
-      }
-      
-      if (!submitButton) {
-        // Try Enter key as fallback
-        console.log('No submit button found, trying Enter key...');
-        await adminInput.press('Enter');
-      } else {
-        console.log('Clicking admin authentication submit button...');
-        await submitButton.click();
-      }
-      
-      // Wait for authentication to complete
-      console.log(`Waiting for admin authentication to complete (timeout: ${timeout}ms)...`);
-      const authResult = await Promise.race([
-        // Success indicator: authentication form disappears
-        page.waitForFunction(() => {
-          const adminForm = document.querySelector('input[name="adminPassword"]');
-          return !adminForm;
-        }, { timeout: timeout })
-          .then(() => ({ success: true, method: 'form_disappeared' })),
-        
-        // Success indicator: navigation occurs
-        page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' })
-          .then(() => ({ success: true, method: 'navigation_occurred' })),
-        
-        // Error indicator: error message appears
-        page.waitForFunction(() => {
-          const bodyText = document.body.innerText.toLowerCase();
-          return bodyText.includes('invalid') || bodyText.includes('incorrect') || bodyText.includes('authentication failed');
-        }, { timeout: Math.min(timeout, 5000) })
-          .then(() => ({ success: false, method: 'error_detected' })),
-        
-        // Timeout handler
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Admin authentication timeout after ${timeout}ms`)), timeout + 1000)
-        )
-      ]);
-      
-      if (!authResult.success) {
-        const errorDetails = await page.evaluate(() => {
-          const bodyText = document.body.innerText;
-          const errorMatch = bodyText.match(/(invalid|incorrect|authentication failed)[^.!?]*[.!?]/i);
-          return errorMatch ? errorMatch[0] : 'Authentication error detected';
-        });
-        return { success: false, status: 'auth_failed', details: errorDetails };
-      }
-      
-      console.log(`Admin authentication completed via ${authResult.method}.`);
-      return { success: true, status: 'authenticated', details: `Admin authentication successful via ${authResult.method}` };
-      
-    } catch (error) {
-      console.error(`Admin authentication error: ${error.message}`);
-      return { success: false, status: 'auth_error', details: `Admin authentication error: ${error.message}` };
-    }
-  }
-
-  /**
-   * Launch a specific world from the FoundryVTT setup interface.
-   * @param {Page} page - Puppeteer page
-   * @param {string} worldSlug - World slug/ID to launch
-   * @param {string} worldName - World display name for logging
-   * @param {Object} options - Launch options
-   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
-   */
-  async launchWorld(page, worldSlug, worldName, options = {}) {
-    const { timeout = 30000 } = options;
-    
-    try {
-      console.log(`Looking for world "${worldName}" (slug: ${worldSlug}) to launch...`);
-      
-      // Enhanced world detection with multiple strategies
-      const worldFound = await page.evaluate((slug, name) => {
-        // Strategy 1: Direct slug match
-        let worldElement = document.querySelector(`li.package.world[data-package-id="${slug}"]`);
-        if (worldElement) {
-          const launchButton = worldElement.querySelector('a[data-action="worldLaunch"]');
-          return { found: true, hasLaunchButton: !!launchButton, method: 'slug_match', element: worldElement };
-        }
-        
-        // Strategy 2: Search by title text (case insensitive)
-        const worldElements = document.querySelectorAll('li.package.world');
-        for (const element of worldElements) {
-          const titleElement = element.querySelector('.package-title');
-          if (titleElement && titleElement.textContent.trim().toLowerCase() === name.toLowerCase()) {
-            const launchButton = element.querySelector('a[data-action="worldLaunch"]');
-            return { found: true, hasLaunchButton: !!launchButton, method: 'title_match', element: element };
-          }
-        }
-        
-        return { found: false };
-      }, worldSlug, worldName);
-      
-      if (!worldFound.found) {
-        throw new Error(`World "${worldName}" not found in worlds list`);
-      }
-      
-      if (!worldFound.hasLaunchButton) {
-        throw new Error(`World "${worldName}" found but launch button not available - world may not be ready`);
-      }
-      
-      console.log(`Found world "${worldName}" via ${worldFound.method}, clicking launch button...`);
-      
-      // Click the world launch button
-      const launchButtonSelector = `li.package.world[data-package-id="${worldSlug}"] a[data-action="worldLaunch"]`;
-      await page.waitForSelector(launchButtonSelector, { timeout: 10000 });
-      await page.click(launchButtonSelector);
-      console.log(`Clicked launch button for world "${worldName}".`);
-      
-      // Wait for world launch to initiate (navigation or join interface appears)
-      console.log(`Waiting for world launch to initiate (timeout: ${timeout}ms)...`);
-      const launchResult = await Promise.race([
-        // Success indicator: navigation to join interface
-        page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' })
-          .then(() => ({ success: true, method: 'navigation_to_join' })),
-        
-        // Success indicator: join form appears on same page
-        page.waitForSelector('form select[name="userid"], form input[name="password"]', { timeout: timeout })
-          .then(() => ({ success: true, method: 'join_form_appeared' })),
-        
-        // Error indicator: error message or dialog
-        page.waitForFunction(() => {
-          const bodyText = document.body.innerText.toLowerCase();
-          return bodyText.includes('error') || bodyText.includes('failed') || bodyText.includes('unavailable');
-        }, { timeout: Math.min(timeout, 5000) })
-          .then(() => ({ success: false, method: 'error_detected' })),
-        
-        // Timeout handler
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`World launch timeout after ${timeout}ms`)), timeout + 1000)
-        )
-      ]);
-      
-      if (!launchResult.success) {
-        const errorDetails = await page.evaluate(() => {
-          const bodyText = document.body.innerText;
-          const errorMatch = bodyText.match(/(error|failed|unavailable)[^.!?]*[.!?]/i);
-          return errorMatch ? errorMatch[0] : 'World launch error detected';
-        });
-        throw new Error(`World launch failed: ${errorDetails}`);
-      }
-      
-      console.log(`World "${worldName}" launch initiated via ${launchResult.method}.`);
-      return { success: true, method: launchResult.method, details: `World launch successful via ${launchResult.method}` };
-      
-    } catch (error) {
-      console.error(`World launch error for "${worldName}": ${error.message}`);
-      return { success: false, details: `World launch error: ${error.message}` };
-    }
-  }
-
-  /**
-   * Authenticate as GM in the world join interface.
-   * @param {Page} page - Puppeteer page
-   * @param {Object} options - Authentication options
-   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
-   */
-  async authenticateAsGM(page, options = {}) {
-    const { timeout = 20000, adminPassword = 'test-admin-password' } = options;
-    
-    try {
-      console.log('Authenticating as GM in world join interface...');
-      
-      // Check what type of authentication interface we have
-      const authInterfaceType = await page.evaluate(() => {
-        // Check for admin setup return form
-        if (document.querySelector('input[name="adminPassword"]')) {
-          return 'admin_setup';
-        }
-        
-        // Check for user selection join form
-        if (document.querySelector('select[name="userid"]')) {
-          return 'user_selection';
-        }
-        
-        // Check for direct world access
-        if (document.body.innerText.toLowerCase().includes('game master') || 
-            document.querySelector('#ui-left, #sidebar, .game-time')) {
-          return 'direct_access';
-        }
-        
-        return 'unknown';
-      });
-      
-      console.log(`Authentication interface type detected: ${authInterfaceType}`);
-      
-      switch (authInterfaceType) {
-        case 'admin_setup':
-          return await this.handleAdminSetupAuth(page, adminPassword, timeout);
-        
-        case 'user_selection':
-          return await this.handleUserSelectionAuth(page, timeout);
-        
-        case 'direct_access':
-          return { success: true, method: 'direct_access', details: 'Already authenticated with direct world access' };
-        
-        default:
-          throw new Error(`Unknown authentication interface type: ${authInterfaceType}`);
-      }
-      
-    } catch (error) {
-      console.error(`GM authentication error: ${error.message}`);
-      return { success: false, details: `GM authentication error: ${error.message}` };
-    }
-  }
-
-  /**
-   * Handle admin setup authentication form.
-   * @param {Page} page - Puppeteer page
-   * @param {string} adminPassword - Admin password
-   * @param {number} timeout - Timeout in milliseconds
-   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
-   */
-  async handleAdminSetupAuth(page, adminPassword, timeout) {
-    console.log('Handling admin setup authentication...');
-    
-    const adminInput = await page.$('input[name="adminPassword"]');
-    if (!adminInput) {
-      throw new Error('Admin password input not found');
-    }
-    
-    await adminInput.click({ clickCount: 3 });
-    await adminInput.type(adminPassword, { delay: 50 });
-    await this.sleep(500);
-    
-    const submitButton = await page.$('button[type="submit"]');
-    if (submitButton) {
-      await submitButton.click();
-    } else {
-      await adminInput.press('Enter');
-    }
-    
-    // Wait for authentication to complete
-    await page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' });
-    
-    return { success: true, method: 'admin_setup_auth', details: 'Admin setup authentication completed' };
-  }
-
-  /**
-   * Handle user selection authentication form.
-   * @param {Page} page - Puppeteer page
-   * @param {number} timeout - Timeout in milliseconds
-   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
-   */
-  async handleUserSelectionAuth(page, timeout) {
-    console.log('Handling user selection authentication...');
-    
-    // Look for GM user in the dropdown
-    const gmUserFound = await page.evaluate(() => {
-      const userSelect = document.querySelector('select[name="userid"]');
-      if (!userSelect) return { found: false, reason: 'no_select_element' };
-      
-      const options = userSelect.querySelectorAll('option');
-      for (const option of options) {
-        const optionText = option.textContent.toLowerCase();
-        const optionValue = option.value;
-        
-        // Look for GM indicators in user names
-        if (optionText.includes('gamemaster') || optionText.includes('gm') || 
-            optionText.includes('admin') || optionValue === 'gamemaster') {
-          return { found: true, value: optionValue, text: optionText };
-        }
-      }
-      
-      // If no explicit GM user, use the first available user
-      const firstValidOption = Array.from(options).find(opt => opt.value && !opt.disabled);
-      if (firstValidOption) {
-        return { found: true, value: firstValidOption.value, text: firstValidOption.textContent, fallback: true };
-      }
-      
-      return { found: false, reason: 'no_valid_users' };
-    });
-    
-    if (!gmUserFound.found) {
-      throw new Error(`No suitable GM user found: ${gmUserFound.reason}`);
-    }
-    
-    console.log(`Selecting ${gmUserFound.fallback ? 'fallback' : 'GM'} user: ${gmUserFound.text}`);
-    
-    // Select the GM user
-    await page.select('select[name="userid"]', gmUserFound.value);
-    await this.sleep(500);
-    
-    // Check if password is required
-    const passwordInput = await page.$('input[name="password"]');
-    if (passwordInput) {
-      // For testing, try common default passwords or leave empty
-      const testPasswords = ['', 'admin', 'foundry', 'test'];
-      for (const password of testPasswords) {
-        await passwordInput.click({ clickCount: 3 });
-        await passwordInput.type(password, { delay: 30 });
-        break; // Use the first password (empty) for now
-      }
-      await this.sleep(300);
-    }
-    
-    // Submit the join form
-    const joinButton = await page.$('button[name="join"]');
-    if (joinButton) {
-      await joinButton.click();
-    } else {
-      await page.keyboard.press('Enter');
-    }
-    
-    // Wait for world to load
-    await page.waitForNavigation({ timeout: timeout, waitUntil: 'networkidle0' });
-    
-    return { 
-      success: true, 
-      method: 'user_selection_auth', 
-      details: `User selection authentication completed with user: ${gmUserFound.text}`
-    };
-  }
-
-  /**
-   * Verify successful GM access to the world.
-   * @param {Page} page - Puppeteer page
-   * @param {Object} options - Verification options
-   * @returns {Promise<{success: boolean, method?: string, details?: string}>}
-   */
-  async verifyGMWorldAccess(page, options = {}) {
-    const { timeout = 15000 } = options;
-    
-    try {
-      console.log('Verifying GM world access...');
-      
-      // Wait for world interface to load and check for GM indicators
-      const verificationResult = await Promise.race([
-        // Success indicator: FoundryVTT world UI elements appear
-        page.waitForFunction(() => {
-          // Check for core FoundryVTT UI elements that indicate successful world loading
-          const gmIndicators = [
-            '#ui-left',           // Left sidebar (typical FoundryVTT layout)
-            '#sidebar',           // Sidebar
-            '#players',           // Players list
-            '#navigation',        // Navigation elements
-            '.game-time',         // Game time indicator
-            '#chat-controls',     // Chat controls
-            '.control-tools'      // Control tools
-          ];
-          
-          for (const selector of gmIndicators) {
-            if (document.querySelector(selector)) {
-              return selector;
-            }
-          }
-          
-          // Check for FoundryVTT canvas (main game area)
-          if (document.querySelector('#board, canvas#board')) {
-            return 'game_canvas';
-          }
-          
-          return false;
-        }, { timeout: timeout })
-          .then((element) => ({ success: true, method: 'ui_elements_detected', details: `FoundryVTT UI detected: ${element}` })),
-        
-        // Error indicator: error page or access denied
-        page.waitForFunction(() => {
-          const bodyText = document.body.innerText.toLowerCase();
-          return bodyText.includes('access denied') || bodyText.includes('unauthorized') || 
-                 bodyText.includes('error') || bodyText.includes('failed to load');
-        }, { timeout: Math.min(timeout, 5000) })
-          .then(() => ({ success: false, method: 'error_detected' })),
-        
-        // Timeout handler
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`GM world access verification timeout after ${timeout}ms`)), timeout + 1000)
-        )
-      ]);
-      
-      if (!verificationResult.success) {
-        const errorDetails = await page.evaluate(() => {
-          const bodyText = document.body.innerText;
-          const errorMatch = bodyText.match(/(access denied|unauthorized|error|failed)[^.!?]*[.!?]/i);
-          return errorMatch ? errorMatch[0] : 'World access error detected';
-        });
-        throw new Error(`GM world access verification failed: ${errorDetails}`);
-      }
-      
-      console.log(`GM world access verified via ${verificationResult.method}.`);
-      return verificationResult;
-      
-    } catch (error) {
-      console.error(`GM world access verification error: ${error.message}`);
-      return { success: false, details: `Verification error: ${error.message}` };
-    }
-  }
-
-  /**
-   * Enter FoundryVTT license key if license screen is shown
-   * Enhanced version for concurrent testing with detailed reporting
-   * @param {Page} page - Puppeteer page
-   * @returns {Promise<{success: boolean, status: string, details?: string}>}
-   */
-  async enterLicenseKey(page) {
-    console.log('Checking for license key requirement...');
-    
-    try {
-      // Wait for page to load and check for license screen
-      await this.sleep(3000);
-      
-      const licenseScreenDetected = await page.evaluate(() => {
-        const bodyText = document.body.innerText.toLowerCase();
-        return bodyText.includes('license') || bodyText.includes('software license');
-      });
-
-      if (!licenseScreenDetected) {
-        console.log('No license screen detected based on page text.');
-        // Double-check for input fields as a fallback
-        const licenseInputExists = await page.$('input[name*="license"], input[id*="license"]');
-        if (!licenseInputExists) {
-          return {
-            success: true,
-            status: 'no_license_required',
-            details: 'No license input detected, assuming license not required'
-          };
-        }
-        console.log('License input field found despite no explicit text, proceeding...');
-      }
-      
-      const licenseSelectors = [
-        'input[name="licenseKey"]', 'input[name="license"]', '#license-key',
-        'input[placeholder*="license" i]', 'form input[type="text"]'
-      ];
-      
-      let licenseInput = null;
-      let foundSelector = null;
-      
-      for (const selector of licenseSelectors) {
-        licenseInput = await page.$(selector);
-        if (licenseInput) {
-          foundSelector = selector;
-          console.log(`Found license input with selector: ${selector}`);
-          break;
-        }
-      }
-      
-      if (licenseInput) {
-        const licenseKey = process.env.FOUNDRY_LICENSE_KEY || this.config.foundryLicenseKey;
-        if (!licenseKey || licenseKey.includes('${')) {
-          return { 
-            success: false, 
-            status: 'no_license_key',
-            details: 'License input found but no license key provided in environment'
-          };
-        }
-        
-        console.log('Entering license key...');
-        await licenseInput.click({ clickCount: 3 });
-        await licenseInput.type(licenseKey, { delay: 50 });
-        await this.sleep(1000);
-        
-        const submitSelectors = [
-          'button[type="submit"]', 'input[type="submit"]', 'button[data-action="license"]',
-          '.license-form button', 'form button'
-        ];
-        
-        let submitButton = null;
-        let submitSelector = null;
-        
-        for (const selector of submitSelectors) {
-          const buttons = await page.$$(selector);
-          for (const button of buttons) {
-            const buttonText = await button.evaluate(btn => btn.textContent.toLowerCase());
-            if (buttonText.includes('submit') || buttonText.includes('continue') || buttonText.includes('activate') || buttonText.includes('accept')) {
-              submitButton = button;
-              submitSelector = selector;
-              console.log(`Found submit button with text "${buttonText}" using selector: ${selector}`);
-              break;
-            }
-          }
-          if (submitButton) break;
-        }
-        
-        if (submitButton) {
-          console.log('Clicking submit button...');
-          await submitButton.click();
-          
-          const navigationResult = await this.waitForNavigation(page);
-          
-          if (!navigationResult.navigated) {
-            return { success: false, status: 'navigation_failed', details: `Failed to navigate after submission: ${navigationResult.error}` };
-          }
-
-          console.log(`Navigation successful to ${page.url()}`);
-          
-          // Final validation
-          const errorCheck = await page.evaluate(() => {
-            const bodyText = document.body.innerText.toLowerCase();
-            const hasError = bodyText.includes('invalid license') || bodyText.includes('invalid key');
-            return { hasError, errorText: hasError ? bodyText.substring(0, 200) : null };
-          });
-          
-          if (errorCheck.hasError) {
-            return { success: false, status: 'license_error', details: `License submission failed: ${errorCheck.errorText}` };
-          }
-          
-          return { success: true, status: 'license_accepted', details: `License submitted using ${foundSelector} and navigated to ${page.url()}` };
-          
-        } else {
-          console.log('No submit button found, trying Enter key press...');
-          await licenseInput.press('Enter');
-          
-          const navigationResult = await this.waitForNavigation(page);
-          if (navigationResult.navigated) {
-            return { success: true, status: 'license_accepted', details: 'License submitted via Enter key and navigated successfully.' };
-          } else {
-            return { success: false, status: 'no_submit_method', details: 'No submit button found and Enter key press failed to navigate.' };
-          }
-        }
-      } else {
-        return {
-          success: true,
-          status: 'no_license_required',
-          details: 'No license input detected, assuming license not required'
-        };
-      }
-      
-    } catch (error) {
-      console.error(`License key entry error: ${error.message}`);
-      return {
-        success: false,
-        status: 'license_entry_error', 
-        details: `Error during license entry: ${error.message}`
-      };
-    }
-  }
-
-  /**
-   * Waits for page navigation to complete with robust error handling.
-   * @param {Page} page - The Puppeteer page object.
-   * @param {object} options - Optional settings.
-   * @param {number} [options.timeout=15000] - Navigation timeout in ms.
-   * @returns {Promise<{navigated: boolean, url?: string, error?: string}>}
-   */
-  async waitForNavigation(page, options = {}) {
-    const { timeout = 15000 } = options;
-    const initialUrl = page.url();
-    console.log(`Waiting for navigation from ${initialUrl}...`);
-
-    try {
-      await page.waitForNavigation({
-        waitUntil: 'networkidle0',
-        timeout: timeout,
-      });
-      const newUrl = page.url();
-      if (newUrl !== initialUrl) {
-        console.log(`Navigation successful. New URL: ${newUrl}`);
-        return { navigated: true, url: newUrl };
-      } else {
-        // This can happen if navigation leads to the same URL with a reload
-        console.log('Navigation event fired, but URL is unchanged. Assuming success.');
-        return { navigated: true, url: newUrl };
-      }
-    } catch (error) {
-      console.log(`waitForNavigation timed out after ${timeout}ms. Checking URL manually.`);
-      const currentUrl = page.url();
-      if (currentUrl !== initialUrl) {
-        console.log(`URL changed to ${currentUrl} despite timeout. Considering it a success.`);
-        return { navigated: true, url: currentUrl };
-      } else {
-        console.error(`Navigation failed. URL remains ${currentUrl}. Error: ${error.message}`);
-        return { navigated: false, error: `Timeout after ${timeout}ms and URL did not change.` };
-      }
-    }
   }
 
   /**
@@ -1573,8 +409,8 @@ export class ConcurrentDockerTestRunner {
       
       // Stop and remove container
       if (this.containers.has(containerId)) {
-        await this.runCommand('docker', ['stop', containerId], { timeout: 10000 });
-        await this.runCommand('docker', ['rm', containerId], { timeout: 10000 });
+        await runCommand('docker', ['stop', containerId], { timeout: 10000 });
+        await runCommand('docker', ['rm', containerId], { timeout: 10000 });
         this.containers.delete(containerId);
       }
       
@@ -1583,449 +419,28 @@ export class ConcurrentDockerTestRunner {
         this.portManager.releasePort(containerId, containerInfo.port);
       }
       
+      console.log(`Cleaned up test environment: ${containerId}`);
+      
     } catch (error) {
-      console.error(`Cleanup failed for ${containerId}:`, error.message);
+      console.error(`Error cleaning up ${containerId}:`, error.message);
     }
   }
 
   /**
-   * Get current status of all running containers
-   * @returns {Object} Status information
+   * Get current runner status for debugging
+   * @returns {Object} Status object with containers, browsers, and port info
    */
   getStatus() {
-    const containerList = Array.from(this.containers.entries()).map(([id, info]) => ({
-      containerId: id,
-      port: info.port,
-      uptime: Date.now() - info.startTime,
-      version: info.context.version,
-      system: info.context.system
-    }));
-
     return {
-      runningContainers: containerList,
-      portManager: this.portManager.getStatus()
+      containers: Array.from(this.containers.entries()).map(([id, info]) => ({
+        id,
+        port: info.port,
+        uptime: Date.now() - info.startTime,
+        context: info.context
+      })),
+      browsers: this.browsers.size,
+      allocatedPorts: this.portManager.getAllocatedPorts()
     };
-  }
-
-  /**
-   * Run a command with timeout and error handling
-   * @param {string} command - Command to run
-   * @param {string[]} args - Command arguments
-   * @param {Object} options - Execution options
-   */
-  async runCommand(command, args, options = {}) {
-    return new Promise((resolve, reject) => {
-      const { timeout = 30000, cwd } = options;
-      
-      const child = spawn(command, args, { cwd });
-      
-      let stdout = '';
-      let stderr = '';
-      
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-      
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-      
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        reject(new Error(`Command timeout after ${timeout}ms: ${command} ${args.join(' ')}`));
-      }, timeout);
-      
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(`Command failed with code ${code}: ${command} ${args.join(' ')}
-Stderr: ${stderr}`));
-        }
-      });
-      
-      child.on('error', (error) => {
-        clearTimeout(timer);
-        reject(new Error(`Command error: ${command} ${args.join(' ')}
-${error.message}`));
-      });
-    });
-  }
-
-  /**
-   * Sleep for specified milliseconds
-   * @param {number} ms - Milliseconds to sleep
-   */
-  async sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Validate FoundryVTT ready state for module testing environment.
-   * 
-   * 🚨 BOOTSTRAP HELPER - Issue #44: Ready State Validation
-   * 
-   * This method completes the final step of the FoundryVTT bootstrap sequence by validating
-   * that the environment is fully prepared and ready for module testing. It serves as the
-   * culmination of the automated setup process (license, system installation, world creation,
-   * GM login) and ensures all components are properly initialized.
-   * 
-   * VALIDATION COVERAGE:
-   * 1. FoundryVTT Framework - Core JS loaded, game object available, ready hook fired
-   * 2. Game System Integration - System is active and functional with proper collections
-   * 3. World Access - World is loaded and accessible for testing
-   * 4. GM Authentication - Current user has GM permissions for full testing access
-   * 5. UI Components - Essential interface elements are rendered and interactive
-   * 6. Canvas System - Game canvas is initialized and ready for scene interaction
-   * 7. Module Environment - Testing environment is prepared for module integration
-   * 
-   * INTEGRATION WITH BOOTSTRAP SEQUENCE:
-   * Called after GM login in the bootstrap process to provide final verification that
-   * the FoundryVTT environment is completely ready for integration test execution.
-   * 
-   * @param {Page} page - Puppeteer page with authenticated FoundryVTT world access
-   * @param {Object} options - Validation options
-   * @param {number} [options.timeout=30000] - Overall validation timeout
-   * @param {number} [options.componentTimeout=5000] - Individual component check timeout
-   * @param {boolean} [options.requireCanvas=true] - Whether canvas initialization is required
-   * @param {boolean} [options.requireGMPermissions=true] - Whether GM permissions are required
-   * @returns {Promise<{success: boolean, status: string, details?: string, validationResults?: Object}>}
-   */
-  async validateReadyState(page, options = {}) {
-    const {
-      timeout = 30000,
-      componentTimeout = 5000,
-      requireCanvas = true,
-      requireGMPermissions = true
-    } = options;
-    
-    console.log(`Validating FoundryVTT ready state (timeout: ${timeout}ms)...`);
-    
-    // Initialize validation tracking
-    const validationResults = {
-      foundryFramework: { checked: false, valid: false, details: null },
-      gameSystem: { checked: false, valid: false, details: null },
-      worldAccess: { checked: false, valid: false, details: null },
-      gmAuthentication: { checked: false, valid: false, details: null },
-      uiComponents: { checked: false, valid: false, details: null },
-      canvasSystem: { checked: false, valid: false, details: null },
-      moduleEnvironment: { checked: false, valid: false, details: null }
-    };
-    
-    try {
-      
-      // Step 1: Validate FoundryVTT Framework Ready State
-      console.log('Validating FoundryVTT framework ready state...');
-      validationResults.foundryFramework.checked = true;
-      
-      const frameworkResult = await Promise.race([
-        page.waitForFunction(() => {
-          // Check for core FoundryVTT framework indicators
-          if (!window.game) return { valid: false, reason: 'game_object_missing' };
-          if (!window.game.ready) return { valid: false, reason: 'ready_hook_not_fired' };
-          if (!window.CONST) return { valid: false, reason: 'foundry_constants_missing' };
-          if (!window.foundry) return { valid: false, reason: 'foundry_namespace_missing' };
-          
-          return { 
-            valid: true, 
-            gameVersion: window.game?.release?.version || 'unknown',
-            readyState: window.game.ready,
-            userId: window.game.userId
-          };
-        }, { timeout: componentTimeout })
-          .then(result => result),
-        
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Framework validation timeout after ${componentTimeout}ms`)), componentTimeout + 1000)
-        )
-      ]);
-      
-      if (!frameworkResult.valid) {
-        validationResults.foundryFramework.details = `Framework validation failed: ${frameworkResult.reason}`;
-        throw new Error(validationResults.foundryFramework.details);
-      }
-      
-      validationResults.foundryFramework.valid = true;
-      validationResults.foundryFramework.details = `FoundryVTT ${frameworkResult.gameVersion} ready state confirmed`;
-      console.log(`✅ Framework validation: ${validationResults.foundryFramework.details}`);
-      
-      // Step 2: Validate Game System Integration
-      console.log('Validating game system integration...');
-      validationResults.gameSystem.checked = true;
-      
-      const systemResult = await page.evaluate(() => {
-        if (!window.game?.system) return { valid: false, reason: 'no_active_system' };
-        if (!window.game.settings) return { valid: false, reason: 'settings_unavailable' };
-        if (!window.game.collections) return { valid: false, reason: 'collections_unavailable' };
-        
-        // Check essential collections are available
-        const requiredCollections = ['actors', 'items', 'scenes', 'users'];
-        const availableCollections = [];
-        const missingCollections = [];
-        
-        for (const collectionName of requiredCollections) {
-          if (window.game.collections.get(collectionName)) {
-            availableCollections.push(collectionName);
-          } else {
-            missingCollections.push(collectionName);
-          }
-        }
-        
-        return {
-          valid: missingCollections.length === 0,
-          systemId: window.game.system.id,
-          systemTitle: window.game.system.title,
-          availableCollections,
-          missingCollections,
-          reason: missingCollections.length > 0 ? `missing_collections: ${missingCollections.join(', ')}` : 'system_ready'
-        };
-      });
-      
-      if (!systemResult.valid) {
-        validationResults.gameSystem.details = `System validation failed: ${systemResult.reason}`;
-        throw new Error(validationResults.gameSystem.details);
-      }
-      
-      validationResults.gameSystem.valid = true;
-      validationResults.gameSystem.details = `System "${systemResult.systemTitle}" (${systemResult.systemId}) with collections: ${(systemResult.availableCollections || []).join(', ')}`;
-      console.log(`✅ System validation: ${validationResults.gameSystem.details}`);
-      
-      // Step 3: Validate World Access
-      console.log('Validating world access...');
-      validationResults.worldAccess.checked = true;
-      
-      const worldResult = await page.evaluate(() => {
-        if (!window.game?.world) return { valid: false, reason: 'no_active_world' };
-        if (!window.game.users) return { valid: false, reason: 'users_collection_missing' };
-        
-        const currentUser = window.game.user;
-        if (!currentUser) return { valid: false, reason: 'no_current_user' };
-        
-        return {
-          valid: true,
-          worldId: window.game.world.id,
-          worldTitle: window.game.world.title,
-          currentUserId: currentUser.id,
-          currentUserName: currentUser.name,
-          reason: 'world_accessible'
-        };
-      });
-      
-      if (!worldResult.valid) {
-        validationResults.worldAccess.details = `World access validation failed: ${worldResult.reason}`;
-        throw new Error(validationResults.worldAccess.details);
-      }
-      
-      validationResults.worldAccess.valid = true;
-      validationResults.worldAccess.details = `World "${worldResult.worldTitle}" accessible as user "${worldResult.currentUserName}"`;
-      console.log(`✅ World access validation: ${validationResults.worldAccess.details}`);
-      
-      // Step 4: Validate GM Authentication (if required)
-      if (requireGMPermissions) {
-        console.log('Validating GM authentication...');
-        validationResults.gmAuthentication.checked = true;
-        
-        const gmResult = await page.evaluate(() => {
-          const currentUser = window.game.user;
-          if (!currentUser) return { valid: false, reason: 'no_current_user' };
-          
-          const isGM = currentUser.isGM;
-          const userRole = currentUser.role;
-          const roleText = window.CONST?.USER_ROLES ? 
-            Object.keys(window.CONST.USER_ROLES).find(k => window.CONST.USER_ROLES[k] === userRole) : 
-            'unknown';
-          
-          return {
-            valid: isGM,
-            userId: currentUser.id,
-            userName: currentUser.name,
-            userRole: roleText,
-            isGM,
-            reason: isGM ? 'gm_permissions_confirmed' : `insufficient_permissions_role_${roleText}`
-          };
-        });
-        
-        if (!gmResult.valid) {
-          validationResults.gmAuthentication.details = `GM authentication failed: ${gmResult.reason}`;
-          throw new Error(validationResults.gmAuthentication.details);
-        }
-        
-        validationResults.gmAuthentication.valid = true;
-        validationResults.gmAuthentication.details = `GM permissions confirmed for user "${gmResult.userName}" (role: ${gmResult.userRole})`;
-        console.log(`✅ GM authentication: ${validationResults.gmAuthentication.details}`);
-      } else {
-        validationResults.gmAuthentication.checked = true;
-        validationResults.gmAuthentication.valid = true;
-        validationResults.gmAuthentication.details = 'GM permissions check skipped (not required)';
-      }
-      
-      // Step 5: Validate UI Components
-      console.log('Validating UI components...');
-      validationResults.uiComponents.checked = true;
-      
-      const uiResult = await page.evaluate(() => {
-        // Essential UI elements that indicate successful FoundryVTT loading
-        const essentialSelectors = [
-          '#ui-left',           // Left UI column
-          '#sidebar',           // Main sidebar
-          '#players',           // Players list
-          '#scene-controls'     // Scene controls
-        ];
-        
-        const presentElements = [];
-        const missingElements = [];
-        
-        for (const selector of essentialSelectors) {
-          const element = document.querySelector(selector);
-          if (element && element.offsetParent !== null) { // Element exists and is visible
-            presentElements.push(selector);
-          } else {
-            missingElements.push(selector);
-          }
-        }
-        
-        // Check for additional UI indicators
-        const additionalIndicators = {
-          hotbar: !!document.querySelector('#hotbar'),
-          sceneNavigation: !!document.querySelector('#scene-navigation'),
-          chatLog: !!document.querySelector('#chat-log'),
-          interface: !!document.querySelector('#interface')
-        };
-        
-        return {
-          valid: missingElements.length === 0,
-          presentElements,
-          missingElements,
-          additionalIndicators,
-          reason: missingElements.length === 0 ? 'ui_components_ready' : `missing_ui_elements: ${missingElements.join(', ')}`
-        };
-      });
-      
-      if (!uiResult.valid) {
-        validationResults.uiComponents.details = `UI validation failed: ${uiResult.reason}`;
-        throw new Error(validationResults.uiComponents.details);
-      }
-      
-      validationResults.uiComponents.valid = true;
-      validationResults.uiComponents.details = `UI elements ready: ${(uiResult.presentElements || []).join(', ')}`;
-      console.log(`✅ UI components validation: ${validationResults.uiComponents.details}`);
-      
-      // Step 6: Validate Canvas System (if required)
-      if (requireCanvas) {
-        console.log('Validating canvas system...');
-        validationResults.canvasSystem.checked = true;
-        
-        const canvasResult = await page.evaluate(() => {
-          if (!window.canvas) return { valid: false, reason: 'canvas_object_missing' };
-          
-          const canvas = window.canvas;
-          const canvasElement = document.querySelector('#board, canvas#board');
-          
-          return {
-            valid: !!(canvas.initialized && canvasElement),
-            canvasInitialized: canvas.initialized,
-            canvasElement: !!canvasElement,
-            canvasReady: canvas.ready,
-            sceneId: canvas.scene?.id || null,
-            reason: (canvas.initialized && canvasElement) ? 'canvas_ready' : 
-                   !canvas.initialized ? 'canvas_not_initialized' : 'canvas_element_missing'
-          };
-        });
-        
-        if (!canvasResult.valid) {
-          validationResults.canvasSystem.details = `Canvas validation failed: ${canvasResult.reason}`;
-          throw new Error(validationResults.canvasSystem.details);
-        }
-        
-        validationResults.canvasSystem.valid = true;
-        validationResults.canvasSystem.details = `Canvas initialized and ready${canvasResult.sceneId ? ` (scene: ${canvasResult.sceneId})` : ''}`;
-        console.log(`✅ Canvas system validation: ${validationResults.canvasSystem.details}`);
-      } else {
-        validationResults.canvasSystem.checked = true;
-        validationResults.canvasSystem.valid = true;
-        validationResults.canvasSystem.details = 'Canvas validation skipped (not required)';
-      }
-      
-      // Step 7: Validate Module Testing Environment
-      console.log('Validating module testing environment...');
-      validationResults.moduleEnvironment.checked = true;
-      
-      const environmentResult = await page.evaluate(() => {
-        // Check for module testing readiness indicators
-        const testingCapabilities = {
-          documentsApi: !!(window.game?.collections && window.game.collections.size > 0),
-          hooksSystem: !!(window.Hooks && typeof window.Hooks.call === 'function'),
-          socketConnection: !!(window.game?.socket && window.game.socket.connected),
-          settingsApi: !!(window.game?.settings && typeof window.game.settings.get === 'function'),
-          moduleSupport: !!(window.game?.modules),
-          apiNamespace: !!(window.foundry && window.foundry.documents)
-        };
-        
-        const readyCapabilities = [];
-        const missingCapabilities = [];
-        
-        for (const [capability, available] of Object.entries(testingCapabilities)) {
-          if (available) {
-            readyCapabilities.push(capability);
-          } else {
-            missingCapabilities.push(capability);
-          }
-        }
-        
-        return {
-          valid: missingCapabilities.length === 0,
-          readyCapabilities,
-          missingCapabilities,
-          socketConnected: testingCapabilities.socketConnection,
-          moduleCount: window.game?.modules?.size || 0,
-          reason: missingCapabilities.length === 0 ? 'testing_environment_ready' : `missing_capabilities: ${missingCapabilities.join(', ')}`
-        };
-      });
-      
-      if (!environmentResult.valid) {
-        validationResults.moduleEnvironment.details = `Environment validation failed: ${environmentResult.reason}`;
-        throw new Error(validationResults.moduleEnvironment.details);
-      }
-      
-      validationResults.moduleEnvironment.valid = true;
-      validationResults.moduleEnvironment.details = `Testing environment ready with capabilities: ${(environmentResult.readyCapabilities || []).join(', ')}`;
-      console.log(`✅ Module environment validation: ${validationResults.moduleEnvironment.details}`);
-      
-      // Final validation summary
-      const allValidationsSuccessful = Object.values(validationResults).every(result => result.valid);
-      const checkedValidations = Object.values(validationResults).filter(result => result.checked).length;
-      const successfulValidations = Object.values(validationResults).filter(result => result.valid).length;
-      
-      if (!allValidationsSuccessful) {
-        const failedValidations = Object.entries(validationResults)
-          .filter(([_, result]) => result.checked && !result.valid)
-          .map(([name, result]) => `${name}: ${result.details}`)
-          .join('; ');
-        throw new Error(`Ready state validation incomplete: ${failedValidations}`);
-      }
-      
-      console.log(`✅ FoundryVTT ready state validation completed successfully (${successfulValidations}/${checkedValidations} checks passed)`);
-      
-      return {
-        success: true,
-        status: 'ready_state_validated',
-        details: `FoundryVTT environment fully ready for module testing (${successfulValidations} validation checks passed)`,
-        validationResults
-      };
-      
-    } catch (error) {
-      console.error(`Ready state validation failed: ${error.message}`);
-      
-      // Return comprehensive failure information
-      return {
-        success: false,
-        status: 'ready_state_validation_failed',
-        details: `Ready state validation failed: ${error.message}`,
-        validationResults
-      };
-    }
   }
 
   /**
