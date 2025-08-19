@@ -8,7 +8,7 @@
  * for each combination, using the existing working Docker setup.
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, copyFileSync, unlinkSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
@@ -139,9 +139,23 @@ class BootstrapRunner {
     try {
       // Determine the zip file based on version
       const zipFileName = this.getZipFileForVersion(permutation.version);
+      const zipPath = join('tests/fixtures/binary_versions', permutation.version, zipFileName);
       
-      execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit' });
-      console.log(`✅ Docker image ${imageName} built successfully`);
+      // Copy zip file to build context root temporarily for Docker build
+      const tempZipPath = `./${zipFileName}`;
+      copyFileSync(zipPath, tempZipPath);
+      
+      try {
+        execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit' });
+        console.log(`✅ Docker image ${imageName} built successfully`);
+      } finally {
+        // Clean up temporary zip file
+        try {
+          unlinkSync(tempZipPath);
+        } catch (error) {
+          console.warn(`⚠️ Failed to clean up temporary zip file: ${error.message}`);
+        }
+      }
     } catch (error) {
       console.error('❌ Docker build failed:', error.message);
       throw error;
@@ -167,6 +181,13 @@ class BootstrapRunner {
       const ready = await this.waitForContainerReady(port);
       
       if (!ready) {
+        console.log(`🔍 Container failed health check. Container ID: ${containerId}. Logs:`);
+        try {
+          const logs = execSync(`docker logs ${containerId.slice(0, 12)}`, { encoding: 'utf8' });
+          console.log(logs);
+        } catch (e) {
+          console.log(`Could not retrieve logs: ${e.message}`);
+        }
         throw new Error('Container failed to start properly');
       }
       
@@ -987,12 +1008,38 @@ class BootstrapRunner {
         if (joinPageUrl.includes('/join')) {
           console.log('📍 Join page detected, handling user authentication...');
           
-          // Wait for join form to load
-          await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.joinFormLoad));
+          // Wait for join form to load with retry
+          console.log('📍 Waiting for join form to load...');
+          let userSelect = null;
+          for (let i = 0; i < 10; i++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            userSelect = await page.$('select[name="userid"]');
+            if (userSelect) {
+              console.log(`✅ User dropdown found after ${i + 1} attempts`);
+              break;
+            }
+            console.log(`🔄 Attempt ${i + 1}: User dropdown not found, retrying...`);
+          }
           
           // Look for user selection dropdown (exactly like POC)
           console.log('📍 Looking for user selection dropdown...');
-          const userSelect = await page.$('select[name="userid"]');
+          
+          // Debug what's actually on the page
+          const pageContent = await page.evaluate(() => {
+            return {
+              url: window.location.href,
+              hasUserSelect: !!document.querySelector('select[name="userid"]'),
+              allSelects: Array.from(document.querySelectorAll('select')).map(s => ({
+                name: s.name,
+                id: s.id,
+                className: s.className
+              })),
+              bodyText: document.body.innerText.slice(0, 500)
+            };
+          });
+          console.log('📊 Page debug info:', JSON.stringify(pageContent, null, 2));
+          
+          // userSelect already found in retry loop above
           
           if (userSelect) {
             console.log('✅ User selection dropdown found, selecting GameMaster...');
@@ -1280,6 +1327,167 @@ class BootstrapRunner {
     
     return results;
   }
+
+  // Clean session API for new architecture - wraps existing working logic
+  async createSession(permutation) {
+    // Create a modified version of runBootstrapTest that returns live session
+    console.log(`🎯 Creating session for: ${permutation.id}`);
+    
+    const testId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const port = await this.portManager.allocatePort(testId);
+    
+    // Step 1: Build Docker image (same as runBootstrapTest)
+    const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
+    const foundryLicenseKey = this.config.foundryLicenseKey;
+    
+    if (!foundryLicenseKey) {
+      console.error('❌ foundryLicenseKey not found in config');
+      throw new Error('foundryLicenseKey not set in test.config.json');
+    }
+    
+    console.log(`🔨 Building Docker image: ${imageName}...`);
+    console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
+    
+    try {
+      // Determine the zip file based on version
+      const zipFileName = this.getZipFileForVersion(permutation.version);
+      const zipPath = join('tests/fixtures/binary_versions', permutation.version, zipFileName);
+      
+      // Copy zip file to build context root temporarily for Docker build
+      const tempZipPath = `./${zipFileName}`;
+      copyFileSync(zipPath, tempZipPath);
+      
+      try {
+        execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit' });
+        console.log(`✅ Docker image ${imageName} built successfully`);
+      } finally {
+        // Clean up temporary zip file
+        try {
+          unlinkSync(tempZipPath);
+        } catch (error) {
+          console.warn(`⚠️ Failed to clean up temporary zip file: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Docker build failed:', error.message);
+      this.portManager.releasePort(testId, port);
+      throw error;
+    }
+    
+    try {
+      // Step 2: Clean up any existing containers
+      console.log('🧹 Cleaning up existing containers...');
+      try {
+        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
+        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
+      } catch (e) {
+        // Container might not exist, which is fine
+      }
+      
+      // Step 3: Start fresh container
+      console.log(`🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
+      const containerId = execSync(`docker run -d --name ${testId} -p ${port}:30000 ${imageName}` , { encoding: 'utf8' }).trim();
+      console.log(`📦 Container ID: ${containerId}`);
+      
+      // Step 4: Wait for container to be ready
+      console.log('⏳ Waiting for container to be ready...');
+      const ready = await this.waitForContainerReady(port);
+      
+      if (!ready) {
+        console.log(`🔍 Container failed health check. Container ID: ${containerId}. Logs:`);
+        try {
+          const logs = execSync(`docker logs ${containerId.slice(0, 12)}`, { encoding: 'utf8' });
+          console.log(logs);
+        } catch (e) {
+          console.log(`Could not retrieve logs: ${e.message}`);
+        }
+        throw new Error('Container failed to start properly');
+      }
+      
+      console.log('✅ Container is ready');
+      
+      // Step 5: Run bootstrap process
+      const bootstrapResult = await this.runBootstrapProcess(port, permutation);
+      
+      if (!bootstrapResult.success) {
+        throw new Error(`Bootstrap failed: ${bootstrapResult.error}`);
+      }
+      
+      console.log('✅ Bootstrap completed successfully - live session ready');
+      
+      // Return live session for testing (DON'T cleanup)
+      return {
+        sessionId: testId,
+        permutation,
+        page: bootstrapResult.page,
+        browser: bootstrapResult.browser,
+        containerId,
+        port,
+        imageName,
+        gameState: bootstrapResult.gameState
+      };
+      
+    } catch (error) {
+      console.error(`❌ Session creation failed for ${permutation.id}:`, error.message);
+      
+      // Cleanup on failure
+      await this.cleanupSession({ sessionId: testId, port, imageName });
+      throw error;
+    }
+  }
+
+  async cleanupSession(sessionInfo) {
+    console.log(`🧹 Cleaning up session ${sessionInfo.sessionId}...`);
+    
+    // Close browser if provided
+    if (sessionInfo.browser) {
+      try {
+        await sessionInfo.browser.close();
+        console.log(`✅ Browser closed for session ${sessionInfo.sessionId}`);
+      } catch (e) {
+        console.warn(`⚠️ Browser cleanup failed: ${e.message}`);
+      }
+    }
+    
+    // Stop and remove Docker container
+    if (sessionInfo.containerId) {
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`docker stop ${sessionInfo.containerId}`, { stdio: 'ignore' });
+        execSync(`docker rm ${sessionInfo.containerId}`, { stdio: 'ignore' });
+        console.log(`✅ Container ${sessionInfo.containerId} stopped and removed`);
+      } catch (e) {
+        console.warn(`⚠️ Container cleanup failed: ${e.message}`);
+      }
+    }
+    
+    // Release port
+    if (sessionInfo.port && sessionInfo.sessionId) {
+      try {
+        this.portManager.releasePort(sessionInfo.sessionId, sessionInfo.port);
+        console.log(`✅ Port ${sessionInfo.port} released for session ${sessionInfo.sessionId}`);
+      } catch (e) {
+        console.warn(`⚠️ Port release failed: ${e.message}`);
+      }
+    }
+    
+    console.log(`✅ Session ${sessionInfo.sessionId} fully cleaned up`);
+  }
+
+  async cleanupImages(permutations) {
+    console.log('🧹 Cleaning up Docker images...');
+    
+    for (const permutation of permutations) {
+      const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
+        console.log(`✅ Docker image ${imageName} removed`);
+      } catch (e) {
+        console.warn(`⚠️ Docker image cleanup failed for ${imageName}: ${e.message}`);
+      }
+    }
+  }
 }
 
 // Main execution
@@ -1314,3 +1522,5 @@ async function main() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(console.error);
 }
+
+export { BootstrapRunner };

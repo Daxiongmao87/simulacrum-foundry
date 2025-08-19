@@ -66,4 +66,5 @@ sleep 2
 
 # Start FoundryVTT with provided arguments
 echo "🚀 Starting FoundryVTT server..."
-exec node resources/app/main.js --dataPath="${FOUNDRY_DATA_PATH}" "$@"
+cd /app
+exec node main.js --dataPath="${FOUNDRY_DATA_PATH}" "$@"
