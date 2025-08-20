@@ -55,17 +55,55 @@ function extractConsoleStatements(filePath) {
   const lines = content.split('\n');
   const statements = [];
 
-  lines.forEach((line, index) => {
-    // Match console.log, console.warn, console.error, console.debug, etc.
+  // First pass: find console statements and their line ranges
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const consoleMatch = line.match(
       /console\.(log|warn|error|debug|info|trace)\s*\(/
     );
+
     if (consoleMatch) {
       const type = consoleMatch[1];
-      const lineNumber = index + 1;
+      const lineNumber = i + 1;
+
+      // Find the end of this console statement (look for closing parenthesis)
+      let endLine = i;
+      let openParens = 0;
+      let inString = false;
+      let stringChar = '';
+
+      for (let j = i; j < lines.length; j++) {
+        const currentLine = lines[j];
+        for (let k = 0; k < currentLine.length; k++) {
+          const char = currentLine[k];
+
+          if (!inString && (char === '"' || char === "'" || char === '`')) {
+            inString = true;
+            stringChar = char;
+          } else if (inString && char === stringChar) {
+            inString = false;
+          } else if (!inString && char === '(') {
+            openParens++;
+          } else if (!inString && char === ')') {
+            openParens--;
+            if (openParens === 0) {
+              endLine = j;
+              break;
+            }
+          }
+        }
+        if (openParens === 0) {
+          break;
+        }
+      }
+
+      // Extract the full console statement content
+      const fullContent = lines.slice(i, endLine + 1).join('\n');
 
       // Try to extract the message if it's a simple string
-      const messageMatch = line.match(/console\.\w+\s*\(\s*['"`]([^'"`]*)/);
+      const messageMatch = fullContent.match(
+        /console\.\w+\s*\(\s*['"`]([^'"`]*)/
+      );
       const message = messageMatch ? messageMatch[1] : '';
 
       // Check if it has a valid prefix
@@ -79,10 +117,13 @@ function extractConsoleStatements(filePath) {
         type,
         message,
         hasValidPrefix,
-        fullLine: line.trim(),
+        fullLine: fullContent.trim(),
       });
+
+      // Skip the lines we've already processed
+      i = endLine;
     }
-  });
+  }
 
   return statements;
 }
