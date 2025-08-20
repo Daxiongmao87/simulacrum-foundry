@@ -1,4 +1,11 @@
 export default [
+  // Specific overrides for dev tools
+  {
+    files: ['scripts/dev/**/*.js'],
+    rules: {
+      'no-console': 'off'  // Dev tools can use console freely
+    }
+  },
   {
     languageOptions: {
       ecmaVersion: 'latest',
@@ -33,7 +40,26 @@ export default [
     files: ['scripts/**/*.js'],
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-console': 'off'
+      'no-console': ['warn', { 
+        allow: ['warn', 'error'] 
+      }],
+      // Complexity rules
+      'complexity': ['warn', 15],
+      'max-depth': ['warn', 4],
+      'max-nested-callbacks': ['warn', 3],
+      'max-params': ['warn', 5],
+      // Code quality
+      'no-var': 'error',
+      'prefer-const': 'warn',
+      'no-multiple-empty-lines': ['error', { max: 2 }],
+      'no-trailing-spaces': 'error',
+      'eol-last': 'error',
+      'curly': ['error', 'all'],
+      'brace-style': ['error', '1tbs'],
+      // Async/Promise best practices
+      'no-async-promise-executor': 'error',
+      'no-await-in-loop': 'warn',
+      'require-await': 'warn'
     }
   }
 ];

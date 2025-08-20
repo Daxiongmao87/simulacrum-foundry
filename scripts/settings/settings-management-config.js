@@ -119,7 +119,7 @@ export class SettingsManagementConfig extends FormApplication {
   _onExportSettings(event) {
     event.preventDefault();
     const settings = {};
-    for (let setting of game.settings.settings.values()) {
+    for (const setting of game.settings.settings.values()) {
       if (setting.scope === 'world' && setting.module === 'simulacrum') {
         settings[setting.key] = game.settings.get('simulacrum', setting.key);
       }

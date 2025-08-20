@@ -1,5 +1,3 @@
-console.log('Simulacrum | Main.js loading...');
-
 import { SimulacrumSettings } from './settings.js';
 import { SimulacrumChatModal } from './chat/simulacrum-chat.js';
 import { ToolRegistry } from './tools/tool-registry.js';
@@ -59,8 +57,6 @@ let isSimulacrumConfigured = false;
  * Updates the connectionState and triggers a UI re-render.
  */
 async function checkEndpointAccessibility() {
-  console.log('Simulacrum | Checking API endpoint accessibility...');
-
   let apiEndpoint;
   try {
     apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
@@ -78,7 +74,6 @@ async function checkEndpointAccessibility() {
   if (!apiEndpoint || apiEndpoint.trim() === '') {
     connectionState = 'disabled';
     isSimulacrumConfigured = false;
-    console.log('Simulacrum | API endpoint not configured.');
   } else {
     isSimulacrumConfigured = true;
     connectionState = 'checking';
@@ -99,7 +94,6 @@ async function checkEndpointAccessibility() {
       if (response.ok || response.status === 405) {
         // 405 Method Not Allowed is fine - means server is responding
         connectionState = 'accessible';
-        console.log('Simulacrum | API endpoint is accessible.');
       } else {
         connectionState = 'inaccessible';
         console.warn(
@@ -137,8 +131,6 @@ export function getChatModalClass() {
 }
 
 Hooks.once('init', () => {
-  console.log('Simulacrum | Initializing Simulacrum Module');
-
   // Extend the ChatModal class with our own version that has the correct template path
   SimulacrumChatModalClass = class extends ChatModal {
     static get defaultOptions() {
@@ -188,8 +180,6 @@ Hooks.once('init', () => {
     toolRegistry.registerTool(new ClearContextTool());
     toolRegistry.registerTool(new ListImagesTool());
 
-    console.log('Simulacrum | All core tools registered successfully');
-
     // Initialize Tool Scheduler
     const toolScheduler = new SimulacrumToolScheduler(toolRegistry);
 
@@ -235,24 +225,15 @@ Hooks.once('init', () => {
         initTimestamp: Date.now(),
       },
     };
-    console.log('Simulacrum | game.simulacrum initialized:', game.simulacrum);
-    console.log(
-      'Simulacrum | Properties of game.simulacrum:',
-      Object.keys(game.simulacrum)
-    );
   } catch (error) {
     console.error('Simulacrum | Failed to register tools:', error);
     ui.notifications.error(
       'Simulacrum | Tool registration failed. Check console for details.'
     );
   }
-
-  console.log('Simulacrum | Settings, ChatModal, and Tools registered.');
 });
 
 Hooks.once('ready', async () => {
-  console.log('Simulacrum | Simulacrum Module Ready');
-
   // Update initialization state
   if (game.simulacrum && game.simulacrum._initState) {
     game.simulacrum._initState.readyComplete = true;
@@ -282,15 +263,14 @@ Hooks.once('ready', async () => {
 
   // Re-check accessibility when settings are closed (in case API endpoint changed)
   Hooks.on('closeSettingsConfig', () => {
-    console.log(
-      'Simulacrum | Settings config closed, re-checking API endpoint.'
-    );
     checkEndpointAccessibility();
   });
 
   // Hook for adding robot context buttons to document sheets
   Hooks.on('renderDocumentSheet', (app, html, _data) => {
-    if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) return;
+    if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) {
+      return;
+    }
 
     const button =
       $(`<a class="simulacrum-context" title="Add to Simulacrum Context">
@@ -307,34 +287,10 @@ Hooks.once('ready', async () => {
 
 // Manually inject Simulacrum button as first item in scene controls tablist
 Hooks.on('renderSceneControls', (app, html, _data) => {
-  console.log('Simulacrum | renderSceneControls hook fired');
-
-  // Debug: Check what's available
-  console.log(
-    'Simulacrum | Debug - SimulacrumSettings exists:',
-    typeof SimulacrumSettings !== 'undefined'
-  );
-  console.log(
-    'Simulacrum | Debug - game.user exists:',
-    typeof game?.user !== 'undefined'
-  );
-  console.log(
-    'Simulacrum | Debug - connectionState:',
-    typeof connectionState !== 'undefined' ? connectionState : 'undefined'
-  );
-  console.log(
-    'Simulacrum | Debug - isSimulacrumConfigured:',
-    typeof isSimulacrumConfigured !== 'undefined'
-      ? isSimulacrumConfigured
-      : 'undefined'
-  );
-
   // Only add if user has permission
   try {
     const hasPermission = SimulacrumSettings.hasSimulacrumPermission(game.user);
-    console.log('Simulacrum | Debug - hasPermission result:', hasPermission);
     if (!hasPermission) {
-      console.log('Simulacrum | User lacks permission for scene control');
       return;
     }
   } catch (e) {
@@ -346,31 +302,17 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
     throw e;
   }
 
-  // Check if we already added the button to avoid duplicates
-  console.log('Simulacrum | Debug - html parameter:', html);
-  console.log(
-    'Simulacrum | Debug - html.find method exists:',
-    typeof html?.find === 'function'
-  );
-
   // Ensure html is a jQuery object
   if (!html || typeof html.find !== 'function') {
-    console.log(
-      'Simulacrum | HTML parameter is not a jQuery object, wrapping it'
-    );
     html = $(html);
     // If still no find method, the html is likely invalid
     if (typeof html.find !== 'function') {
-      console.log(
-        'Simulacrum | Cannot process invalid HTML parameter, skipping'
-      );
       return;
     }
   }
 
   let simulacrumButton = html.find('.scene-control[data-control="simulacrum"]');
   if (simulacrumButton.length > 0) {
-    console.log('Simulacrum | Button already exists, updating state');
     // Update existing button's state
     updateSimulacrumButtonState(simulacrumButton);
     return;
@@ -380,8 +322,6 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
   const tablist = html.find('ol.main-controls[role="tablist"]');
 
   if (tablist.length) {
-    console.log('Simulacrum | Found main-controls tablist, injecting button');
-
     // Create the Simulacrum button matching the exact HTML structure
     simulacrumButton = $(`
             <li class="scene-control" 
@@ -396,7 +336,6 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
 
     // Add click handler for direct chat opening
     simulacrumButton.on('click', (event) => {
-      console.log('Simulacrum | Direct button clicked');
       event.preventDefault();
       event.stopPropagation();
 
@@ -419,12 +358,8 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
     // Append as the last item in the tablist
     tablist.append(simulacrumButton);
 
-    console.log('Simulacrum | Button injected as scene control');
-
     // Update the newly injected button's state
     updateSimulacrumButtonState(simulacrumButton);
-  } else {
-    console.log('Simulacrum | Could not find main-controls tablist');
   }
 });
 
@@ -434,7 +369,7 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
  */
 function updateSimulacrumButtonState(buttonElement) {
   let tooltip = 'Simulacrum AI Assistant';
-  let classes = ['scene-control'];
+  const classes = ['scene-control'];
 
   if (!isSimulacrumConfigured) {
     classes.push('simulacrum-disabled');
@@ -467,5 +402,3 @@ function updateSimulacrumButtonState(buttonElement) {
   // Ensure the icon is correct (it should already be fa-hat-wizard from initial creation)
   buttonElement.find('i').removeClass().addClass('fas fa-hat-wizard');
 }
-
-console.log('Simulacrum | Hooks setup complete');

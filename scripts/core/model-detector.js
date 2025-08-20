@@ -213,7 +213,9 @@ export class ModelDetector {
    * @returns {Object|null} Cached detection result or null
    */
   getCachedResult(apiEndpoint, apiKey = null) {
-    if (!apiEndpoint) return null;
+    if (!apiEndpoint) {
+      return null;
+    }
     const cacheKey = `${apiEndpoint}:${apiKey || 'nokey'}`;
     return this.cache.get(cacheKey) || null;
   }
@@ -237,7 +239,9 @@ export class ModelDetector {
    * @returns {Array} Array of matching models
    */
   getModelSuggestions(partialName, models) {
-    if (!partialName || !models) return [];
+    if (!partialName || !models) {
+      return [];
+    }
 
     const query = partialName.toLowerCase();
     return models.filter(

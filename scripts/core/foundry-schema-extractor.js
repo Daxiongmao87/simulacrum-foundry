@@ -19,7 +19,9 @@ export class FoundrySchemaExtractor {
       const normalized = await engine.normalizeDocumentType(documentType);
       const collectionName = normalized.collection;
       const DocumentClass = CONFIG[collectionName]?.documentClass;
-      if (!DocumentClass) return null;
+      if (!DocumentClass) {
+        return null;
+      }
 
       let schemaObj;
       if (typeof DocumentClass.defineSchema === 'function') {
@@ -27,7 +29,9 @@ export class FoundrySchemaExtractor {
       } else if (DocumentClass.schema) {
         schemaObj = DocumentClass.schema;
       }
-      if (!schemaObj) return null;
+      if (!schemaObj) {
+        return null;
+      }
 
       return this.convertFoundrySchemaToJSONSchema(schemaObj);
     } catch (e) {

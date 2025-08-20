@@ -233,7 +233,9 @@ export class SimulacrumChatModal {
     const contextItemsContainer = $(this.chatWindow.element).find(
       '.auxiliary-content-container .simulacrum-context-items'
     );
-    if (!contextItemsContainer.length) return;
+    if (!contextItemsContainer.length) {
+      return;
+    }
 
     // Clear existing items
     contextItemsContainer.empty();
@@ -358,7 +360,9 @@ export class SimulacrumChatModal {
         const messageId = $message.data('message-id');
 
         // Skip if this message already has a copy button
-        if ($message.find('.simulacrum-copy-btn').length) return;
+        if ($message.find('.simulacrum-copy-btn').length) {
+          return;
+        }
 
         // Create a copy button
         const copyButton = $(
@@ -409,7 +413,9 @@ export class SimulacrumChatModal {
    * @private
    */
   async _copyMessageContent(contentElement, tooltip, button) {
-    if (!contentElement) return;
+    if (!contentElement) {
+      return;
+    }
 
     try {
       // Get both HTML and plain text versions
@@ -461,7 +467,9 @@ export class SimulacrumChatModal {
    * @private
    */
   _processElementForTextCopy(element) {
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     // Process heading tags to add # symbols
     const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
@@ -587,7 +595,9 @@ export class SimulacrumChatModal {
    * Transform send button to cancel button during processing
    */
   transformSendButtonToCancel() {
-    if (!this.chatWindow.element) return;
+    if (!this.chatWindow.element) {
+      return;
+    }
 
     const sendButton = $(this.chatWindow.element).find('.chat-send');
     if (sendButton.length) {
@@ -609,7 +619,9 @@ export class SimulacrumChatModal {
    * Transform cancel button back to send button
    */
   transformCancelButtonToSend() {
-    if (!this.chatWindow.element) return;
+    if (!this.chatWindow.element) {
+      return;
+    }
 
     const sendButton = $(this.chatWindow.element).find('.chat-send');
     if (sendButton.length) {
@@ -637,7 +649,9 @@ export class SimulacrumChatModal {
    */
   async _handleUserMessage(message) {
     try {
-      if (this.processing) return;
+      if (this.processing) {
+        return;
+      }
       this.processing = true;
 
       // Get user info

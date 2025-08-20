@@ -78,15 +78,21 @@ export class ToolCallParser {
   validateToolCall(toolName, args) {
     try {
       const tool = this.toolRegistry.getTool(toolName);
-      if (!tool) return false;
+      if (!tool) {
+        return false;
+      }
       // Basic validation: args must be an object
-      if (typeof args !== 'object' || args === null) return false;
+      if (typeof args !== 'object' || args === null) {
+        return false;
+      }
       // If tool has a parameterSchema, perform a simple property check
       const schema = tool.parameterSchema || {};
       if (schema.properties) {
         const required = schema.required || [];
         for (const key of required) {
-          if (!(key in args)) return false;
+          if (!(key in args)) {
+            return false;
+          }
         }
       }
       return true;

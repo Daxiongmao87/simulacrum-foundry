@@ -106,7 +106,6 @@ export class AgenticLoopController {
     } else {
       // Fallback to notifications
       ui.notifications.info(`Simulacrum | ${message}...`);
-      console.log(`Simulacrum | Placeholder: ${message}`);
     }
   }
 
@@ -124,7 +123,6 @@ export class AgenticLoopController {
     } else {
       // Fallback to notifications
       ui.notifications.info(`Simulacrum | AI Response: ${message}`);
-      console.log(`Simulacrum | AI Response: ${message}`);
     }
   }
 
@@ -135,7 +133,6 @@ export class AgenticLoopController {
    */
   showMessage(message) {
     ui.notifications.info(`Simulacrum | ${message}`);
-    console.log(`Simulacrum | ${message}`);
   }
 
   /**
@@ -146,31 +143,20 @@ export class AgenticLoopController {
    */
   async executeTools(toolCalls, abortSignal) {
     const toolResults = [];
-    console.log('Simulacrum | Starting tool execution...');
 
     if (abortSignal.aborted) {
-      console.log('Simulacrum | Tool execution cancelled before starting.');
       return [];
     }
 
     for (const toolCall of toolCalls) {
       if (abortSignal.aborted) {
-        console.log('Simulacrum | Tool execution cancelled during loop.');
         break;
       }
-      console.log(
-        `Simulacrum | Attempting to execute tool: ${toolCall.tool_name} with parameters:`,
-        toolCall.parameters
-      );
       try {
         const result = await this.toolScheduler.scheduleToolExecution(
           toolCall.tool_name,
           toolCall.parameters,
           game.user
-        );
-        console.log(
-          `Simulacrum | Tool ${toolCall.tool_name} executed successfully. Result:`,
-          result
         );
         toolResults.push({
           toolName: toolCall.tool_name,
@@ -193,7 +179,6 @@ export class AgenticLoopController {
       }
     }
 
-    console.log('Simulacrum | All tool executions completed.');
     return toolResults;
   }
 
@@ -205,7 +190,7 @@ export class AgenticLoopController {
   async processUserRequest(userMessage) {
     this.cancelled = false;
     this.abortController = new AbortController();
-    let context = this.initializeContext(userMessage);
+    const context = this.initializeContext(userMessage);
 
     // Initialize token tracker and context compaction with context window from settings
     try {
@@ -214,9 +199,6 @@ export class AgenticLoopController {
       this.tokenTracker.setMaxTokens(contextWindow);
       this.contextCompaction.setMaxTokens(contextWindow);
     } catch {
-      console.warn(
-        'Simulacrum | Could not get context window setting, using default 8192'
-      );
       this.tokenTracker.setMaxTokens(8192);
       this.contextCompaction.setMaxTokens(8192);
     }
@@ -243,62 +225,34 @@ export class AgenticLoopController {
 
         // Update context if compaction occurred
         if (compactedHistory !== chatHistory) {
-          console.log(
-            `Simulacrum | Context compacted from ${chatHistory.length} to ${compactedHistory.length} messages`
-          );
           context.replaceMessagesArray(compactedHistory);
         }
 
         // Get AI response with accumulated context
         const chatPrompt = await context.toChatPrompt(); // Ensure to await if toChatPrompt is async
-        console.log(
-          `Simulacrum | Iteration ${iteration}: Fetching AI response with prompt:`,
-          chatPrompt
-        );
         const response = await this.aiService.sendMessage(
           chatPrompt,
           this.abortController.signal
         );
-        console.log(
-          `Simulacrum | Iteration ${iteration}: Raw AI response:`,
-          response
-        );
 
         // Update token tracking from API response
         this.tokenTracker.updateFromResponse(response);
-        console.log(
-          `Simulacrum | Token usage stats:`,
-          this.tokenTracker.getContextWindowStats()
-        );
 
         const parsed = await this.responseParser.parseAgentResponse(response);
-        console.log(
-          `Simulacrum | Iteration ${iteration}: Parsed JSON response:`,
-          parsed
-        );
 
         // Programmatic enforcement of in_progress logic:
         // If AI provides tool_calls, the loop must continue, regardless of AI's in_progress suggestion.
         if (parsed.tool_calls && parsed.tool_calls.length > 0) {
           parsed.continuation.in_progress = true;
-          console.log(
-            `Simulacrum | Iteration ${iteration}: Overriding in_progress to true due to tool_calls.`
-          );
         }
 
         // Replace placeholder with AI message
         this.replacePlaceholderWithMessage(parsed.message);
         context.addAIResponse(parsed); // Add parsed AI response to context
-        console.log(
-          `Simulacrum | Iteration ${iteration}: AI response added to context.`
-        );
 
         // Check if we're done
         if (!parsed.continuation.in_progress) {
           this.showMessage('Workflow completed.');
-          console.log(
-            `Simulacrum | Iteration ${iteration}: Workflow completed.`
-          );
           return; // Complete
         }
 
@@ -313,10 +267,6 @@ export class AgenticLoopController {
 
         // Execute tools if present
         if (parsed.tool_calls && parsed.tool_calls.length > 0) {
-          console.log(
-            `Simulacrum | Iteration ${iteration}: Tool calls identified:`,
-            parsed.tool_calls
-          );
           const toolResults = await this.executeTools(
             parsed.tool_calls,
             this.abortController.signal
@@ -333,23 +283,13 @@ export class AgenticLoopController {
             context.addSystemMessage(
               `Tool execution results:\n${formattedResults}`
             );
-            console.log(
-              `Simulacrum | Tool results added to AI context (${formattedResults.length} chars)`
-            );
           }
 
           // Add raw tool results to context for backward compatibility
           context.addToolResults(toolResults);
-          console.log(
-            `Simulacrum | Iteration ${iteration}: Tool execution results:`,
-            toolResults
-          );
         } else {
           // If AI indicates continuation but provides no tools, it might be stuck or waiting for more info.
-          // For now, we'll just log and continue, but this might need more sophisticated handling.
-          console.warn(
-            'Simulacrum | AI indicated continuation but provided no tool calls.'
-          );
+          // For now, we'll just continue, but this might need more sophisticated handling.
         }
       } catch (error) {
         console.error('Simulacrum | Agentic loop error:', error);
@@ -369,9 +309,6 @@ export class AgenticLoopController {
     if (iteration >= MAX_ITERATIONS) {
       this.showMessage(
         'Agentic loop terminated due to maximum iteration limit.'
-      );
-      console.warn(
-        'Simulacrum | Agentic loop terminated due to maximum iteration limit.'
       );
     } else if (this.abortController.signal.aborted) {
       this.showMessage('Operation cancelled by user.');

@@ -19,7 +19,9 @@
  * @returns {string} Normalized type.
  */
 export function normalizeDocumentType(type) {
-  if (!type) return '';
+  if (!type) {
+    return '';
+  }
   // Split on hyphen or underscore, capitalize each part, join
   return type
     .split(/[-_]/)
@@ -53,14 +55,12 @@ export function findCollection(type) {
     if (window?.CONFIG?.Item?.typeLabels?.[type]) {
       collection = gameCollections.get('Item');
       filterByType = type;
-    }
-    // Check if type is an Actor subtype
-    else if (window?.CONFIG?.Actor?.typeLabels?.[type]) {
+    } else if (window?.CONFIG?.Actor?.typeLabels?.[type]) {
+      // Check if type is an Actor subtype
       collection = gameCollections.get('Actor');
       filterByType = type;
-    }
-    // Check other document types for subtypes
-    else {
+    } else {
+      // Check other document types for subtypes
       for (const [docType, cfg] of Object.entries(window?.CONFIG || {})) {
         if (cfg?.typeLabels?.[type]) {
           collection = gameCollections.get(docType);
@@ -105,7 +105,9 @@ export function validateDocumentType(type) {
 export function listAvailableTypes() {
   const types = [];
   const gameCollections = game?.collections;
-  if (!gameCollections) return types;
+  if (!gameCollections) {
+    return types;
+  }
 
   // Top‑level collections
   for (const key of gameCollections.keys()) {

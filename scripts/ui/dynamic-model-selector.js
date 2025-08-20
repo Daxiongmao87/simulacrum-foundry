@@ -24,8 +24,6 @@ export class DynamicModelSelector {
    * Initialize the dynamic model selector
    */
   initialize() {
-    console.log('🤖 Initializing Dynamic Model Selector');
-
     // Hook into settings render to enhance UI
     Hooks.on('renderSettingsConfig', (app, html) => {
       this.enhanceSettingsUI(html);
@@ -41,7 +39,6 @@ export class DynamicModelSelector {
   watchApiKeySetting() {
     Hooks.on('updateSetting', (setting, value) => {
       if (setting.key === 'simulacrum.apiKey') {
-        console.log(`🔑 API key changed, refreshing model detection`);
         this.onApiKeyChange(value);
       }
     });
@@ -52,32 +49,19 @@ export class DynamicModelSelector {
    * @param {jQuery} html - Settings UI HTML
    */
   enhanceSettingsUI(html) {
-    console.log('DEBUG: enhanceSettingsUI called');
-    console.log('DEBUG: html length:', html.length);
-
-    // Look for ANY simulacrum settings
-    const simulacrumElements = html.find('[name^="simulacrum."]');
-    console.log('DEBUG: Found simulacrum elements:', simulacrumElements.length);
-
     // Look specifically for model select
     const modelSelect = html.find('select[name="simulacrum.modelName"]');
-    console.log('DEBUG: Model select found:', modelSelect.length > 0);
-    if (modelSelect.length > 0) {
-      console.log('DEBUG: Model select element exists');
-    }
 
     if (modelSelect.length > 0) {
       this.settingElement = modelSelect.closest('.form-group');
       this.modelInput = modelSelect;
     } else {
-      console.log('DEBUG: No model select found, skipping setup');
       return;
     }
 
     // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
     html.on('change', 'select[name="simulacrum.modelName"]', async (e) => {
       const selectedValue = e.target.value;
-      console.log('DEBUG: Model dropdown changed to:', selectedValue);
 
       // Get the model's context window
       const availableModels = game.settings.get(
@@ -89,18 +73,12 @@ export class DynamicModelSelector {
       );
 
       if (selectedModel) {
-        console.log(
-          'DEBUG: Updating context length to:',
-          selectedModel.contextWindow
-        );
-
         // Update the context length field in the UI immediately
         const contextInput = html.find(
           'input[name="simulacrum.contextLength"]'
         );
         if (contextInput.length > 0) {
           contextInput.val(selectedModel.contextWindow);
-          console.log('DEBUG: Context length field updated in UI');
         }
 
         // Also update the setting for persistence
@@ -109,7 +87,6 @@ export class DynamicModelSelector {
           'contextLength',
           selectedModel.contextWindow
         );
-        console.log('DEBUG: Context length setting updated');
       }
     });
 
@@ -131,7 +108,6 @@ export class DynamicModelSelector {
   async updateModelSelection(apiEndpoint, apiKey = null) {
     // Skip if UI elements not ready
     if (!this.modelInput) {
-      console.log('🤖 UI not ready, skipping model selection update');
       return;
     }
 
@@ -149,7 +125,6 @@ export class DynamicModelSelector {
       return;
     }
 
-    console.log(`🤖 Updating model selection for: ${apiEndpoint}`);
     this.showLoadingState();
 
     try {
@@ -173,8 +148,6 @@ export class DynamicModelSelector {
    * @param {Object} detection - Detection result object
    */
   async updateModelUI(detection) {
-    console.log(`🤖 Updating model UI:`, detection);
-
     this.showModelSetting();
 
     if (detection.detectable && detection.models.length > 0) {
@@ -191,8 +164,6 @@ export class DynamicModelSelector {
    * @param {Array} models - Array of detected models
    */
   showDropdownSelector(models) {
-    console.log(`📋 Setting up dropdown with ${models.length} models`);
-
     // Create select element
     const select = document.createElement('select');
     select.name = 'simulacrum.modelName';
@@ -234,18 +205,8 @@ export class DynamicModelSelector {
     // Use event delegation through the form container to survive FoundryVTT DOM changes
     select.setAttribute('data-simulacrum-model-select', 'true');
 
-    console.log('🔥 CREATED SELECT ELEMENT:', select);
-    console.log(
-      '🔥 SELECT HAS EVENT LISTENERS:',
-      select.hasAttribute('data-has-listeners')
-    );
-    console.log('🔥 ABOUT TO REPLACE INPUT WITH SELECT...');
-
     // Replace the input with select
     this.replaceModelInput(select);
-
-    console.log('🔥 REPLACEMENT COMPLETE. NEW modelInput:', this.modelInput);
-    console.log('🔥 NEW modelInput DOM element:', this.modelInput[0]);
 
     // Add model info display
     this.addModelInfoDisplay(models.length);
@@ -256,8 +217,6 @@ export class DynamicModelSelector {
    * @param {string} apiType - Detected API type for placeholder guidance
    */
   showTextInput(apiType) {
-    console.log(`✏️ Setting up text input for ${apiType} API`);
-
     // Create text input
     const input = document.createElement('input');
     input.type = 'text';
@@ -299,9 +258,6 @@ export class DynamicModelSelector {
    * @param {string} value - Selected model value
    */
   async onModelSelectionChange(value) {
-    console.log(`🔥 onModelSelectionChange called with value: ${value}`);
-    console.log(`🔥 this object:`, this);
-
     if (value === '__custom__') {
       this.showCustomInput();
     } else {
@@ -335,9 +291,9 @@ export class DynamicModelSelector {
    * Show custom model input below dropdown
    */
   showCustomInput() {
-    if (this.customInput) return; // Already exists
-
-    console.log('✏️ Showing custom model input');
+    if (this.customInput) {
+      return;
+    } // Already exists
 
     const customContainer = document.createElement('div');
     customContainer.className = 'simulacrum-custom-model';
@@ -389,8 +345,6 @@ export class DynamicModelSelector {
    * @param {string} value - Custom model name
    */
   async onCustomModelChange(value) {
-    console.log(`🤖 Custom model changed: ${value}`);
-
     if (value.trim()) {
       // Update the setting with custom value
       await game.settings.set('simulacrum', 'modelName', value.trim());
@@ -408,7 +362,6 @@ export class DynamicModelSelector {
     // Re-test model detection if we have an endpoint
     const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
     if (apiEndpoint && this.currentApiType === 'openai') {
-      console.log('🔑 Re-detecting models after API key change');
       await this.updateModelSelection(apiEndpoint, apiKey);
     }
   }
@@ -420,9 +373,6 @@ export class DynamicModelSelector {
   triggerContextWindowUpdate(modelName) {
     // Check if dynamic context window setting exists and supports detection
     if (game.simulacrum?.dynamicContextWindowSetting) {
-      console.log(
-        `🔗 Triggering context window update for model: ${modelName}`
-      );
       game.simulacrum.dynamicContextWindowSetting.onModelChange(modelName);
     }
   }
@@ -432,19 +382,13 @@ export class DynamicModelSelector {
    * @param {string} modelName - Model name that changed
    */
   async triggerContextWindowUpdateImmediate(modelName) {
-    console.log(`⚡ Immediate context window update for model: ${modelName}`);
-
     const contextWindowSetting = game.simulacrum?.dynamicContextWindowSetting;
     if (!contextWindowSetting) {
-      console.warn('⚠️ Dynamic context window setting not available');
       return;
     }
 
     // Check if we can auto-detect context window
     if (!contextWindowSetting.currentDetection?.supportsDetection) {
-      console.log(
-        'ℹ️ Context window auto-detection not supported for this API'
-      );
       return;
     }
 
@@ -452,7 +396,6 @@ export class DynamicModelSelector {
       // Get the current API endpoint
       const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
       if (!apiEndpoint) {
-        console.warn('⚠️ No API endpoint configured');
         return;
       }
 
@@ -465,9 +408,6 @@ export class DynamicModelSelector {
           apiEndpoint,
           modelName
         );
-      console.log(
-        `🎯 Detected context window: ${contextWindow} tokens for ${modelName}`
-      );
 
       // Update the UI field immediately
       contextWindowSetting.updateDetectedValue(contextWindow);
@@ -479,11 +419,6 @@ export class DynamicModelSelector {
 
       if (!isOverridden) {
         await game.settings.set('simulacrum', 'contextWindow', contextWindow);
-        console.log(`💾 Updated context window setting to: ${contextWindow}`);
-      } else {
-        console.log(
-          `🔒 Context window override enabled, display updated but setting not changed`
-        );
       }
 
       contextWindowSetting.hideLoadingState();
@@ -502,30 +437,19 @@ export class DynamicModelSelector {
    * @param {HTMLElement} newElement - New input/select element
    */
   replaceModelInput(newElement) {
-    console.log('🔥 replaceModelInput called with:', newElement);
-    console.log('🔥 Current this.modelInput:', this.modelInput);
-
     if (this.modelInput) {
       // Copy existing attributes
       const oldInput = this.modelInput[0];
-      console.log('🔥 Old input element:', oldInput);
 
       Array.from(oldInput.attributes).forEach((attr) => {
         if (attr.name !== 'type' && attr.name !== 'name') {
-          console.log(`🔥 Copying attribute ${attr.name}=${attr.value}`);
           newElement.setAttribute(attr.name, attr.value);
         }
       });
 
-      console.log('🔥 About to replace element...');
       // Replace the element
       this.modelInput.replaceWith(newElement);
       this.modelInput = $(newElement);
-
-      console.log('🔥 Element replaced. New modelInput:', this.modelInput);
-      console.log('🔥 New element in DOM:', this.modelInput[0]);
-    } else {
-      console.error('🔥 this.modelInput is null/undefined!');
     }
   }
 

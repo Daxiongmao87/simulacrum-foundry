@@ -114,7 +114,9 @@ export class SimulacrumToolScheduler {
 
     console.log('Simulacrum | schedule: Before processing newCalls for loop');
     for (const call of newCalls) {
-      if (call.status !== 'validating') continue;
+      if (call.status !== 'validating') {
+        continue;
+      }
       const { request, tool } = call;
       try {
         if (true) {
@@ -152,8 +154,9 @@ export class SimulacrumToolScheduler {
       if (
         call.request.callId !== targetCallId ||
         ['success', 'error', 'cancelled'].includes(call.status)
-      )
+      ) {
         return call;
+      }
       const start = call.startTime;
       const updatedCall = { ...call };
 
@@ -162,16 +165,19 @@ export class SimulacrumToolScheduler {
           updatedCall.status = 'success';
           updatedCall.response = data;
           updatedCall.durationMs = start ? Date.now() - start : undefined;
-          if (updatedCall.resolve) updatedCall.resolve(data);
+          if (updatedCall.resolve) {
+            updatedCall.resolve(data);
+          }
           break;
         case 'error':
           updatedCall.status = 'error';
           updatedCall.response = data;
           updatedCall.durationMs = start ? Date.now() - start : undefined;
-          if (updatedCall.reject)
+          if (updatedCall.reject) {
             updatedCall.reject(
               data?.error || new Error('Tool execution failed')
             );
+          }
           break;
         case 'awaiting_approval':
           updatedCall.status = 'awaiting_approval';
@@ -187,8 +193,9 @@ export class SimulacrumToolScheduler {
         case 'cancelled':
           updatedCall.status = 'cancelled';
           updatedCall.response = data;
-          if (updatedCall.reject)
+          if (updatedCall.reject) {
             updatedCall.reject(new Error('Tool execution cancelled'));
+          }
           break;
         default:
           break;
@@ -200,7 +207,9 @@ export class SimulacrumToolScheduler {
   }
 
   notifyToolCallsUpdate() {
-    if (this.onToolCallsUpdate) this.onToolCallsUpdate(this.toolCalls);
+    if (this.onToolCallsUpdate) {
+      this.onToolCallsUpdate(this.toolCalls);
+    }
   }
 
   checkAndNotifyCompletion() {

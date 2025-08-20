@@ -223,7 +223,9 @@ export class ContextWindowDetector {
    * @returns {Object|null} Cached detection result or null
    */
   getCachedResult(apiEndpoint) {
-    if (!apiEndpoint) return null;
+    if (!apiEndpoint) {
+      return null;
+    }
     const cacheKey = apiEndpoint.toLowerCase().trim();
     return this.cache.get(cacheKey) || null;
   }

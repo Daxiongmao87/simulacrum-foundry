@@ -92,7 +92,9 @@ export class ListImagesTool extends Tool {
     const sources = ['data', 'public']; // FoundryVTT's main FilePicker sources
 
     for (const source of sources) {
-      if (abortSignal?.aborted) break;
+      if (abortSignal?.aborted) {
+        break;
+      }
 
       outputHandler?.({
         type: 'progress',
@@ -105,7 +107,9 @@ export class ListImagesTool extends Tool {
         const initialDirs = rootBrowse.dirs || [];
 
         for (const dir of initialDirs) {
-          if (abortSignal?.aborted) break;
+          if (abortSignal?.aborted) {
+            break;
+          }
           await this._recursivelyDiscoverDirectories(
             source,
             dir,
@@ -139,7 +143,9 @@ export class ListImagesTool extends Tool {
     abortSignal,
     outputHandler
   ) {
-    if (abortSignal?.aborted) return;
+    if (abortSignal?.aborted) {
+      return;
+    }
 
     // Determine a category for the path (e.g., 'user', 'modules', 'systems', 'core')
     let category = 'user'; // Default category
@@ -158,7 +164,9 @@ export class ListImagesTool extends Tool {
       const subDirs = browseResult.dirs || [];
 
       for (const subDir of subDirs) {
-        if (abortSignal?.aborted) break;
+        if (abortSignal?.aborted) {
+          break;
+        }
         await this._recursivelyDiscoverDirectories(
           source,
           subDir,
@@ -189,7 +197,9 @@ export class ListImagesTool extends Tool {
     const imageExtensions = this.getSupportedImageExtensions();
 
     for (const { source, path: searchPath, category } of allSourcePaths) {
-      if (abortSignal?.aborted) break;
+      if (abortSignal?.aborted) {
+        break;
+      }
 
       try {
         const foundImages = await this.scanDirectory(
@@ -253,7 +263,9 @@ export class ListImagesTool extends Tool {
    * @returns {Promise<object[]>} Array of image objects
    */
   async scanDirectory(source, basePath, keyword, imageExtensions, abortSignal) {
-    if (abortSignal?.aborted) return [];
+    if (abortSignal?.aborted) {
+      return [];
+    }
 
     const images = [];
 
@@ -265,7 +277,9 @@ export class ListImagesTool extends Tool {
 
       // Process files in current directory
       for (const file of files.files) {
-        if (abortSignal?.aborted) break;
+        if (abortSignal?.aborted) {
+          break;
+        }
 
         // FilePicker.browse returns complete paths, so we use 'file' directly.
         const fullPath = file;
@@ -284,7 +298,9 @@ export class ListImagesTool extends Tool {
 
       // Recursively scan subdirectories
       for (const folder of files.dirs || []) {
-        if (abortSignal?.aborted) break;
+        if (abortSignal?.aborted) {
+          break;
+        }
 
         const subImages = await this.scanDirectory(
           source,
@@ -310,7 +326,9 @@ export class ListImagesTool extends Tool {
    * @returns {boolean} True if matches
    */
   matchesKeyword(filename, keyword) {
-    if (!keyword || keyword === '*') return true;
+    if (!keyword || keyword === '*') {
+      return true;
+    }
 
     // Auto-wrap with wildcards unless already present
     let searchPattern = keyword;

@@ -49,6 +49,28 @@ try {
   console.log('📋 Running code formatting...');
   execSync('npx lint-staged', { stdio: 'inherit' });
   
+  // Check for console statement violations (warning only for now)
+  console.log('🔍 Checking console statements...');
+  try {
+    execSync('npm run console:validate', { stdio: 'inherit' });
+  } catch (e) {
+    console.warn('⚠️  Console validation failed - consider fixing before next commit');
+    console.warn('💡 Run "npm run console:prefix" to auto-fix prefix issues');
+    // Don't block commit for now, just warn
+  }
+  
+  // Run ESLint to check for errors (warnings won't block)
+  console.log('📋 Running ESLint checks...');
+  try {
+    execSync('npx eslint scripts/**/*.js --max-warnings 160', { stdio: 'inherit' });
+  } catch (e) {
+    if (e.status === 1) {
+      console.error('❌ ESLint found errors that must be fixed');
+      console.error('💡 Run "npm run lint:fix" to auto-fix some issues');
+      process.exit(1);
+    }
+  }
+  
 } catch (error) {
   console.error('❌ Pre-commit validation failed:', error.message);
   process.exit(1);

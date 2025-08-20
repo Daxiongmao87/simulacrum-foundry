@@ -8,7 +8,13 @@
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "lint": "eslint scripts/**/*.js",
     "lint:fix": "eslint scripts/**/*.js --fix",
+    "lint:strict": "eslint scripts/**/*.js --max-warnings 0",
     "format": "prettier --write scripts/**/*.js",
+    "console:audit": "node scripts/dev/console-manager.js audit",
+    "console:clean": "node scripts/dev/console-manager.js clean",
+    "console:prefix": "node scripts/dev/console-manager.js prefix",
+    "console:validate": "node scripts/dev/console-manager.js validate",
+    "quality:check": "npm run lint && npm run console:validate",
     "prepare": "husky"
   },
   "lint-staged": {

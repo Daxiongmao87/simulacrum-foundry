@@ -44,7 +44,9 @@ Please provide corrected data that satisfies the schema and explain the changes 
    * @returns {string}
    */
   formatSchemaForAI(schema) {
-    if (!schema) return 'Schema could not be retrieved.';
+    if (!schema) {
+      return 'Schema could not be retrieved.';
+    }
 
     // Handle FoundryVTT schema objects which have circular references
     const simplified = {};
@@ -67,7 +69,9 @@ Please provide corrected data that satisfies the schema and explain the changes 
    */
   analyzeErrorPatterns(errorMessage, _schema) {
     // Basic pattern matching – can be expanded later.
-    if (!errorMessage) return '';
+    if (!errorMessage) {
+      return '';
+    }
     const patterns = [];
     if (/required/.test(errorMessage)) {
       patterns.push(
@@ -94,7 +98,9 @@ Please provide corrected data that satisfies the schema and explain the changes 
    * @returns {boolean} - True if the error is an image validation error, false otherwise.
    */
   detectImageValidationError(errorMessage) {
-    if (!errorMessage) return false;
+    if (!errorMessage) {
+      return false;
+    }
     const imageErrorPatterns = [
       'Image path is required',
       'Image file does not exist',

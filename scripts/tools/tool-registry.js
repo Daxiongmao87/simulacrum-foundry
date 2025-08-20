@@ -104,8 +104,12 @@ export class ToolRegistry {
       throw new Error('User lacks permission to execute tools');
     }
     const gremlinMode = game.settings.get('simulacrum', 'gremlinMode');
-    if (gremlinMode) return true;
-    if (!tool.shouldConfirmExecute()) return true;
+    if (gremlinMode) {
+      return true;
+    }
+    if (!tool.shouldConfirmExecute()) {
+      return true;
+    }
     const toolPermissions =
       game.settings.get('simulacrum', 'toolPermissions') || {};
     const permission = toolPermissions[toolName];

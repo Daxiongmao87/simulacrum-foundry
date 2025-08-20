@@ -22,8 +22,6 @@ export class DynamicContextWindowSetting {
    * Initialize the dynamic setting system
    */
   initialize() {
-    console.log('🎨 Initializing Dynamic Context Window Setting');
-
     // Hook into settings render to add our dynamic behavior
     Hooks.on('renderSettingsConfig', (app, html) => {
       this.enhanceSettingsUI(html);
@@ -43,11 +41,9 @@ export class DynamicContextWindowSetting {
     // Create observer for settings changes
     Hooks.on('updateSetting', (setting, value) => {
       if (setting.key === 'simulacrum.apiEndpoint') {
-        console.log(`🔗 API endpoint changed: ${value}`);
         this.onApiEndpointChange(value);
       }
       if (setting.key === 'simulacrum.modelName') {
-        console.log(`🤖 Model changed: ${value}`);
         this.onModelChange(value);
       }
     });
@@ -58,12 +54,9 @@ export class DynamicContextWindowSetting {
    * @param {jQuery} html - Settings UI HTML
    */
   enhanceSettingsUI(html) {
-    console.log('🎨 Enhancing settings UI with dynamic context window');
-
     // Find context window setting
     const contextSetting = html.find('input[name="simulacrum.contextWindow"]');
     if (contextSetting.length === 0) {
-      console.warn('⚠️ Context window setting not found in UI');
       return;
     }
 
@@ -90,7 +83,6 @@ export class DynamicContextWindowSetting {
   onApiEndpointChange(value) {
     // Skip if UI elements not ready
     if (!this.contextInput) {
-      console.log('🔄 UI not ready, skipping API endpoint change');
       return;
     }
 
@@ -108,8 +100,6 @@ export class DynamicContextWindowSetting {
 
     // Debounce API testing (1.5 second delay)
     this.debounceTimer = setTimeout(async () => {
-      console.log(`🔍 Testing API endpoint after debounce: ${value}`);
-
       try {
         const detection = await this.detector.detectEndpointType(value);
         this.currentDetection = detection;
@@ -135,21 +125,13 @@ export class DynamicContextWindowSetting {
    * @param {string} modelName - Selected model name
    */
   async onModelChange(modelName) {
-    console.log(`🤖 Context window onModelChange called with: ${modelName}`);
-    console.log(`🤖 Current detection:`, this.currentDetection);
-
     if (
       !this.currentDetection ||
       !this.currentDetection.supportsDetection ||
       !modelName
     ) {
-      console.log(
-        `🤖 Skipping context window update - detection: ${!!this.currentDetection}, supports: ${this.currentDetection?.supportsDetection}, model: ${!!modelName}`
-      );
       return;
     }
-
-    console.log(`🔄 Updating context window for model: ${modelName}`);
 
     try {
       this.showLoadingState();
@@ -160,10 +142,6 @@ export class DynamicContextWindowSetting {
         modelName
       );
 
-      console.log(
-        `🎯 Detected context window: ${contextWindow} for model ${modelName}`
-      );
-
       // Update the displayed value
       this.updateDetectedValue(contextWindow);
 
@@ -172,9 +150,6 @@ export class DynamicContextWindowSetting {
         this.overrideCheckbox && this.overrideCheckbox.is(':checked');
       if (!isOverridden) {
         await game.settings.set('simulacrum', 'contextWindow', contextWindow);
-        console.log(`💾 Updated context window setting to: ${contextWindow}`);
-      } else {
-        console.log(`🔒 Context window override enabled, not updating setting`);
       }
 
       this.hideLoadingState();
@@ -189,8 +164,6 @@ export class DynamicContextWindowSetting {
    * @param {Object} detection - Detection result object
    */
   async updateContextWindowUI(detection) {
-    console.log(`🎨 Updating UI for detection:`, detection);
-
     if (!detection.visible) {
       this.hideContextWindowSetting();
       return;
@@ -212,8 +185,6 @@ export class DynamicContextWindowSetting {
    * @param {Object} detection - Detection result
    */
   async showAutoDetectedField(_detection) {
-    console.log('🎯 Setting up auto-detected field');
-
     // Get current model to detect context window
     const modelName = game.settings.get('simulacrum', 'modelName');
     const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
@@ -226,11 +197,8 @@ export class DynamicContextWindowSetting {
           apiEndpoint,
           modelName
         );
-      } catch (error) {
-        console.warn(
-          '⚠️ Failed to get context window for current model:',
-          error
-        );
+      } catch {
+        // Failed to get context window for current model
       }
     }
 
@@ -258,8 +226,6 @@ export class DynamicContextWindowSetting {
    * @param {number} defaultValue - Default context window value
    */
   showEditableField(defaultValue) {
-    console.log(`✏️ Setting up editable field with default: ${defaultValue}`);
-
     // Make input editable
     this.contextInput.prop('readonly', false);
     this.contextInput.removeClass('auto-detected');
@@ -281,7 +247,9 @@ export class DynamicContextWindowSetting {
    * Add override checkbox functionality
    */
   addOverrideCheckbox() {
-    if (this.overrideCheckbox) return; // Already exists
+    if (this.overrideCheckbox) {
+      return;
+    } // Already exists
 
     const checkboxHtml = `
             <div class="simulacrum-override-container" style="margin-top: 5px; display: none;">
@@ -303,7 +271,6 @@ export class DynamicContextWindowSetting {
     // Handle override checkbox changes
     this.overrideCheckbox.on('change', (event) => {
       const isChecked = event.target.checked;
-      console.log(`🔄 Override checkbox changed: ${isChecked}`);
 
       if (isChecked) {
         // Enable manual editing
@@ -456,13 +423,11 @@ export class DynamicContextWindowSetting {
   async updateUIFromCurrentSettings() {
     // Only proceed if UI elements are available
     if (!this.contextInput) {
-      console.log('🔄 UI elements not ready yet, skipping initial update');
       return;
     }
 
     const apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
     if (apiEndpoint) {
-      console.log('🔄 Updating UI from current settings');
       await this.onApiEndpointChange(apiEndpoint);
     }
   }

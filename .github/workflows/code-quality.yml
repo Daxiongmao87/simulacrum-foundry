@@ -1,0 +1,77 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Check ESLint strict (no warnings)
+      run: npm run lint:strict
+      continue-on-error: true  # Don't fail build on warnings initially
+      
+    - name: Run Prettier check
+      run: npx prettier --check "scripts/**/*.js"
+    
+    - name: Console statement audit
+      run: npm run console:audit
+      
+    - name: Validate console statements
+      run: npm run console:validate
+      continue-on-error: true  # Don't fail build initially
+    
+    - name: Code complexity report
+      run: |
+        echo "### Code Complexity Report"
+        npx eslint scripts/**/*.js --format json | \
+        node -e "
+          const data = JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf-8'));
+          const issues = data.flatMap(f => f.messages.filter(m => 
+            m.ruleId === 'complexity' || 
+            m.ruleId === 'max-depth' || 
+            m.ruleId === 'max-nested-callbacks'
+          ));
+          if (issues.length > 0) {
+            console.log('⚠️ Complexity issues found:', issues.length);
+            issues.slice(0, 10).forEach(i => 
+              console.log('  -', i.message)
+            );
+          } else {
+            console.log('✅ No complexity issues');
+          }
+        "
+      continue-on-error: true
+      
+    - name: Generate quality report
+      if: always()
+      run: |
+        echo "## 📊 Code Quality Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # ESLint summary
+        echo "### ESLint Results" >> $GITHUB_STEP_SUMMARY
+        npx eslint scripts/**/*.js --format compact >> $GITHUB_STEP_SUMMARY 2>&1 || true
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Console statement summary
+        echo "### Console Statement Summary" >> $GITHUB_STEP_SUMMARY
+        npm run console:audit 2>&1 | tail -20 >> $GITHUB_STEP_SUMMARY || true

@@ -64,7 +64,7 @@ export class SearchDocumentsTool extends Tool {
 
       for (const doc of documents) {
         let relevanceScore = 0;
-        let matchedFields = [];
+        const matchedFields = [];
 
         for (const field of searchFields) {
           const fieldValue = foundry.utils.getProperty(doc, field);

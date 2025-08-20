@@ -157,7 +157,9 @@ export class TokenTracker {
    * @returns {number} Available tokens
    */
   getAvailableTokens() {
-    if (!this._maxTokens) return 0;
+    if (!this._maxTokens) {
+      return 0;
+    }
     return Math.max(0, this._maxTokens - this._currentPromptTokens);
   }
 
