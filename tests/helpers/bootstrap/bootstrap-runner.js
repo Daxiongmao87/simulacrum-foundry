@@ -33,14 +33,14 @@ class BootstrapRunner {
   }
 
   async initialize() {
-    console.log('Simulacrum | Test Runner - 🚀 Initializing Bootstrap Runner...');
+    console.log('[Test Runner] 🚀 Initializing Bootstrap Runner...');
     
     // Load config if not provided in constructor
     if (!this.config) {
       const configPath = join(PROJECT_ROOT, 'tests', 'config', 'test.config.json');
       this.config = JSON.parse(readFileSync(configPath, 'utf8'));
     }
-    console.log('Simulacrum | Test Runner - ✅ Config loaded');
+    console.log('[Test Runner] ✅ Config loaded');
     
     // Initialize container and port managers
     this.portManager = new PortManager(this.config);
@@ -50,12 +50,12 @@ class BootstrapRunner {
     this.versions = this.config['foundry-versions'] || [];
     this.systems = this.config['foundry-systems'] || [];
     
-    console.log(`Simulacrum | Test Runner - 📊 Versions: ${this.versions.join(', ')}`);
-    console.log(`Simulacrum | Test Runner - 📊 Systems: ${this.systems.join(', ')}`);
+    console.log(`[Test Runner] 📊 Versions: ${this.versions.join(', ')}`);
+    console.log(`[Test Runner] 📊 Systems: ${this.systems.join(', ')}`);
     
     // Generate permutations
     this.permutations = this.generatePermutations();
-    console.log(`Simulacrum | Test Runner - 🔄 Generated ${this.permutations.length} permutations`);
+    console.log(`[Test Runner] 🔄 Generated ${this.permutations.length} permutations`);
     
     return true;
   }
@@ -117,7 +117,7 @@ class BootstrapRunner {
   }
 
   async runBootstrapProcess(port, permutation) {
-    console.log(`Simulacrum | Test Runner - 🔄 Running bootstrap process for ${permutation.id}...`);
+    console.log(`[Test Runner] 🔄 Running bootstrap process for ${permutation.id}...`);
     
     const browser = await puppeteer.launch({ 
       headless: this.config.puppeteer.headless,
@@ -132,7 +132,7 @@ class BootstrapRunner {
       const text = msg.text();
       // Ignore Chromium version compatibility warnings
       if (text.includes('modern JavaScript features') && text.includes('Chromium version')) {
-        console.log(`Simulacrum | Test Runner - [BROWSER] ${msg.type()}: ${text} (ignored)`);
+        console.log(`[Test Runner] [BROWSER] ${msg.type()}: ${text} (ignored)`);
         return;
       }
       
@@ -140,22 +140,22 @@ class BootstrapRunner {
       if (text.includes('JSHandle@')) {
         try {
           const args = await Promise.all(msg.args().map(arg => arg.jsonValue().catch(() => 'Unable to serialize')));
-          console.log(`Simulacrum | Test Runner - [BROWSER] ${msg.type()}:`, ...args);
+          console.log(`[Test Runner] [BROWSER] ${msg.type()}:`, ...args);
         } catch (e) {
-          console.log(`Simulacrum | Test Runner - [BROWSER] ${msg.type()}: ${text}`);
+          console.log(`[Test Runner] [BROWSER] ${msg.type()}: ${text}`);
         }
       } else {
-        console.log(`Simulacrum | Test Runner - [BROWSER] ${msg.type()}: ${text}`);
+        console.log(`[Test Runner] [BROWSER] ${msg.type()}: ${text}`);
       }
     });
     
     // Handle page errors without terminating (like POC)
     page.on('pageerror', (error) => {
       if (error.message.includes('modern JavaScript features') && error.message.includes('Chromium version')) {
-        console.log(`Simulacrum | Test Runner - [BROWSER] pageerror: ${error.message} (ignored)`);
+        console.log(`[Test Runner] [BROWSER] pageerror: ${error.message} (ignored)`);
         return;
       }
-      console.log(`Simulacrum | Test Runner - [BROWSER] pageerror: ${error.message}`);
+      console.log(`[Test Runner] [BROWSER] pageerror: ${error.message}`);
     });
     
     try {
@@ -175,12 +175,12 @@ class BootstrapRunner {
       }
       
       // Navigate to setup page (EXACTLY like your working POC)
-      console.log('Simulacrum | Test Runner - 📍 Navigating to setup page...');
+      console.log('[Test Runner] 📍 Navigating to setup page...');
       await page.goto(`http://localhost:${port}/setup`, { waitUntil: 'domcontentloaded', timeout: this.config.puppeteer.timeout });
-      console.log('Simulacrum | Test Runner - 📍 Navigated to setup page');
+      console.log('[Test Runner] 📍 Navigated to setup page');
       
       // Wait for setup page to be ready (EXACTLY like your working POC)
-      console.log('Simulacrum | Test Runner - 📍 Waiting for setup page to be ready...');
+      console.log('[Test Runner] 📍 Waiting for setup page to be ready...');
       await page.waitForFunction(() => {
         // Check for any setup-related elements
         const hasSetupElements = !!document.querySelector('.setup-menu, .setup-packages, [data-tab], .setup-packages-systems, .setup-packages-worlds');
@@ -190,10 +190,10 @@ class BootstrapRunner {
         return hasSetupElements || hasGameObject || hasAnyContent;
       }, { timeout: this.config.bootstrap.timeouts.setupPageReady });
       
-      console.log('Simulacrum | Test Runner - ✅ FoundryVTT setup page is ready');
+      console.log('[Test Runner] ✅ FoundryVTT setup page is ready');
       
       // Check for EULA that might appear dynamically on setup page (EXACTLY like your working POC)
-      console.log('Simulacrum | Test Runner - 📍 Checking for EULA that might appear on setup page...');
+      console.log('[Test Runner] 📍 Checking for EULA that might appear on setup page...');
               try {
           await page.waitForFunction(() => {
             const bodyText = document.body.textContent || '';
@@ -203,7 +203,7 @@ class BootstrapRunner {
                    bodyText.includes('please sign the End User License Agreement');
           }, { timeout: this.config.bootstrap.timeouts.eulaSetupPage });
         
-        console.log('Simulacrum | Test Runner - 📍 EULA appeared on setup page, accepting agreement...');
+        console.log('[Test Runner] 📍 EULA appeared on setup page, accepting agreement...');
         
         // Wait for EULA form to be fully rendered
         await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.eulaFormRender));
@@ -211,12 +211,12 @@ class BootstrapRunner {
         // Handle EULA agreement on setup page
         const setupEulaResult = await this.handleEULA(page);
         if (setupEulaResult.success) {
-          console.log('Simulacrum | Test Runner - ✅ EULA accepted on setup page');
+          console.log('[Test Runner] ✅ EULA accepted on setup page');
           // Wait for EULA processing
           await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.eulaProcessing));
         }
       } catch (e) {
-        console.log('Simulacrum | Test Runner - 📍 No EULA appeared on setup page, continuing...');
+        console.log('[Test Runner] 📍 No EULA appeared on setup page, continuing...');
       }
       
       // Install system (now that we're on the setup page)
@@ -244,9 +244,9 @@ class BootstrapRunner {
       }
       
       // Enable Simulacrum module
-      console.log('Simulacrum | Test Runner - 🔧 Enabling Simulacrum module...');
+      console.log('[Test Runner] 🔧 Enabling Simulacrum module...');
       await this.enableSimulacrumModule(page);
-      console.log('Simulacrum | Test Runner - ✅ Simulacrum module enabled');
+      console.log('[Test Runner] ✅ Simulacrum module enabled');
       
       return {
         success: true,
@@ -262,7 +262,7 @@ class BootstrapRunner {
   }
 
   async submitLicense(page, licenseKey) {
-    console.log('Simulacrum | Test Runner - 🔑 Submitting license key...');
+    console.log('[Test Runner] 🔑 Submitting license key...');
     
     try {
       const result = await page.evaluate(async (licenseKey) => {
@@ -298,7 +298,7 @@ class BootstrapRunner {
   }
 
   async handleEULA(page) {
-    console.log('Simulacrum | Test Runner - 📝 Checking for EULA...');
+    console.log('[Test Runner] 📝 Checking for EULA...');
     
     try {
       // Check if EULA text appears in body content (like your working POC)
@@ -316,10 +316,10 @@ class BootstrapRunner {
         };
       });
       
-      console.log(`Simulacrum | Test Runner - 📍 EULA check:`, JSON.stringify(eulaCheck, null, 2));
+      console.log(`[Test Runner] 📍 EULA check:`, JSON.stringify(eulaCheck, null, 2));
       
       if (eulaCheck.detected) {
-        console.log('Simulacrum | Test Runner - 📍 EULA detected, accepting agreement...');
+        console.log('[Test Runner] 📍 EULA detected, accepting agreement...');
         
         // Accept EULA (same logic as your working POC)
         const result = await page.evaluate(() => {
@@ -328,14 +328,14 @@ class BootstrapRunner {
             const eulaCheckbox = document.querySelector('#eula-agree, input[name="eula-agree"], input[type="checkbox"]');
             if (eulaCheckbox) {
               eulaCheckbox.checked = true;
-              console.log('Simulacrum | Test Runner - EULA checkbox checked');
+              console.log('[Test Runner] EULA checkbox checked');
             }
             
             // Look for the sign/accept button
             const signButton = document.querySelector('#sign, button[name="sign"], button[data-action*="sign"]');
             if (signButton) {
               signButton.click();
-              console.log('Simulacrum | Test Runner - EULA sign button clicked');
+              console.log('[Test Runner] EULA sign button clicked');
               return { success: true, method: 'button_click' };
             }
             
@@ -345,7 +345,7 @@ class BootstrapRunner {
               const text = button.textContent.toLowerCase();
               if (text.includes('sign') || text.includes('accept') || text.includes('agree') || text.includes('continue')) {
                 button.click();
-                console.log(`Simulacrum | Test Runner - EULA button clicked: ${button.textContent}`);
+                console.log(`[Test Runner] EULA button clicked: ${button.textContent}`);
                 return { success: true, method: 'text_search_click' };
               }
             }
@@ -357,33 +357,33 @@ class BootstrapRunner {
         });
         
         if (result.success) {
-          console.log('Simulacrum | Test Runner - ✅ EULA accepted successfully');
+          console.log('[Test Runner] ✅ EULA accepted successfully');
           
           // Wait for EULA processing
           await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.eulaProcessing));
           
           return result;
         } else {
-          console.log(`Simulacrum | Test Runner - ⚠️ EULA acceptance failed: ${result.reason}`);
+          console.log(`[Test Runner] ⚠️ EULA acceptance failed: ${result.reason}`);
           return result;
         }
       } else {
-        console.log('Simulacrum | Test Runner - 📍 No EULA detected, continuing to setup...');
+        console.log('[Test Runner] 📍 No EULA detected, continuing to setup...');
         return { success: true, method: 'no_eula' };
       }
       
     } catch (error) {
-      console.log(`Simulacrum | Test Runner - ⚠️ EULA check failed: ${error.message}, continuing...`);
+      console.log(`[Test Runner] ⚠️ EULA check failed: ${error.message}, continuing...`);
       return { success: true, method: 'error_continue' };
     }
   }
 
   async installSystem(page, system) {
-    console.log(`Simulacrum | Test Runner - 🎲 Installing system: ${system}`);
+    console.log(`[Test Runner] 🎲 Installing system: ${system}`);
     
     try {
       // Step 1: Wait for setup page to be fully ready (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Waiting for setup page to be fully ready...');
+      console.log('[Test Runner] 📍 Waiting for setup page to be fully ready...');
       
       // Wait for setup page to load - be more flexible about what constitutes "ready" (exactly like POC)
       await page.waitForFunction(() => {
@@ -395,10 +395,10 @@ class BootstrapRunner {
         return hasSetupElements || hasGameObject || hasAnyContent;
       }, { timeout: this.config.bootstrap.timeouts.setupPageReady });
       
-      console.log('Simulacrum | Test Runner - ✅ FoundryVTT setup page is ready');
+      console.log('[Test Runner] ✅ FoundryVTT setup page is ready');
       
       // Step 2: Look for and click "Decline Sharing" button (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Looking for Decline Sharing button...');
+      console.log('[Test Runner] 📍 Looking for Decline Sharing button...');
       try {
         const declineButton = await page.evaluate(() => {
           const buttons = Array.from(document.querySelectorAll('button'));
@@ -410,16 +410,16 @@ class BootstrapRunner {
           return false;
         });
         if (declineButton) {
-          console.log('Simulacrum | Test Runner - ✅ Decline Sharing button clicked');
+          console.log('[Test Runner] ✅ Decline Sharing button clicked');
         } else {
-          console.log('Simulacrum | Test Runner - ⚠️ Decline Sharing button not found, proceeding...');
+          console.log('[Test Runner] ⚠️ Decline Sharing button not found, proceeding...');
         }
       } catch (e) {
-        console.log('Simulacrum | Test Runner - ⚠️ Decline Sharing button not found, proceeding...');
+        console.log('[Test Runner] ⚠️ Decline Sharing button not found, proceeding...');
       }
       
       // Step 3: Click the step-button to proceed (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Clicking step-button to proceed...');
+      console.log('[Test Runner] 📍 Clicking step-button to proceed...');
       try {
         const stepButtonClicked = await page.evaluate(() => {
           const buttons = Array.from(document.querySelectorAll('.step-button:not(.disabled)'));
@@ -431,16 +431,16 @@ class BootstrapRunner {
           return false;
         });
         if (stepButtonClicked) {
-          console.log('Simulacrum | Test Runner - ✅ Step-button clicked');
+          console.log('[Test Runner] ✅ Step-button clicked');
         } else {
-          console.log('Simulacrum | Test Runner - ⚠️ Step-button not found, proceeding...');
+          console.log('[Test Runner] ⚠️ Step-button not found, proceeding...');
         }
       } catch (e) {
-        console.log('Simulacrum | Test Runner - ⚠️ Step-button not found, proceeding...');
+        console.log('[Test Runner] ⚠️ Step-button not found, proceeding...');
       }
       
       // Step 4: Click "Install System" button (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Step 4: Clicking Install System button...');
+      console.log('[Test Runner] 📍 Step 4: Clicking Install System button...');
       
       // First, let's see what buttons are actually available (exactly like POC)
       const availableButtons = await page.evaluate(() => {
@@ -452,7 +452,7 @@ class BootstrapRunner {
           type: btn.type
         }));
       });
-      console.log('Simulacrum | Test Runner - 📊 Available buttons:', JSON.stringify(availableButtons, null, 2));
+      console.log('[Test Runner] 📊 Available buttons:', JSON.stringify(availableButtons, null, 2));
       
       const installSystemClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
@@ -464,7 +464,7 @@ class BootstrapRunner {
         return false;
       });
       if (installSystemClicked) {
-        console.log('Simulacrum | Test Runner - ✅ Install System button clicked');
+        console.log('[Test Runner] ✅ Install System button clicked');
       } else {
         throw new Error('Install System button not found');
       }
@@ -473,10 +473,10 @@ class BootstrapRunner {
       await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.searchResults));
       
       // Step 2: Search for the system
-      console.log(`Simulacrum | Test Runner - 📍 Searching for ${system} system...`);
+      console.log(`[Test Runner] 📍 Searching for ${system} system...`);
       
       await page.type('#install-package-search-filter', system);
-      console.log(`Simulacrum | Test Runner - ✅ ${system} entered in search field`);
+      console.log(`[Test Runner] ✅ ${system} entered in search field`);
       
       // Wait for search results
       await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.searchResults));
@@ -490,10 +490,10 @@ class BootstrapRunner {
           className: el.className
         }));
       });
-      console.log(`Simulacrum | Test Runner - 📊 All packages found after searching for "${system}":`, JSON.stringify(allPackages, null, 2));
+      console.log(`[Test Runner] 📊 All packages found after searching for "${system}":`, JSON.stringify(allPackages, null, 2));
       
       // Step 3: Find and click Install button for the specific system
-      console.log(`Simulacrum | Test Runner - 📍 Looking for ${system} package specifically...`);
+      console.log(`[Test Runner] 📍 Looking for ${system} package specifically...`);
       
       const packageResult = await page.evaluate((systemName) => {
         // Look for package elements that might contain the system
@@ -524,14 +524,14 @@ class BootstrapRunner {
         return { found: false };
       }, system);
       
-      console.log(`Simulacrum | Test Runner - 📊 ${system} package search result:`, JSON.stringify(packageResult, null, 2));
+      console.log(`[Test Runner] 📊 ${system} package search result:`, JSON.stringify(packageResult, null, 2));
       
       if (!packageResult.found) {
         throw new Error(`${system} package not found in search results`);
       }
       
       // Step 4: Click the install button
-      console.log(`Simulacrum | Test Runner - 📍 Clicking Install button for ${system}...`);
+      console.log(`[Test Runner] 📍 Clicking Install button for ${system}...`);
       
       const installClicked = await page.evaluate((systemName) => {
         const packageElements = Array.from(document.querySelectorAll('[data-package-id], .package, .package-tile'));
@@ -559,10 +559,10 @@ class BootstrapRunner {
         throw new Error(`Could not click install button for ${system}`);
       }
       
-      console.log(`Simulacrum | Test Runner - ✅ Install button clicked for ${system}`);
+      console.log(`[Test Runner] ✅ Install button clicked for ${system}`);
       
       // Step 5: Wait for installation to complete
-      console.log(`Simulacrum | Test Runner - ⏳ Waiting for ${system} installation to complete...`);
+      console.log(`[Test Runner] ⏳ Waiting for ${system} installation to complete...`);
       
       await page.waitForFunction((systemName) => {
         const bodyText = document.body.textContent || '';
@@ -571,14 +571,14 @@ class BootstrapRunner {
                bodyText.includes('was installed successfully');
       }, { timeout: this.config.bootstrap.timeouts.systemInstallation }, system);
       
-      console.log(`Simulacrum | Test Runner - ✅ ${system} system installed successfully`);
+      console.log(`[Test Runner] ✅ ${system} system installed successfully`);
       
       // Step 6: Close dialog
       try {
         await page.click('.header-control.icon.fa-solid.fa-xmark');
-        console.log('Simulacrum | Test Runner - ✅ Dialog closed');
+        console.log('[Test Runner] ✅ Dialog closed');
       } catch (e) {
-        console.log('Simulacrum | Test Runner - ⚠️ Could not close dialog, continuing...');
+        console.log('[Test Runner] ⚠️ Could not close dialog, continuing...');
       }
       
       return { success: true };
@@ -588,7 +588,7 @@ class BootstrapRunner {
   }
 
   async createWorld(page, permutation) {
-    console.log(`Simulacrum | Test Runner - 🌍 Creating world for ${permutation.id}...`);
+    console.log(`[Test Runner] 🌍 Creating world for ${permutation.id}...`);
     
     try {
       // Navigate to worlds tab
@@ -617,17 +617,17 @@ class BootstrapRunner {
       // World Title
       try {
         await page.type('input[name="title"]', `Test World ${permutation.id}`);
-        console.log('Simulacrum | Test Runner - ✅ World title filled');
+        console.log('[Test Runner] ✅ World title filled');
       } catch (e) {
-        console.log(`Simulacrum | Test Runner - ⚠️ Could not fill world title: ${e.message}`);
+        console.log(`[Test Runner] ⚠️ Could not fill world title: ${e.message}`);
       }
       
       // World ID
       try {
         await page.type('input[name="id"]', `test-world-${permutation.id}`);
-        console.log('Simulacrum | Test Runner - ✅ World ID filled');
+        console.log('[Test Runner] ✅ World ID filled');
       } catch (e) {
-        console.log(`Simulacrum | Test Runner - ⚠️ Could not fill world ID: ${e.message}`);
+        console.log(`[Test Runner] ⚠️ Could not fill world ID: ${e.message}`);
       }
       
       // Game System - critical for world creation
@@ -637,28 +637,28 @@ class BootstrapRunner {
           const tagName = await page.evaluate(el => el.tagName, systemField);
           if (tagName === 'SELECT') {
             await page.select('select[name="system"], #world-config-system', permutation.system);
-            console.log(`Simulacrum | Test Runner - ✅ Game system selected: ${permutation.system}`);
+            console.log(`[Test Runner] ✅ Game system selected: ${permutation.system}`);
           } else {
             await page.type('input[name="system"], #world-config-system', permutation.system);
-            console.log(`Simulacrum | Test Runner - ✅ Game system entered: ${permutation.system}`);
+            console.log(`[Test Runner] ✅ Game system entered: ${permutation.system}`);
           }
         } else {
-          console.log('Simulacrum | Test Runner - ⚠️ Game system field not found - this may cause world creation to fail');
+          console.log('[Test Runner] ⚠️ Game system field not found - this may cause world creation to fail');
         }
       } catch (e) {
-        console.log(`Simulacrum | Test Runner - ⚠️ Could not set game system: ${e.message} - this may cause world creation to fail`);
+        console.log(`[Test Runner] ⚠️ Could not set game system: ${e.message} - this may cause world creation to fail`);
       }
       
       // Description - try multiple approaches, but don't fail if not found
       try {
         await page.type('textarea[name="description"], textarea[placeholder*="description"], textarea[placeholder*="Description"], textarea[name="desc"]', `Test world for ${permutation.description}`);
-        console.log('Simulacrum | Test Runner - ✅ World description filled');
+        console.log('[Test Runner] ✅ World description filled');
       } catch (e) {
-        console.log(`Simulacrum | Test Runner - ⚠️ Could not fill world description: ${e.message} - continuing without it`);
+        console.log(`[Test Runner] ⚠️ Could not fill world description: ${e.message} - continuing without it`);
       }
       
       // Submit form (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Submitting world creation form...');
+      console.log('[Test Runner] 📍 Submitting world creation form...');
       
       const submitClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
@@ -692,13 +692,13 @@ class BootstrapRunner {
       });
       
       if (submitClicked.success) {
-        console.log(`Simulacrum | Test Runner - ✅ World creation form submitted via ${submitClicked.method}`);
+        console.log(`[Test Runner] ✅ World creation form submitted via ${submitClicked.method}`);
       } else {
         throw new Error(`Submit button not found: ${submitClicked.reason}`);
       }
       
       // Wait for world creation to complete (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Waiting for world creation to complete...');
+      console.log('[Test Runner] 📍 Waiting for world creation to complete...');
       await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.worldCreationWait));
       
       // Check for creation success or error messages (exactly like POC)
@@ -712,7 +712,7 @@ class BootstrapRunner {
         };
       });
       
-      console.log('Simulacrum | Test Runner - 📊 World creation result check:', JSON.stringify(creationResult, null, 2));
+      console.log('[Test Runner] 📊 World creation result check:', JSON.stringify(creationResult, null, 2));
       
       // Get the actual world ID that was created by looking at the form data
       const actualWorldId = await page.evaluate((permutationId) => {
@@ -744,7 +744,7 @@ class BootstrapRunner {
         return null;
       }, permutation.id);
       
-      console.log('Simulacrum | Test Runner - 📊 Actual world ID found:', JSON.stringify(actualWorldId, null, 2));
+      console.log('[Test Runner] 📊 Actual world ID found:', JSON.stringify(actualWorldId, null, 2));
       
       if (!actualWorldId || !actualWorldId.id) {
         throw new Error('Could not determine the actual world ID that was created');
@@ -761,11 +761,11 @@ class BootstrapRunner {
   }
 
   async launchWorld(page, worldId) {
-    console.log(`Simulacrum | Test Runner - 🚀 Launching world: ${worldId}`);
+    console.log(`[Test Runner] 🚀 Launching world: ${worldId}`);
     
     try {
       // Navigate back to worlds tab (exactly like POC)
-      console.log('Simulacrum | Test Runner - 📍 Navigating back to worlds tab...');
+      console.log('[Test Runner] 📍 Navigating back to worlds tab...');
       await page.click('[data-tab="worlds"]');
       
       // Wait for worlds tab content and ensure we're actually on the worlds tab
@@ -787,10 +787,10 @@ class BootstrapRunner {
         };
       });
       
-      console.log('Simulacrum | Test Runner - 📊 Worlds tab verification:', JSON.stringify(onWorldsTab, null, 2));
+      console.log('[Test Runner] 📊 Worlds tab verification:', JSON.stringify(onWorldsTab, null, 2));
       
       // Now find and click the launch button for the specific world (exactly like POC)
-      console.log(`Simulacrum | Test Runner - 📍 Looking for Launch World button for ${worldId}...`);
+      console.log(`[Test Runner] 📍 Looking for Launch World button for ${worldId}...`);
       
       const launchClicked = await page.evaluate((worldId) => {
         // Find the world element for the specific world - be more flexible in searching
@@ -824,31 +824,31 @@ class BootstrapRunner {
           
           if (launchButton) {
             launchButton.click();
-            console.log(`Simulacrum | Test Runner - Found and clicked worldLaunch button for ${worldId}`);
+            console.log(`[Test Runner] Found and clicked worldLaunch button for ${worldId}`);
             return true;
           } else {
-            console.log(`Simulacrum | Test Runner - ${worldId} element found but no worldLaunch button found within it`);
-            console.log(`Simulacrum | Test Runner - Element HTML: ${targetWorldElement.outerHTML.substring(0, 200)}`);
+            console.log(`[Test Runner] ${worldId} element found but no worldLaunch button found within it`);
+            console.log(`[Test Runner] Element HTML: ${targetWorldElement.outerHTML.substring(0, 200)}`);
             return false;
           }
         } else {
-          console.log(`Simulacrum | Test Runner - ${worldId} element not found in DOM`);
+          console.log(`[Test Runner] ${worldId} element not found in DOM`);
           return false;
         }
       }, worldId);
       
       if (launchClicked) {
-        console.log(`Simulacrum | Test Runner - ✅ Launch World button clicked for ${worldId}`);
+        console.log(`[Test Runner] ✅ Launch World button clicked for ${worldId}`);
         
         // Wait for game world to load
-        console.log('Simulacrum | Test Runner - 📍 Waiting for game world to load...');
+        console.log('[Test Runner] 📍 Waiting for game world to load...');
         
         // Set up console log listener for game canvas ready
         const gameLoadedPromise = new Promise((resolve) => {
           const listener = (msg) => {
             const text = msg.text();
             if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
-              console.log('Simulacrum | Test Runner - ✅ Game canvas ready - world fully loaded');
+              console.log('[Test Runner] ✅ Game canvas ready - world fully loaded');
               page.off('console', listener);
               resolve();
             }
@@ -858,7 +858,7 @@ class BootstrapRunner {
           // Timeout fallback after 60 seconds
           setTimeout(() => {
             page.off('console', listener);
-            console.log('Simulacrum | Test Runner - ⚠️ Timeout waiting for game canvas - continuing anyway');
+            console.log('[Test Runner] ⚠️ Timeout waiting for game canvas - continuing anyway');
             resolve();
           }, 60000);
         });
@@ -866,27 +866,27 @@ class BootstrapRunner {
         await gameLoadedPromise;
         
         // Handle user authentication if on join page (exactly like POC)
-        console.log('Simulacrum | Test Runner - 📍 Checking if user authentication is required...');
+        console.log('[Test Runner] 📍 Checking if user authentication is required...');
         
         const joinPageUrl = page.url();
         if (joinPageUrl.includes('/join')) {
-          console.log('Simulacrum | Test Runner - 📍 Join page detected, handling user authentication...');
+          console.log('[Test Runner] 📍 Join page detected, handling user authentication...');
           
           // Wait for join form to load with retry
-          console.log('Simulacrum | Test Runner - 📍 Waiting for join form to load...');
+          console.log('[Test Runner] 📍 Waiting for join form to load...');
           let userSelect = null;
           for (let i = 0; i < 10; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             userSelect = await page.$('select[name="userid"]');
             if (userSelect) {
-              console.log(`Simulacrum | Test Runner - ✅ User dropdown found after ${i + 1} attempts`);
+              console.log(`[Test Runner] ✅ User dropdown found after ${i + 1} attempts`);
               break;
             }
-            console.log(`Simulacrum | Test Runner - 🔄 Attempt ${i + 1}: User dropdown not found, retrying...`);
+            console.log(`[Test Runner] 🔄 Attempt ${i + 1}: User dropdown not found, retrying...`);
           }
           
           // Look for user selection dropdown (exactly like POC)
-          console.log('Simulacrum | Test Runner - 📍 Looking for user selection dropdown...');
+          console.log('[Test Runner] 📍 Looking for user selection dropdown...');
           
           // Debug what's actually on the page
           const pageContent = await page.evaluate(() => {
@@ -906,7 +906,7 @@ class BootstrapRunner {
           // userSelect already found in retry loop above
           
           if (userSelect) {
-            console.log('Simulacrum | Test Runner - ✅ User selection dropdown found, selecting GameMaster...');
+            console.log('[Test Runner] ✅ User selection dropdown found, selecting GameMaster...');
             // Get available users and select GameMaster if available (exactly like POC)
             const userOptions = await page.evaluate(() => {
               const select = document.querySelector('select[name="userid"]');
@@ -920,7 +920,7 @@ class BootstrapRunner {
               return [];
             });
             
-            console.log('Simulacrum | Test Runner - 📊 Available users:', JSON.stringify(userOptions, null, 2));
+            console.log('[Test Runner] 📊 Available users:', JSON.stringify(userOptions, null, 2));
             
             // Look for GameMaster user (exactly like POC)
             const gameMasterOption = userOptions.find(opt => 
@@ -931,13 +931,13 @@ class BootstrapRunner {
             
             if (gameMasterOption) {
               await page.select('select[name="userid"]', gameMasterOption.value);
-              console.log(`Simulacrum | Test Runner - ✅ Selected user: ${gameMasterOption.text}`);
+              console.log(`[Test Runner] ✅ Selected user: ${gameMasterOption.text}`);
             } else {
               // Select first available user (exactly like POC)
               const firstUser = userOptions.find(opt => opt.value && !opt.disabled);
               if (firstUser) {
                 await page.select('select[name="userid"]', firstUser.value);
-                console.log(`Simulacrum | Test Runner - ✅ Selected first available user: ${firstUser.text}`);
+                console.log(`[Test Runner] ✅ Selected first available user: ${firstUser.text}`);
               } else {
                 throw new Error('No available users found in dropdown');
               }
@@ -948,7 +948,7 @@ class BootstrapRunner {
           
           // Fill in password (empty for default setup) (exactly like POC)
           await page.type('input[name="password"], input[type="password"]', '');
-          console.log('Simulacrum | Test Runner - ✅ Password filled (empty)');
+          console.log('[Test Runner] ✅ Password filled (empty)');
           
           // Submit the form (exactly like POC)
           const authSubmitClicked = await page.evaluate(() => {
@@ -965,7 +965,7 @@ class BootstrapRunner {
             return false;
           });
           if (authSubmitClicked) {
-            console.log('Simulacrum | Test Runner - ✅ Authentication form submitted');
+            console.log('[Test Runner] ✅ Authentication form submitted');
           } else {
             throw new Error('Authentication submit button not found');
           }
@@ -976,18 +976,18 @@ class BootstrapRunner {
           // Check if we were redirected to the game (exactly like POC)
           const newUrl = page.url();
           if (newUrl.includes('/game')) {
-            console.log('Simulacrum | Test Runner - ✅ Successfully authenticated and redirected to game world');
+            console.log('[Test Runner] ✅ Successfully authenticated and redirected to game world');
           } else {
-            console.log(`Simulacrum | Test Runner - 📍 Still on ${newUrl}, waiting longer for authentication...`);
+            console.log(`[Test Runner] 📍 Still on ${newUrl}, waiting longer for authentication...`);
             await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.authenticationRedirect));
           }
         } else {
-          console.log('Simulacrum | Test Runner - 📍 Not on join page, proceeding with verification...');
+          console.log('[Test Runner] 📍 Not on join page, proceeding with verification...');
         }
         
         return { success: true };
       } else {
-        console.log(`Simulacrum | Test Runner - ⚠️ Launch World button not found for ${worldId}`);
+        console.log(`[Test Runner] ⚠️ Launch World button not found for ${worldId}`);
         
         // Debug what world elements actually exist (exactly like POC)
         const worldDebug = await page.evaluate(() => {
@@ -1012,11 +1012,11 @@ class BootstrapRunner {
   }
 
   async verifyGameWorld(page) {
-    console.log('Simulacrum | Test Runner - 🎯 Verifying game world...');
+    console.log('[Test Runner] 🎯 Verifying game world...');
     
     try {
       // Wait for game world to fully load (exactly like POC)
-      console.log('Simulacrum | Test Runner - ⏳ Waiting for game world to fully load...');
+      console.log('[Test Runner] ⏳ Waiting for game world to fully load...');
       await new Promise(resolve => setTimeout(resolve, this.config.bootstrap.timeouts.gameWorldLoad));
       
       // Take comprehensive verification (exactly like POC)
@@ -1045,7 +1045,7 @@ class BootstrapRunner {
         };
       });
       
-      console.log('Simulacrum | Test Runner - 📊 Game World Verification:', JSON.stringify(gameWorldVerification, null, 2));
+      console.log('[Test Runner] 📊 Game World Verification:', JSON.stringify(gameWorldVerification, null, 2));
       
       // Verify we're actually in a working game world (exactly like POC)
       if (!gameWorldVerification.isInGameWorld || !gameWorldVerification.hasGameUI) {
@@ -1104,14 +1104,14 @@ class BootstrapRunner {
         };
       });
       
-      console.log('Simulacrum | Test Runner - 📊 FINAL COMPREHENSIVE VERIFICATION:');
-      console.log('Simulacrum | Test Runner - 📊 Verification Data:', JSON.stringify(finalVerification, null, 2));
+      console.log('[Test Runner] 📊 FINAL COMPREHENSIVE VERIFICATION:');
+      console.log('[Test Runner] 📊 Verification Data:', JSON.stringify(finalVerification, null, 2));
       
       if (finalVerification.gameReady && finalVerification.worldLoaded && finalVerification.userAuthenticated) {
-        console.log('Simulacrum | Test Runner - ✅✅✅ COMPLETE SUCCESS VERIFICATION! ✅✅✅');
-        console.log('Simulacrum | Test Runner - 🎯 FoundryVTT is fully operational with a working game world');
-        console.log('Simulacrum | Test Runner - 🎯 User is authenticated and ready to play');
-        console.log('Simulacrum | Test Runner - 🎯 All essential UI components are present and functional');
+        console.log('[Test Runner] ✅✅✅ COMPLETE SUCCESS VERIFICATION! ✅✅✅');
+        console.log('[Test Runner] 🎯 FoundryVTT is fully operational with a working game world');
+        console.log('[Test Runner] 🎯 User is authenticated and ready to play');
+        console.log('[Test Runner] 🎯 All essential UI components are present and functional');
         
         return { 
           ready: true, 
@@ -1139,12 +1139,12 @@ class BootstrapRunner {
   async enableSimulacrumModule(page) {
     try {
       // Step 37: Click the settings button
-      console.log('Simulacrum | Test Runner - 📍 Clicking settings button...');
+      console.log('[Test Runner] 📍 Clicking settings button...');
       await page.click('.ui-control.plain.icon.fa-solid.fa-gears');
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Step 38: Click "Manage Modules" button
-      console.log('Simulacrum | Test Runner - 📍 Clicking Manage Modules...');
+      console.log('[Test Runner] 📍 Clicking Manage Modules...');
       const manageModulesClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const manageModulesButton = buttons.find(btn => 
@@ -1164,7 +1164,7 @@ class BootstrapRunner {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Step 39: Enable simulacrum module checkbox
-      console.log('Simulacrum | Test Runner - 📍 Enabling Simulacrum module checkbox...');
+      console.log('[Test Runner] 📍 Enabling Simulacrum module checkbox...');
       const moduleEnabled = await page.evaluate(() => {
         const simulacrumCheckbox = document.querySelector('input[name="simulacrum"]');
         if (simulacrumCheckbox) {
@@ -1180,7 +1180,7 @@ class BootstrapRunner {
       }
       
       // Step 40: Click "Save Module Settings" button
-      console.log('Simulacrum | Test Runner - 📍 Saving module settings...');
+      console.log('[Test Runner] 📍 Saving module settings...');
       const saveClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const saveButton = buttons.find(btn => 
@@ -1200,7 +1200,7 @@ class BootstrapRunner {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Step 41: Click "Yes" to confirm - this will trigger a full page reload!
-      console.log('Simulacrum | Test Runner - 📍 Confirming module activation (this will reload the page)...');
+      console.log('[Test Runner] 📍 Confirming module activation (this will reload the page)...');
       const confirmClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const yesButton = buttons.find(btn => 
@@ -1214,17 +1214,17 @@ class BootstrapRunner {
       });
       
       if (!confirmClicked) {
-        console.log('Simulacrum | Test Runner - ⚠️ Could not find Yes confirmation button - module may already be enabled');
+        console.log('[Test Runner] ⚠️ Could not find Yes confirmation button - module may already be enabled');
       } else {
         // Wait for the page to reload and FoundryVTT to reinitialize
-        console.log('Simulacrum | Test Runner - 📍 Waiting for FoundryVTT to reinitialize after module activation...');
+        console.log('[Test Runner] 📍 Waiting for FoundryVTT to reinitialize after module activation...');
         
         // Set up console log listener for FoundryVTT initialization
         const foundryLoadedPromise = new Promise((resolve) => {
           const listener = (msg) => {
             const text = msg.text();
             if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
-              console.log('Simulacrum | Test Runner - ✅ FoundryVTT game canvas ready - full initialization complete');
+              console.log('[Test Runner] ✅ FoundryVTT game canvas ready - full initialization complete');
               page.off('console', listener);
               resolve();
             }
@@ -1234,7 +1234,7 @@ class BootstrapRunner {
           // Timeout fallback after 30 seconds
           setTimeout(() => {
             page.off('console', listener);
-            console.log('Simulacrum | Test Runner - ⚠️ Timeout waiting for FoundryVTT initialization log');
+            console.log('[Test Runner] ⚠️ Timeout waiting for FoundryVTT initialization log');
             resolve();
           }, 30000);
         });
@@ -1242,13 +1242,13 @@ class BootstrapRunner {
         await foundryLoadedPromise;
         
         // 10 second grace period for everything to settle
-        console.log('Simulacrum | Test Runner - 📍 Waiting 10 seconds grace period for full initialization...');
+        console.log('[Test Runner] 📍 Waiting 10 seconds grace period for full initialization...');
         await new Promise(resolve => setTimeout(resolve, 10000));
         
-        console.log('Simulacrum | Test Runner - ✅ Module activation reload complete');
+        console.log('[Test Runner] ✅ Module activation reload complete');
       }
       
-      console.log('Simulacrum | Test Runner - ✅ Simulacrum module enabled in settings - module initialization will be verified by integration tests');
+      console.log('[Test Runner] ✅ Simulacrum module enabled in settings - module initialization will be verified by integration tests');
       
     } catch (error) {
       console.error('❌ Failed to enable Simulacrum module:', error.message);
@@ -1259,7 +1259,7 @@ class BootstrapRunner {
   async takeScreenshot(page, permutationId) {
     const filename = `bootstrap-success-${permutationId}-${Date.now()}.png`;
     await page.screenshot({ path: filename, fullPage: true });
-    console.log(`Simulacrum | Test Runner - 📸 Screenshot saved: ${filename}`);
+    console.log(`[Test Runner] 📸 Screenshot saved: ${filename}`);
     return filename;
   }
 
@@ -1269,7 +1269,7 @@ class BootstrapRunner {
   // Clean session API for new architecture - wraps existing working logic
   async createSession(permutation) {
     // Create a modified version of runBootstrapTest that returns live session
-    console.log(`Simulacrum | Test Runner - 🎯 Creating session for: ${permutation.id}`);
+    console.log(`[Test Runner] 🎯 Creating session for: ${permutation.id}`);
     
     const testId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const port = await this.portManager.allocatePort(testId);
@@ -1284,13 +1284,13 @@ class BootstrapRunner {
     }
     
     // Package the module first
-    console.log('Simulacrum | Test Runner - 📦 Packaging Simulacrum module...');
+    console.log('[Test Runner] 📦 Packaging Simulacrum module...');
     const packageScriptPath = join(PROJECT_ROOT, 'tools', 'package-module.js');
     execSync(`node ${packageScriptPath}`, { stdio: 'inherit', cwd: PROJECT_ROOT });
-    console.log('Simulacrum | Test Runner - ✅ Module packaged to dist/');
+    console.log('[Test Runner] ✅ Module packaged to dist/');
     
-    console.log(`Simulacrum | Test Runner - 🔨 Building Docker image: ${imageName}...`);
-    console.log(`Simulacrum | Test Runner - 🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
+    console.log(`[Test Runner] 🔨 Building Docker image: ${imageName}...`);
+    console.log(`[Test Runner] 🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
     
     try {
       // Determine the zip file based on version
@@ -1307,7 +1307,7 @@ class BootstrapRunner {
           stdio: 'inherit',
           cwd: PROJECT_ROOT 
         });
-        console.log(`Simulacrum | Test Runner - ✅ Docker image ${imageName} built successfully`);
+        console.log(`[Test Runner] ✅ Docker image ${imageName} built successfully`);
       } finally {
         // Clean up temporary zip file
         try {
@@ -1324,7 +1324,7 @@ class BootstrapRunner {
     
     try {
       // Step 2: Clean up any existing containers
-      console.log('Simulacrum | Test Runner - 🧹 Cleaning up existing containers...');
+      console.log('[Test Runner] 🧹 Cleaning up existing containers...');
       try {
         execSync(`docker stop ${testId}`, { stdio: 'ignore' });
         execSync(`docker rm ${testId}`, { stdio: 'ignore' });
@@ -1333,26 +1333,26 @@ class BootstrapRunner {
       }
       
       // Step 3: Start fresh container
-      console.log(`Simulacrum | Test Runner - 🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
+      console.log(`[Test Runner] 🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
       const containerId = execSync(`docker run -d --name ${testId} -p ${port}:30000 ${imageName}` , { encoding: 'utf8' }).trim();
-      console.log(`Simulacrum | Test Runner - 📦 Container ID: ${containerId}`);
+      console.log(`[Test Runner] 📦 Container ID: ${containerId}`);
       
       // Step 4: Wait for container to be ready
-      console.log('Simulacrum | Test Runner - ⏳ Waiting for container to be ready...');
+      console.log('[Test Runner] ⏳ Waiting for container to be ready...');
       const ready = await this.waitForContainerReady(port);
       
       if (!ready) {
-        console.log(`Simulacrum | Test Runner - 🔍 Container failed health check. Container ID: ${containerId}. Logs:`);
+        console.log(`[Test Runner] 🔍 Container failed health check. Container ID: ${containerId}. Logs:`);
         try {
           const logs = execSync(`docker logs ${containerId.slice(0, 12)}`, { encoding: 'utf8' });
-          console.log('Simulacrum | Test Runner - 📋 Container Logs:', logs);
+          console.log('[Test Runner] 📋 Container Logs:', logs);
         } catch (e) {
-          console.log(`Simulacrum | Test Runner - Could not retrieve logs: ${e.message}`);
+          console.log(`[Test Runner] Could not retrieve logs: ${e.message}`);
         }
         throw new Error('Container failed to start properly');
       }
       
-      console.log('Simulacrum | Test Runner - ✅ Container is ready');
+      console.log('[Test Runner] ✅ Container is ready');
       
       // Step 5: Run bootstrap process
       const bootstrapResult = await this.runBootstrapProcess(port, permutation);
@@ -1361,7 +1361,7 @@ class BootstrapRunner {
         throw new Error(`Bootstrap failed: ${bootstrapResult.error}`);
       }
       
-      console.log('Simulacrum | Test Runner - ✅ Bootstrap completed successfully - live session ready');
+      console.log('[Test Runner] ✅ Bootstrap completed successfully - live session ready');
       
       // Return live session for testing (DON'T cleanup)
       return {
@@ -1385,13 +1385,13 @@ class BootstrapRunner {
   }
 
   async cleanupSession(sessionInfo) {
-    console.log(`Simulacrum | Test Runner - 🧹 Cleaning up session ${sessionInfo.sessionId}...`);
+    console.log(`[Test Runner] 🧹 Cleaning up session ${sessionInfo.sessionId}...`);
     
     // Close browser if provided
     if (sessionInfo.browser) {
       try {
         await sessionInfo.browser.close();
-        console.log(`Simulacrum | Test Runner - ✅ Browser closed for session ${sessionInfo.sessionId}`);
+        console.log(`[Test Runner] ✅ Browser closed for session ${sessionInfo.sessionId}`);
       } catch (e) {
         console.warn(`⚠️ Browser cleanup failed: ${e.message}`);
       }
@@ -1403,7 +1403,7 @@ class BootstrapRunner {
         const { execSync } = await import('child_process');
         // Use rm -f to force remove regardless of container state
         execSync(`docker rm -f ${sessionInfo.containerId}`, { stdio: 'ignore' });
-        console.log(`Simulacrum | Test Runner - ✅ Container ${sessionInfo.containerId} force removed`);
+        console.log(`[Test Runner] ✅ Container ${sessionInfo.containerId} force removed`);
       } catch (e) {
         console.warn(`⚠️ Container cleanup failed: ${e.message}`);
       }
@@ -1413,24 +1413,24 @@ class BootstrapRunner {
     if (sessionInfo.port && sessionInfo.sessionId) {
       try {
         this.portManager.releasePort(sessionInfo.sessionId, sessionInfo.port);
-        console.log(`Simulacrum | Test Runner - ✅ Port ${sessionInfo.port} released for session ${sessionInfo.sessionId}`);
+        console.log(`[Test Runner] ✅ Port ${sessionInfo.port} released for session ${sessionInfo.sessionId}`);
       } catch (e) {
         console.warn(`⚠️ Port release failed: ${e.message}`);
       }
     }
     
-    console.log(`Simulacrum | Test Runner - ✅ Session ${sessionInfo.sessionId} fully cleaned up`);
+    console.log(`[Test Runner] ✅ Session ${sessionInfo.sessionId} fully cleaned up`);
   }
 
   async cleanupImages(permutations) {
-    console.log('Simulacrum | Test Runner - 🧹 Cleaning up Docker images...');
+    console.log('[Test Runner] 🧹 Cleaning up Docker images...');
     
     for (const permutation of permutations) {
       const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
       try {
         const { execSync } = await import('child_process');
         execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
-        console.log(`Simulacrum | Test Runner - ✅ Docker image ${imageName} removed`);
+        console.log(`[Test Runner] ✅ Docker image ${imageName} removed`);
       } catch (e) {
         console.warn(`⚠️ Docker image cleanup failed for ${imageName}: ${e.message}`);
       }

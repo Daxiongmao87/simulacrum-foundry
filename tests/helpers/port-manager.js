@@ -20,7 +20,7 @@ export class PortManager {
       this.availablePorts.push(port);
     }
     
-    console.log(`Simulacrum | Test Runner - PortManager initialized: ${this.availablePorts.length} ports available (${this.portRange.start}-${this.portRange.end}), max ${this.maxConcurrentInstances} concurrent instances`);
+    console.log(`[Test Runner] PortManager initialized: ${this.availablePorts.length} ports available (${this.portRange.start}-${this.portRange.end}), max ${this.maxConcurrentInstances} concurrent instances`);
   }
 
   /**
@@ -31,14 +31,14 @@ export class PortManager {
   async allocatePort(containerId) {
     // Check if we're at max concurrent instances
     if (this.allocatedPorts.size >= this.maxConcurrentInstances) {
-      console.log(`Simulacrum | Test Runner - Max concurrent instances (${this.maxConcurrentInstances}) reached. Queuing ${containerId}...`);
+      console.log(`[Test Runner] Max concurrent instances (${this.maxConcurrentInstances}) reached. Queuing ${containerId}...`);
       return await this.queuePortRequest(containerId);
     }
 
     // Find next available port
     const availablePort = this.findAvailablePort();
     if (!availablePort) {
-      console.log(`Simulacrum | Test Runner - No available ports in range ${this.portRange.start}-${this.portRange.end}. Queuing ${containerId}...`);
+      console.log(`[Test Runner] No available ports in range ${this.portRange.start}-${this.portRange.end}. Queuing ${containerId}...`);
       return await this.queuePortRequest(containerId);
     }
 
@@ -48,7 +48,7 @@ export class PortManager {
       timestamp: Date.now()
     });
 
-    console.log(`Simulacrum | Test Runner - Port ${availablePort} allocated to ${containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
+    console.log(`[Test Runner] Port ${availablePort} allocated to ${containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
     return availablePort;
   }
 
@@ -62,7 +62,7 @@ export class PortManager {
       const allocation = this.allocatedPorts.get(port);
       if (allocation.containerId === containerId) {
         this.allocatedPorts.delete(port);
-        console.log(`Simulacrum | Test Runner - Port ${port} released by ${containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
+        console.log(`[Test Runner] Port ${port} released by ${containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
         
         // Process queued requests
         this.processPortQueue();
@@ -123,7 +123,7 @@ export class PortManager {
       };
 
       this.portQueue.push(request);
-      console.log(`Simulacrum | Test Runner - ${containerId} queued for port allocation (position ${this.portQueue.length})`);
+      console.log(`[Test Runner] ${containerId} queued for port allocation (position ${this.portQueue.length})`);
 
       // Set timeout to prevent infinite waiting
       setTimeout(() => {
@@ -162,7 +162,7 @@ export class PortManager {
       timestamp: Date.now()
     });
 
-    console.log(`Simulacrum | Test Runner - Port ${availablePort} allocated to queued ${request.containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
+    console.log(`[Test Runner] Port ${availablePort} allocated to queued ${request.containerId} (${this.allocatedPorts.size}/${this.maxConcurrentInstances} instances)`);
     request.resolve(availablePort);
   }
 

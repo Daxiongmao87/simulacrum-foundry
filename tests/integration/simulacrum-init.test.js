@@ -31,15 +31,15 @@ const PROJECT_ROOT = join(__dirname, '..', '..');
 export default async function simulacrumInitTest(session, permutation, config) {
   const { page, gameState } = session;
   
-  console.log(`Simulacrum | Integration Test -     🧪 Testing Simulacrum module initialization on ${permutation.description}`);
+  console.log(`[Integration Test]     🧪 Testing Simulacrum module initialization on ${permutation.description}`);
   
   try {
     // Wait for modules to fully load
-    console.log(`Simulacrum | Integration Test -     📍 Waiting for modules to initialize...`);
+    console.log(`[Integration Test]     📍 Waiting for modules to initialize...`);
     await new Promise(resolve => setTimeout(resolve, 5000));
     
     // Test 1: Verify Simulacrum module is loaded and active
-    console.log(`Simulacrum | Integration Test -     📍 Verifying Simulacrum module is loaded...`);
+    console.log(`[Integration Test]     📍 Verifying Simulacrum module is loaded...`);
     const moduleCheck = await page.evaluate(() => {
       const modules = game.modules;
       const simulacrumModule = modules.get('simulacrum');
@@ -55,7 +55,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       };
     });
     
-    console.log(`Simulacrum | Integration Test -     📊 Module Check: ${JSON.stringify(moduleCheck, null, 2)}`);
+    console.log(`[Integration Test]     📊 Module Check: ${JSON.stringify(moduleCheck, null, 2)}`);
     
     if (!moduleCheck.moduleExists) {
       throw new Error('Simulacrum module not found in module registry');
@@ -65,10 +65,10 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('Simulacrum module is not active');
     }
     
-    console.log(`Simulacrum | Integration Test -     ✅ Simulacrum module loaded and active (v${moduleCheck.moduleVersion})`);
+    console.log(`[Integration Test]     ✅ Simulacrum module loaded and active (v${moduleCheck.moduleVersion})`);
     
     // Test 2: Verify game.simulacrum object exists and is properly initialized
-    console.log(`Simulacrum | Integration Test -     📍 Verifying game.simulacrum object...`);
+    console.log(`[Integration Test]     📍 Verifying game.simulacrum object...`);
     const simulacrumObjectCheck = await page.evaluate(() => {
       const simulacrum = window.game?.simulacrum;
       
@@ -88,7 +88,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       };
     });
     
-    console.log(`Simulacrum | Integration Test -     📊 game.simulacrum Check: ${JSON.stringify(simulacrumObjectCheck, null, 2)}`);
+    console.log(`[Integration Test]     📊 game.simulacrum Check: ${JSON.stringify(simulacrumObjectCheck, null, 2)}`);
     
     if (!simulacrumObjectCheck.exists) {
       throw new Error('game.simulacrum object not found');
@@ -102,10 +102,10 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('game.simulacrum.aiService not found');
     }
     
-    console.log(`Simulacrum | Integration Test -     ✅ game.simulacrum object properly initialized with ${simulacrumObjectCheck.propertyCount} properties`);
+    console.log(`[Integration Test]     ✅ game.simulacrum object properly initialized with ${simulacrumObjectCheck.propertyCount} properties`);
     
     // Test 3: Verify module settings are registered
-    console.log(`Simulacrum | Integration Test -     📍 Verifying module settings...`);
+    console.log(`[Integration Test]     📍 Verifying module settings...`);
     const settingsCheck = await page.evaluate(() => {
       try {
         // Check for key settings
@@ -130,7 +130,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       }
     });
     
-    console.log(`Simulacrum | Integration Test -     📊 Settings Check: ${JSON.stringify(settingsCheck, null, 2)}`);
+    console.log(`[Integration Test]     📊 Settings Check: ${JSON.stringify(settingsCheck, null, 2)}`);
     
     if (!settingsCheck.success) {
       throw new Error(`Settings check failed: ${settingsCheck.error}`);
@@ -140,10 +140,10 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('simulacrum.apiEndpoint setting not found');
     }
     
-    console.log(`Simulacrum | Integration Test -     ✅ Module settings properly registered`);
+    console.log(`[Integration Test]     ✅ Module settings properly registered`);
     
     // Test 4: Verify initialization state
-    console.log(`Simulacrum | Integration Test -     📍 Verifying initialization state...`);
+    console.log(`[Integration Test]     📍 Verifying initialization state...`);
     const initStateCheck = await page.evaluate(() => {
       const initState = window.game?.simulacrum?._initState;
       
@@ -156,7 +156,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       };
     });
     
-    console.log(`Simulacrum | Integration Test -     📊 Init State Check: ${JSON.stringify(initStateCheck, null, 2)}`);
+    console.log(`[Integration Test]     📊 Init State Check: ${JSON.stringify(initStateCheck, null, 2)}`);
     
     if (!initStateCheck.hasInitState) {
       throw new Error('Module initialization state not found');
@@ -170,7 +170,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('Module ready hook not completed');
     }
     
-    console.log(`Simulacrum | Integration Test -     ✅ Module initialization state verified`);
+    console.log(`[Integration Test]     ✅ Module initialization state verified`);
     
     // Test 5: Take screenshot for verification
     const screenshotPath = join(PROJECT_ROOT, 'tests', 'artifacts', `simulacrum-init-${permutation.id}-${Date.now()}.png`);
@@ -179,7 +179,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       fullPage: true 
     });
     
-    console.log(`Simulacrum | Integration Test -     📸 Screenshot saved: ${screenshotPath}`);
+    console.log(`[Integration Test]     📸 Screenshot saved: ${screenshotPath}`);
     
     // Return successful test result
     return {
@@ -199,7 +199,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
     };
     
   } catch (error) {
-    console.log(`Simulacrum | Integration Test -     ❌ Simulacrum module initialization test failed: ${error.message}`);
+    console.log(`[Integration Test]     ❌ Simulacrum module initialization test failed: ${error.message}`);
     
     // Take screenshot on failure for debugging
     const failureScreenshot = join(PROJECT_ROOT, 'tests', 'artifacts', `simulacrum-init-FAILED-${permutation.id}-${Date.now()}.png`);
@@ -208,9 +208,9 @@ export default async function simulacrumInitTest(session, permutation, config) {
         path: failureScreenshot,
         fullPage: true 
       });
-      console.log(`Simulacrum | Integration Test -     📸 Failure screenshot saved: ${failureScreenshot}`);
+      console.log(`[Integration Test]     📸 Failure screenshot saved: ${failureScreenshot}`);
     } catch (screenshotError) {
-      console.log(`Simulacrum | Integration Test -     ⚠️ Could not take failure screenshot: ${screenshotError.message}`);
+      console.log(`[Integration Test]     ⚠️ Could not take failure screenshot: ${screenshotError.message}`);
     }
     
     return {
