@@ -18,9 +18,6 @@ class ModelContextDetector {
       // First try to get from cached settings
       const cachedWindow = game.settings.get('simulacrum', 'contextWindow');
       if (cachedWindow && cachedWindow > 0) {
-        console.log(
-          `🔍 Using cached context window: ${cachedWindow} tokens for ${modelName}`
-        );
         return cachedWindow;
       }
 
@@ -36,9 +33,6 @@ class ModelContextDetector {
         const parameters = modelInfo.parameters || {};
         const contextWindow = parameters.num_ctx || 4096;
 
-        console.log(
-          `🔍 Detected context window: ${contextWindow} tokens for ${modelName}`
-        );
         return contextWindow;
       }
     } catch (error) {
@@ -47,7 +41,7 @@ class ModelContextDetector {
 
     // Fallback to reasonable default
     const fallbackWindow = 4096;
-    console.log(
+    console.warn(
       `🔍 Using fallback context window: ${fallbackWindow} tokens for ${modelName || 'unknown model'}`
     );
     return fallbackWindow;
@@ -75,9 +69,6 @@ export class ContextCompaction {
       apiEndpoint,
       modelName
     );
-    console.log(
-      `📦 Context compaction initialized with ${this.maxTokens} max tokens`
-    );
   }
 
   /**
@@ -86,7 +77,6 @@ export class ContextCompaction {
    */
   setMaxTokens(maxTokens) {
     this.maxTokens = maxTokens;
-    console.log(`📦 Context compaction max tokens set to ${this.maxTokens}`);
   }
 
   /**
@@ -105,7 +95,7 @@ export class ContextCompaction {
     const thresholdTokens = this.maxTokens * this.compactionThreshold;
 
     if (currentUsage > thresholdTokens) {
-      console.log(
+      console.warn(
         `🗜️ Context compaction triggered at ${currentUsage}/${this.maxTokens} tokens (${Math.round((currentUsage / this.maxTokens) * 100)}%)`
       );
       return await this.performCompaction(chatHistory);
@@ -133,7 +123,6 @@ export class ContextCompaction {
 
       if (workingHistory.length <= 2) {
         // Too few messages to compact meaningfully
-        console.log('📦 Skipping compaction - too few messages to compress');
         return chatHistory;
       }
 
@@ -141,10 +130,6 @@ export class ContextCompaction {
       const midpoint = Math.floor(workingHistory.length / 2);
       const olderHalf = workingHistory.slice(0, midpoint);
       const newerHalf = workingHistory.slice(midpoint);
-
-      console.log(
-        `📦 Compacting ${olderHalf.length} older messages, preserving ${newerHalf.length} newer messages`
-      );
 
       // Send older half to AI for summarization
       const summary = await this.summarizeHistory(olderHalf);
@@ -161,9 +146,6 @@ export class ContextCompaction {
         ...newerHalf,
       ];
 
-      console.log(
-        `📦 Compacted ${olderHalf.length} messages into 1 summary. New history length: ${compactedHistory.length}`
-      );
       return compactedHistory;
     } catch (error) {
       console.error('📦 Context compaction failed:', error);

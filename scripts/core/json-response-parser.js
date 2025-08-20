@@ -30,7 +30,7 @@ export class AgentResponseParser {
 
         return parsed;
       } catch (error) {
-        console.log('Simulacrum | Parsing error, retrying:', error.message);
+        console.warn('Simulacrum | Parsing error, retrying:', error.message);
         // Request a new response from the AI service
         rawResponse = await this.aiService.sendMessage(
           'Please respond in the required JSON format.'

@@ -234,18 +234,9 @@ export class ImageValidator {
         FilePicker.sources !== null
       ) {
         const sourceNames = Object.keys(FilePicker.sources);
-        console.log(
-          'Simulacrum | ImageValidator | Using official FilePicker.sources API:',
-          sourceNames
-        );
         return sourceNames;
       }
-    } catch (error) {
-      console.debug(
-        'Simulacrum | ImageValidator | FilePicker.sources access failed:',
-        error.message
-      );
-    }
+    } catch {}
 
     // Method 2: Check FilePicker instance sources property
     try {
@@ -255,41 +246,20 @@ export class ImageValidator {
         tempFilePicker.sources !== null
       ) {
         const sourceNames = Object.keys(tempFilePicker.sources);
-        console.log(
-          'Simulacrum | ImageValidator | Using FilePicker instance sources:',
-          sourceNames
-        );
         return sourceNames;
       }
-    } catch (error) {
-      console.debug(
-        'Simulacrum | ImageValidator | FilePicker instance sources access failed:',
-        error.message
-      );
-    }
+    } catch {}
 
     // Method 3: Check CONFIG.FilePicker configuration objects
     try {
       if (typeof window !== 'undefined' && window.CONFIG?.FilePicker?.sources) {
         const sourceNames = Object.keys(window.CONFIG.FilePicker.sources);
-        console.log(
-          'Simulacrum | ImageValidator | Using CONFIG.FilePicker.sources:',
-          sourceNames
-        );
         return sourceNames;
       }
-    } catch (error) {
-      console.debug(
-        'Simulacrum | ImageValidator | CONFIG.FilePicker access failed:',
-        error.message
-      );
-    }
+    } catch {}
 
     // Fallback: Trial-and-error discovery with official FoundryVTT source names
     // Based on v13 API documentation: "data" | "public" | "s3"
-    console.log(
-      'Simulacrum | ImageValidator | Using trial-and-error discovery with official source names'
-    );
     const officialSources = ['data', 'public', 's3']; // Official FoundryVTT v13 sources
     const availableSources = [];
 
@@ -298,15 +268,8 @@ export class ImageValidator {
         // Test if this source is accessible by trying to browse its root
         await FilePicker.browse(source, '');
         availableSources.push(source);
-        console.debug(
-          `Simulacrum | ImageValidator | Source '${source}' is available`
-        );
-      } catch (error) {
+      } catch {
         // Source not available in this environment, skip it
-        console.debug(
-          `Simulacrum | ImageValidator | Source '${source}' not available:`,
-          error.message
-        );
       }
     }
 
@@ -317,10 +280,6 @@ export class ImageValidator {
       return ['data', 'public']; // Should never happen with properly configured FoundryVTT
     }
 
-    console.log(
-      'Simulacrum | ImageValidator | Discovered available sources:',
-      availableSources
-    );
     return availableSources;
   }
 

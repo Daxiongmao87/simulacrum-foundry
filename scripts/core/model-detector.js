@@ -29,8 +29,6 @@ export class ModelDetector {
     }
 
     try {
-      console.log(`🤖 Detecting models for endpoint: ${apiEndpoint}`);
-
       // Test different endpoint patterns
       const detectionResults = await Promise.allSettled([
         this.testOllamaModels(apiEndpoint),
@@ -40,9 +38,6 @@ export class ModelDetector {
       // Return first successful result
       for (const result of detectionResults) {
         if (result.status === 'fulfilled' && result.value.models.length > 0) {
-          console.log(
-            `🎯 Found ${result.value.models.length} models via ${result.value.type}`
-          );
           this.cache.set(cacheKey, result.value);
           return result.value;
         }
@@ -76,8 +71,6 @@ export class ModelDetector {
       .replace('/v1/chat/completions', '')
       .replace('/v1', '');
     const tagsUrl = `${ollamaEndpoint}/api/tags`;
-
-    console.log(`🦙 Testing Ollama models at: ${tagsUrl}`);
 
     const response = await fetch(tagsUrl, {
       method: 'GET',
@@ -118,7 +111,6 @@ export class ModelDetector {
    */
   async testOpenAIModels(apiEndpoint, apiKey) {
     const modelsUrl = `${apiEndpoint}/models`;
-    console.log(`🔍 Testing OpenAI models at: ${modelsUrl}`);
 
     const headers = {};
     if (apiKey) {
@@ -203,7 +195,6 @@ export class ModelDetector {
    */
   clearCache() {
     this.cache.clear();
-    console.log('🧹 Model detection cache cleared');
   }
 
   /**

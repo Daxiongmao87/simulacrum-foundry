@@ -41,8 +41,6 @@ export class ContextWindowDetector {
     }
 
     try {
-      console.log(`🔍 Testing API endpoint: ${apiEndpoint}`);
-
       // Test basic connectivity first
       const pingResponse = await fetch(`${apiEndpoint}/models`, {
         method: 'GET',
@@ -101,7 +99,6 @@ export class ContextWindowDetector {
           showOverride: true,
           autoDetect: true,
         };
-        console.log(`🎯 Detected Ollama API at ${apiEndpoint}`);
         this.cache.set(cacheKey, result);
         return result;
       } else {
@@ -115,7 +112,6 @@ export class ContextWindowDetector {
           showOverride: false,
           autoDetect: false,
         };
-        console.log(`🎯 Detected OpenAI-compatible API at ${apiEndpoint}`);
         this.cache.set(cacheKey, result);
         return result;
       }
@@ -147,9 +143,6 @@ export class ContextWindowDetector {
 
     try {
       const showEndpoint = apiEndpoint.replace('/v1', '/api/show');
-      console.log(
-        `🔍 Getting context window for ${modelName} from ${showEndpoint}`
-      );
 
       const response = await fetch(showEndpoint, {
         method: 'POST',
@@ -164,9 +157,6 @@ export class ContextWindowDetector {
         // Check parameters object first
         if (data.parameters?.num_ctx) {
           const contextWindow = parseInt(data.parameters.num_ctx);
-          console.log(
-            `🎯 Found context window in parameters: ${contextWindow}`
-          );
           return contextWindow;
         }
 
@@ -175,9 +165,6 @@ export class ContextWindowDetector {
           const match = data.modelfile.match(/PARAMETER num_ctx (\d+)/);
           if (match) {
             const contextWindow = parseInt(match[1]);
-            console.log(
-              `🎯 Found context window in modelfile: ${contextWindow}`
-            );
             return contextWindow;
           }
         }
@@ -185,13 +172,10 @@ export class ContextWindowDetector {
         // Check other common locations
         if (data.model_info?.num_ctx) {
           const contextWindow = parseInt(data.model_info.num_ctx);
-          console.log(
-            `🎯 Found context window in model_info: ${contextWindow}`
-          );
           return contextWindow;
         }
 
-        console.log(
+        console.warn(
           `⚠️ No context window found for ${modelName}, using default 8192`
         );
         return 8192;
@@ -214,7 +198,6 @@ export class ContextWindowDetector {
    */
   clearCache() {
     this.cache.clear();
-    console.log('🧹 Context window detection cache cleared');
   }
 
   /**

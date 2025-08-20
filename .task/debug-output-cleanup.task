@@ -1,117 +1,113 @@
-# Debug Output Cleanup Task - Issue #66
+# Task: Remove Excessive Debug Outputs from Simulacrum Module - Issue #66
 
-**Problem Statement**: The Simulacrum module contains excessive debug outputs throughout the codebase that need to be cleaned up to provide a professional user experience. Only critical state changes and error logging should be preserved.
+## Problem Statement
+Issue #66: ESLint reports 93 warnings about "Unexpected console statement" during pre-commit checks. The project's ESLint configuration only allows `console.warn` and `console.error`, but the codebase contains 502 console statements across 34 files using disallowed methods (`console.log`, `console.debug`, `console.info`).
 
-**Acceptance Criteria**:
-- All unnecessary console.log, console.debug, and console.info statements are removed from scripts/ directory
-- Critical state changes and error logging are preserved
-- Module logs are clean and professional
+## Acceptance Criteria
+- All ESLint "Unexpected console statement" warnings are resolved
+- Essential error reporting is preserved using `console.warn` or `console.error`
+- Debug noise and development logging is removed
+- Code passes pre-commit ESLint checks without console statement violations
 - No functionality is broken during cleanup
-- All changes are validated through testing
 
-**MVP Scope**: Remove excessive debug output while preserving only essential logging for errors and critical state changes.
+## MVP Scope
+Fix ESLint violations only - do NOT build a new logging system or add logging infrastructure. Simple removal/conversion of existing console statements.
 
-## Phase 1: Investigation and Analysis
+## Task Breakdown
 
-### project-investigator Tasks:
-1. **Scan All JavaScript Files**: Search for all console.log, console.debug, console.info, console.warn, and console.error statements across the entire scripts/ directory
-2. **Categorize Debug Statements**: Create a comprehensive inventory categorizing each logging statement as:
-   - REMOVE: Development/debugging info no longer needed
-   - KEEP: Critical state changes, errors, or important user information
-   - REVIEW: Borderline cases requiring evaluation
-3. **Identify Debug Patterns**: Look for common debug patterns and verbose logging areas:
-   - Function entry/exit logging
-   - Variable state dumps
-   - Development timing/performance logs
-   - Excessive API call logging
-   - Temporary debugging statements
-4. **Risk Assessment**: Identify any logging that might be tied to error handling or user feedback mechanisms
-5. **File Priority Analysis**: Determine which files have the most excessive debug output requiring cleanup
+### Phase 1: Investigation and Categorization
+**Agent: project-investigator**
 
-### Research Questions:
-- Which files contain the highest density of debug statements?
-- Are there any console statements that serve as user notifications or error feedback?
-- What logging patterns are used for legitimate error handling vs development debugging?
-- Are there any console statements in critical code paths that might indicate important state changes?
+Analyze all 502 console statements across 34 files to:
 
-### Investigation Scope:
-- Focus ONLY on scripts/ directory (excluding tests/ and other directories)
-- Include fimlib/ submodule files within scripts/
-- Search patterns: console.log, console.debug, console.info, console.warn, console.error
-- Document findings with file locations and categorization recommendations
+1. **Categorize console statements by type and purpose:**
+   - Development debug statements (remove these)
+   - Essential error reporting (convert to console.error)
+   - Important warnings (convert to console.warn)
+   - Informational messages (evaluate for removal vs conversion)
 
-## Phase 2: Implementation and Cleanup
+2. **Identify critical files requiring careful review:**
+   - Core module files (`scripts/main.js`, `scripts/settings.js`)
+   - Error handling (`scripts/error-handling.js`)
+   - AI service integration (`scripts/chat/ai-service.js`)
+   - Tool registry and CRUD operations
 
-### implementation-tester Tasks:
-1. **Remove Unnecessary Debug Statements**: Systematically remove all console statements categorized as "REMOVE" from Phase 1
-2. **Preserve Critical Logging**: Ensure all error handling and critical state change logging remains intact
-3. **Handle Edge Cases**: Review borderline cases and make conservative decisions (when in doubt, keep the logging)
-4. **Maintain Code Readability**: Ensure removal doesn't impact code structure or readability
-5. **Batch Processing**: Process files in logical groups to maintain consistency
+3. **Document findings in specific categories:**
+   - Files with mostly debug statements (candidates for bulk removal)
+   - Files with error handling that should use console.error
+   - Files with user-facing warnings that should use console.warn
+   - Test files (determine if console statements should remain for test output)
 
-### Implementation Requirements:
-- Remove ONLY console.log, console.debug, and console.info statements identified as unnecessary
-- PRESERVE all console.error and console.warn statements (these are typically critical)
-- PRESERVE any console statements that provide user feedback or error information
-- DO NOT modify any error handling logic - only remove debug output statements
-- Maintain all existing functionality and code structure
-- Apply changes systematically file by file
+4. **Assess impact of removal on functionality:**
+   - Identify any console statements that serve functional purposes
+   - Flag any statements that might be relied upon by external systems
 
-### Test Scenarios:
-1. **Functionality Validation**: Ensure all core module functionality works after cleanup
-2. **Error Handling Verification**: Confirm error handling and user feedback mechanisms still work
-3. **Critical State Logging**: Verify important state changes are still properly logged
-4. **UI/UX Testing**: Ensure no user-facing functionality is broken
-5. **Integration Testing**: Test with FoundryVTT to ensure module loads and operates correctly
+### Phase 2: Implementation and Cleanup
+**Agent: implementation-tester**
 
-### Validation Criteria:
-- Module initializes without errors
-- All tools and features function as expected
-- Critical errors are still properly logged
-- No user-facing functionality is broken
-- Console output is significantly reduced and professional
+Execute systematic cleanup based on investigation findings:
 
-## Phase 3: Documentation and Completion
+1. **Remove development debug statements:**
+   - Delete `console.log()` used for debugging
+   - Delete `console.debug()` statements
+   - Remove `console.info()` used for development information
 
-### project-documentation-writer Tasks:
-1. **Document Changes Made**: Create summary of files modified and types of debug statements removed
-2. **Update Issue Status**: Document completion status and any decisions made during cleanup
-3. **Provide Cleanup Statistics**: Report on number of debug statements removed vs preserved
-4. **Note Any Preserved Logging**: Document why specific console statements were kept for future reference
+2. **Convert essential reporting:**
+   - Change error reporting to `console.error()`
+   - Change important warnings to `console.warn()`
+   - Apply conversions only where statements serve legitimate error/warning purposes
 
-### Documentation Requirements:
-- Summary of files modified with before/after debug statement counts
-- Categorization of what was removed vs what was preserved
-- Any edge cases or decisions that required evaluation
-- Recommendations for future debug statement management
+3. **Handle special cases:**
+   - Test files: Determine appropriate handling (remove vs keep for test output)
+   - Build/tooling files: Review if console output is intentional for CLI tools
+   - Third-party/submodule files: Handle according to their purpose
 
-## Dependencies and Prerequisites:
-- Access to all JavaScript files in scripts/ directory
-- Understanding of FoundryVTT module architecture and error handling patterns
-- Ability to test module functionality after changes
-- ESLint configuration should remain satisfied after cleanup
+4. **Validate changes incrementally:**
+   - Run `npm run lint` after each batch of changes
+   - Ensure no new ESLint errors are introduced
+   - Test basic module functionality after major file changes
 
-## Success Metrics:
-1. **Quantitative**: Significant reduction in console output during normal operation
-2. **Qualitative**: Professional, clean console output focused on errors and critical information
-3. **Functional**: All module features work correctly after cleanup
-4. **Maintainable**: Code remains readable and maintainable post-cleanup
+### Phase 3: Final Validation
+**Agent: implementation-tester**
 
-## Risk Mitigation:
-- Make conservative decisions - when in doubt, preserve the logging statement
-- Focus on obviously unnecessary debug output (development/testing artifacts)
-- Test thoroughly after each batch of changes
-- Maintain git history for easy rollback if needed
+Comprehensive testing and validation:
 
-## Completion Criteria:
-- All files in scripts/ directory have been reviewed and cleaned
-- Functionality testing confirms no regressions
-- Console output during normal operation is professional and minimal
-- Only error logging and critical state changes remain
-- Issue #66 can be marked as resolved
+1. **ESLint compliance verification:**
+   - Run `npm run lint` to confirm zero console statement warnings
+   - Verify pre-commit hooks pass without console violations
+   - Confirm only `console.warn` and `console.error` remain (if any)
 
-## Notes:
-- This is strictly a cleanup task - no new features or enhancements should be added
-- Focus on the MVP: remove excessive debug output while preserving essential logging
-- Prioritize user experience and professional presentation over comprehensive logging
-- Be systematic and thorough to ensure no excessive debug output remains
+2. **Functionality testing:**
+   - Test module initialization in FoundryVTT
+   - Verify AI service functionality works correctly
+   - Test tool operations to ensure no broken functionality
+   - Confirm error handling still reports appropriately
+
+3. **Edge case validation:**
+   - Test error conditions to ensure console.error statements work
+   - Verify any remaining console.warn statements trigger appropriately
+   - Confirm no essential debugging was accidentally removed
+
+## Success Metrics
+1. ESLint `npm run lint` reports zero "Unexpected console statement" warnings
+2. Pre-commit hooks pass without console statement violations
+3. Module loads and functions correctly in FoundryVTT
+4. Essential error reporting is preserved and functional
+5. Git commit succeeds without ESLint blocking
+
+## Implementation Constraints
+- **NO scope creep**: Do not implement new logging systems or infrastructure
+- **Preserve functionality**: Do not remove console statements that serve functional purposes
+- **ESLint compliance**: Only `console.warn` and `console.error` are allowed
+- **MVP approach**: Fix the immediate ESLint violations, nothing more
+
+## Dependencies
+- Access to codebase for analysis and modification
+- Ability to run `npm run lint` for validation
+- Understanding of ESLint configuration in `.eslintrc.json`
+
+## Notes
+- 502 console statements across 34 files indicates significant cleanup needed
+- Some files (like tests, build tools) may legitimately need console output
+- Focus on core module files where debug statements should definitely be removed
+- Test files in `/tests/` directory may need different handling than core module files

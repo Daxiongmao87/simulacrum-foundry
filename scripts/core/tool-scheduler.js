@@ -49,43 +49,20 @@ export class SimulacrumToolScheduler {
 
   // Legacy method – schedule a single tool call
   async scheduleToolExecution(toolName, parameters, _user, abortSignal) {
-    console.log(
-      'Simulacrum | scheduleToolExecution: Starting for tool',
-      toolName
-    );
     const callId = generateCallId();
     const request = { callId, name: toolName, args: parameters };
-    console.log(
-      'Simulacrum | scheduleToolExecution: Before calling this.schedule()'
-    );
     const promise = new Promise((resolve, reject) => {
-      console.log(
-        'Simulacrum | scheduleToolExecution: Inside Promise constructor'
-      );
       // Store resolve/reject for later completion
       this.schedule(request, abortSignal, resolve, reject);
-      console.log(
-        'Simulacrum | scheduleToolExecution: Promise waiting for this.schedule() to resolve/reject'
-      );
     });
     return promise;
   }
 
   // New schedule method – accepts array of requests
   async schedule(requests, signal, resolvePromise, rejectPromise) {
-    console.log(
-      'Simulacrum  < /dev/null |  schedule: Start of schedule() method'
-    );
     const reqArray = Array.isArray(requests) ? requests : [requests];
-    console.log('Simulacrum | schedule: After reqArray initialization');
-    console.log('Simulacrum | schedule: Before toolRegistry await');
     const toolRegistry = await this.toolRegistry;
-    console.log('Simulacrum | schedule: After toolRegistry await');
     const newCalls = reqArray.map((req) => {
-      console.log(
-        'Simulacrum | schedule: Inside reqArray.map() loop for request',
-        req.callId
-      );
       const tool = toolRegistry.getTool(req.name);
       if (!tool) {
         return {
@@ -112,7 +89,6 @@ export class SimulacrumToolScheduler {
     this.toolCalls = this.toolCalls.concat(newCalls);
     this.notifyToolCallsUpdate();
 
-    console.log('Simulacrum | schedule: Before processing newCalls for loop');
     for (const call of newCalls) {
       if (call.status !== 'validating') {
         continue;
@@ -146,7 +122,6 @@ export class SimulacrumToolScheduler {
     }
     this.attemptExecutionOfScheduledCalls(signal);
     this.checkAndNotifyCompletion();
-    console.log('Simulacrum | schedule: End of schedule() method');
   }
 
   setStatusInternal(targetCallId, status, data) {

@@ -115,7 +115,6 @@ export class ToolRegistry {
     const permission = toolPermissions[toolName];
 
     if (permission === 'autoconfirm') {
-      console.log(`Simulacrum | Auto-confirming tool ${toolName}`);
       return true;
     } else if (permission === 'deny') {
       ui.notifications.error(

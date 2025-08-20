@@ -170,7 +170,6 @@ export class SimulacrumChatModal {
    */
   _cancelCurrentOperation() {
     if (this.abortController) {
-      console.log('Simulacrum | Cancelling current AI operation');
       this.abortController.abort();
       this.abortController = null;
     }
@@ -685,12 +684,7 @@ export class SimulacrumChatModal {
       this.transformSendButtonToCancel();
 
       // Show initial placeholder
-      console.log('Simulacrum | About to show placeholder');
       this.showPlaceholder('Thinking');
-      console.log(
-        'Simulacrum | Placeholder shown, current placeholder:',
-        this.currentPlaceholder
-      );
 
       // Set this chat as the context for the agentic loop controller
       game.simulacrum.agenticLoopController.setChatContext(this);
@@ -775,7 +769,7 @@ export class SimulacrumChatModal {
    * @param {Array} functionCalls - Any function calls that were executed
    * @private
    */
-  _onStreamComplete(finalMessage, functionCalls) {
+  _onStreamComplete(finalMessage, _functionCalls) {
     // Add final message to conversation history
     if (finalMessage) {
       this.history.push({
@@ -783,8 +777,6 @@ export class SimulacrumChatModal {
         content: finalMessage,
       });
     }
-
-    console.log('Stream complete:', { finalMessage, functionCalls });
   }
 
   /**
@@ -841,10 +833,6 @@ export class SimulacrumChatModal {
     }
 
     this.contextDocuments.push(document);
-    console.log(
-      `Simulacrum | Added document to context: ${document.name} (${document.uuid})`,
-      this.contextDocuments
-    );
     ui.notifications.info(`Added ${document.name} to context`);
   }
 

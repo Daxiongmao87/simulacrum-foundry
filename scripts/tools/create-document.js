@@ -22,29 +22,17 @@ export class CreateDocumentTool extends Tool {
   }
 
   async execute(params) {
-    console.log(
-      `Simulacrum | CreateDocumentTool: execute method called with params:`,
-      params
-    );
     try {
       const { documentType, name, data } = params;
 
       // Use DocumentDiscovery to find target collection
       const { collection } = DocumentDiscovery.findCollection(documentType);
-      console.log(
-        `Simulacrum | CreateDocumentTool: Found collection for ${documentType}:`,
-        collection.name
-      );
 
       // Create the document using Foundry API
       const createdDocument = await collection.documentClass.create({
         name,
         ...data,
       });
-      console.log(
-        `Simulacrum | CreateDocumentTool: Document created successfully:`,
-        createdDocument
-      );
 
       return {
         success: true,

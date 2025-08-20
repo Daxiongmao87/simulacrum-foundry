@@ -52,9 +52,6 @@ export class GenericCRUDTools {
         );
       }
 
-      console.log(
-        `Simulacrum | GenericCRUDTools | Validating images for new ${documentType} document...`
-      );
       ui.notifications.info(
         `Simulacrum | Validating images for new ${documentType} document...`
       );
@@ -134,9 +131,6 @@ export class GenericCRUDTools {
   async updateDocument(documentType, documentId, updates) {
     try {
       const document = await this.readDocument(documentType, documentId);
-      console.log(
-        `Simulacrum | GenericCRUDTools | Validating images for ${documentType} document update...`
-      );
       ui.notifications.info(
         `Simulacrum | Validating images for ${documentType} document update...`
       );

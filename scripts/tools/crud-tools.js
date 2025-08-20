@@ -45,20 +45,10 @@ export class CreateDocumentTool extends Tool {
    * @returns {Promise<object>} The created document instance.
    */
   async execute(params) {
-    console.log('Simulacrum | CreateDocumentTool.execute() started');
-    console.log(
-      'Simulacrum | Calling crudService.createDocument() with:',
-      params.documentType,
-      params.data
-    );
     try {
       const result = await this.crudService.createDocument(
         params.documentType,
         params.data
-      );
-      console.log(
-        'Simulacrum | crudService.createDocument() succeeded:',
-        result
       );
       return result;
     } catch (error) {

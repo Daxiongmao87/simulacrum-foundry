@@ -60,9 +60,6 @@ export class TokenTracker {
     }
     this._promptTokens += count;
     this._totalTokens += count;
-    console.log(
-      `Simulacrum | TokenTracker: Added ${count} prompt tokens. Current total: ${this._promptTokens}`
-    );
   }
 
   /**
@@ -79,9 +76,6 @@ export class TokenTracker {
     }
     this._completionTokens += count;
     this._totalTokens += count;
-    console.log(
-      `Simulacrum | TokenTracker: Added ${count} completion tokens. Current total: ${this._completionTokens}`
-    );
   }
 
   /**
@@ -91,7 +85,6 @@ export class TokenTracker {
     this._promptTokens = 0;
     this._completionTokens = 0;
     this._totalTokens = 0;
-    console.log('Simulacrum | TokenTracker: All token counts reset.');
   }
 
   /**
@@ -136,9 +129,6 @@ export class TokenTracker {
    */
   setMaxTokens(maxTokens) {
     this._maxTokens = maxTokens;
-    console.log(
-      `🎯 TokenTracker initialized with ${maxTokens} token context window`
-    );
   }
 
   /**
