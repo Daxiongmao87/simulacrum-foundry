@@ -17,6 +17,59 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..', '..');
 
+// DEBUG mode detection
+const DEBUG_MODE = process.env.DEBUG === 'true' || process.argv.includes('--debug');
+
+/**
+ * Smart console logging with DEBUG mode support for integration tests
+ */
+class IntegrationTestLogger {
+  constructor(debugMode = false) {
+    this.debugMode = debugMode;
+  }
+
+  // Essential logs - always shown
+  essential(message) {
+    console.log(`[Integration Test] ${message}`);
+  }
+
+  // Debug logs - only shown when DEBUG=true or --debug flag
+  debug(message) {
+    if (this.debugMode) {
+      console.log(`[Integration Test] [Debug] ${message}`);
+    }
+  }
+
+  // Success logs - always shown
+  success(message) {
+    console.log(`[Integration Test] ✅ ${message}`);
+  }
+
+  // Error logs - always shown
+  error(message) {
+    console.error(`[Integration Test] ❌ ${message}`);
+  }
+
+  // Info logs - always shown
+  info(message) {
+    console.log(`[Integration Test] 📋 ${message}`);
+  }
+
+  // Progress logs - debug mode only (too verbose for normal operation)
+  progress(message) {
+    if (this.debugMode) {
+      console.log(`[Integration Test] [Debug] 🔄 ${message}`);
+    }
+  }
+
+  // Data logs - debug mode only (JSON dumps are verbose)
+  data(message, data) {
+    if (this.debugMode) {
+      console.log(`[Integration Test] [Debug] 📊 ${message}:`, JSON.stringify(data, null, 2));
+    }
+  }
+}
+
 /**
  * Simulacrum Module Initialization Test
  * 
@@ -30,16 +83,17 @@ const PROJECT_ROOT = join(__dirname, '..', '..');
  */
 export default async function simulacrumInitTest(session, permutation, config) {
   const { page, gameState } = session;
+  const logger = new IntegrationTestLogger(DEBUG_MODE);
   
-  console.log(`[Integration Test]     🧪 Testing Simulacrum module initialization on ${permutation.description}`);
+  logger.essential(`🧪 Testing Simulacrum module initialization on ${permutation.description}`);
   
   try {
     // Wait for modules to fully load
-    console.log(`[Integration Test]     📍 Waiting for modules to initialize...`);
+    logger.progress('Waiting for modules to initialize...');
     await new Promise(resolve => setTimeout(resolve, 5000));
     
     // Test 1: Verify Simulacrum module is loaded and active
-    console.log(`[Integration Test]     📍 Verifying Simulacrum module is loaded...`);
+    logger.essential('📍 Verifying Simulacrum module is loaded...');
     const moduleCheck = await page.evaluate(() => {
       const modules = game.modules;
       const simulacrumModule = modules.get('simulacrum');
@@ -55,7 +109,8 @@ export default async function simulacrumInitTest(session, permutation, config) {
       };
     });
     
-    console.log(`[Integration Test]     📊 Module Check: ${JSON.stringify(moduleCheck, null, 2)}`);
+    // Show detailed data only in debug mode
+    logger.data('Module Check', moduleCheck);
     
     if (!moduleCheck.moduleExists) {
       throw new Error('Simulacrum module not found in module registry');
@@ -65,10 +120,10 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('Simulacrum module is not active');
     }
     
-    console.log(`[Integration Test]     ✅ Simulacrum module loaded and active (v${moduleCheck.moduleVersion})`);
+    logger.success(`Simulacrum module loaded and active (v${moduleCheck.moduleVersion})`);
     
     // Test 2: Verify game.simulacrum object exists and is properly initialized
-    console.log(`[Integration Test]     📍 Verifying game.simulacrum object...`);
+    logger.essential('📍 Verifying game.simulacrum object...');
     const simulacrumObjectCheck = await page.evaluate(() => {
       const simulacrum = window.game?.simulacrum;
       
@@ -88,7 +143,8 @@ export default async function simulacrumInitTest(session, permutation, config) {
       };
     });
     
-    console.log(`[Integration Test]     📊 game.simulacrum Check: ${JSON.stringify(simulacrumObjectCheck, null, 2)}`);
+    // Show detailed data only in debug mode
+    logger.data('game.simulacrum Check', simulacrumObjectCheck);
     
     if (!simulacrumObjectCheck.exists) {
       throw new Error('game.simulacrum object not found');
@@ -102,7 +158,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
       throw new Error('game.simulacrum.aiService not found');
     }
     
-    console.log(`[Integration Test]     ✅ game.simulacrum object properly initialized with ${simulacrumObjectCheck.propertyCount} properties`);
+    logger.success(`game.simulacrum object properly initialized with ${simulacrumObjectCheck.propertyCount} properties`);
     
     // Test 3: Verify module settings are registered
     console.log(`[Integration Test]     📍 Verifying module settings...`);

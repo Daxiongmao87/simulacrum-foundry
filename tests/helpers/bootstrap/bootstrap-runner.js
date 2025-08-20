@@ -23,13 +23,14 @@ const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 
 class BootstrapRunner {
-  constructor(config = null) {
+  constructor(config = null, debugMode = false) {
     this.config = config;
     this.versions = [];
     this.systems = [];
     this.permutations = [];
     this.containerManager = null;
     this.portManager = null;
+    this.debugMode = debugMode;
   }
 
   async initialize() {
@@ -50,12 +51,15 @@ class BootstrapRunner {
     this.versions = this.config['foundry-versions'] || [];
     this.systems = this.config['foundry-systems'] || [];
     
-    console.log(`[Test Runner] 📊 Versions: ${this.versions.join(', ')}`);
-    console.log(`[Test Runner] 📊 Systems: ${this.systems.join(', ')}`);
+    // Configuration details - debug mode only
+    if (this.debugMode) {
+      console.log(`[Test Runner] [Debug] 📊 Versions: ${this.versions.join(', ')}`);
+      console.log(`[Test Runner] [Debug] 📊 Systems: ${this.systems.join(', ')}`);
+      console.log(`[Test Runner] [Debug] 🔄 Generated ${this.permutations.length} permutations`);
+    }
     
     // Generate permutations
     this.permutations = this.generatePermutations();
-    console.log(`[Test Runner] 🔄 Generated ${this.permutations.length} permutations`);
     
     return true;
   }
