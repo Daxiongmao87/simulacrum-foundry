@@ -16,7 +16,7 @@
  * - Orchestrator: Coordinates complete workflow with resource management
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { glob } from 'glob';
 import { BootstrapRunner } from './helpers/bootstrap/bootstrap-runner.js';
@@ -29,8 +29,43 @@ class TestOrchestrator {
     this.startTime = Date.now();
   }
 
+  cleanArtifacts() {
+    const artifactsPath = join(process.cwd(), 'tests', 'artifacts');
+    
+    if (existsSync(artifactsPath)) {
+      console.log('🧹 Cleaning artifacts directory...');
+      
+      // Remove all files in artifacts directory except README.md
+      try {
+        const files = glob.sync(join(artifactsPath, '*'), { nodir: true });
+        let cleanedCount = 0;
+        
+        for (const file of files) {
+          // Keep README.md file
+          if (file.endsWith('README.md')) {
+            continue;
+          }
+          
+          rmSync(file, { force: true });
+          cleanedCount++;
+        }
+        
+        if (cleanedCount > 0) {
+          console.log(`✅ Cleaned ${cleanedCount} artifact file(s)`);
+        } else {
+          console.log('✅ Artifacts directory already clean');
+        }
+      } catch (error) {
+        console.warn(`⚠️ Failed to clean artifacts directory: ${error.message}`);
+      }
+    }
+  }
+
   async initialize() {
     console.log('🚀 Initializing Test Orchestrator...');
+    
+    // Clean artifacts directory to ensure only up-to-date artifacts from this test run
+    this.cleanArtifacts();
     
     // Load configuration
     this.config = JSON.parse(readFileSync('tests/config/test.config.json', 'utf8'));
