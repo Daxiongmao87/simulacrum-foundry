@@ -44,6 +44,9 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Build artifacts
+dist/
+
 # Testing artifacts
 tests/fixtures/binary_versions/
 tests/fixtures/downloads/
