@@ -378,18 +378,85 @@ export class ContainerManager {
   async cleanupAllContainers() {
     console.log('🧹 Cleaning up all running containers...');
 
-    const cleanupPromises = [];
+    const containerIds = Array.from(this.runningContainers.keys());
+    let cleanupErrors = [];
     
-    for (const containerId of this.runningContainers.keys()) {
-      cleanupPromises.push(
-        this.stopContainer(containerId)
-          .then(() => this.removeContainer(containerId))
-          .catch(error => console.error(`Cleanup failed for ${containerId}:`, error.message))
-      );
+    // First cleanup tracked containers
+    for (const containerId of containerIds) {
+      try {
+        console.log(`🧹 Cleaning up tracked container ${containerId.substring(0, 12)}...`);
+        
+        // Stop container first
+        await this.stopContainer(containerId);
+        
+        // Then remove container
+        await this.removeContainer(containerId);
+        
+        console.log(`✅ Successfully cleaned up container ${containerId.substring(0, 12)}`);
+      } catch (error) {
+        const errorMsg = `Cleanup failed for ${containerId.substring(0, 12)}: ${error.message}`;
+        console.error(`❌ ${errorMsg}`);
+        cleanupErrors.push(errorMsg);
+        
+        // Try emergency cleanup with docker commands
+        try {
+          console.log(`🚨 Attempting emergency cleanup for ${containerId.substring(0, 12)}`);
+          await execAsync(`docker kill ${containerId}`, { timeout: 10000 });
+          await execAsync(`docker rm -f ${containerId}`, { timeout: 10000 });
+          
+          // Force remove from tracking
+          if (this.runningContainers.has(containerId)) {
+            const container = this.runningContainers.get(containerId);
+            this.portManager.releasePort(container.instanceId, container.port);
+            this.runningContainers.delete(containerId);
+          }
+          
+          console.log(`✅ Emergency cleanup successful for ${containerId.substring(0, 12)}`);
+        } catch (emergencyError) {
+          console.error(`💥 Emergency cleanup also failed for ${containerId.substring(0, 12)}: ${emergencyError.message}`);
+          cleanupErrors.push(`Emergency cleanup failed: ${emergencyError.message}`);
+        }
+      }
     }
 
-    await Promise.allSettled(cleanupPromises);
-    console.log(`✅ Container cleanup completed for ${cleanupPromises.length} containers`);
+    // Now cleanup orphaned containers created by bootstrap-runner using execSync
+    console.log('🔍 Looking for orphaned session containers...');
+    try {
+      const { execSync } = await import('child_process');
+      // Find all containers with names matching session-* pattern
+      const orphanedContainers = execSync('docker ps -a --filter "name=session-" --format "{{.Names}}"', { encoding: 'utf8' })
+        .trim()
+        .split('\n')
+        .filter(name => name.length > 0);
+      
+      if (orphanedContainers.length > 0) {
+        console.log(`📦 Found ${orphanedContainers.length} orphaned containers to clean up`);
+        
+        for (const containerName of orphanedContainers) {
+          try {
+            console.log(`🧹 Stopping orphaned container: ${containerName}`);
+            execSync(`docker stop ${containerName}`, { stdio: 'ignore' });
+            execSync(`docker rm ${containerName}`, { stdio: 'ignore' });
+            console.log(`✅ Removed orphaned container: ${containerName}`);
+          } catch (error) {
+            console.warn(`⚠️ Failed to cleanup orphaned container ${containerName}: ${error.message}`);
+          }
+        }
+      } else {
+        console.log('✅ No orphaned containers found');
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to check for orphaned containers: ${error.message}`);
+    }
+    
+    console.log(`🧹 Container cleanup completed`);
+    
+    if (cleanupErrors.length > 0) {
+      console.warn(`⚠️ ${cleanupErrors.length} cleanup errors occurred:`);
+      cleanupErrors.forEach(error => console.warn(`  - ${error}`));
+    } else {
+      console.log('✅ All containers cleaned up successfully');
+    }
   }
 
   /**

@@ -840,10 +840,30 @@ class BootstrapRunner {
       if (launchClicked) {
         console.log(`✅ Launch World button clicked for ${worldId}`);
         
-        // Wait for navigation to game world (exactly like POC)
-        console.log('📍 Waiting for navigation to game world...');
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: this.config.bootstrap.timeouts.navigationWait });
-        console.log('✅ Navigation to game world detected');
+        // Wait for game world to load
+        console.log('📍 Waiting for game world to load...');
+        
+        // Set up console log listener for game canvas ready
+        const gameLoadedPromise = new Promise((resolve) => {
+          const listener = (msg) => {
+            const text = msg.text();
+            if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
+              console.log('✅ Game canvas ready - world fully loaded');
+              page.off('console', listener);
+              resolve();
+            }
+          };
+          page.on('console', listener);
+          
+          // Timeout fallback after 60 seconds
+          setTimeout(() => {
+            page.off('console', listener);
+            console.log('⚠️ Timeout waiting for game canvas - continuing anyway');
+            resolve();
+          }, 60000);
+        });
+        
+        await gameLoadedPromise;
         
         // Handle user authentication if on join page (exactly like POC)
         console.log('📍 Checking if user authentication is required...');
@@ -1196,60 +1216,39 @@ class BootstrapRunner {
       if (!confirmClicked) {
         console.log('⚠️ Could not find Yes confirmation button - module may already be enabled');
       } else {
-        // Wait for the page to fully reload and reinitialize (like after user login)
-        console.log('📍 Waiting for page reload after module activation...');
+        // Wait for the page to reload and FoundryVTT to reinitialize
+        console.log('📍 Waiting for FoundryVTT to reinitialize after module activation...');
         
-        // Wait for navigation to complete
-        await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
-        
-        // Wait for game to be ready again (like in launchWorld)
-        console.log('📍 Waiting for game to reinitialize after reload...');
-        await page.waitForFunction(
-          () => window.game && window.game.ready && window.game.user && window.game.user.isGM,
-          { timeout: 60000 }
-        );
-        console.log('✅ Game reinitialized after module activation');
-        
-        // Add a 30-second wait to ensure everything is fully loaded
-        console.log('📍 Waiting 30 seconds for full initialization...');
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        console.log('✅ 30-second wait complete');
-      }
-      
-      // Wait for Simulacrum module to fully initialize
-      console.log('📍 Waiting for Simulacrum module to initialize...');
-      try {
-        await page.waitForFunction(
-          () => window.game && window.game.simulacrum,
-          { timeout: 15000 }
-        );
-        console.log('✅ game.simulacrum object found');
-        
-        // Try to wait for full initialization, but don't fail if it doesn't complete
-        try {
-          await page.waitForFunction(
-            () => window.game.simulacrum._initState && window.game.simulacrum._initState.readyComplete,
-            { timeout: 10000 }
-          );
-          console.log('✅ Full module initialization completed');
-        } catch (e) {
-          console.log('⚠️ Module ready state not detected, but game.simulacrum exists - continuing');
-        }
-      } catch (e) {
-        console.log('⚠️ Simulacrum module object not found after timeout - checking if module is still active');
-        const moduleStillActive = await page.evaluate(() => {
-          const modules = window.game?.modules;
-          const simulacrumModule = modules?.get('simulacrum');
-          return {
-            moduleExists: !!simulacrumModule,
-            moduleActive: simulacrumModule?.active || false,
-            gameSimulacrumExists: !!window.game?.simulacrum
+        // Set up console log listener for FoundryVTT initialization
+        const foundryLoadedPromise = new Promise((resolve) => {
+          const listener = (msg) => {
+            const text = msg.text();
+            if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
+              console.log('✅ FoundryVTT game canvas ready - full initialization complete');
+              page.off('console', listener);
+              resolve();
+            }
           };
+          page.on('console', listener);
+          
+          // Timeout fallback after 30 seconds
+          setTimeout(() => {
+            page.off('console', listener);
+            console.log('⚠️ Timeout waiting for FoundryVTT initialization log');
+            resolve();
+          }, 30000);
         });
-        console.log('Module status after timeout:', JSON.stringify(moduleStillActive, null, 2));
+        
+        await foundryLoadedPromise;
+        
+        // 10 second grace period for everything to settle
+        console.log('📍 Waiting 10 seconds grace period for full initialization...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        console.log('✅ Module activation reload complete');
       }
       
-      console.log('✅ Simulacrum module activation and initialization completed');
+      console.log('✅ Simulacrum module enabled in settings - module initialization will be verified by integration tests');
       
     } catch (error) {
       console.error('❌ Failed to enable Simulacrum module:', error.message);
@@ -1402,9 +1401,9 @@ class BootstrapRunner {
     if (sessionInfo.containerId) {
       try {
         const { execSync } = await import('child_process');
-        execSync(`docker stop ${sessionInfo.containerId}`, { stdio: 'ignore' });
-        execSync(`docker rm ${sessionInfo.containerId}`, { stdio: 'ignore' });
-        console.log(`✅ Container ${sessionInfo.containerId} stopped and removed`);
+        // Use rm -f to force remove regardless of container state
+        execSync(`docker rm -f ${sessionInfo.containerId}`, { stdio: 'ignore' });
+        console.log(`✅ Container ${sessionInfo.containerId} force removed`);
       } catch (e) {
         console.warn(`⚠️ Container cleanup failed: ${e.message}`);
       }

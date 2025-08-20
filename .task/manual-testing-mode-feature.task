@@ -1,0 +1,122 @@
+# Manual Testing Mode Feature Implementation Task
+
+## Problem Statement
+Implement a manual testing mode feature for GitHub issue #62 that allows developers to bootstrap a live FoundryVTT session without running automated tests, keeping the instance running for manual interaction and testing.
+
+## Acceptance Criteria
+- Add `-m`/`--manual` flag to run-tests.js script
+- Execute complete bootstrap process (license, EULA, system installation, world creation, module activation)
+- Skip integration test execution in manual mode
+- Keep FoundryVTT instance running indefinitely
+- Wait for ESC key press to trigger cleanup and exit
+- Display clear instructions to user about how to access the session and exit
+
+## Current Architecture Context
+- `run-tests.js`: Main orchestrator with existing argument parsing for --help, --versions, --systems
+- `TestOrchestrator`: Handles initialization, test execution, and cleanup phases
+- `BootstrapRunner`: Creates live FoundryVTT sessions through Docker containers
+- Existing patterns for permutation generation, session management, and cleanup
+
+## MVP Implementation Tasks
+
+### Task 1: Add Manual Flag Parsing
+**Objective**: Extend existing parseArgs() function to recognize --manual/-m flag
+**Implementation**:
+- Add `manual: false` to options object in parseArgs()
+- Add parsing logic for `--manual` and `-m` flags
+- Follow existing pattern used for --help, --versions, --systems flags
+
+### Task 2: Update Help Documentation
+**Objective**: Add manual mode documentation to help message
+**Implementation**:
+- Add `--manual, -m` entry to Options section in showHelp()
+- Include clear description of manual mode behavior
+- Add example usage showing manual mode invocation
+
+### Task 3: Add Manual Mode Initialization
+**Objective**: Extend TestOrchestrator to handle manual mode configuration
+**Implementation**:
+- Add manual mode detection in initialize() method
+- Store manual flag in instance variable for later reference
+- Ensure bootstrap infrastructure still initializes normally
+
+### Task 4: Implement Manual Session Runner
+**Objective**: Create runManualSession() method to handle manual testing workflow
+**Implementation**:
+- Generate single permutation (use first version/system from config)
+- Create one live FoundryVTT session using bootstrap.createSession()
+- Display session access information (URL, credentials)
+- Wait for ESC key press before cleanup
+- Handle session cleanup on exit
+
+### Task 5: Add Keyboard Input Handling
+**Objective**: Implement ESC key detection for graceful exit
+**Implementation**:
+- Configure process.stdin for raw input mode
+- Listen for ESC key press (keycode 27)
+- Provide clear user instructions about ESC to exit
+- Restore normal stdin behavior after exit
+
+### Task 6: Update Main Workflow
+**Objective**: Route execution to manual mode when flag is detected
+**Implementation**:
+- Add conditional logic in main() function after initialization
+- Call runManualSession() instead of runAllTests() when manual flag is set
+- Ensure proper error handling and cleanup in manual mode path
+
+### Task 7: Integration Validation
+**Objective**: Verify manual mode works with existing infrastructure
+**Implementation**:
+- Test with single version/system combination
+- Verify bootstrap process completes successfully
+- Confirm FoundryVTT session is accessible and functional
+- Test ESC key exit behavior and cleanup
+
+## Implementation Guidelines
+
+### Minimal Viable Implementation
+- Use first configured version/system pair only (no multi-permutation support)
+- Implement basic ESC key detection (no complex input handling)
+- Display simple text instructions (no fancy UI)
+- Follow existing error handling patterns
+
+### Code Patterns to Follow
+- Maintain existing TestOrchestrator class structure
+- Use same session creation/cleanup patterns as test execution
+- Follow existing console logging format and styling
+- Preserve all existing functionality (no breaking changes)
+
+### Success Criteria
+1. `node run-tests.js --manual` successfully bootstraps FoundryVTT session
+2. Session remains accessible until ESC key is pressed
+3. Clean shutdown and Docker cleanup occurs on exit
+4. No regression in existing test functionality
+5. Help documentation accurately describes new feature
+
+### Edge Cases to Handle
+- Invalid version/system configurations
+- Docker/container failures during bootstrap
+- Keyboard input handling errors
+- Cleanup failures during exit
+- Multiple concurrent manual sessions (prevent)
+
+## Dependencies and Prerequisites
+- Existing Docker test infrastructure functional
+- FoundryVTT license and binary files available
+- Bootstrap process working correctly
+- No changes required to BootstrapRunner or ContainerManager
+
+## Files to Modify
+- `/home/patrick/Projects/simulacrum-foudry/tests/run-tests.js` (primary implementation file)
+- No new files required for MVP implementation
+
+## Follow-up Tasks (Post-MVP)
+- Support for specific version/system selection in manual mode
+- Enhanced session information display
+- Support for multiple concurrent manual sessions
+- Integration with development workflow scripts
+- Enhanced keyboard input handling (q for quit, etc.)
+
+---
+
+**Implementation Philosophy**: Make it exist first, make it better later. Focus on core functionality without enhancements. Test thoroughly before considering complete.

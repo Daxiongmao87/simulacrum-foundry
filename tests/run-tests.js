@@ -33,6 +33,7 @@ class TestOrchestrator {
     this.bootstrap = null;
     this.results = [];
     this.startTime = Date.now();
+    this.manualMode = false;
   }
 
   cleanArtifacts() {
@@ -87,6 +88,12 @@ class TestOrchestrator {
     if (options.systems) {
       this.config['foundry-systems'] = options.systems;
       console.log('🔧 Overriding systems from command line');
+    }
+    
+    // Set manual mode flag
+    this.manualMode = options.manual || false;
+    if (this.manualMode) {
+      console.log('🔧 Manual testing mode enabled');
     }
     
     // Initialize bootstrap infrastructure
@@ -241,6 +248,122 @@ class TestOrchestrator {
     this.generateReport();
   }
 
+  async runManualSession() {
+    console.log('🎯 Starting manual testing mode...');
+    
+    // Generate single permutation (use first version/system)
+    const version = this.config['foundry-versions'][0];
+    const system = this.config['foundry-systems'][0];
+    const permutation = {
+      id: `${version}-${system}`,
+      version,
+      system,
+      description: `${system} on FoundryVTT ${version}`
+    };
+    
+    console.log(`📊 Manual testing with: ${permutation.description}`);
+    
+    let session = null;
+    try {
+      // Create live FoundryVTT session
+      console.log('🚀 Creating FoundryVTT session...');
+      session = await this.bootstrap.createSession(permutation);
+      console.log('✅ Session created successfully!');
+      
+      // Display session information
+      console.log('');
+      console.log('🎮 FoundryVTT Session Ready!');
+      console.log('=============================');
+      console.log(`📍 URL: http://localhost:${session.port}`);
+      console.log('👤 Username: Gamemaster');
+      console.log('🔑 Password: admin');
+      console.log('🌍 World: SimulacrumTestWorld');
+      console.log('');
+      console.log('🔧 Manual Testing Instructions:');
+      console.log('  1. Open the URL above in your browser');
+      console.log('  2. Login with the provided credentials');
+      console.log('  3. Test the Simulacrum module manually');
+      console.log('  4. Press ESC in this terminal to exit and cleanup');
+      console.log('');
+      
+      // Wait for ESC key
+      await this.waitForEscKey();
+      
+    } catch (error) {
+      console.error(`❌ Manual session failed: ${error.message}`);
+      
+    } finally {
+      // Always cleanup session
+      if (session) {
+        try {
+          console.log('🧹 Cleaning up session...');
+          await this.bootstrap.cleanupSession(session);
+          console.log('✅ Session cleaned up');
+        } catch (error) {
+          console.warn(`⚠️ Session cleanup failed: ${error.message}`);
+        }
+      }
+      
+      // Cleanup Docker images
+      console.log('🧹 Cleaning up Docker images...');
+      try {
+        await this.bootstrap.cleanupImages([permutation]);
+        console.log('✅ Docker images cleaned up');
+      } catch (error) {
+        console.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+      }
+    }
+    
+    console.log('');
+    console.log('🎉 Manual testing session complete!');
+  }
+
+  async waitForEscKey() {
+    return new Promise((resolve) => {
+      console.log('⌨️  Waiting for ESC key press...');
+      
+      // Check if stdin is a TTY (interactive terminal)
+      if (process.stdin.isTTY) {
+        // Set stdin to raw mode
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.setEncoding('utf8');
+        
+        const onKeyPress = (key) => {
+          // ESC key has keycode 27 (0x1b)
+          if (key === '\u001b') {
+            console.log('');
+            console.log('✅ ESC key detected - initiating cleanup...');
+            
+            // Restore stdin
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+            process.stdin.removeListener('data', onKeyPress);
+            
+            resolve();
+          }
+        };
+        
+        process.stdin.on('data', onKeyPress);
+      } else {
+        // Not running in interactive mode, just wait indefinitely
+        console.log('⚠️  Not running in interactive terminal mode');
+        console.log('📍 Session will remain active. Use Ctrl+C to exit and cleanup will run.');
+        
+        // Set up signal handlers for cleanup
+        process.on('SIGINT', () => {
+          console.log('\n✅ Interrupt signal received - initiating cleanup...');
+          resolve();
+        });
+        
+        process.on('SIGTERM', () => {
+          console.log('\n✅ Terminate signal received - initiating cleanup...');
+          resolve();
+        });
+      }
+    });
+  }
+
   async cleanup() {
     console.log('🧹 Performing final cleanup...');
     
@@ -307,6 +430,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     help: false,
+    manual: false,
     versions: null,
     systems: null
   };
@@ -316,6 +440,8 @@ function parseArgs() {
     
     if (arg === '--help' || arg === '-h') {
       options.help = true;
+    } else if (arg === '--manual' || arg === '-m') {
+      options.manual = true;
     } else if (arg === '--versions' || arg === '-v') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
@@ -347,6 +473,7 @@ Usage: node run-tests.js [options]
 
 Options:
   --help, -h              Show this help message
+  --manual, -m            Manual testing mode - bootstrap instance and wait for ESC to exit
   --versions, -v <list>   Override FoundryVTT versions (comma-separated)
   --systems, -s <list>    Override game systems (comma-separated)
   
@@ -361,9 +488,11 @@ Configuration:
   
 Examples:
   node run-tests.js                              # Use config defaults
+  node run-tests.js --manual                     # Manual testing mode
   node run-tests.js --versions v12,v13           # Test multiple versions
   node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
   node run-tests.js -v v13 -s dnd5e              # Test specific combination
+  node run-tests.js -m -v v13 -s dnd5e           # Manual mode with specific version/system
 `);
 }
 
@@ -380,7 +509,13 @@ async function main() {
   
   try {
     await orchestrator.initialize(options);
-    await orchestrator.runAllTests();
+    
+    // Route to appropriate execution mode
+    if (orchestrator.manualMode) {
+      await orchestrator.runManualSession();
+    } else {
+      await orchestrator.runAllTests();
+    }
   } catch (error) {
     console.error('❌ Test orchestration failed:', error.message);
     console.error(error.stack);
