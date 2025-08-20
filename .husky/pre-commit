@@ -4,6 +4,7 @@
 import { execSync } from 'child_process';
 
 console.log('🔒 CRITICAL: Scanning for sensitive data...');
+console.log('⚠️  NOTE: Git submodules are completely ignored by all pre-commit checks');
 
 const SENSITIVE_DATA_PATTERNS = [
   { pattern: /[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/g, description: 'FoundryVTT License Key' },
@@ -14,8 +15,16 @@ const SENSITIVE_DATA_PATTERNS = [
 
 try {
   const changedFiles = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim().split('\n').filter(f => f.length > 0);
+  
+  // Filter out submodule files completely
+  const submoduleFiles = changedFiles.filter(file => file.startsWith('scripts/fimlib/'));
+  if (submoduleFiles.length > 0) {
+    console.log(`⚠️  Ignoring ${submoduleFiles.length} submodule files: ${submoduleFiles.join(', ')}`);
+  }
+  
+  const nonSubmoduleFiles = changedFiles.filter(file => !file.startsWith('scripts/fimlib/'));
 
-  for (const file of changedFiles) {
+  for (const file of nonSubmoduleFiles) {
     try {
       const stagedContent = execSync(`git diff --cached -- "${file}"`, { encoding: 'utf-8' });
       const addedLines = stagedContent.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).map(line => line.substring(1));
@@ -50,7 +59,8 @@ try {
   execSync('npx lint-staged', { stdio: 'inherit' });
   
   // Check for console statement violations (warning only for now)
-  console.log('🔍 Checking console statements...');
+  // NOTE: Submodules are completely ignored by console validation
+  console.log('🔍 Checking console statements (excluding submodules)...');
   try {
     execSync('npm run console:validate', { stdio: 'inherit' });
   } catch (e) {
@@ -60,7 +70,8 @@ try {
   }
   
   // Run ESLint to check for errors (warnings won't block)
-  console.log('📋 Running ESLint checks...');
+  // NOTE: Submodules are completely ignored by ESLint
+  console.log('📋 Running ESLint checks (excluding submodules)...');
   try {
     execSync('npx eslint scripts/**/*.js --max-warnings 160', { stdio: 'inherit' });
   } catch (e) {
