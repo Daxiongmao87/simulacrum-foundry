@@ -309,13 +309,65 @@ Hooks.once('ready', async () => {
 Hooks.on('renderSceneControls', (app, html, _data) => {
   console.log('Simulacrum | renderSceneControls hook fired');
 
+  // Debug: Check what's available
+  console.log(
+    'Simulacrum | Debug - SimulacrumSettings exists:',
+    typeof SimulacrumSettings !== 'undefined'
+  );
+  console.log(
+    'Simulacrum | Debug - game.user exists:',
+    typeof game?.user !== 'undefined'
+  );
+  console.log(
+    'Simulacrum | Debug - connectionState:',
+    typeof connectionState !== 'undefined' ? connectionState : 'undefined'
+  );
+  console.log(
+    'Simulacrum | Debug - isSimulacrumConfigured:',
+    typeof isSimulacrumConfigured !== 'undefined'
+      ? isSimulacrumConfigured
+      : 'undefined'
+  );
+
   // Only add if user has permission
-  if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) {
-    console.log('Simulacrum | User lacks permission for scene control');
-    return;
+  try {
+    const hasPermission = SimulacrumSettings.hasSimulacrumPermission(game.user);
+    console.log('Simulacrum | Debug - hasPermission result:', hasPermission);
+    if (!hasPermission) {
+      console.log('Simulacrum | User lacks permission for scene control');
+      return;
+    }
+  } catch (e) {
+    console.error(
+      'Simulacrum | Error checking permission:',
+      e.message,
+      e.stack
+    );
+    throw e;
   }
 
   // Check if we already added the button to avoid duplicates
+  console.log('Simulacrum | Debug - html parameter:', html);
+  console.log(
+    'Simulacrum | Debug - html.find method exists:',
+    typeof html?.find === 'function'
+  );
+
+  // Ensure html is a jQuery object
+  if (!html || typeof html.find !== 'function') {
+    console.log(
+      'Simulacrum | HTML parameter is not a jQuery object, wrapping it'
+    );
+    html = $(html);
+    // If still no find method, the html is likely invalid
+    if (typeof html.find !== 'function') {
+      console.log(
+        'Simulacrum | Cannot process invalid HTML parameter, skipping'
+      );
+      return;
+    }
+  }
+
   let simulacrumButton = html.find('.scene-control[data-control="simulacrum"]');
   if (simulacrumButton.length > 0) {
     console.log('Simulacrum | Button already exists, updating state');

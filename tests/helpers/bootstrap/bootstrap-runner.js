@@ -119,14 +119,25 @@ class BootstrapRunner {
     const page = await browser.newPage();
     
     // Handle console messages and filter Chromium warnings (like POC)
-    page.on('console', (msg) => {
+    page.on('console', async (msg) => {
       const text = msg.text();
       // Ignore Chromium version compatibility warnings
       if (text.includes('modern JavaScript features') && text.includes('Chromium version')) {
         console.log(`[BROWSER] ${msg.type()}: ${text} (ignored)`);
         return;
       }
-      console.log(`[BROWSER] ${msg.type()}: ${text}`);
+      
+      // If the message contains JSHandle references, try to get the actual values
+      if (text.includes('JSHandle@')) {
+        try {
+          const args = await Promise.all(msg.args().map(arg => arg.jsonValue().catch(() => 'Unable to serialize')));
+          console.log(`[BROWSER] ${msg.type()}:`, ...args);
+        } catch (e) {
+          console.log(`[BROWSER] ${msg.type()}: ${text}`);
+        }
+      } else {
+        console.log(`[BROWSER] ${msg.type()}: ${text}`);
+      }
     });
     
     // Handle page errors without terminating (like POC)
@@ -1189,6 +1200,11 @@ class BootstrapRunner {
           { timeout: 60000 }
         );
         console.log('✅ Game reinitialized after module activation');
+        
+        // Add a 30-second wait to ensure everything is fully loaded
+        console.log('📍 Waiting 30 seconds for full initialization...');
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        console.log('✅ 30-second wait complete');
       }
       
       // Wait for Simulacrum module to fully initialize
