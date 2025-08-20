@@ -223,6 +223,11 @@ class BootstrapRunner {
         throw new Error(`Game world not ready: ${gameState.error}`);
       }
       
+      // Enable Simulacrum module
+      console.log('🔧 Enabling Simulacrum module...');
+      await this.enableSimulacrumModule(page);
+      console.log('✅ Simulacrum module enabled');
+      
       return {
         success: true,
         browser,
@@ -1088,6 +1093,142 @@ class BootstrapRunner {
       
     } catch (error) {
       return { ready: false, error: error.message };
+    }
+  }
+
+  async enableSimulacrumModule(page) {
+    try {
+      // Step 37: Click the settings button
+      console.log('📍 Clicking settings button...');
+      await page.click('.ui-control.plain.icon.fa-solid.fa-gears');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Step 38: Click "Manage Modules" button
+      console.log('📍 Clicking Manage Modules...');
+      const manageModulesClicked = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const manageModulesButton = buttons.find(btn => 
+          btn.textContent && btn.textContent.includes('Manage Modules')
+        );
+        if (manageModulesButton) {
+          manageModulesButton.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (!manageModulesClicked) {
+        throw new Error('Could not find Manage Modules button');
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Step 39: Enable simulacrum module checkbox
+      console.log('📍 Enabling Simulacrum module checkbox...');
+      const moduleEnabled = await page.evaluate(() => {
+        const simulacrumCheckbox = document.querySelector('input[name="simulacrum"]');
+        if (simulacrumCheckbox) {
+          simulacrumCheckbox.checked = true;
+          simulacrumCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      });
+      
+      if (!moduleEnabled) {
+        throw new Error('Could not find or enable Simulacrum module checkbox');
+      }
+      
+      // Step 40: Click "Save Module Settings" button
+      console.log('📍 Saving module settings...');
+      const saveClicked = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const saveButton = buttons.find(btn => 
+          btn.textContent && btn.textContent.includes('Save Module Settings')
+        );
+        if (saveButton) {
+          saveButton.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (!saveClicked) {
+        throw new Error('Could not find Save Module Settings button');
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Step 41: Click "Yes" to confirm - this will trigger a full page reload!
+      console.log('📍 Confirming module activation (this will reload the page)...');
+      const confirmClicked = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const yesButton = buttons.find(btn => 
+          btn.textContent && btn.textContent.trim() === 'Yes'
+        );
+        if (yesButton) {
+          yesButton.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (!confirmClicked) {
+        console.log('⚠️ Could not find Yes confirmation button - module may already be enabled');
+      } else {
+        // Wait for the page to fully reload and reinitialize (like after user login)
+        console.log('📍 Waiting for page reload after module activation...');
+        
+        // Wait for navigation to complete
+        await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
+        
+        // Wait for game to be ready again (like in launchWorld)
+        console.log('📍 Waiting for game to reinitialize after reload...');
+        await page.waitForFunction(
+          () => window.game && window.game.ready && window.game.user && window.game.user.isGM,
+          { timeout: 60000 }
+        );
+        console.log('✅ Game reinitialized after module activation');
+      }
+      
+      // Wait for Simulacrum module to fully initialize
+      console.log('📍 Waiting for Simulacrum module to initialize...');
+      try {
+        await page.waitForFunction(
+          () => window.game && window.game.simulacrum,
+          { timeout: 15000 }
+        );
+        console.log('✅ game.simulacrum object found');
+        
+        // Try to wait for full initialization, but don't fail if it doesn't complete
+        try {
+          await page.waitForFunction(
+            () => window.game.simulacrum._initState && window.game.simulacrum._initState.readyComplete,
+            { timeout: 10000 }
+          );
+          console.log('✅ Full module initialization completed');
+        } catch (e) {
+          console.log('⚠️ Module ready state not detected, but game.simulacrum exists - continuing');
+        }
+      } catch (e) {
+        console.log('⚠️ Simulacrum module object not found after timeout - checking if module is still active');
+        const moduleStillActive = await page.evaluate(() => {
+          const modules = window.game?.modules;
+          const simulacrumModule = modules?.get('simulacrum');
+          return {
+            moduleExists: !!simulacrumModule,
+            moduleActive: simulacrumModule?.active || false,
+            gameSimulacrumExists: !!window.game?.simulacrum
+          };
+        });
+        console.log('Module status after timeout:', JSON.stringify(moduleStillActive, null, 2));
+      }
+      
+      console.log('✅ Simulacrum module activation and initialization completed');
+      
+    } catch (error) {
+      console.error('❌ Failed to enable Simulacrum module:', error.message);
+      throw error;
     }
   }
 

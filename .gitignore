@@ -50,6 +50,7 @@ tests/fixtures/downloads/
 tests/config/test.config.json
 tests/temp/
 tests/output/
+tests/artifacts/
 
 # Docker testing artifacts  
 tests/docker/*.log

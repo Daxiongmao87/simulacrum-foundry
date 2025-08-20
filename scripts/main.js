@@ -27,7 +27,7 @@ import { ListImagesTool } from './tools/list-images.js';
 import { SimulacrumAIService } from './chat/ai-service.js';
 import { ContextManager } from './context-manager.js';
 // import { setupGlobalErrorHandling } from "./error-handling.js"; // Currently unused
-import './tool-test.js'; // Load testing functions
+// import './tool-test.js'; // Load testing functions - file doesn't exist
 import { AgenticLoopController } from './core/agentic-loop-controller.js';
 import { SimulacrumToolScheduler } from './core/tool-scheduler.js';
 import { TokenTracker, formatToolResultsForAI } from './core/token-tracker.js';
@@ -228,6 +228,12 @@ Hooks.once('init', () => {
       ModelDetector,
       DynamicModelSelector,
       dynamicModelSelector,
+      // Initialization state for testing
+      _initState: {
+        initComplete: true,
+        readyComplete: false,
+        initTimestamp: Date.now(),
+      },
     };
     console.log('Simulacrum | game.simulacrum initialized:', game.simulacrum);
     console.log(
@@ -246,6 +252,12 @@ Hooks.once('init', () => {
 
 Hooks.once('ready', async () => {
   console.log('Simulacrum | Simulacrum Module Ready');
+
+  // Update initialization state
+  if (game.simulacrum && game.simulacrum._initState) {
+    game.simulacrum._initState.readyComplete = true;
+    game.simulacrum._initState.readyTimestamp = Date.now();
+  }
 
   // Initialize dynamic schema modifier for image validation (now that game.collections is populated)
   registerDynamicSchemaModifier(game.simulacrum.documentDiscoveryEngine);
