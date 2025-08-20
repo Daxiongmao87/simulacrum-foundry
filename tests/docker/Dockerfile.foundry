@@ -37,6 +37,9 @@ RUN mkdir -p ${FOUNDRY_DATA_PATH} && \
     mkdir -p ${FOUNDRY_DATA_PATH}/Data/systems && \
     mkdir -p ${FOUNDRY_DATA_PATH}/Data/worlds
 
+# Copy Simulacrum module from dist/ to modules directory
+COPY dist/ ${FOUNDRY_DATA_PATH}/Data/modules/simulacrum/
+
 # Copy entrypoint script
 COPY tests/docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

@@ -89,188 +89,7 @@ class BootstrapRunner {
     }
   }
 
-  async discoverAvailableVersions() {
-    console.log('🔍 Discovering available Foundry versions...');
-    
-    const availableVersions = [];
-    
-    for (const version of this.versions) {
-      const versionPath = join('tests/fixtures/binary_versions', version);
-      try {
-        const entries = await readdir(versionPath);
-        const zipFiles = entries.filter(entry => entry.endsWith('.zip'));
-        
-        if (zipFiles.length > 0) {
-          availableVersions.push({
-            version,
-            zipFile: zipFiles[0],
-            zipPath: join(versionPath, zipFiles[0])
-          });
-          console.log(`✅ Found ${version}: ${zipFiles[0]}`);
-        } else {
-          console.log(`⚠️ No ZIP files found in ${version}`);
-        }
-      } catch (error) {
-        console.log(`⚠️ Could not read ${version}: ${error.message}`);
-      }
-    }
-    
-    return availableVersions;
-  }
 
-    async runBootstrapTest(permutation) {
-    console.log(`🎯 Running bootstrap test: ${permutation.id}`);
-    
-    const testId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const port = await this.portManager.allocatePort(testId);
-    
-    // Step 0: Build Docker image (like POC)
-    const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
-    const foundryLicenseKey = this.config.foundryLicenseKey;
-    
-    if (!foundryLicenseKey) {
-      console.error('❌ foundryLicenseKey not found in config');
-      throw new Error('foundryLicenseKey not set in test.config.json');
-    }
-    
-    console.log(`🔨 Building Docker image: ${imageName}...`);
-    console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
-    
-    try {
-      // Determine the zip file based on version
-      const zipFileName = this.getZipFileForVersion(permutation.version);
-      const zipPath = join('tests/fixtures/binary_versions', permutation.version, zipFileName);
-      
-      // Copy zip file to build context root temporarily for Docker build
-      const tempZipPath = `./${zipFileName}`;
-      copyFileSync(zipPath, tempZipPath);
-      
-      try {
-        execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit' });
-        console.log(`✅ Docker image ${imageName} built successfully`);
-      } finally {
-        // Clean up temporary zip file
-        try {
-          unlinkSync(tempZipPath);
-        } catch (error) {
-          console.warn(`⚠️ Failed to clean up temporary zip file: ${error.message}`);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Docker build failed:', error.message);
-      throw error;
-    }
-    
-    try {
-      // Step 1: Clean up any existing containers (like POC)
-      console.log('🧹 Cleaning up existing containers...');
-      try {
-        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
-        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
-      } catch (e) {
-        // Container might not exist, which is fine
-      }
-      
-      // Step 2: Start fresh container (like POC)
-      console.log(`🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
-      const containerId = execSync(`docker run -d --name ${testId} -p ${port}:30000 ${imageName}` , { encoding: 'utf8' }).trim();
-      console.log(`📦 Container ID: ${containerId}`);
-      
-      // Step 2: Wait for container to be ready
-      console.log('⏳ Waiting for container to be ready...');
-      const ready = await this.waitForContainerReady(port);
-      
-      if (!ready) {
-        console.log(`🔍 Container failed health check. Container ID: ${containerId}. Logs:`);
-        try {
-          const logs = execSync(`docker logs ${containerId.slice(0, 12)}`, { encoding: 'utf8' });
-          console.log(logs);
-        } catch (e) {
-          console.log(`Could not retrieve logs: ${e.message}`);
-        }
-        throw new Error('Container failed to start properly');
-      }
-      
-      console.log('✅ Container is ready');
-      
-      // Step 3: Run bootstrap process (based on your working POC)
-      const bootstrapResult = await this.runBootstrapProcess(port, permutation);
-      
-      if (!bootstrapResult.success) {
-        throw new Error(`Bootstrap failed: ${bootstrapResult.error}`);
-      }
-      
-      console.log('✅ Bootstrap completed successfully');
-      
-      // Step 4: Take screenshot as proof
-      const screenshotPath = await this.takeScreenshot(bootstrapResult.page, permutation.id);
-      
-      // Close browser now that we have screenshot
-      await bootstrapResult.browser.close();
-      
-      const result = {
-        success: true,
-        permutation,
-        containerId,
-        port,
-        screenshotPath,
-        bootstrapResult
-      };
-      
-      // ALWAYS cleanup container after test (success OR failure) - like POC
-      console.log(`🧹 Cleaning up container ${testId}...`);
-      try {
-        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
-        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
-        console.log(`✅ Container ${testId} cleaned up`);
-      } catch (e) {
-        console.warn(`⚠️ Container cleanup failed: ${e.message}`);
-      }
-      
-      // Clean up the Docker image - like POC
-      console.log(`🧹 Cleaning up Docker image ${imageName}...`);
-      try {
-        execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
-        console.log(`✅ Docker image ${imageName} removed`);
-      } catch (e) {
-        console.warn(`⚠️ Docker image cleanup failed: ${e.message}`);
-      }
-      
-      this.portManager.releasePort(testId, port);
-      
-      return result;
-      
-    } catch (error) {
-      console.error(`❌ Bootstrap test failed for ${permutation.id}:`, error.message);
-      
-      // ALWAYS cleanup container on failure too - like POC
-      console.log(`🧹 Cleaning up failed container ${testId}...`);
-      try {
-        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
-        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
-        console.log(`✅ Failed container ${testId} cleaned up`);
-      } catch (e) {
-        console.warn(`⚠️ Failed container cleanup failed: ${e.message}`);
-      }
-      
-      // Clean up the Docker image on failure too - like POC
-      console.log(`🧹 Cleaning up Docker image ${imageName}...`);
-      try {
-        execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
-        console.log(`✅ Docker image ${imageName} removed`);
-      } catch (e) {
-        console.warn(`⚠️ Docker image cleanup failed: ${e.message}`);
-      }
-      
-      this.portManager.releasePort(testId, port);
-      
-      return {
-        success: false,
-        permutation,
-        error: error.message
-      };
-    }
-  }
 
   async waitForContainerReady(port) {
     for (let i = 0; i < this.config.bootstrap.retries.containerHealthCheck; i++) {
@@ -1281,52 +1100,6 @@ class BootstrapRunner {
 
   // Port allocation is now handled by PortManager
 
-  async runAllTests() {
-    console.log('🎯 Running all bootstrap tests...');
-    
-    const availableVersions = await this.discoverAvailableVersions();
-    if (availableVersions.length === 0) {
-      throw new Error('No Foundry versions available for testing');
-    }
-    
-    const results = [];
-    
-    for (const permutation of this.permutations) {
-      // Check if version is available
-      const versionAvailable = availableVersions.some(v => v.version === permutation.version);
-      if (!versionAvailable) {
-        console.log(`⚠️ Skipping ${permutation.id} - version ${permutation.version} not available`);
-        continue;
-      }
-      
-      const result = await this.runBootstrapTest(permutation);
-      results.push(result);
-      
-      if (result.success) {
-        console.log(`✅ ${permutation.id}: SUCCESS`);
-      } else {
-        console.log(`❌ ${permutation.id}: FAILED - ${result.error}`);
-      }
-    }
-    
-    // Final cleanup - ensure no test containers are left running
-    console.log('🧹 Final cleanup - checking for any leftover test containers...');
-    try {
-      const runningContainers = execSync('docker ps -q --filter "name=test-"', { encoding: 'utf8' }).trim();
-      if (runningContainers) {
-        console.log('⚠️ Found running test containers, cleaning up...');
-        execSync('docker ps -q --filter "name=test-" | xargs -r docker stop', { stdio: 'ignore' });
-        execSync('docker ps -aq --filter "name=test-" | xargs -r docker rm', { stdio: 'ignore' });
-        console.log('✅ All leftover test containers cleaned up');
-      } else {
-        console.log('✅ No leftover test containers found');
-      }
-    } catch (e) {
-      console.log('✅ No test containers to clean up');
-    }
-    
-    return results;
-  }
 
   // Clean session API for new architecture - wraps existing working logic
   async createSession(permutation) {
@@ -1344,6 +1117,11 @@ class BootstrapRunner {
       console.error('❌ foundryLicenseKey not found in config');
       throw new Error('foundryLicenseKey not set in test.config.json');
     }
+    
+    // Package the module first
+    console.log('📦 Packaging Simulacrum module...');
+    execSync('node tools/package-module.js', { stdio: 'inherit' });
+    console.log('✅ Module packaged to dist/');
     
     console.log(`🔨 Building Docker image: ${imageName}...`);
     console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
@@ -1490,37 +1268,5 @@ class BootstrapRunner {
   }
 }
 
-// Main execution
-async function main() {
-  const runner = new BootstrapRunner();
-  
-  try {
-    await runner.initialize();
-    const results = await runner.runAllTests();
-    
-    const successful = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
-    
-    console.log('\n📊 Test Results:');
-    console.log(`✅ Successful: ${successful}`);
-    console.log(`❌ Failed: ${failed}`);
-    
-    if (failed === 0) {
-      console.log('🎉 All bootstrap tests passed!');
-      process.exit(0);
-    } else {
-      console.log('💥 Some tests failed');
-      process.exit(1);
-    }
-    
-  } catch (error) {
-    console.error('💥 Bootstrap runner failed:', error.message);
-    process.exit(1);
-  }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(console.error);
-}
 
 export { BootstrapRunner };
