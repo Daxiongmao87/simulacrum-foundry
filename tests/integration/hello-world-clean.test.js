@@ -138,7 +138,7 @@ export default async function helloWorldTest(session, permutation, config) {
     console.log(`    📍 Generating test artifacts...`);
     
     // Take screenshot as proof of successful test
-    const screenshotPath = `test-results/hello-world-${permutation.id}-${Date.now()}.png`;
+    const screenshotPath = `tests/artifacts/hello-world-${permutation.id}-${Date.now()}.png`;
     await page.screenshot({ 
       path: screenshotPath,
       fullPage: true 
@@ -186,7 +186,7 @@ export default async function helloWorldTest(session, permutation, config) {
     console.log(`    ❌ Hello World test failed: ${error.message}`);
     
     // Take screenshot on failure for debugging
-    const failureScreenshot = `test-results/hello-world-FAILED-${permutation.id}-${Date.now()}.png`;
+    const failureScreenshot = `tests/artifacts/hello-world-FAILED-${permutation.id}-${Date.now()}.png`;
     try {
       await page.screenshot({ 
         path: failureScreenshot,

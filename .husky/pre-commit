@@ -17,7 +17,7 @@ try {
 
   for (const file of changedFiles) {
     try {
-      const stagedContent = execSync(`git diff --cached ${file}`, { encoding: 'utf-8' });
+      const stagedContent = execSync(`git diff --cached -- "${file}"`, { encoding: 'utf-8' });
       const addedLines = stagedContent.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).map(line => line.substring(1));
       
       for (const line of addedLines) {
