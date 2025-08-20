@@ -9,6 +9,14 @@
  * - Verify no critical initialization errors
  */
 
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory of this script
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..');
+
 /**
  * Simulacrum Module Initialization Test
  * 
@@ -165,7 +173,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
     console.log(`    ✅ Module initialization state verified`);
     
     // Test 5: Take screenshot for verification
-    const screenshotPath = `tests/artifacts/simulacrum-init-${permutation.id}-${Date.now()}.png`;
+    const screenshotPath = join(PROJECT_ROOT, 'tests', 'artifacts', `simulacrum-init-${permutation.id}-${Date.now()}.png`);
     await page.screenshot({ 
       path: screenshotPath,
       fullPage: true 
@@ -194,7 +202,7 @@ export default async function simulacrumInitTest(session, permutation, config) {
     console.log(`    ❌ Simulacrum module initialization test failed: ${error.message}`);
     
     // Take screenshot on failure for debugging
-    const failureScreenshot = `tests/artifacts/simulacrum-init-FAILED-${permutation.id}-${Date.now()}.png`;
+    const failureScreenshot = join(PROJECT_ROOT, 'tests', 'artifacts', `simulacrum-init-FAILED-${permutation.id}-${Date.now()}.png`);
     try {
       await page.screenshot({ 
         path: failureScreenshot,

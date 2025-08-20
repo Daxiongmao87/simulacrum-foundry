@@ -1,0 +1,263 @@
+Step Number	Action	Supporting Identifiers	Page Information
+Step 1	"Click on the button 
+            
+            Submit Key
+        "	"[textContent : 
+            
+            Submit Key
+        ]
+[value : enterKey]
+[name : action]
+[className : bright]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/license"
+Step 2	"Change the value of input field to value: [on]"	"[value : on]
+[id : eula-agree]
+[name : agree]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/license"
+Step 3	"Click on the button 
+            
+            Agree
+        "	"[textContent : 
+            
+            Agree
+        ]
+[id : sign]
+[name : accept]
+[className : bright]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/license"
+Step 4	"Click on the button Decline Sharing"	"[textContent : Decline Sharing]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 5	"Click on the link with text: 
+        
+    "	"[textContent : 
+        
+    ]
+[className : step-button disabled]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 6	"Click on the button 
+            
+            Install System
+        "	"[textContent : 
+            
+            Install System
+        ]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 7	"Change the value of input field to value: [dnd5e]"	"[value : dnd5e]
+[id : install-package-search-filter]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 8	"Click on the button 
+                        
+                        Install
+                    "	"[textContent : 
+                        
+                        Install
+                    ]
+[className : install-package]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 9	"Click on the button "	"[className : header-control icon fa-solid fa-xmark]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 10	"Click on the button 
+            
+            Create World
+        "	"[textContent : 
+            
+            Create World
+        ]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 11	"Click on the input field"	"[id : world-config-title]
+[name : title]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 12	"Change the value of input field to value: [test-world]"	"[value : test-world]
+[id : world-config-title]
+[name : title]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 13	"Click on the input field"	"[id : world-config-id]
+[name : id]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 14	"Change the value of input field to value: [test-world]"	"[value : test-world]
+[id : world-config-id]
+[name : id]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 15	"Change the value of the select"	"[textContent : Dungeons & Dragons Fifth Edition]
+[value : dnd5e]
+[id : world-config-system]
+[name : system]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 16	"Click on the button 
+        
+        Create World
+    "	"[textContent : 
+        
+        Create World
+    ]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 17	"Click on the link with text: 
+                    
+                "	"[textContent : 
+                    
+                ]
+[className : control play]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 18	"Click on the link with text: 
+                    
+                "	"[textContent : 
+                    
+                ]
+[className : control play]
+"	"Foundry Virtual Tabletop
+http://localhost:30003/setup"
+Step 19	"Click on the input field"	"[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 20	"Click on the input field"	"[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 21	"Change the value of input field to value: [patricha]"	"[value : patricha]
+[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 22	"Change the value of input field to value: [[[password values not recorded]]]"	"[textContent : [[password values not recorded]]]
+[value : [[password values not recorded]]]
+[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 23	"Change the value of input field to value: [patrick]"	"[value : patrick]
+[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 24	"Change the value of input field to value: [[[password values not recorded]]]"	"[textContent : [[password values not recorded]]]
+[value : [[password values not recorded]]]
+[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 25	"Change the value of input field to value: [patrick]"	"[value : patrick]
+[className : scroll-hide svelte-1f354aw]
+"	"
+http://10.241.0.3:7860/?__theme=dark"
+Step 26	"Click on the input field"	"[name : search[title_normalize]]
+[className : string optional ui-autocomplete-input]
+"	"Tag Group:Hair Styles Wiki | Danbooru
+https://danbooru.donmai.us/wiki_pages/tag_group%3Ahair_styles"
+Step 27	"Change the value of input field to value: [red_sonja ]"	"[value : red_sonja ]
+[name : search[title_normalize]]
+[className : string optional ui-autocomplete-input]
+"	"Tag Group:Hair Styles Wiki | Danbooru
+https://danbooru.donmai.us/wiki_pages/tag_group%3Ahair_styles"
+Step 28	"Click on the link with text: Posts"	"[textContent : Posts]
+"	"Red Sonja Wiki | Danbooru
+https://danbooru.donmai.us/wiki_pages/red_sonja"
+Step 29	"Click on the link with text: 
+      
+              
+
+                
+"	"[textContent : 
+      
+              
+
+                
+]
+[className : post-preview-link]
+[Contains image with alt : post #9022519]"	"Red Sonja | Danbooru
+https://danbooru.donmai.us/posts?tags=red_sonja"
+Step 30	"Click on the link with text: 
+      
+              
+
+                
+"	"[textContent : 
+      
+              
+
+                
+]
+[className : post-preview-link]
+[Contains image with alt : post #9022518]"	"red sonja (red sonja) drawn by az_ciam | Danbooru
+https://danbooru.donmai.us/posts/9022519?q=red_sonja"
+Step 31	"Click on the button  ↙️"	"[textContent :  ↙️]
+[id : paste]
+[title : Read generation parameters from prompt or last generation if prompt is empty into user interface.]
+[className : lg secondary gradio-button tool svelte-cmf5ev]
+"	"Stable Diffusion
+http://10.241.0.3:7860/?__theme=dark"
+Step 32	"Click on the button Txt2img "	"[textContent : Txt2img ]
+[id : tab_txt2img-button]
+[className : selected svelte-1uw5tnk]
+"	"Stable Diffusion
+http://10.241.0.3:7860/?__theme=dark"
+Step 33	"Click on the button  ↙️"	"[textContent :  ↙️]
+[id : paste]
+[title : Read generation parameters from prompt or last generation if prompt is empty into user interface.]
+[className : lg secondary gradio-button tool svelte-cmf5ev]
+"	"Stable Diffusion
+http://10.241.0.3:7860/?__theme=dark"
+Step 34	"Click on the button Txt2img "	"[textContent : Txt2img ]
+[id : tab_txt2img-button]
+[className : selected svelte-1uw5tnk]
+"	"Stable Diffusion
+http://10.241.0.3:7860/?__theme=dark"
+Step 35	"Change the value of the select"	"[textContent : 
+                
+                    Gamemaster
+            ]
+[value : ewhR4WZB5eju2Rak]
+[name : userid]
+"	"testworld
+http://localhost:30000/join"
+Step 36	"Click on the button 
+            
+            Join Game Session
+        "	"[textContent : 
+            
+            Join Game Session
+        ]
+[name : join]
+[className : bright]
+"	"testworld
+http://localhost:30000/join"
+Step 37	"Click on the button "	"[className : ui-control plain icon fa-solid fa-gears]
+"	"Foundry Virtual Tabletop
+http://localhost:30000/game"
+Step 38	"Click on the button 
+        
+        Manage Modules
+            "	"[textContent : 
+        
+        Manage Modules
+            ]
+"	"Foundry Virtual Tabletop
+http://localhost:30000/game"
+Step 39	"Change the value of input field to value: [on]"	"[value : on]
+[name : simulacrum]
+"	"Foundry Virtual Tabletop
+http://localhost:30000/game"
+Step 40	"Click on the button 
+        
+        Save Module Settings
+    "	"[textContent : 
+        
+        Save Module Settings
+    ]
+"	"Foundry Virtual Tabletop
+http://localhost:30000/game"
+Step 41	"Click on the button Yes"	"[textContent : Yes]
+"	"Foundry Virtual Tabletop
+http://localhost:30000/game"
+

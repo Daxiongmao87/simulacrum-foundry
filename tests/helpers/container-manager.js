@@ -11,10 +11,16 @@
 
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
-import path from 'path';
+import path, { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const execAsync = promisify(exec);
+
+// Get the directory of this script for reliable path resolution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..');
 
 export class ContainerManager {
   constructor(config, portManager) {
@@ -461,17 +467,10 @@ export class ContainerManager {
   }
 
   /**
-   * Get the project root directory (where package.json is located)
+   * Get the project root directory
    * @returns {string} Project root directory
    */
   getProjectRoot() {
-    let projectRoot = process.cwd();
-    while (projectRoot !== '/' && !fs.existsSync(path.join(projectRoot, 'package.json'))) {
-      projectRoot = path.dirname(projectRoot);
-    }
-    if (projectRoot === '/') {
-      throw new Error('Could not find project root (package.json not found)');
-    }
-    return projectRoot;
+    return PROJECT_ROOT;
   }
 }

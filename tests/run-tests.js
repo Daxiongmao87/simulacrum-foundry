@@ -17,9 +17,15 @@
  */
 
 import { readFileSync, existsSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { BootstrapRunner } from './helpers/bootstrap/bootstrap-runner.js';
+
+// Get the directory of this script
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..');
 
 class TestOrchestrator {
   constructor() {
@@ -30,7 +36,7 @@ class TestOrchestrator {
   }
 
   cleanArtifacts() {
-    const artifactsPath = join(process.cwd(), 'tests', 'artifacts');
+    const artifactsPath = join(PROJECT_ROOT, 'tests', 'artifacts');
     
     if (existsSync(artifactsPath)) {
       console.log('🧹 Cleaning artifacts directory...');
@@ -61,15 +67,27 @@ class TestOrchestrator {
     }
   }
 
-  async initialize() {
+  async initialize(options = {}) {
     console.log('🚀 Initializing Test Orchestrator...');
     
     // Clean artifacts directory to ensure only up-to-date artifacts from this test run
     this.cleanArtifacts();
     
     // Load configuration
-    this.config = JSON.parse(readFileSync('tests/config/test.config.json', 'utf8'));
+    const configPath = join(PROJECT_ROOT, 'tests', 'config', 'test.config.json');
+    this.config = JSON.parse(readFileSync(configPath, 'utf8'));
     console.log('✅ Configuration loaded');
+    
+    // Override with command-line options if provided
+    if (options.versions) {
+      this.config['foundry-versions'] = options.versions;
+      console.log('🔧 Overriding versions from command line');
+    }
+    
+    if (options.systems) {
+      this.config['foundry-systems'] = options.systems;
+      console.log('🔧 Overriding systems from command line');
+    }
     
     // Initialize bootstrap infrastructure
     this.bootstrap = new BootstrapRunner(this.config);
@@ -105,11 +123,12 @@ class TestOrchestrator {
     // If tests are specified in config, use those
     if (this.config['integration-tests'] && this.config['integration-tests'].length > 0) {
       console.log(`📋 Using configured tests: ${this.config['integration-tests'].length} tests`);
-      return this.config['integration-tests'].map(test => `tests/integration/${test}`);
+      return this.config['integration-tests'].map(test => join(PROJECT_ROOT, 'tests', 'integration', test));
     }
     
     // Otherwise discover all test files
-    const testFiles = await glob('tests/integration/**/*.test.js');
+    const testPattern = join(PROJECT_ROOT, 'tests', 'integration', '**', '*.test.js');
+    const testFiles = await glob(testPattern);
     console.log(`📋 Discovered ${testFiles.length} test files`);
     
     return testFiles;
@@ -121,7 +140,7 @@ class TestOrchestrator {
     // Import the test function
     let testFunction;
     try {
-      const testModule = await import(join(process.cwd(), testFile));
+      const testModule = await import(testFile);
       testFunction = testModule.default;
       
       if (typeof testFunction !== 'function') {
@@ -208,13 +227,43 @@ class TestOrchestrator {
       return;
     }
     
-    // Run each test file across all permutations
-    for (const testFile of testFiles) {
-      const testResults = await this.runSingleIntegrationTest(testFile, permutations);
-      this.results.push(...testResults);
+    try {
+      // Run each test file across all permutations
+      for (const testFile of testFiles) {
+        const testResults = await this.runSingleIntegrationTest(testFile, permutations);
+        this.results.push(...testResults);
+      }
+    } finally {
+      // Always cleanup containers and images, even if tests failed
+      await this.cleanup();
     }
     
     this.generateReport();
+  }
+
+  async cleanup() {
+    console.log('🧹 Performing final cleanup...');
+    
+    try {
+      // Cleanup any remaining containers
+      if (this.bootstrap && this.bootstrap.containerManager) {
+        await this.bootstrap.containerManager.cleanupAllContainers();
+        console.log('✅ All containers cleaned up');
+      }
+    } catch (error) {
+      console.warn(`⚠️ Container cleanup failed: ${error.message}`);
+    }
+    
+    try {
+      // Cleanup Docker images
+      if (this.bootstrap) {
+        const permutations = this.generatePermutations();
+        await this.bootstrap.cleanupImages(permutations);
+        console.log('✅ All Docker images cleaned up');
+      }
+    } catch (error) {
+      console.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+    }
   }
 
   generateReport() {
@@ -253,16 +302,98 @@ class TestOrchestrator {
   }
 }
 
+// Parse command line arguments
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    versions: null,
+    systems: null
+  };
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+    } else if (arg === '--versions' || arg === '-v') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options.versions = nextArg.split(',').map(v => v.trim());
+        i++; // Skip next argument as it's the value
+      }
+    } else if (arg.startsWith('--versions=')) {
+      options.versions = arg.split('=')[1].split(',').map(v => v.trim());
+    } else if (arg === '--systems' || arg === '-s') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options.systems = nextArg.split(',').map(s => s.trim());
+        i++; // Skip next argument as it's the value
+      }
+    } else if (arg.startsWith('--systems=')) {
+      options.systems = arg.split('=')[1].split(',').map(s => s.trim());
+    }
+  }
+  
+  return options;
+}
+
+// Display help message
+function showHelp() {
+  console.log(`
+FoundryVTT Integration Test Runner
+
+Usage: node run-tests.js [options]
+
+Options:
+  --help, -h              Show this help message
+  --versions, -v <list>   Override FoundryVTT versions (comma-separated)
+  --systems, -s <list>    Override game systems (comma-separated)
+  
+Description:
+  This orchestrator runs integration tests against live FoundryVTT sessions.
+  It creates Docker containers, bootstraps FoundryVTT instances, executes tests,
+  and manages cleanup automatically.
+  
+Configuration:
+  Tests are configured via tests/config/test.config.json
+  Command-line flags override configuration file settings.
+  
+Examples:
+  node run-tests.js                              # Use config defaults
+  node run-tests.js --versions v12,v13           # Test multiple versions
+  node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
+  node run-tests.js -v v13 -s dnd5e              # Test specific combination
+`);
+}
+
 // Main execution
 async function main() {
+  const options = parseArgs();
+  
+  if (options.help) {
+    showHelp();
+    process.exit(0);
+  }
+  
   const orchestrator = new TestOrchestrator();
   
   try {
-    await orchestrator.initialize();
+    await orchestrator.initialize(options);
     await orchestrator.runAllTests();
   } catch (error) {
     console.error('❌ Test orchestration failed:', error.message);
     console.error(error.stack);
+    
+    // Try to cleanup even on initialization failure
+    try {
+      if (orchestrator.bootstrap) {
+        await orchestrator.cleanup();
+      }
+    } catch (cleanupError) {
+      console.warn(`⚠️ Emergency cleanup failed: ${cleanupError.message}`);
+    }
+    
     process.exit(1);
   }
 }

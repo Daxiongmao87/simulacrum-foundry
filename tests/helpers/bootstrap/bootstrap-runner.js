@@ -10,15 +10,21 @@
 
 import { readFileSync, readdirSync, copyFileSync, unlinkSync } from 'fs';
 import { readdir } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import puppeteer from 'puppeteer';
 import { ContainerManager } from '../container-manager.js';
 import { PortManager } from '../port-manager.js';
 
+// Get the directory of this script
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..', '..');
+
 class BootstrapRunner {
-  constructor() {
-    this.config = null;
+  constructor(config = null) {
+    this.config = config;
     this.versions = [];
     this.systems = [];
     this.permutations = [];
@@ -29,8 +35,11 @@ class BootstrapRunner {
   async initialize() {
     console.log('🚀 Initializing Bootstrap Runner...');
     
-    // Load config (READ ONLY - no modifications)
-    this.config = JSON.parse(readFileSync('tests/config/test.config.json', 'utf8'));
+    // Load config if not provided in constructor
+    if (!this.config) {
+      const configPath = join(PROJECT_ROOT, 'tests', 'config', 'test.config.json');
+      this.config = JSON.parse(readFileSync(configPath, 'utf8'));
+    }
     console.log('✅ Config loaded');
     
     // Initialize container and port managers
@@ -70,7 +79,7 @@ class BootstrapRunner {
 
   getZipFileForVersion(version) {
     // Dynamically discover zip file in version folder
-    const versionPath = join('tests/fixtures/binary_versions', version);
+    const versionPath = join(PROJECT_ROOT, 'tests', 'fixtures', 'binary_versions', version);
     try {
       const entries = readdirSync(versionPath);
       const zipFiles = entries.filter(entry => entry.endsWith('.zip'));
@@ -1277,7 +1286,8 @@ class BootstrapRunner {
     
     // Package the module first
     console.log('📦 Packaging Simulacrum module...');
-    execSync('node tools/package-module.js', { stdio: 'inherit' });
+    const packageScriptPath = join(PROJECT_ROOT, 'tools', 'package-module.js');
+    execSync(`node ${packageScriptPath}`, { stdio: 'inherit', cwd: PROJECT_ROOT });
     console.log('✅ Module packaged to dist/');
     
     console.log(`🔨 Building Docker image: ${imageName}...`);
@@ -1286,14 +1296,18 @@ class BootstrapRunner {
     try {
       // Determine the zip file based on version
       const zipFileName = this.getZipFileForVersion(permutation.version);
-      const zipPath = join('tests/fixtures/binary_versions', permutation.version, zipFileName);
+      const zipPath = join(PROJECT_ROOT, 'tests', 'fixtures', 'binary_versions', permutation.version, zipFileName);
       
       // Copy zip file to build context root temporarily for Docker build
-      const tempZipPath = `./${zipFileName}`;
+      const tempZipPath = join(PROJECT_ROOT, zipFileName);
       copyFileSync(zipPath, tempZipPath);
       
       try {
-        execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit' });
+        const dockerfilePath = join(PROJECT_ROOT, 'tests', 'docker', 'Dockerfile.foundry');
+        execSync(`docker build -f ${dockerfilePath} --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} ${PROJECT_ROOT}`, { 
+          stdio: 'inherit',
+          cwd: PROJECT_ROOT 
+        });
         console.log(`✅ Docker image ${imageName} built successfully`);
       } finally {
         // Clean up temporary zip file
