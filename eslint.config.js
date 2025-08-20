@@ -41,7 +41,7 @@ export default [
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': ['warn', { 
-        allow: ['warn', 'error'] 
+        allow: ['log', 'warn', 'error', 'info'] 
       }],
       // Complexity rules
       'complexity': ['warn', 15],

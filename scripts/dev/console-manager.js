@@ -23,7 +23,14 @@ import { readFileSync, writeFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
 
-const VALID_PREFIXES = ['Simulacrum |', 'Foundry VTT |'];
+const VALID_PREFIXES = [
+  'Simulacrum |', // Main module prefix
+  'Simulacrum | [Debug] ', // Debug logs for main module
+  'Simulacrum | Test Runner - ', // Test runner script prefix
+  'Simulacrum | Test Runner [Debug] - ', // Debug logs for test runner
+  'Simulacrum | Integration Test - ', // Integration test prefix
+  'Simulacrum | Integration Test [Debug] - ', // Debug logs for integration tests
+];
 const DEBUG_MODE = process.env.DEBUG === 'true';
 
 /**
