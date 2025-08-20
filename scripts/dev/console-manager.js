@@ -38,7 +38,7 @@ const DEBUG_MODE = process.env.DEBUG === 'true';
  * NOTE: Git submodules are completely ignored
  */
 async function findJavaScriptFiles() {
-  const files = await glob('scripts/**/*.js', {
+  const files = await glob('{scripts,tests,tools}/**/*.js', {
     ignore: [
       'scripts/fimlib/**/*', // Git submodule - completely ignored
       'scripts/dev/**/*', // Dev tools

@@ -73,7 +73,7 @@ try {
   // NOTE: Submodules are completely ignored by ESLint
   console.log('📋 Running ESLint checks (excluding submodules)...');
   try {
-    execSync('npx eslint scripts/**/*.js --max-warnings 160', { stdio: 'inherit' });
+    execSync('npx eslint scripts/**/*.js tests/**/*.js tools/**/*.js --max-warnings 160', { stdio: 'inherit' });
   } catch (e) {
     if (e.status === 1) {
       console.error('❌ ESLint found errors that must be fixed');

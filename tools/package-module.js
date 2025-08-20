@@ -29,7 +29,7 @@ function copyRecursive(src, dest) {
     const destPath = path.join(distDir, src);
     
     if (!fs.existsSync(srcPath)) {
-        console.log(`Warning: ${src} not found, skipping`);
+        console.log(`Simulacrum | Tools - Warning: ${src} not found, skipping`);
         return;
     }
     
@@ -48,11 +48,11 @@ function copyRecursive(src, dest) {
         // Copy file
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         fs.copyFileSync(srcPath, destPath);
-        console.log(`Copied: ${src}`);
+        console.log(`Simulacrum | Tools - Copied: ${src}`);
     }
 }
 
-console.log('Packaging Foundry module...');
+console.log('Simulacrum | Tools - Packaging Foundry module...');
 
 // Clean dist directory
 if (fs.existsSync(distDir)) {
@@ -65,4 +65,4 @@ for (const file of filesToCopy) {
     copyRecursive(file, '');
 }
 
-console.log(`Module packaged to: ${distDir}`);
+console.log(`Simulacrum | Tools - Module packaged to: ${distDir}`);

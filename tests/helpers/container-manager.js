@@ -38,7 +38,7 @@ export class ContainerManager {
       systemsMountPath: config.docker.systemsMountPath
     };
 
-    console.log('ContainerManager initialized with config:', this.dockerConfig);
+    console.log('Simulacrum | Test Runner - ContainerManager initialized with config:', this.dockerConfig);
   }
 
   /**
@@ -50,8 +50,8 @@ export class ContainerManager {
     const imageName = permutation.dockerImage;
     const versionZip = this.getFoundryVersionZip(permutation.version);
     
-    console.log(`🏗️  Building Docker image: ${imageName}`);
-    console.log(`📦 Using FoundryVTT binary: ${versionZip}`);
+    console.log(`Simulacrum | Test Runner - 🏗️  Building Docker image: ${imageName}`);
+    console.log(`Simulacrum | Test Runner - 📦 Using FoundryVTT binary: ${versionZip}`);
 
     // Verify FoundryVTT zip file exists
     if (!fs.existsSync(versionZip)) {
@@ -62,7 +62,7 @@ export class ContainerManager {
     try {
       const existingImage = await execAsync(`docker images -q ${imageName}`);
       if (existingImage.stdout.trim()) {
-        console.log(`✅ Docker image ${imageName} already exists, skipping build`);
+        console.log(`Simulacrum | Test Runner - ✅ Docker image ${imageName} already exists, skipping build`);
         return imageName;
       }
     } catch (error) {
@@ -80,7 +80,7 @@ export class ContainerManager {
       '.'
     ].join(' ');
 
-    console.log(`🔨 Build command: ${buildCommand}`);
+    console.log(`Simulacrum | Test Runner - 🔨 Build command: ${buildCommand}`);
 
     try {
       // Build with timeout and progress monitoring
@@ -90,7 +90,7 @@ export class ContainerManager {
       
       if (process.cwd() !== projectRoot) {
         process.chdir(projectRoot);
-        console.log(`📁 Changed to project root: ${projectRoot}`);
+        console.log(`Simulacrum | Test Runner - 📁 Changed to project root: ${projectRoot}`);
       }
       
       const buildProcess = exec(buildCommand);
@@ -100,7 +100,7 @@ export class ContainerManager {
         buildOutput += data;
         // Log important build steps
         if (data.includes('Step ') || data.includes('Successfully')) {
-          console.log(`🏗️  ${data.trim()}`);
+          console.log(`Simulacrum | Test Runner - 🏗️  ${data.trim()}`);
         }
       });
 
@@ -134,10 +134,10 @@ export class ContainerManager {
       // Restore original working directory
       if (process.cwd() !== originalCwd) {
         process.chdir(originalCwd);
-        console.log(`📁 Restored working directory: ${originalCwd}`);
+        console.log(`Simulacrum | Test Runner - 📁 Restored working directory: ${originalCwd}`);
       }
 
-      console.log(`✅ Docker image ${imageName} built successfully`);
+      console.log(`Simulacrum | Test Runner - ✅ Docker image ${imageName} built successfully`);
       return imageName;
 
     } catch (error) {
@@ -146,7 +146,7 @@ export class ContainerManager {
       const projectRoot = this.getProjectRoot();
       if (process.cwd() !== originalCwd) {
         process.chdir(originalCwd);
-        console.log(`📁 Restored working directory: ${originalCwd}`);
+        console.log(`Simulacrum | Test Runner - 📁 Restored working directory: ${originalCwd}`);
       }
       
       console.error(`❌ Docker build failed for ${imageName}:`, error.message);
@@ -161,7 +161,7 @@ export class ContainerManager {
    * @returns {Promise<Object>} Container information
    */
   async startContainer(permutation, instanceId) {
-    console.log(`🚀 Starting container for ${permutation.id} (${instanceId})...`);
+    console.log(`Simulacrum | Test Runner - 🚀 Starting container for ${permutation.id} (${instanceId})...`);
 
     // Allocate port
     const port = await this.portManager.allocatePort(instanceId);
@@ -190,7 +190,7 @@ export class ContainerManager {
         imageName
       ].join(' ');
 
-      console.log(`🔨 Run command: ${runCommand}`);
+      console.log(`Simulacrum | Test Runner - 🔨 Run command: ${runCommand}`);
 
       // Start container
       const result = await execAsync(runCommand);
@@ -200,7 +200,7 @@ export class ContainerManager {
         throw new Error('Failed to get container ID from docker run');
       }
 
-      console.log(`📦 Container started: ${containerId} on port ${port}`);
+      console.log(`Simulacrum | Test Runner - 📦 Container started: ${containerId} on port ${port}`);
 
       // Track running container
       this.runningContainers.set(containerId, {
@@ -237,7 +237,7 @@ export class ContainerManager {
    * @returns {Promise<void>}
    */
   async waitForContainerReady(containerId, port) {
-    console.log(`⏳ Waiting for container ${containerId} to be ready on port ${port}...`);
+    console.log(`Simulacrum | Test Runner - ⏳ Waiting for container ${containerId} to be ready on port ${port}...`);
 
     const maxAttempts = 30;
     const checkInterval = this.config.docker.timeouts.healthCheckInterval;
@@ -255,11 +255,11 @@ export class ContainerManager {
         const httpCode = healthCheck.stdout.trim();
 
         if (httpCode === '200' || httpCode === '302') {
-          console.log(`✅ Container ${containerId} is ready (HTTP ${httpCode})`);
+          console.log(`Simulacrum | Test Runner - ✅ Container ${containerId} is ready (HTTP ${httpCode})`);
           return;
         }
 
-        console.log(`🔄 Attempt ${attempt}/${maxAttempts}: HTTP ${httpCode}, waiting...`);
+        console.log(`Simulacrum | Test Runner - 🔄 Attempt ${attempt}/${maxAttempts}: HTTP ${httpCode}, waiting...`);
 
       } catch (error) {
         if (attempt === maxAttempts) {
@@ -274,7 +274,7 @@ export class ContainerManager {
           throw new Error(`Container ${containerId} failed to become ready after ${maxAttempts} attempts`);
         }
 
-        console.log(`🔄 Attempt ${attempt}/${maxAttempts} failed: ${error.message}, retrying...`);
+        console.log(`Simulacrum | Test Runner - 🔄 Attempt ${attempt}/${maxAttempts} failed: ${error.message}, retrying...`);
       }
 
       // Wait before next attempt
@@ -288,17 +288,17 @@ export class ContainerManager {
    * @returns {Promise<void>}
    */
   async stopContainer(containerId) {
-    console.log(`🛑 Stopping container ${containerId}...`);
+    console.log(`Simulacrum | Test Runner - 🛑 Stopping container ${containerId}...`);
 
     try {
       await execAsync(`docker stop ${containerId}`, { timeout: this.config.docker.timeouts.containerStop });
-      console.log(`✅ Container ${containerId} stopped`);
+      console.log(`Simulacrum | Test Runner - ✅ Container ${containerId} stopped`);
     } catch (error) {
       console.warn(`⚠️ Failed to stop container ${containerId}:`, error.message);
       // Try force stop
       try {
         await execAsync(`docker kill ${containerId}`);
-        console.log(`🔪 Container ${containerId} force killed`);
+        console.log(`Simulacrum | Test Runner - 🔪 Container ${containerId} force killed`);
       } catch (killError) {
         console.error(`❌ Failed to kill container ${containerId}:`, killError.message);
       }
@@ -311,11 +311,11 @@ export class ContainerManager {
    * @returns {Promise<void>}
    */
   async removeContainer(containerId) {
-    console.log(`🗑️  Removing container ${containerId}...`);
+    console.log(`Simulacrum | Test Runner - 🗑️  Removing container ${containerId}...`);
 
     try {
       await execAsync(`docker rm ${containerId}`);
-      console.log(`✅ Container ${containerId} removed`);
+      console.log(`Simulacrum | Test Runner - ✅ Container ${containerId} removed`);
       
       // Remove from tracking
       if (this.runningContainers.has(containerId)) {
@@ -376,7 +376,7 @@ export class ContainerManager {
    * @returns {Promise<void>}
    */
   async cleanupAllContainers() {
-    console.log('🧹 Cleaning up all running containers...');
+    console.log('Simulacrum | Test Runner - 🧹 Cleaning up all running containers...');
 
     const containerIds = Array.from(this.runningContainers.keys());
     let cleanupErrors = [];
@@ -384,7 +384,7 @@ export class ContainerManager {
     // First cleanup tracked containers
     for (const containerId of containerIds) {
       try {
-        console.log(`🧹 Cleaning up tracked container ${containerId.substring(0, 12)}...`);
+        console.log(`Simulacrum | Test Runner - 🧹 Cleaning up tracked container ${containerId.substring(0, 12)}...`);
         
         // Stop container first
         await this.stopContainer(containerId);
@@ -392,7 +392,7 @@ export class ContainerManager {
         // Then remove container
         await this.removeContainer(containerId);
         
-        console.log(`✅ Successfully cleaned up container ${containerId.substring(0, 12)}`);
+        console.log(`Simulacrum | Test Runner - ✅ Successfully cleaned up container ${containerId.substring(0, 12)}`);
       } catch (error) {
         const errorMsg = `Cleanup failed for ${containerId.substring(0, 12)}: ${error.message}`;
         console.error(`❌ ${errorMsg}`);
@@ -400,7 +400,7 @@ export class ContainerManager {
         
         // Try emergency cleanup with docker commands
         try {
-          console.log(`🚨 Attempting emergency cleanup for ${containerId.substring(0, 12)}`);
+          console.log(`Simulacrum | Test Runner - 🚨 Attempting emergency cleanup for ${containerId.substring(0, 12)}`);
           await execAsync(`docker kill ${containerId}`, { timeout: 10000 });
           await execAsync(`docker rm -f ${containerId}`, { timeout: 10000 });
           
@@ -411,7 +411,7 @@ export class ContainerManager {
             this.runningContainers.delete(containerId);
           }
           
-          console.log(`✅ Emergency cleanup successful for ${containerId.substring(0, 12)}`);
+          console.log(`Simulacrum | Test Runner - ✅ Emergency cleanup successful for ${containerId.substring(0, 12)}`);
         } catch (emergencyError) {
           console.error(`💥 Emergency cleanup also failed for ${containerId.substring(0, 12)}: ${emergencyError.message}`);
           cleanupErrors.push(`Emergency cleanup failed: ${emergencyError.message}`);
@@ -420,7 +420,7 @@ export class ContainerManager {
     }
 
     // Now cleanup orphaned containers created by bootstrap-runner using execSync
-    console.log('🔍 Looking for orphaned session containers...');
+    console.log('Simulacrum | Test Runner - 🔍 Looking for orphaned session containers...');
     try {
       const { execSync } = await import('child_process');
       // Find all containers with names matching session-* pattern
@@ -430,32 +430,32 @@ export class ContainerManager {
         .filter(name => name.length > 0);
       
       if (orphanedContainers.length > 0) {
-        console.log(`📦 Found ${orphanedContainers.length} orphaned containers to clean up`);
+        console.log(`Simulacrum | Test Runner - 📦 Found ${orphanedContainers.length} orphaned containers to clean up`);
         
         for (const containerName of orphanedContainers) {
           try {
-            console.log(`🧹 Stopping orphaned container: ${containerName}`);
+            console.log(`Simulacrum | Test Runner - 🧹 Stopping orphaned container: ${containerName}`);
             execSync(`docker stop ${containerName}`, { stdio: 'ignore' });
             execSync(`docker rm ${containerName}`, { stdio: 'ignore' });
-            console.log(`✅ Removed orphaned container: ${containerName}`);
+            console.log(`Simulacrum | Test Runner - ✅ Removed orphaned container: ${containerName}`);
           } catch (error) {
             console.warn(`⚠️ Failed to cleanup orphaned container ${containerName}: ${error.message}`);
           }
         }
       } else {
-        console.log('✅ No orphaned containers found');
+        console.log('Simulacrum | Test Runner - ✅ No orphaned containers found');
       }
     } catch (error) {
       console.warn(`⚠️ Failed to check for orphaned containers: ${error.message}`);
     }
     
-    console.log(`🧹 Container cleanup completed`);
+    console.log(`Simulacrum | Test Runner - 🧹 Container cleanup completed`);
     
     if (cleanupErrors.length > 0) {
       console.warn(`⚠️ ${cleanupErrors.length} cleanup errors occurred:`);
       cleanupErrors.forEach(error => console.warn(`  - ${error}`));
     } else {
-      console.log('✅ All containers cleaned up successfully');
+      console.log('Simulacrum | Test Runner - ✅ All containers cleaned up successfully');
     }
   }
 
@@ -501,7 +501,7 @@ export class ContainerManager {
   async verifyDockerAvailable() {
     try {
       await execAsync('docker --version');
-      console.log('✅ Docker is available');
+      console.log('Simulacrum | Test Runner - ✅ Docker is available');
       return true;
     } catch (error) {
       console.error('❌ Docker is not available:', error.message);
