@@ -534,13 +534,17 @@ export class SimulacrumChatModal {
     // Clear any existing placeholder
     this.clearCurrentPlaceholder();
 
-    // Add placeholder message and store the removable element
-    this.currentPlaceholder = this.chatWindow.addMessage({
-      content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${gerund}...</div>`,
-      sender: 'System',
-      cornerText: this._getTimestamp(),
-      img: 'icons/svg/clockwork.svg',
-    });
+    // Add placeholder message and store the removable element (non-persistent)
+    this.currentPlaceholder = this.chatWindow.addMessage(
+      {
+        content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${gerund}...</div>`,
+        sender: 'System',
+        cornerText: this._getTimestamp(),
+        img: 'icons/svg/clockwork.svg',
+      },
+      true,
+      false
+    ); // render=true, persistent=false
   }
 
   /**
@@ -568,15 +572,19 @@ export class SimulacrumChatModal {
    * @param {string} newGerund - The new gerund to display
    */
   updatePlaceholderGerund(newGerund) {
-    // For simplicity, just replace the placeholder with updated content
+    // For simplicity, just replace the placeholder with updated content (non-persistent)
     if (this.currentPlaceholder) {
       this.currentPlaceholder.remove();
-      this.currentPlaceholder = this.chatWindow.addMessage({
-        content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${newGerund}...</div>`,
-        sender: 'System',
-        cornerText: this._getTimestamp(),
-        img: 'icons/svg/clockwork.svg',
-      });
+      this.currentPlaceholder = this.chatWindow.addMessage(
+        {
+          content: `<div class="simulacrum-placeholder"><i class="fas fa-cog fa-spin"></i> ${newGerund}...</div>`,
+          sender: 'System',
+          cornerText: this._getTimestamp(),
+          img: 'icons/svg/clockwork.svg',
+        },
+        true,
+        false
+      ); // render=true, persistent=false
     }
   }
 
