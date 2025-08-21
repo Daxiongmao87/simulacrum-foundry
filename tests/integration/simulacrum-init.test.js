@@ -2,6 +2,13 @@
  * @file tests/integration/simulacrum-init.test.js
  * @description Integration test to verify Simulacrum module is properly initialized
  * 
+ * Test Metadata:
+ * - enabled: true
+ * - category: "module-initialization"
+ * - priority: "high"
+ * - timeout: 60000
+ * - description: "Verifies Simulacrum module loads correctly and initializes game.simulacrum object"
+ * 
  * Test Scope:
  * - Verify Simulacrum module is loaded and active
  * - Verify module settings are available
@@ -81,6 +88,29 @@ class IntegrationTestLogger {
  * @param {Object} config - Test configuration from test.config.json
  * @returns {Object} Test result with success status and details
  */
+// Test metadata for auto-discovery and configuration
+export const testMetadata = {
+  name: 'simulacrum-init',
+  enabled: true,
+  category: 'module-initialization',
+  priority: 'high',
+  timeout: 60000,
+  description: 'Verifies Simulacrum module loads correctly and initializes game.simulacrum object',
+  dependencies: [],
+  tags: ['core', 'initialization', 'module'],
+  // Optional: Test-specific configuration overrides
+  configuration: {
+    // Override specific config values for this test only
+    // 'foundry-versions': ['v13'],  // Example: test only on v13
+    // 'foundry-systems': ['dnd5e'], // Example: test only with dnd5e
+  },
+  requirements: {
+    minFoundryVersion: 'v12',
+    requiredModules: [],
+    requiredSystems: []
+  }
+};
+
 export default async function simulacrumInitTest(session, permutation, config) {
   const { page, gameState } = session;
   const logger = new IntegrationTestLogger(DEBUG_MODE);

@@ -5,6 +5,7 @@ research/
 .AGENT/
 .BACKLOG/
 .claude/
+.task/
 
 # Team member instruction files
 CLAUDE.md

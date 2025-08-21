@@ -17,7 +17,7 @@
  */
 
 import { readFileSync, existsSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { BootstrapRunner } from './helpers/bootstrap/bootstrap-runner.js';
@@ -149,6 +149,12 @@ class TestOrchestrator {
       this.logger.config('Overriding systems from command line');
     }
     
+    // Store selected tests from command line
+    this.selectedTests = options.tests || null;
+    if (this.selectedTests) {
+      this.logger.config(`Selected tests from command line: ${this.selectedTests.join(', ')}`);
+    }
+    
     // Set manual mode flag
     this.manualMode = options.manual || false;
     if (this.manualMode) {
@@ -187,27 +193,96 @@ class TestOrchestrator {
   async discoverIntegrationTests() {
     this.logger.essential('🔍 Discovering integration tests...');
     
-    // If tests are specified in config, use those
-    if (this.config['integration-tests'] && this.config['integration-tests'].length > 0) {
-      this.logger.info(`Using configured tests: ${this.config['integration-tests'].length} tests`);
-      return this.config['integration-tests'].map(test => join(PROJECT_ROOT, 'tests', 'integration', test));
+    // Step 1: Discover all test files
+    const testPattern = join(PROJECT_ROOT, 'tests', 'integration', '**', '*.test.js');
+    let testFiles = await glob(testPattern);
+    this.logger.debug(`Found ${testFiles.length} test files via glob`);
+    
+    // Step 2: Filter by --tests flag if provided (highest priority)
+    if (this.selectedTests && this.selectedTests.length > 0) {
+      testFiles = testFiles.filter(file => {
+        const testName = basename(file, '.test.js');
+        const fileName = basename(file);
+        // Match against both test name (without extension) and full filename
+        return this.selectedTests.some(selected => 
+          testName === selected || 
+          fileName === selected ||
+          fileName === `${selected}.test.js`
+        );
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on --tests flag`);
+      
+      // Warn if any selected tests were not found
+      const foundTestNames = testFiles.map(f => basename(f, '.test.js'));
+      const notFound = this.selectedTests.filter(selected => 
+        !foundTestNames.includes(selected) && 
+        !foundTestNames.includes(selected.replace('.test.js', ''))
+      );
+      if (notFound.length > 0) {
+        this.logger.warn(`Tests not found: ${notFound.join(', ')}`);
+      }
+    }
+    // Step 3: Filter by configuration if no --tests flag and config exists
+    else if (this.config['integration-tests'] && this.config['integration-tests'].length > 0) {
+      const configuredTests = this.config['integration-tests'].map(test => 
+        join(PROJECT_ROOT, 'tests', 'integration', test)
+      );
+      testFiles = testFiles.filter(file => configuredTests.includes(file));
+      this.logger.info(`Filtered to ${testFiles.length} tests based on configuration`);
+    }
+    // Step 4: Otherwise filter by enabled status in test metadata and config
+    else {
+      const enabledTests = [];
+      const testConfigs = this.config['test-configurations'] || {};
+      
+      for (const testFile of testFiles) {
+        const testName = basename(testFile, '.test.js');
+        let isEnabled = true;
+        
+        try {
+          // Check test configuration in test.config.json first
+          if (testConfigs[testName] && typeof testConfigs[testName].enabled === 'boolean') {
+            isEnabled = testConfigs[testName].enabled;
+            this.logger.debug(`Test ${testName} enabled status from config: ${isEnabled}`);
+          } else {
+            // Import and check test metadata
+            const testModule = await import(testFile);
+            const metadata = testModule.testMetadata || {};
+            
+            // Default to enabled if metadata doesn't exist or enabled is not specified
+            isEnabled = metadata.enabled !== false;
+            this.logger.debug(`Test ${testName} enabled status from metadata: ${isEnabled}`);
+          }
+          
+          if (isEnabled) {
+            enabledTests.push(testFile);
+            this.logger.debug(`Test enabled: ${basename(testFile)}`);
+          } else {
+            this.logger.debug(`Test disabled: ${basename(testFile)}`);
+          }
+        } catch (error) {
+          // If we can't load metadata, include the test by default
+          this.logger.debug(`Could not load metadata for ${basename(testFile)}, including by default`);
+          enabledTests.push(testFile);
+        }
+      }
+      testFiles = enabledTests;
+      this.logger.info(`Discovered ${testFiles.length} enabled test files`);
     }
     
-    // Otherwise discover all test files
-    const testPattern = join(PROJECT_ROOT, 'tests', 'integration', '**', '*.test.js');
-    const testFiles = await glob(testPattern);
-    this.logger.info(`Discovered ${testFiles.length} test files`);
     return testFiles;
   }
 
   async runSingleIntegrationTest(testFile, permutations) {
     this.logger.essential(`🧪 Running integration test: ${testFile}`);
     
-    // Import the test function
+    // Import the test function and metadata
     let testFunction;
+    let testMetadata = {};
     try {
       const testModule = await import(testFile);
       testFunction = testModule.default;
+      testMetadata = testModule.testMetadata || {};
       
       if (typeof testFunction !== 'function') {
         throw new Error('Integration test must export a default function');
@@ -215,6 +290,30 @@ class TestOrchestrator {
     } catch (error) {
       this.logger.error(`Failed to load test ${testFile}: ${error.message}`);
       return [];
+    }
+    
+    // Apply test-specific configuration overrides if available
+    const testConfig = { ...this.config };
+    const testName = basename(testFile, '.test.js');
+    const testConfigFromFile = this.config['test-configurations']?.[testName];
+    
+    // Priority: testMetadata.configuration > test-configurations > global config
+    if (testConfigFromFile?.overrides) {
+      // Apply overrides from test.config.json
+      if (testConfigFromFile.overrides['foundry-versions']) {
+        testConfig['foundry-versions'] = testConfigFromFile.overrides['foundry-versions'];
+        this.logger.debug(`Applied version override from test config for ${testName}`);
+      }
+      if (testConfigFromFile.overrides['foundry-systems']) {
+        testConfig['foundry-systems'] = testConfigFromFile.overrides['foundry-systems'];
+        this.logger.debug(`Applied system override from test config for ${testName}`);
+      }
+    }
+    
+    if (testMetadata.configuration) {
+      // Merge test-specific configuration from metadata (highest priority)
+      Object.assign(testConfig, testMetadata.configuration);
+      this.logger.debug(`Applied test-specific configuration from metadata for ${testMetadata.name || testName}`);
     }
     
     const testResults = [];
@@ -491,7 +590,8 @@ function parseArgs() {
     help: false,
     manual: false,
     versions: null,
-    systems: null
+    systems: null,
+    tests: null
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -517,6 +617,14 @@ function parseArgs() {
       }
     } else if (arg.startsWith('--systems=')) {
       options.systems = arg.split('=')[1].split(',').map(s => s.trim());
+    } else if (arg === '--tests' || arg === '-t') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options.tests = nextArg.split(',').map(t => t.trim());
+        i++; // Skip next argument as it's the value
+      }
+    } else if (arg.startsWith('--tests=')) {
+      options.tests = arg.split('=')[1].split(',').map(t => t.trim());
     }
   }
   
@@ -536,6 +644,7 @@ Options:
   --manual, -m            Manual testing mode - bootstrap instance and wait for ESC to exit
   --versions, -v <list>   Override FoundryVTT versions (comma-separated)
   --systems, -s <list>    Override game systems (comma-separated)
+  --tests, -t <list>      Run specific tests only (comma-separated test names)
   
 Description:
   This orchestrator runs integration tests against live FoundryVTT sessions.
@@ -559,6 +668,8 @@ Examples:
   node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
   node run-tests.js -v v13 -s dnd5e              # Test specific combination
   node run-tests.js -m -v v13 -s dnd5e           # Manual mode with specific version/system
+  node run-tests.js --tests simulacrum-init      # Run specific test
+  node run-tests.js -t test1,test2               # Run multiple specific tests
   DEBUG=true node run-tests.js                   # Environment variable debug mode
 `);
 }
