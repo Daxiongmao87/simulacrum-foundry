@@ -1,0 +1,108 @@
+Step Number	Action	Supporting Identifiers	Page Information
+Step 1	"Click on the input field"	"[name : title]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 2	"Change the value of input field to value: [test]"	"[value : test]
+[name : title]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 3	"Click on the input field"	"[value : test]
+[name : title]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 4	"Change the value of input field to value: [test123]"	"[value : test123]
+[name : title]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 5	"Change the value of the select"	"[textContent : 
+                Dungeons & Dragons Fifth EditionLevel Up: Advanced 5th Edition (Official)Pathfinder...<i>truncated</i>]
+[value : dnd5e]
+[name : system]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 6	"Click on the button 
+            
+            Create World
+        "	"[textContent : 
+            
+            Create World
+        ]
+[className : bright]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 7	"Click on the link with text: 
+                        
+                    "	"[textContent : 
+                        
+                    ]
+[className : control play]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/setup"
+Step 8	"Change the value of the select"	"[textContent : 
+                
+                    Gamemaster
+            ]
+[value : pDCMWjvnLSItJvXW]
+[name : userid]
+"	"test123
+https://foundry.instance1.astralkeep.com/join"
+Step 9	"Click on the button 
+            
+            Join Game Session
+        "	"[textContent : 
+            
+            Join Game Session
+        ]
+[name : join]
+[className : bright]
+"	"test123
+https://foundry.instance1.astralkeep.com/join"
+Step 10	"Click on the link with text: 
+        
+    "	"[textContent : 
+        
+    ]
+[className : step-button disabled]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+Step 11	"Click on the link with text: 
+            
+            
+        "	"[textContent : 
+            
+            
+        ]
+[className : item]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+Step 12	"Click on the button 
+            
+            Manage Modules
+                    "	"[textContent : 
+            
+            Manage Modules
+                    ]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+Step 13	"Change the value of input field to value: [on]"	"[value : on]
+[name : divination]
+[className : active]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+Step 14	"Click on the button 
+             Save Module Settings
+        "	"[textContent : 
+             Save Module Settings
+        ]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+Step 15	"Click on the button 
+          
+          Yes
+        "	"[textContent : 
+          
+          Yes
+        ]
+"	"Foundry Virtual Tabletop
+https://foundry.instance1.astralkeep.com/game"
+

@@ -424,7 +424,7 @@ export class ContainerManager {
     try {
       const { execSync } = await import('child_process');
       // Find all containers with names matching session-* pattern
-      const orphanedContainers = execSync('docker ps -a --filter "name=session-" --format "{{.Names}}"', { encoding: 'utf8' })
+      const orphanedContainers = execSync('docker ps -a --filter "name=foundry-test-" --format "{{.Names}}"', { encoding: 'utf8' })
         .trim()
         .split('\n')
         .filter(name => name.length > 0);
@@ -467,31 +467,22 @@ export class ContainerManager {
   getFoundryVersionZip(version) {
     // Get the project root directory
     const projectRoot = this.getProjectRoot();
-    
-    // Common locations for FoundryVTT binaries
-    const possiblePaths = [
-      path.join(projectRoot, 'tests/fixtures/binary_versions', version, 'FoundryVTT-Node-13.347.zip'),
-      path.join(projectRoot, 'tests/fixtures/binary_versions', version, `foundryvtt-${version}.zip`),
-      path.join(projectRoot, 'tests/fixtures/binary_versions', version, `FoundryVTT-${version}.zip`),
-      path.join(projectRoot, 'foundry-binaries', `foundryvtt-${version}.zip`),
-      path.join(projectRoot, 'foundry-binaries', `FoundryVTT-${version}.zip`),
-      path.join(projectRoot, 'tests/binaries', `foundryvtt-${version}.zip`),
-      path.join(projectRoot, `foundryvtt-${version}.zip`),
-      path.join(projectRoot, 'foundryvtt.zip') // Generic fallback
-    ];
+    const versionDir = path.join(projectRoot, 'tests/fixtures/binary_versions', version);
 
-    for (const zipPath of possiblePaths) {
-      if (fs.existsSync(zipPath)) {
-        return zipPath;
-      }
+    // Find the first zip file in the directory
+    if (fs.existsSync(versionDir)) {
+        const files = fs.readdirSync(versionDir);
+        const zipFile = files.find(file => file.toLowerCase().endsWith('.zip'));
+        if (zipFile) {
+            return path.join(versionDir, zipFile);
+        }
     }
-
-    // If no specific version found, return the generic path with instructions
-    console.warn(`⚠️ FoundryVTT binary for ${version} not found in expected locations:`);
-    possiblePaths.forEach(p => console.warn(`  - ${p}`));
-    console.warn(`Please download FoundryVTT ${version} and place the zip file in one of these locations.`);
     
-    return possiblePaths[0]; // Return first option for error reporting
+    // Fallback for error messaging
+    const genericPath = path.join(versionDir, 'FoundryVTT-*.zip');
+    console.warn(`⚠️ FoundryVTT binary for ${version} not found in ${versionDir}`);
+    console.warn(`Please download FoundryVTT ${version} and place the zip file in that location.`);
+    return genericPath;
   }
 
   /**

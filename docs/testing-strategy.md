@@ -142,6 +142,19 @@ npm run test:setup                # Setup test environment
 npm run test:cleanup              # Cleanup test artifacts
 ```
 
+#### **Bootstrap Infrastructure (Core Test Engine)**
+```bash
+# Core infrastructure for setting up test environments
+node tests/run-tests.js           # Main test orchestrator
+node tests/bootstrap/bootstrap-runner.js  # Bootstrap infrastructure
+```
+
+**Bootstrap Infrastructure**: The core engine that creates live FoundryVTT sessions for testing. It handles:
+- **Version Compatibility**: Manages FoundryVTT v12/v13 differences
+- **Docker Orchestration**: Builds and runs test containers
+- **Session Management**: Creates authenticated GM sessions
+- **UI Automation**: Handles license, EULA, system installation
+
 #### **Performance Tests (Custom)**
 ```bash
 # Slow execution, nightly builds
@@ -161,6 +174,8 @@ npm run test:stress              # Stress testing
 - **Docker Containers**: Isolated FoundryVTT instances
 - **Port Management**: Dynamic port allocation
 - **Resource Cleanup**: Automatic cleanup on completion/failure
+- **Version Management**: Multi-version FoundryVTT support (v12, v13)
+- **UI Automation**: Version-specific UI handling for different FoundryVTT versions
 
 ### **Debugging & Troubleshooting**
 

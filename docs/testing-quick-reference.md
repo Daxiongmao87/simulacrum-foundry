@@ -18,6 +18,12 @@ npm run test:setup                # Setup test environment
 npm run test:cleanup              # Cleanup test artifacts
 ```
 
+### **Bootstrap Infrastructure (Core)**
+```bash
+node tests/run-tests.js           # Main test orchestrator
+node tests/bootstrap/bootstrap-runner.js  # Bootstrap infrastructure
+```
+
 ### **Comprehensive Testing (Slow)**
 ```bash
 npm run test:all                  # Run all test categories
@@ -69,6 +75,11 @@ npm run test:integration -- --debug
 - **Integration**: Multiple components (Docker + Puppeteer)
 - **E2E**: Complete workflows (Puppeteer)
 
+### **Infrastructure**
+- **Bootstrap**: Core test environment setup (FoundryVTT + Docker)
+- **Version Management**: Multi-version FoundryVTT support
+- **UI Automation**: Version-specific UI handling
+
 ### **Non-Functional Tests**
 - **Performance**: Load, memory, response time
 - **Security**: Vulnerabilities, data exposure
@@ -97,8 +108,13 @@ docker system prune       # Docker cleanup
 
 ```
 tests/
+├── bootstrap/            # Core test infrastructure
+│   ├── bootstrap-runner.js     # Main orchestrator
+│   ├── v12/                    # v12-specific UI automation
+│   ├── v13/                    # v13-specific UI automation
+│   └── common/                 # Shared utilities
 ├── integration/          # Integration tests
-├── helpers/             # Test utilities
+├── helpers/             # Test utilities and mocks
 ├── config/              # Test configuration
 ├── fixtures/            # Test data
 └── README.md            # Detailed documentation
@@ -116,5 +132,6 @@ tests/
 
 - **Detailed docs**: `docs/testing-strategy.md`
 - **Test workflow**: `tests/README.md`
+- **Bootstrap architecture**: `tests/README.md#bootstrap-infrastructure-development`
 - **Console issues**: `npm run console:validate`
 - **Debug mode**: `npm run test:integration -- --debug`

@@ -6,6 +6,7 @@
   "main": "scripts/main.js",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:unit:v12": "node --experimental-vm-modules node_modules/.bin/jest --config tests/unit/v12/jest.config.js",
     "lint": "eslint scripts/**/*.js",
     "lint:fix": "eslint scripts/**/*.js --fix",
     "lint:strict": "eslint scripts/**/*.js --max-warnings 0",

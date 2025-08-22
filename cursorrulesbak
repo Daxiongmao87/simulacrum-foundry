@@ -1,0 +1,106 @@
+# Simulacrum FoundryVTT AI Module - Development Guidelines
+
+## 🚨 CRITICAL MANDATES FOR ALL DEVELOPMENT
+
+### 1. Mandatory Research and Investigation
+Before any implementation or bug fix, thorough research is **mandatory**.
+
+- **Foundry VTT Source Code**: When encountering a problem or before implementing new functionality, it is **imperative** to investigate the relevant Foundry VTT source code. The project includes `foundry-source/v12/` and `foundry-source/v13/` for this purpose. Understand existing patterns, data structures, and core logic. Focus on:
+    - **Document Definitions**: How core documents (Actor, Item, Scene, JournalEntry) are structured and their data models.
+    - **API Endpoints**: How Foundry VTT exposes its functionality (e.g., `game.collections`, `CONFIG`, `Hooks`).
+    - **UI Rendering**: How UI elements are rendered and manipulated, especially for version-specific differences.
+    - **Core Logic**: Underlying mechanisms for data persistence, networking, and game state management.
+
+- **Foundry VTT Online API Database**: For any module changes that require interacting with Foundry VTT, it is **imperative** to search the official Foundry VTT online API database for the specific version(s) you are targeting. This ensures correct API usage and compatibility.
+
+- **Issue Analysis (Slow Read)**: Before starting any task, **SLOW DOWN AND READ** the entire GitHub issue description carefully, as detailed in `.github/WORKFLOW_ENFORCEMENT.md`.
+    - Copy the entire issue description into your analysis.
+    - Search for `🚨 WARNINGS` and highlight them.
+    - Identify the exact deliverable type required.
+    - Quote the specific requirements word-for-word.
+    - List any forbidden actions.
+
+### 2. System-Agnostic Architecture
+**NEVER hardcode game system assumptions.** This module MUST work with ALL FoundryVTT systems.
+- Use `DocumentDiscoveryEngine.getAvailableTypes()` for document types.
+- Use `FoundrySchemaExtractor.getDocumentSchema()` for schemas.
+- Use `CONFIG` inspection for system-specific types.
+- NEVER assume D&D 5e, Pathfinder, etc., exist.
+
+### 3. Adherence to Existing Patterns and Conventions
+- **Consistency**: Adhere strictly to existing code style, formatting, naming conventions, and architectural patterns found in the project. Review surrounding code, tests, and configuration files (e.g., `package.json`, `eslint.config.js`) before making changes.
+- **Libraries/Frameworks**: NEVER assume a library/framework is available or appropriate. Verify its established usage within the project before employing it.
+
+## General Development Guidelines
+
+### Coding Standards
+- **ESLint**: Use `npm run lint` for validation and `npm run lint:fix` for auto-fixing issues.
+- **Prettier**: Use `npm run format` for code formatting.
+
+### Git Workflow
+- **Commit Messages**: Commits MUST reference GitHub issues (e.g., "Fix chat persistence (#36)").
+- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality and issue validation. Do NOT bypass these hooks.
+- **Feature Branches**: Work on feature branches (e.g., `git checkout -b feature-name`).
+
+## Implementation Guidelines
+
+### Tool-Based Architecture
+- All tools extend the `Tool` base class in `scripts/tools/tool-registry.js`.
+- Implement `execute(params)` in subclasses.
+- Override `shouldConfirmExecute()` if the tool does not require user confirmation (defaults to `true`).
+- Define `parameterSchema` using JSON schema for input validation.
+
+### Agentic Loop Pattern
+- Understand `AgenticLoopController` (`scripts/core/agentic-loop-controller.js`) for managing AI → Tool → AI cycles, context windows, and token tracking.
+- **Critical Note on Tool Execution**: Be aware that `scripts/core/tool-scheduler.js` currently contains an `if (true)` condition that forces Gremlin mode for agentic loop tool execution, overriding the user's `gremlinMode` setting. This means tools executed within the agentic loop will bypass user confirmation regardless of the setting. This is a current design choice but may be subject to future review.
+
+### Document Operations
+- Always use the system-agnostic `DocumentDiscoveryEngine` from `scripts/core/document-discovery-engine.js` for discovering, normalizing, and interacting with Foundry VTT document types.
+- Use `GenericCRUDTools` from `scripts/core/generic-crud-tools.js` for creating, reading, updating, and deleting documents.
+
+### AI Integration
+- Follow the AI service pattern in `scripts/chat/ai-service.js` for OpenAI-compatible API integration, streaming responses, and tool call parsing.
+- Utilize `ModelDetector` and `ContextWindowDetector` (`scripts/core/`) for dynamic AI model and context window detection.
+- Employ `TokenTracker` (`scripts/core/`) for managing context window limits and truncating tool results for AI consumption.
+
+### Settings Pattern
+- Register module settings using FoundryVTT's system as demonstrated in `scripts/settings.js`.
+- Leverage dynamic settings for `modelName` and `contextLength` based on API detection.
+
+### Error Handling
+- Implement robust `try/catch` blocks.
+- Return structured results: `{ success: boolean, result?: any, error?: string }`.
+- Ensure graceful degradation for API failures using `SimulacrumError` and `ErrorRecoveryManager` (`scripts/error-handling.js`).
+
+## Testing and Verification
+
+### Working Commands
+- `npm run lint` - ESLint validation
+- `npm run lint:fix` - Auto-fix ESLint issues
+- `npm run format` - Prettier formatting
+- `npm run prepare` - Husky git hooks setup
+- `npm test` - Jest testing (Currently broken due to ES6 module config issues; avoid relying on this until fixed).
+
+### Docker Integration Testing
+- The project uses a sophisticated Docker-based integration testing infrastructure, detailed in `tests/README.md`.
+- Use `node tests/run-tests.js` to execute integration tests.
+- **CRITICAL**: Understand the distinction between "BOOTSTRAP HELPER" (modifying `tests/helpers/concurrent-docker-test-runner.js` or related bootstrap files) and "INTEGRATION TEST" (creating `.test.js` files in `tests/integration/`). This distinction is strictly enforced by `.github/WORKFLOW_ENFORCEMENT.md`.
+- For manual debugging of the bootstrap process, use `node tests/run-tests.js --manual`.
+
+### Validation and Rejection Triggers
+- **Verify Correct Deliverable Type**: Ensure your implementation matches the deliverable type specified in the GitHub issue.
+- **Immediate Rejection Triggers**: Strictly adhere to the rules outlined in `.github/WORKFLOW_ENFORCEMENT.md` to avoid immediate rejection of work.
+- **Commit Prevention**: NEVER commit if wrong deliverable type created, issue warnings ignored, specified file not modified, or tests don't pass syntax check.
+
+## Key Files to Understand
+
+- `scripts/main.js`: Module initialization and tool registration.
+- `scripts/core/agentic-loop-controller.js`: AI workflow orchestration.
+- `scripts/tools/tool-registry.js`: Tool base class and registry.
+- `scripts/core/document-discovery-engine.js`: System-agnostic document handling.
+- `scripts/settings.js`: Module settings integration.
+- `scripts/error-handling.js`: Comprehensive error handling system.
+- `tests/run-tests.js`: Main test orchestrator.
+- `tests/README.md`: Detailed documentation for the testing infrastructure.
+- `.github/copilot-instructions.md`: Detailed project overview and architectural patterns.
+- `.github/WORKFLOW_ENFORCEMENT.md`: Strict workflow and issue analysis guidelines.

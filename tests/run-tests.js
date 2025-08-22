@@ -20,7 +20,7 @@ import { readFileSync, existsSync, rmSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
-import { BootstrapRunner } from './helpers/bootstrap/bootstrap-runner.js';
+import { BootstrapRunner } from './bootstrap/bootstrap-runner.js';
 
 // Get the directory of this script
 const __filename = fileURLToPath(import.meta.url);

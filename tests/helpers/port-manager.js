@@ -7,8 +7,10 @@
 
 export class PortManager {
   constructor(config) {
-    this.portRange = config.docker.portRange;
-    this.maxConcurrentInstances = config.docker.maxConcurrentInstances;
+    const dockerCfg = (config && config.docker) ? config.docker : {};
+    // Provide safe defaults if not specified in config
+    this.portRange = dockerCfg.portRange || { start: 30000, end: 30010 };
+    this.maxConcurrentInstances = (typeof dockerCfg.maxConcurrentInstances === 'number') ? dockerCfg.maxConcurrentInstances : 1;
     
     // Track allocated ports and their containers
     this.allocatedPorts = new Map(); // port -> { containerId, timestamp }

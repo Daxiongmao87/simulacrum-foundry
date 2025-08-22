@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 // Get the directory of this script
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const PROJECT_ROOT = join(__dirname, '..', '..');
+const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 
 // DEBUG mode detection
 const DEBUG_MODE = process.env.DEBUG === 'true' || process.argv.includes('--debug');

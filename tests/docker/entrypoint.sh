@@ -66,5 +66,15 @@ sleep 2
 
 # Start FoundryVTT with provided arguments
 echo "🚀 Starting FoundryVTT server..."
+echo "📍 Using main.js path: ${FOUNDRY_MAIN_JS_PATH}"
+
+# Verify main.js exists
+if [ ! -f "${FOUNDRY_MAIN_JS_PATH}" ]; then
+    echo "❌ main.js not found at ${FOUNDRY_MAIN_JS_PATH}"
+    echo "📁 Available files in /app:"
+    find /app -name "main.js" -type f 2>/dev/null || echo "No main.js files found"
+    exit 1
+fi
+
 cd /app
-exec node main.js --dataPath="${FOUNDRY_DATA_PATH}" "$@"
+exec node "${FOUNDRY_MAIN_JS_PATH}" --dataPath="${FOUNDRY_DATA_PATH}" "$@"

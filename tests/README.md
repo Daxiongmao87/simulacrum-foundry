@@ -24,8 +24,8 @@ This directory contains the complete integration testing infrastructure for the 
 
 ## Architecture
 
-### 🏗️ Bootstrap Infrastructure (`helpers/bootstrap/`)
-**Purpose**: Get from Docker image to authenticated live FoundryVTT session  
+### 🏗️ Bootstrap Infrastructure (`bootstrap/`)
+**Purpose**: Core test infrastructure that orchestrates the entire testing environment  
 **Scope**: Infrastructure-only, no application testing
 
 - **Dynamic Discovery**: Automatically finds FoundryVTT zip files in version folders
@@ -33,6 +33,20 @@ This directory contains the complete integration testing infrastructure for the 
 - **System Installation**: Installs required game systems automatically  
 - **Session Management**: Creates authenticated GM sessions ready for testing
 - **Resource Management**: Dynamic port allocation and cleanup
+- **Version Compatibility**: Handles FoundryVTT v12/v13 differences in UI automation
+
+#### **Modular Design for Version Compatibility**
+The bootstrap infrastructure uses a modular approach to handle UI differences between FoundryVTT versions:
+
+- **`bootstrap-runner.js`**: Main orchestrator that delegates to version-specific modules
+- **`v12/` & `v13/`**: Version-specific UI automation (button selectors, page flows, etc.)
+- **`common/`**: Shared utilities (Docker operations, browser automation, validation)
+
+This architecture ensures:
+- **Clean Separation**: Version logic isolated from core orchestration
+- **Easy Extension**: New versions can be added without touching existing code
+- **Maintainable**: Each version's UI quirks are contained in dedicated modules
+- **Testable**: Version modules can be tested independently
 
 ### 🧪 Integration Tests (`integration/`)
 **Purpose**: Test specific functionality against live FoundryVTT sessions  
@@ -51,6 +65,7 @@ This directory contains the complete integration testing infrastructure for the 
 - **Resource Coordination**: Manages Docker images, containers, ports
 - **Concurrency Control**: Respects `maxConcurrentInstances` configuration  
 - **Comprehensive Reporting**: Aggregates results with success rates and timing
+- **Version-Aware Testing**: Dynamically discovers and runs version-specific tests
 
 ## Quick Start
 
@@ -110,14 +125,24 @@ tests/
 │   └── binary_versions/
 │       ├── v12/FoundryVTT-*.zip        # FoundryVTT v12 binaries
 │       └── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
-├── helpers/
-│   ├── bootstrap/                      # Bootstrap infrastructure
-│   │   ├── bootstrap-runner.js         # Core bootstrap orchestration
-│   │   ├── manual-bootstrap-test.js    # Manual testing utilities
-│   │   └── run-bootstrap-tests.js      # Bootstrap test runners
+├── bootstrap/                           # Core test infrastructure
+│   ├── bootstrap-runner.js             # Main orchestrator (version-agnostic)
+│   ├── v12/                            # v12-specific UI automation
+│   │   ├── setup-foundry.js            # v12 setup logic
+│   │   ├── install-system.js           # v12 system installation
+│   │   └── install-module.js           # v12 module installation
+│   ├── v13/                            # v13-specific UI automation
+│   │   ├── setup-foundry.js            # v13 setup logic
+│   │   ├── install-system.js           # v13 system installation
+│   │   └── install-module.js           # v13 module installation
+│   └── common/                         # Shared utilities
+│       ├── docker-utils.js             # Docker operations
+│       ├── browser-utils.js            # Browser automation utilities
+│       └── validation.js               # Shared validation logic
+├── helpers/                             # Test utilities and mocks
 │   ├── container-manager.js            # Docker container lifecycle
 │   └── port-manager.js                 # Port allocation management
-├── integration/                        # Integration test scripts
+├── integration/                         # Integration test scripts
 │   ├── hello-world-clean.test.js       # Example clean integration test
 │   ├── hello-world.test.js             # Legacy test (old architecture)
 │   └── integration-test-template.js    # Legacy template
@@ -316,5 +341,40 @@ When adding new testing infrastructure:
 3. **Resource Management**: Always clean up Docker resources
 4. **Error Handling**: Robust error handling with informative messages
 5. **Documentation**: Update this README for new functionality
+
+### **Bootstrap Infrastructure Development**
+The bootstrap infrastructure follows an iterative development approach:
+
+#### **Phase 1: Foundation** ✅
+- Create version-specific directories (v12/, v13/)
+- Create common utilities directory (common/)
+- Extract Docker operations into docker-utils.js
+- **Verification**: Docker operations work for both v12 and v13
+
+#### **Phase 2: FoundryVTT Setup** 🚧
+- Extract FoundryVTT startup logic into version-specific setup-foundry.js
+- **Verification**: FoundryVTT containers start successfully for both versions
+- Extract license key submission logic
+- **Verification**: License key submission works for both versions
+
+#### **Phase 3: EULA and Initial Setup** 📋
+- Extract EULA acceptance logic into version-specific modules
+- **Verification**: EULA acceptance works for both versions
+- Extract initial setup page navigation logic
+- **Verification**: Setup page navigation works for both versions
+
+#### **Phase 4: System Installation** 🎲
+- Extract system installation logic into version-specific install-system.js
+- **Verification**: System installation works for both versions
+- Extract module installation logic into version-specific install-module.js
+- **Verification**: Module installation works for both versions
+
+#### **Phase 5: Integration** 🔗
+- Refactor bootstrap-runner.js to orchestrate version-specific modules
+- **Verification**: Full bootstrap process works for both v12 and v13
+- Update imports and ensure backward compatibility
+- **Verification**: No regression in existing functionality
+
+**Each phase must be completed and verified before moving to the next.**
 
 For detailed architecture information, see `tests/SPECIFICATION.md`.

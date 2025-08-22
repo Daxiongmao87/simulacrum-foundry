@@ -14,12 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Build arguments
 ARG FOUNDRY_VERSION_ZIP
+ARG FOUNDRY_MAIN_JS_PATH
 ARG FOUNDRY_DATA_PATH=/data
 ARG FOUNDRY_LICENSE_KEY
 
 # Set environment variables
 ENV FOUNDRY_DATA_PATH=${FOUNDRY_DATA_PATH}
 ENV FOUNDRY_LICENSE_KEY=${FOUNDRY_LICENSE_KEY}
+ENV FOUNDRY_MAIN_JS_PATH=${FOUNDRY_MAIN_JS_PATH}
 
 # Set working directory
 WORKDIR /app
