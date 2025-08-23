@@ -19,6 +19,18 @@ import { PortManager } from '../helpers/port-manager.js';
 
 // Dynamic imports for version-specific modules
 
+import { LicenseSubmissionV12 } from './v12/license-submission.js';
+import { EULAHandlingV12 } from './v12/eula-handling.js';
+import { SetupNavigationV12 } from './v12/setup-navigation.js';
+import { DeclineDataSharingV12 } from './v12/decline-data-sharing.js';
+import { StepButtonHandlingV12 } from './v12/step-button-handling.js';
+import { SystemInstallerV12 } from './v12/install-system.js';
+import { WorldCreationV12 } from './v12/world-creation.js';
+import { WorldLaunchV12 } from './v12/world-launch.js';
+import { UserAuthenticationV12 } from './v12/user-authentication.js';
+import { GameVerificationV12 } from './v12/game-verification.js';
+import { EnableModuleV12 } from './v12/enable-module.js';
+
 import { LicenseSubmissionV13 } from './v13/license-submission.js';
 import { EULAHandlingV13 } from './v13/eula-handling.js';
 import { SetupNavigationV13 } from './v13/setup-navigation.js';
@@ -102,6 +114,19 @@ class BootstrapRunner {
    */
   getVersionModules(version) {
     const moduleMap = {
+      'v12': {
+        licenseSubmission: new LicenseSubmissionV12(),
+        eulaHandling: new EULAHandlingV12(),
+        setupNavigation: new SetupNavigationV12(),
+        declineDataSharing: new DeclineDataSharingV12(),
+        stepButtonHandling: new StepButtonHandlingV12(),
+        systemInstaller: new SystemInstallerV12(),
+        worldCreation: new WorldCreationV12(),
+        worldLaunch: new WorldLaunchV12(),
+        userAuthentication: new UserAuthenticationV12(),
+        gameVerification: new GameVerificationV12(),
+        enableModule: new EnableModuleV12()
+      },
       'v13': {
         licenseSubmission: new LicenseSubmissionV13(),
         eulaHandling: new EULAHandlingV13(),
@@ -117,7 +142,7 @@ class BootstrapRunner {
       }
     };
     
-    return moduleMap[version];
+    return moduleMap[version] || moduleMap['v13']; // Default to v13
   }
 
   async discoverAvailableVersions() {

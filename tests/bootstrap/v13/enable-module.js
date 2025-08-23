@@ -82,40 +82,37 @@ export class EnableModuleV13 {
       });
       
       if (!confirmClicked) {
-        console.log('[V13 Module] ⚠️ Could not find Yes confirmation button - module may already be enabled');
-      } else {
-        // Wait for the page to reload and FoundryVTT to reinitialize
-        console.log('[V13 Module] 📍 Waiting for FoundryVTT to reinitialize after module activation...');
-        
-        // Set up console log listener for FoundryVTT initialization
-        const foundryLoadedPromise = new Promise((resolve) => {
-          const listener = (msg) => {
-            const text = msg.text();
-            if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
-              console.log('[V13 Module] ✅ FoundryVTT game canvas ready - full initialization complete');
-              page.off('console', listener);
-              resolve();
-            }
-          };
-          page.on('console', listener);
-          
-          // Timeout fallback after 30 seconds
-          setTimeout(() => {
-            page.off('console', listener);
-            console.log('[V13 Module] ⚠️ Timeout waiting for FoundryVTT initialization log');
-            resolve();
-          }, 30000);
-        });
-        
-        await foundryLoadedPromise;
-        
-        // 10 second grace period for everything to settle
-        console.log('[V13 Module] 📍 Waiting 10 seconds grace period for full initialization...');
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        
-        console.log('[V13 Module] ✅ Module activation reload complete');
+        throw new Error('Could not find Yes confirmation button');
       }
       
+      // Wait for the page to reload and FoundryVTT to reinitialize
+      console.log('[V13 Module] 📍 Waiting for FoundryVTT to reinitialize after module activation...');
+      
+      // Set up console log listener for FoundryVTT initialization
+      const foundryLoadedPromise = new Promise((resolve) => {
+        const listener = (msg) => {
+          const text = msg.text();
+          if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
+            console.log('[V13 Module] ✅ FoundryVTT game canvas ready - full initialization complete');
+            page.off('console', listener);
+            resolve();
+          }
+        };
+        page.on('console', listener);
+        setTimeout(() => {
+          page.off('console', listener);
+          console.log('[V13 Module] ⚠️ Timeout waiting for FoundryVTT initialization log');
+          resolve();
+        }, 30000);
+      });
+      
+      await foundryLoadedPromise;
+      
+      // 10 second grace period for everything to settle
+      console.log('[V13 Module] 📍 Waiting 10 seconds grace period for full initialization...');
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      
+      console.log('[V13 Module] ✅ Module activation reload complete');
       console.log('[V13 Module] ✅ Simulacrum module enabled in settings - module initialization will be verified by integration tests');
       return { success: true };
       

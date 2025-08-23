@@ -198,7 +198,35 @@ class TestOrchestrator {
     let testFiles = await glob(testPattern);
     this.logger.debug(`Found ${testFiles.length} test files via glob`);
     
-    // Step 2: Filter by --tests flag if provided (highest priority)
+    // Step 2: Filter by --versions flag if provided (filter by version directories)
+    if (this.config['foundry-versions'] && this.config['foundry-versions'].length > 0) {
+      const versionDirs = this.config['foundry-versions'];
+      testFiles = testFiles.filter(file => {
+        // Extract version directory from file path
+        const relativePath = file.replace(join(PROJECT_ROOT, 'tests', 'integration'), '');
+        const pathParts = relativePath.split('/').filter(part => part.length > 0);
+        
+        // Check if the first directory matches any of the specified versions
+        if (pathParts.length > 0) {
+          const versionDir = pathParts[0];
+          const isVersionMatch = versionDirs.some(version => 
+            versionDir === version || versionDir.startsWith(version)
+          );
+          
+          if (!isVersionMatch) {
+            this.logger.debug(`Filtering out test from version directory ${versionDir}: ${basename(file)}`);
+          }
+          
+          return isVersionMatch;
+        }
+        
+        // If no version directory structure, include the test
+        return true;
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on --versions flag (${versionDirs.join(', ')})`);
+    }
+    
+    // Step 3: Filter by --tests flag if provided (highest priority)
     if (this.selectedTests && this.selectedTests.length > 0) {
       testFiles = testFiles.filter(file => {
         const testName = basename(file, '.test.js');
@@ -222,7 +250,7 @@ class TestOrchestrator {
         this.logger.warn(`Tests not found: ${notFound.join(', ')}`);
       }
     }
-    // Step 3: Filter by configuration if no --tests flag and config exists
+    // Step 4: Filter by configuration if no --tests flag and config exists
     else if (this.config['integration-tests'] && this.config['integration-tests'].length > 0) {
       const configuredTests = this.config['integration-tests'].map(test => 
         join(PROJECT_ROOT, 'tests', 'integration', test)
@@ -230,7 +258,7 @@ class TestOrchestrator {
       testFiles = testFiles.filter(file => configuredTests.includes(file));
       this.logger.info(`Filtered to ${testFiles.length} tests based on configuration`);
     }
-    // Step 4: Otherwise filter by enabled status in test metadata and config
+    // Step 5: Otherwise filter by enabled status in test metadata and config
     else {
       const enabledTests = [];
       const testConfigs = this.config['test-configurations'] || {};

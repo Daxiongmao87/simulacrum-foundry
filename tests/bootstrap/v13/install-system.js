@@ -57,13 +57,10 @@ export class SystemInstallerV13 {
       // Wait for system installation dialog
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Step 3: Search for the system
-      console.log(`[V13 System] 📍 Searching for ${system} system...`);
+      // Step 3: Look for available packages (no search filter needed)
+      console.log(`[V13 System] 📍 Looking for available packages...`);
       
-      await page.type('#install-package-search-filter', system);
-      console.log(`[V13 System] ✅ ${system} entered in search field`);
-      
-      // Wait for search results
+      // Wait a moment for packages to load
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Debug: Show all available packages after search
