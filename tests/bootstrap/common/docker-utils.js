@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * @file tests/helpers/bootstrap/common/docker-utils.js
+ * @file tests/bootstrap/common/docker-utils.js
  * @description Common Docker operations for FoundryVTT test containers
  */
 
 import { execSync } from 'child_process';
-import { copyFileSync, unlinkSync, readdirSync } from 'fs';
+import { readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,30 +29,16 @@ export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
   try {
     // Determine the zip file based on version
     const zipFileName = getZipFileForVersion(version);
-    const zipPath = join(PROJECT_ROOT, 'tests', 'fixtures', 'binary_versions', version, zipFileName);
+    const dockerfilePath = join(PROJECT_ROOT, 'tests', 'docker', 'Dockerfile.foundry');
+    // Use runner's behavior: pass context path directly; main.js build arg is /app/main.js
+    const contextZipPath = `tests/fixtures/binary_versions/${version}/${zipFileName}`;
+    const mainJsPath = '/app/main.js';
     
-    // Copy zip file to build context root temporarily for Docker build
-    const tempZipPath = join(PROJECT_ROOT, zipFileName);
-    copyFileSync(zipPath, tempZipPath);
-    
-    try {
-      const dockerfilePath = join(PROJECT_ROOT, 'tests', 'docker', 'Dockerfile.foundry');
-      // Determine main.js path based on version
-      const mainJsPath = version === 'v12' ? '/app/resources/app/main.js' : '/app/main.js';
-      
-      execSync(`docker build -f ${dockerfilePath} --build-arg FOUNDRY_VERSION_ZIP=${zipFileName} --build-arg FOUNDRY_MAIN_JS_PATH=${mainJsPath} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} ${PROJECT_ROOT}`, { 
-        stdio: 'inherit',
-        cwd: PROJECT_ROOT 
-      });
-      console.log(`[Docker Utils] ✅ Docker image ${imageName} built successfully`);
-    } finally {
-      // Clean up temporary zip file
-      try {
-        unlinkSync(tempZipPath);
-      } catch (error) {
-        console.warn(`⚠️ Failed to clean up temporary zip file: ${error.message}`);
-      }
-    }
+    execSync(`docker build -f ${dockerfilePath} --build-arg FOUNDRY_VERSION_ZIP=${contextZipPath} --build-arg FOUNDRY_MAIN_JS_PATH=${mainJsPath} --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { 
+      stdio: 'inherit',
+      cwd: PROJECT_ROOT 
+    });
+    console.log(`[Docker Utils] ✅ Docker image ${imageName} built successfully`);
   } catch (error) {
     console.error('❌ Docker build failed:', error.message);
     throw error;
@@ -92,7 +78,7 @@ function getZipFileForVersion(version) {
  * @param {number} port - Port to expose
  * @returns {Promise<string>} Container ID
  */
-export async function startFoundryContainer(containerName, imageName, port) {
+export async function startFoundryContainer(containerName, imageName, port, version) {
   console.log(`[Docker Utils] 🚀 Starting FoundryVTT container from image: ${imageName}...`);
   
   try {
@@ -104,8 +90,11 @@ export async function startFoundryContainer(containerName, imageName, port) {
       // Container might not exist, which is fine
     }
     
-    // Start fresh container
-    const containerId = execSync(`docker run -d --name ${containerName} -p ${port}:30000 ${imageName}`, { encoding: 'utf8' }).trim();
+    // Start fresh container (mirror runner env args)
+    const envArgs = version === 'v12'
+      ? '-e FOUNDRY_DATA_PATH=/data -e FOUNDRY_MAIN_JS_PATH=/app/resources/app/main.js'
+      : '-e FOUNDRY_DATA_PATH=/data';
+    const containerId = execSync(`docker run -d --name ${containerName} ${envArgs} -p ${port}:30000 ${imageName}`, { encoding: 'utf8' }).trim();
     console.log(`[Docker Utils] 📦 Container ID: ${containerId}`);
     
     return containerId;
@@ -161,17 +150,20 @@ export function removeImage(imageName) {
  * @returns {Promise<boolean>} True if container is ready
  */
 export async function waitForContainerReady(port, config) {
-  for (let i = 0; i < config.bootstrap.retries.containerHealthCheck; i++) {
+  const retries = config?.bootstrap?.retries?.containerHealthCheck ?? 30;
+  const curlTimeout = config?.bootstrap?.retries?.curlTimeout ?? 5000;
+  const interval = config?.bootstrap?.retries?.healthCheckInterval ?? 1000;
+  for (let i = 0; i < retries; i++) {
     try {
       const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}`, { 
         encoding: 'utf8', 
-        timeout: config.bootstrap.timeouts.curlTimeout 
+        timeout: curlTimeout 
       });
       if (response.trim() === '302') {
         return true;
       }
     } catch (e) {}
-    await new Promise(resolve => setTimeout(resolve, config.bootstrap.retries.healthCheckInterval));
+    await new Promise(resolve => setTimeout(resolve, interval));
   }
   return false;
 }

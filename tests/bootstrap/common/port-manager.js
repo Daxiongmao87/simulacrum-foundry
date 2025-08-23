@@ -8,8 +8,11 @@
 export class PortManager {
   constructor(config) {
     const dockerCfg = (config && config.docker) ? config.docker : {};
-    // Provide safe defaults if not specified in config
-    this.portRange = dockerCfg.portRange || { start: 30000, end: 30010 };
+    // Require explicit portBeginning; do not silently default
+    if (typeof dockerCfg.portBeginning !== 'number') {
+      throw new Error('[Test Runner] docker.portBeginning is required in tests/config/test.config.json');
+    }
+    this.portBeginning = dockerCfg.portBeginning;
     this.maxConcurrentInstances = (typeof dockerCfg.maxConcurrentInstances === 'number') ? dockerCfg.maxConcurrentInstances : 1;
     
     // Track allocated ports and their containers
@@ -18,11 +21,11 @@ export class PortManager {
     
     // Generate available port pool
     this.availablePorts = [];
-    for (let port = this.portRange.start; port <= this.portRange.end; port++) {
-      this.availablePorts.push(port);
+    for (let i = 0; i < this.maxConcurrentInstances; i++) {
+      this.availablePorts.push(this.portBeginning + i);
     }
     
-    console.log(`[Test Runner] PortManager initialized: ${this.availablePorts.length} ports available (${this.portRange.start}-${this.portRange.end}), max ${this.maxConcurrentInstances} concurrent instances`);
+    console.log(`[Test Runner] PortManager initialized: base ${this.portBeginning}, capacity ${this.maxConcurrentInstances}, available ports: ${this.availablePorts.join(', ')}`);
   }
 
   /**
@@ -40,7 +43,7 @@ export class PortManager {
     // Find next available port
     const availablePort = this.findAvailablePort();
     if (!availablePort) {
-      console.log(`[Test Runner] No available ports in range ${this.portRange.start}-${this.portRange.end}. Queuing ${containerId}...`);
+      console.log(`[Test Runner] No available ports starting at ${this.portBeginning}. Queuing ${containerId}...`);
       return await this.queuePortRequest(containerId);
     }
 
@@ -211,3 +214,5 @@ export class PortManager {
     return this.availablePorts.includes(port) && !this.allocatedPorts.has(port);
   }
 }
+
+

@@ -40,7 +40,7 @@ The bootstrap infrastructure uses a modular approach to handle UI differences be
 
 - **`bootstrap-runner.js`**: Main orchestrator that delegates to version-specific modules
 - **`v12/` & `v13/`**: Version-specific UI automation (button selectors, page flows, etc.)
-- **`common/`**: Shared utilities (Docker operations, browser automation, validation)
+- **`common/`**: Shared utilities (e.g., Docker operations, port management, browser automation)
 
 This architecture ensures:
 - **Clean Separation**: Version logic isolated from core orchestration
@@ -92,14 +92,14 @@ All testing behavior is controlled via `tests/config/test.config.json`:
 
 ```json
 {
-  "foundry-versions": ["v12", "v13"],           // FoundryVTT versions to test
-  "foundry-systems": ["dnd5e", "pf2e"],        // Game systems to test
-  "foundryLicenseKey": "YOUR-LICENSE-KEY",     // FoundryVTT license
+  "foundry-versions": ["v12", "v13"],
+  "foundry-systems": ["dnd5e", "pf2e"],
+  "foundryLicenseKey": "YOUR-LICENSE-KEY",
   "docker": {
-    "maxConcurrentInstances": 1,               // Concurrent test limit
-    "portRange": { "start": 30000, "end": 30010 }  // Available ports
+    "portBeginning": 30050,
+    "maxConcurrentInstances": 1
   },
-  "integration-tests": [                        // Tests to run
+  "integration-tests": [
     "hello-world-clean.test.js"
   ]
 }
@@ -135,13 +135,13 @@ tests/
 │   │   ├── setup-foundry.js            # v13 setup logic
 │   │   ├── install-system.js           # v13 system installation
 │   │   └── install-module.js           # v13 module installation
-│   └── common/                         # Shared utilities
-│       ├── docker-utils.js             # Docker operations
+│   └── common/                         # Shared utilities (single source of truth)
+│       ├── docker-utils.js             # Docker build/run/health-check
 │       ├── browser-utils.js            # Browser automation utilities
-│       └── validation.js               # Shared validation logic
-├── helpers/                             # Test utilities and mocks
-│   ├── container-manager.js            # Docker container lifecycle
-│   └── port-manager.js                 # Port allocation management
+│       ├── port-manager.js             # Port allocation (portBeginning + maxConcurrentInstances)
+│       └── index.js                    # Re-exports for common utilities
+├── helpers/                             # Test utilities and mocks (legacy/general)
+│   └── container-manager.js            # Legacy container lifecycle (avoid for bootstrap)
 ├── integration/                         # Integration test scripts
 │   ├── hello-world-clean.test.js       # Example clean integration test
 │   ├── hello-world.test.js             # Legacy test (old architecture)
@@ -223,8 +223,11 @@ export default async function myIntegrationTest(session, permutation, config) {
 For debugging bootstrap issues:
 
 ```bash
-# Test bootstrap process manually
-node tests/helpers/bootstrap/manual-bootstrap-test.js dnd5e --debug
+# Container-only: build/run container(s), print info, wait for ESC, cleanup
+node tests/run-tests.js --container-only -v v13
+
+# Full manual session: complete bootstrap to a live session and wait for ESC
+node tests/run-tests.js --manual -v v13
 ```
 
 ### Custom Test Execution
@@ -280,9 +283,9 @@ The system automatically manages:
 - Ensure sufficient disk space
 
 **"Port allocation failed"**
-- Check ports 30000-30010 are available
-- Adjust `portRange` in configuration if needed
-- Reduce `maxConcurrentInstances` if running out of ports
+- Check that `docker.portBeginning` is free
+- Reduce or increase `docker.maxConcurrentInstances` based on capacity
+- Ensure no other processes are using the planned port range `[portBeginning, portBeginning + maxConcurrentInstances - 1]`
 
 ### Debug Mode
 

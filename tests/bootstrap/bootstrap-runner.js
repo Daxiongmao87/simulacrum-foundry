@@ -14,8 +14,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import puppeteer from 'puppeteer';
-import { ContainerManager } from '../helpers/container-manager.js';
-import { PortManager } from '../helpers/port-manager.js';
+import { PortManager } from './common/port-manager.js';
+import { DockerUtils, BrowserUtils } from './common/index.js';
 
 // Dynamic imports for version-specific modules
 
@@ -53,7 +53,6 @@ class BootstrapRunner {
     this.debugMode = debugMode;
     this.permutations = [];
     this.portManager = new PortManager(this.config);
-    this.containerManager = new ContainerManager(this.config, this.portManager);
   }
 
   async initialize() {
@@ -193,12 +192,7 @@ class BootstrapRunner {
     console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
     
     try {
-      // Determine the zip file based on version
-      const zipFileName = this.getZipFileForVersion(permutation.version);
-      const contextZipPath = `tests/fixtures/binary_versions/${permutation.version}/${zipFileName}`;
-      
-      execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${contextZipPath} --build-arg FOUNDRY_MAIN_JS_PATH=/app/main.js --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit', cwd: PROJECT_ROOT });
-      console.log(`✅ Docker image ${imageName} built successfully`);
+      await DockerUtils.buildFoundryImage(imageName, permutation.version, foundryLicenseKey);
     } catch (error) {
       console.error('❌ Docker build failed:', error.message);
       throw error;
@@ -216,15 +210,12 @@ class BootstrapRunner {
       
       // Step 2: Start fresh container (like POC)
       console.log(`🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
-      const envArgs = permutation.version === 'v12'
-        ? '-e FOUNDRY_DATA_PATH=/data -e FOUNDRY_MAIN_JS_PATH=/app/resources/app/main.js'
-        : '-e FOUNDRY_DATA_PATH=/data';
-      const containerId = execSync(`docker run -d --name ${testId} ${envArgs} -p ${port}:30000 ${imageName}` , { encoding: 'utf8' }).trim();
+      const containerId = await DockerUtils.startFoundryContainer(testId, imageName, port, permutation.version);
       console.log(`📦 Container ID: ${containerId}`);
       
       // Step 2: Wait for container to be ready
       console.log('⏳ Waiting for container to be ready...');
-      const ready = await this.waitForContainerReady(port);
+      const ready = await DockerUtils.waitForContainerReady(port, this.config);
       
       if (!ready) {
         throw new Error('Container failed to start properly');
@@ -298,6 +289,102 @@ class BootstrapRunner {
     }
   }
 
+  /**
+   * Build image and start container only (no Puppeteer/bootstrap phases)
+   * Mirrors the build/run path of runBootstrapTest up to readiness
+   */
+  async createContainerOnly(permutation) {
+    console.log(`🎯 Creating container only: ${permutation.id}`);
+    const testId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const port = await this.portManager.allocatePort(testId);
+
+    const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
+    const foundryLicenseKey = this.config.foundryLicenseKey;
+    if (!foundryLicenseKey) {
+      console.error('❌ foundryLicenseKey not found in config');
+      throw new Error('foundryLicenseKey not set in test.config.json');
+    }
+
+    console.log(`🔨 Building Docker image: ${imageName}...`);
+    console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
+
+    try {
+      // Determine the zip file based on version
+      const zipFileName = this.getZipFileForVersion(permutation.version);
+      const contextZipPath = `tests/fixtures/binary_versions/${permutation.version}/${zipFileName}`;
+
+      execSync(`docker build -f tests/docker/Dockerfile.foundry --build-arg FOUNDRY_VERSION_ZIP=${contextZipPath} --build-arg FOUNDRY_MAIN_JS_PATH=/app/main.js --build-arg FOUNDRY_LICENSE_KEY=${foundryLicenseKey} -t ${imageName} .`, { stdio: 'inherit', cwd: PROJECT_ROOT });
+      console.log(`✅ Docker image ${imageName} built successfully`);
+    } catch (error) {
+      console.error('❌ Docker build failed:', error.message);
+      throw error;
+    }
+
+    try {
+      // Clean up any existing containers
+      console.log('🧹 Cleaning up existing containers...');
+      try {
+        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
+        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
+      } catch (e) {
+        // ignore
+      }
+
+      // Start fresh container
+      console.log(`🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
+      const envArgs = permutation.version === 'v12'
+        ? '-e FOUNDRY_DATA_PATH=/data -e FOUNDRY_MAIN_JS_PATH=/app/resources/app/main.js'
+        : '-e FOUNDRY_DATA_PATH=/data';
+      const containerId = await DockerUtils.startFoundryContainer(testId, imageName, port, permutation.version);
+      console.log(`📦 Container ID: ${containerId}`);
+
+      // Wait for container to be ready
+      console.log('⏳ Waiting for container to be ready...');
+      const ready = await DockerUtils.waitForContainerReady(port, this.config);
+      if (!ready) {
+        throw new Error('Container failed to start properly');
+      }
+      console.log('✅ Container is ready');
+
+      return {
+        success: true,
+        permutation,
+        containerId,
+        port,
+        instanceId: testId,
+        containerName: testId,
+        imageName,
+        url: `http://localhost:${port}`
+      };
+
+    } catch (error) {
+      console.error(`❌ Container creation failed for ${permutation.id}:`, error.message);
+      try {
+        const logName = testId;
+        execSync(`docker logs ${logName} --tail 200`, { stdio: 'inherit' });
+      } catch (e) {
+        console.warn(`⚠️ Failed to fetch container logs: ${e.message}`);
+      }
+      console.log(`🧹 Cleaning up failed container ${testId}...`);
+      try {
+        execSync(`docker stop ${testId}`, { stdio: 'ignore' });
+        execSync(`docker rm ${testId}`, { stdio: 'ignore' });
+        console.log(`✅ Failed container ${testId} cleaned up`);
+      } catch (e) {
+        console.warn(`⚠️ Failed container cleanup failed: ${e.message}`);
+      }
+      console.log(`🧹 Cleaning up Docker image ${imageName}...`);
+      try {
+        execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
+        console.log(`✅ Docker image ${imageName} removed`);
+      } catch (e) {
+        console.warn(`⚠️ Docker image cleanup failed: ${e.message}`);
+      }
+      this.portManager.releasePort(testId, port);
+      return { success: false, permutation, error: error.message };
+    }
+  }
+
   async waitForContainerReady(port) {
     const retries = this.config?.bootstrap?.retries?.containerHealthCheck ?? 30;
     const curlTimeout = this.config?.bootstrap?.retries?.curlTimeout ?? 5000;
@@ -320,15 +407,8 @@ class BootstrapRunner {
   async runBootstrapProcess(port, permutation) {
     console.log(`🔄 Running bootstrap process for ${permutation.id}...`);
     
-    const configuredArgs = Array.isArray(this.config?.puppeteer?.args) ? this.config.puppeteer.args : [];
-    const launchArgs = Array.from(new Set([...configuredArgs, '--no-sandbox', '--disable-setuid-sandbox']));
-    const browser = await puppeteer.launch({ 
-      headless: this.config?.puppeteer?.headless ?? true,
-      args: launchArgs,
-      defaultViewport: this.config?.puppeteer?.viewport ?? { width: 1366, height: 768 }
-    });
-    
-    const page = await browser.newPage();
+    const browser = await BrowserUtils.launchBrowser(this.config);
+    const page = await BrowserUtils.createPageWithHandlers(browser, this.config);
     
     // Handle console messages and filter Chromium warnings (like POC)
     page.on('console', (msg) => {

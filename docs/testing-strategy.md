@@ -155,6 +155,30 @@ node tests/bootstrap/bootstrap-runner.js  # Bootstrap infrastructure
 - **Session Management**: Creates authenticated GM sessions
 - **UI Automation**: Handles license, EULA, system installation
 
+#### **Smoke Tests (Quick Validation)**
+
+Use smoke tests to quickly validate that infrastructure changes didn’t break the basics.
+
+When to run:
+- After modifying bootstrap or common utilities
+- Before longer integration runs
+
+Commands:
+```bash
+# Build/run container(s), print info, wait for ESC to cleanup
+node tests/run-tests.js --container-only -v v13
+
+# Complete bootstrap to a live session and wait for ESC
+node tests/run-tests.js --manual -v v13
+```
+
+Checklist:
+- Image builds successfully (no Dockerfile errors)
+- Container becomes ready (HTTP 302 on printed URL)
+- URL opens; GM login works if prompted
+- World loads; basic UI appears
+- Pressing ESC stops the session and cleans up container/image
+
 #### **Performance Tests (Custom)**
 ```bash
 # Slow execution, nightly builds

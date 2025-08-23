@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * @file tests/helpers/bootstrap/common/browser-utils.js
+ * @file tests/bootstrap/common/browser-utils.js
  * @description Common browser automation utilities for FoundryVTT testing
  */
 
@@ -13,10 +13,12 @@ import puppeteer from 'puppeteer';
  * @returns {Promise<import('puppeteer').Browser>} Puppeteer browser instance
  */
 export async function launchBrowser(config) {
+  const configuredArgs = Array.isArray(config?.puppeteer?.args) ? config.puppeteer.args : [];
+  const launchArgs = Array.from(new Set([...configuredArgs, '--no-sandbox', '--disable-setuid-sandbox']));
   return await puppeteer.launch({ 
-    headless: config.puppeteer.headless,
-    args: config.puppeteer.args,
-    defaultViewport: config.puppeteer.viewport
+    headless: config?.puppeteer?.headless ?? true,
+    args: launchArgs,
+    defaultViewport: config?.puppeteer?.viewport ?? { width: 1366, height: 768 }
   });
 }
 

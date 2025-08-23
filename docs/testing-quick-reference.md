@@ -22,6 +22,8 @@ npm run test:cleanup              # Cleanup test artifacts
 ```bash
 node tests/run-tests.js           # Main test orchestrator
 node tests/bootstrap/bootstrap-runner.js  # Bootstrap infrastructure
+node tests/run-tests.js --container-only -v v13   # Build/run container(s), print info, wait ESC, cleanup
+node tests/run-tests.js --manual -v v13           # Full bootstrap to live session, wait ESC, cleanup
 ```
 
 ### **Comprehensive Testing (Slow)**
@@ -112,12 +114,30 @@ tests/
 │   ├── bootstrap-runner.js     # Main orchestrator
 │   ├── v12/                    # v12-specific UI automation
 │   ├── v13/                    # v13-specific UI automation
-│   └── common/                 # Shared utilities
+│   └── common/                 # Shared utilities (e.g., Docker ops, port management, browser utils)
+│       ├── docker-utils.js     # Docker build/run/health-check
+│       ├── browser-utils.js    # Browser automation utilities
+│       ├── port-manager.js     # Port allocation (portBeginning + maxConcurrentInstances)
+│       └── index.js            # Re-exports for common utilities
 ├── integration/          # Integration tests
-├── helpers/             # Test utilities and mocks
+├── helpers/             # Test utilities and mocks (legacy/general)
 ├── config/              # Test configuration
 ├── fixtures/            # Test data
 └── README.md            # Detailed documentation
+```
+
+## Port Allocation
+
+- Configure starting port with `docker.portBeginning` and capacity with `docker.maxConcurrentInstances` in `tests/config/test.config.json`.
+- Ports are allocated from `[portBeginning, portBeginning + maxConcurrentInstances - 1]`.
+- Example:
+```json
+{
+  "docker": {
+    "portBeginning": 30050,
+    "maxConcurrentInstances": 3
+  }
+}
 ```
 
 ## Best Practices

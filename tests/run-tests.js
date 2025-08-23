@@ -92,6 +92,7 @@ class TestOrchestrator {
     this.results = [];
     this.startTime = Date.now();
     this.manualMode = false;
+    this.manualContainerMode = false;
     this.logger = new TestLogger(DEBUG_MODE);
   }
 
@@ -159,6 +160,11 @@ class TestOrchestrator {
     this.manualMode = options.manual || false;
     if (this.manualMode) {
       this.logger.info('Manual testing mode enabled');
+    }
+    // Set manual container-only mode flag
+    this.manualContainerMode = options.containerOnly || false;
+    if (this.manualContainerMode) {
+      this.logger.info('Manual container-only mode enabled');
     }
     
     // Initialize bootstrap infrastructure
@@ -504,6 +510,75 @@ class TestOrchestrator {
     this.logger.success('Manual testing session complete!');
   }
 
+  async runManualContainer() {
+    this.logger.essential('🎯 Starting manual container-only mode...');
+    
+    // Generate single permutation (use first version/system)
+    const version = this.config['foundry-versions'][0];
+    const system = this.config['foundry-systems'][0];
+    const permutation = {
+      id: `${version}-${system}`,
+      version,
+      system,
+      description: `${system} on FoundryVTT ${version}`
+    };
+    // Image name used by our tooling
+    permutation.dockerImage = `${this.config.docker.imagePrefix}-${permutation.id}`;
+    
+    this.logger.info(`Manual container for: ${permutation.description}`);
+    
+    let container = null;
+    try {
+      this.logger.essential('🚀 Building image and launching FoundryVTT container...');
+      container = await this.bootstrap.createContainerOnly(permutation);
+      
+      // Display container information
+      this.logger.info(' ');
+      this.logger.info('📦 FoundryVTT Container Launched!');
+      this.logger.info('================================');
+      this.logger.info(`📍 URL: ${container.url}`);
+      this.logger.info(`🔌 Port: ${container.port}`);
+      this.logger.info(`🆔 Container ID: ${container.containerId}`);
+      this.logger.info(`🏷️  Container Name: ${container.containerName}`);
+      this.logger.info(`🖼️  Image: ${container.imageName}`);
+      this.logger.info(' ');
+      this.logger.info('🔧 Manual Mode Instructions:');
+      this.logger.info('   - Open the URL above in your browser');
+      this.logger.info('   - Inspect the container as needed');
+      this.logger.info('   - Press ESC in this terminal to stop and clean up');
+      this.logger.info(' ');
+      
+      // Wait for ESC key
+      await this.waitForEscKey();
+      
+    } catch (error) {
+      this.logger.error(`Manual container session failed: ${error.message}`);
+    } finally {
+      // Always cleanup container
+      if (container && container.containerId) {
+        try {
+          this.logger.essential('🧹 Stopping and removing container...');
+          await this.bootstrap.cleanupSession({ containerId: container.containerId, port: container.port });
+          this.logger.success('Container cleaned up');
+        } catch (error) {
+          this.logger.warn(`⚠️ Container cleanup failed: ${error.message}`);
+        }
+      }
+      
+      // Cleanup Docker image
+      this.logger.essential('🧹 Cleaning up Docker image...');
+      try {
+        await this.bootstrap.cleanupImages([permutation]);
+        this.logger.success('Docker image cleaned up');
+      } catch (error) {
+        this.logger.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+      }
+    }
+    
+    this.logger.info(' ');
+    this.logger.success('Manual container-only session complete!');
+  }
+
   async waitForEscKey() {
     return new Promise((resolve) => {
       this.logger.essential('⌨️  Waiting for ESC key press...');
@@ -617,6 +692,7 @@ function parseArgs() {
   const options = {
     help: false,
     manual: false,
+    containerOnly: false,
     versions: null,
     systems: null,
     tests: null
@@ -629,6 +705,8 @@ function parseArgs() {
       options.help = true;
     } else if (arg === '--manual' || arg === '-m') {
       options.manual = true;
+    } else if (arg === '--container-only' || arg === '-c') {
+      options.containerOnly = true;
     } else if (arg === '--versions' || arg === '-v') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
@@ -670,6 +748,7 @@ Options:
   --help, -h              Show this help message
   --debug                 Enable verbose debug output (same as DEBUG=true)
   --manual, -m            Manual testing mode - bootstrap instance and wait for ESC to exit
+  --container-only, -c     Manual container-only mode - build/run container, show info, ESC to cleanup
   --versions, -v <list>   Override FoundryVTT versions (comma-separated)
   --systems, -s <list>    Override game systems (comma-separated)
   --tests, -t <list>      Run specific tests only (comma-separated test names)
@@ -692,10 +771,12 @@ Examples:
   node run-tests.js                              # Use config defaults
   node run-tests.js --debug                      # Enable verbose debug output
   node run-tests.js --manual                     # Manual testing mode
+  node run-tests.js --container-only             # Manual container-only mode
   node run-tests.js --versions v12,v13           # Test multiple versions
   node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
   node run-tests.js -v v13 -s dnd5e              # Test specific combination
   node run-tests.js -m -v v13 -s dnd5e           # Manual mode with specific version/system
+  node run-tests.js -c -v v13 -s dnd5e           # Manual container-only with specific version/system
   node run-tests.js --tests simulacrum-init      # Run specific test
   node run-tests.js -t test1,test2               # Run multiple specific tests
   DEBUG=true node run-tests.js                   # Environment variable debug mode
@@ -722,7 +803,9 @@ async function main() {
     await orchestrator.initialize(options);
     
     // Route to appropriate execution mode
-    if (orchestrator.manualMode) {
+    if (orchestrator.manualContainerMode) {
+      await orchestrator.runManualContainer();
+    } else if (orchestrator.manualMode) {
       await orchestrator.runManualSession();
     } else {
       await orchestrator.runAllTests();
