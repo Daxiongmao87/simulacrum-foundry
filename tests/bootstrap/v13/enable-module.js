@@ -4,6 +4,7 @@
  */
 
 export class EnableModuleV13 {
+  static meta = { name: 'enable-module', description: 'Enable Simulacrum module' };
   async enableModule(page, config) {
     try {
       // Step 37: Click the settings button

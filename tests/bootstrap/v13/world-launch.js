@@ -4,6 +4,7 @@
  */
 
 export class WorldLaunchV13 {
+  static meta = { name: 'world-launch', description: 'Launch created world' };
   async launchWorld(page, worldId, port, config) {
     console.log(`[V13 Launch] 🚀 Launching world: ${worldId}`);
     

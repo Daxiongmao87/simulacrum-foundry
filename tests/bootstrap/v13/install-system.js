@@ -4,6 +4,7 @@
  */
 
 export class SystemInstallerV13 {
+  static meta = { name: 'install-system', description: 'Install configured game system' };
   async installSystem(page, system) {
     console.log(`[V13 System] 🎲 Installing system: ${system}`);
     

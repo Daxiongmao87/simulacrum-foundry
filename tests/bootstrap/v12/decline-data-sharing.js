@@ -4,6 +4,7 @@
  */
 
 export class DeclineDataSharingV12 {
+  static meta = { name: 'decline-data-sharing', description: 'Click Decline Sharing if prompted' };
   async handleDeclineSharing(page) {
     console.log('[V12 Decline] 📍 Looking for Decline Sharing button...');
     

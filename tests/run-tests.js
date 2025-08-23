@@ -92,7 +92,7 @@ class TestOrchestrator {
     this.results = [];
     this.startTime = Date.now();
     this.manualMode = false;
-    this.manualContainerMode = false;
+    this.manualStepName = null;
     this.logger = new TestLogger(DEBUG_MODE);
   }
 
@@ -156,15 +156,26 @@ class TestOrchestrator {
       this.logger.config(`Selected tests from command line: ${this.selectedTests.join(', ')}`);
     }
     
-    // Set manual mode flag
+    // Set manual mode flag and optional stop-at-step
     this.manualMode = options.manual || false;
+    this.manualStepName = options.manualStep || null;
     if (this.manualMode) {
-      this.logger.info('Manual testing mode enabled');
+      if (this.manualStepName) {
+        this.logger.info(`Manual testing mode enabled (stop after step: ${this.manualStepName})`);
+      } else {
+        this.logger.info('Manual testing mode enabled');
+      }
     }
-    // Set manual container-only mode flag
-    this.manualContainerMode = options.containerOnly || false;
-    if (this.manualContainerMode) {
-      this.logger.info('Manual container-only mode enabled');
+
+    // If manual mode, override concurrency to run all permutations simultaneously
+    if (this.manualMode && !options.listSteps) {
+      const versionsCount = (this.config['foundry-versions'] || []).length || 1;
+      const systemsCount = (this.config['foundry-systems'] || []).length || 1;
+      const totalPermutations = versionsCount * systemsCount;
+      if (this.config?.docker) {
+        this.config.docker.maxConcurrentInstances = totalPermutations;
+        this.logger.config(`Overriding max concurrent instances for manual mode: ${totalPermutations} (simultaneous permutations)`);
+      }
     }
     
     // Initialize bootstrap infrastructure
@@ -441,73 +452,68 @@ class TestOrchestrator {
   }
 
   async runManualSession() {
-    this.logger.essential('🎯 Starting manual testing mode...');
-    
-    // Generate single permutation (use first version/system)
-    const version = this.config['foundry-versions'][0];
-    const system = this.config['foundry-systems'][0];
-    const permutation = {
-      id: `${version}-${system}`,
-      version,
-      system,
-      description: `${system} on FoundryVTT ${version}`
-    };
-    
-    this.logger.info(`Manual testing with: ${permutation.description}`);
-    
-    let session = null;
-    try {
-      // Create live FoundryVTT session
-      this.logger.essential('🚀 Creating FoundryVTT session...');
-      session = await this.bootstrap.createSession(permutation);
-      this.logger.success('Session created successfully!');
-      
-      // Display session information
+    this.logger.essential('🎯 Starting manual testing mode (simultaneous)...');
+
+    const permutations = this.generatePermutations();
+    this.logger.info(`Manual mode will simultaneously run ${permutations.length} permutation(s)`);
+
+    // Create sessions concurrently
+    const createPromises = permutations.map(p =>
+      this.bootstrap.createSession(p, { stopAtStep: this.manualStepName })
+        .then(session => ({ ok: true, session, permutation: p }))
+        .catch(error => ({ ok: false, error, permutation: p }))
+    );
+
+    const results = await Promise.allSettled(createPromises);
+    const sessions = results
+      .map(r => (r.status === 'fulfilled' ? r.value : r.reason))
+      .filter(r => r && r.ok)
+      .map(r => r.session);
+
+    // Display info for all started sessions
+    if (sessions.length > 0) {
       this.logger.info(' ');
-      this.logger.info('🎮 FoundryVTT Session Ready!');
-      this.logger.info('=============================');
-      this.logger.info(`📍 URL: http://localhost:${session.port}`);
-      this.logger.info('👤 Username: Gamemaster');
-      this.logger.info('🔑 Password: admin');
-      this.logger.info('🌍 World: SimulacrumTestWorld');
+      this.logger.info('🎮 FoundryVTT Sessions Ready!');
+      this.logger.info('==============================');
+      for (const s of sessions) {
+        this.logger.info(`📍 ${s.permutation?.id || 'session'}: http://localhost:${s.port}`);
+      }
       this.logger.info(' ');
       this.logger.info('🔧 Manual Testing Instructions:');
-      this.logger.info('   1. Open the URL above in your browser');
-      this.logger.info('   2. Login with the provided credentials');
-      this.logger.info('   3. Test the Simulacrum module manually');
-      this.logger.info('   4. Press ESC in this terminal to exit and cleanup');
-      this.logger.info(' ');
-      
-      // Wait for ESC key
-      await this.waitForEscKey();
-      
-    } catch (error) {
-      this.logger.error(`Manual session failed: ${error.message}`);
-      
-    } finally {
-      // Always cleanup session
-      if (session) {
-        try {
-          this.logger.essential('🧹 Cleaning up session...');
-          await this.bootstrap.cleanupSession(session);
-          this.logger.success('Session cleaned up');
-        } catch (error) {
-          this.logger.warn(`⚠️ Session cleanup failed: ${error.message}`);
-        }
+      this.logger.info('   - Open the URLs above in your browser');
+      this.logger.info('   - Interact with any/all sessions');
+      this.logger.info('   - Press ESC in this terminal to stop and clean up ALL sessions');
+      if (this.manualStepName) {
+        this.logger.info(`   ⏸️  Sessions paused after step: ${this.manualStepName}`);
       }
-      
-      // Cleanup Docker images
-      this.logger.essential('🧹 Cleaning up Docker images...');
+      this.logger.info(' ');
+
+      await this.waitForEscKey();
+    } else {
+      this.logger.warn('No sessions started successfully. Nothing to hold open.');
+    }
+
+    // Cleanup all sessions
+    for (const s of sessions) {
       try {
-        await this.bootstrap.cleanupImages([permutation]);
-        this.logger.success('Docker images cleaned up');
+        this.logger.essential(`🧹 Cleaning up session on port ${s.port}...`);
+        await this.bootstrap.cleanupSession(s);
       } catch (error) {
-        this.logger.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+        this.logger.warn(`⚠️ Session cleanup failed: ${error.message}`);
       }
     }
-    
+
+    // Cleanup all Docker images
+    this.logger.essential('🧹 Cleaning up Docker images...');
+    try {
+      await this.bootstrap.cleanupImages(permutations);
+      this.logger.success('Docker images cleaned up');
+    } catch (error) {
+      this.logger.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+    }
+
     this.logger.info(' ');
-    this.logger.success('Manual testing session complete!');
+    this.logger.success('Manual testing sessions complete!');
   }
 
   async runManualContainer() {
@@ -606,6 +612,19 @@ class TestOrchestrator {
         };
         
         process.stdin.on('data', onKeyPress);
+
+        // Allow external signals (e.g., timeout sending SIGINT/SIGTERM) to trigger cleanup in TTY mode
+        const onSignal = (signal) => {
+          this.logger.info(`\n✅ ${signal} received - initiating cleanup...`);
+          try {
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+            process.stdin.removeListener('data', onKeyPress);
+          } catch {}
+          resolve();
+        };
+        process.once('SIGINT', () => onSignal('SIGINT'));
+        process.once('SIGTERM', () => onSignal('SIGTERM'));
       } else {
         // Not running in interactive mode, just wait indefinitely
         this.logger.warn('⚠️  Not running in interactive terminal mode');
@@ -622,6 +641,15 @@ class TestOrchestrator {
           resolve();
         });
       }
+    });
+  }
+
+  async listSteps() {
+    this.logger.essential('📋 Listing available bootstrap steps...');
+    const version = this.config['foundry-versions'][0];
+    const steps = await this.bootstrap.getStepList(version);
+    steps.forEach((s, idx) => {
+      this.logger.info(`${idx + 1}. ${s.name} - ${s.description}`);
     });
   }
 
@@ -687,15 +715,23 @@ class TestOrchestrator {
 }
 
 // Parse command line arguments
+function normalizeVersionToken(token) {
+  const t = String(token).trim();
+  if (t.startsWith('v')) return t;
+  // accept bare major like 12 or 13 and prefix with 'v'
+  return `v${t}`;
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     help: false,
     manual: false,
-    containerOnly: false,
+    manualStep: null,
     versions: null,
     systems: null,
-    tests: null
+    tests: null,
+    listSteps: false
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -705,16 +741,24 @@ function parseArgs() {
       options.help = true;
     } else if (arg === '--manual' || arg === '-m') {
       options.manual = true;
-    } else if (arg === '--container-only' || arg === '-c') {
-      options.containerOnly = true;
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options.manualStep = nextArg.trim();
+        i++;
+      }
+    } else if (arg.startsWith('--manual=')) {
+      options.manual = true;
+      options.manualStep = arg.split('=')[1].trim();
+    } else if (arg === '--list-steps' || arg === '-l') {
+      options.listSteps = true;
     } else if (arg === '--versions' || arg === '-v') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
-        options.versions = nextArg.split(',').map(v => v.trim());
+        options.versions = nextArg.split(',').map(v => normalizeVersionToken(v));
         i++; // Skip next argument as it's the value
       }
     } else if (arg.startsWith('--versions=')) {
-      options.versions = arg.split('=')[1].split(',').map(v => v.trim());
+      options.versions = arg.split('=')[1].split(',').map(v => normalizeVersionToken(v));
     } else if (arg === '--systems' || arg === '-s') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
@@ -747,8 +791,8 @@ Usage: node run-tests.js [options]
 Options:
   --help, -h              Show this help message
   --debug                 Enable verbose debug output (same as DEBUG=true)
-  --manual, -m            Manual testing mode - bootstrap instance and wait for ESC to exit
-  --container-only, -c     Manual container-only mode - build/run container, show info, ESC to cleanup
+  --manual, -m [step]     Manual mode; simultaneously launch one instance per permutation (versions x systems); optionally stop after named step, then wait for ESC
+  --list-steps, -l        List available bootstrap steps for selected version
   --versions, -v <list>   Override FoundryVTT versions (comma-separated)
   --systems, -s <list>    Override game systems (comma-separated)
   --tests, -t <list>      Run specific tests only (comma-separated test names)
@@ -770,13 +814,13 @@ Configuration:
 Examples:
   node run-tests.js                              # Use config defaults
   node run-tests.js --debug                      # Enable verbose debug output
-  node run-tests.js --manual                     # Manual testing mode
-  node run-tests.js --container-only             # Manual container-only mode
+  node run-tests.js --manual                     # Manual testing mode (full bootstrap)
+  node run-tests.js --manual license-submission  # Manual mode, stop after step
+  node run-tests.js --list-steps                 # Show step names and descriptions
   node run-tests.js --versions v12,v13           # Test multiple versions
   node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
   node run-tests.js -v v13 -s dnd5e              # Test specific combination
   node run-tests.js -m -v v13 -s dnd5e           # Manual mode with specific version/system
-  node run-tests.js -c -v v13 -s dnd5e           # Manual container-only with specific version/system
   node run-tests.js --tests simulacrum-init      # Run specific test
   node run-tests.js -t test1,test2               # Run multiple specific tests
   DEBUG=true node run-tests.js                   # Environment variable debug mode
@@ -803,8 +847,8 @@ async function main() {
     await orchestrator.initialize(options);
     
     // Route to appropriate execution mode
-    if (orchestrator.manualContainerMode) {
-      await orchestrator.runManualContainer();
+    if (options.listSteps) {
+      await orchestrator.listSteps();
     } else if (orchestrator.manualMode) {
       await orchestrator.runManualSession();
     } else {

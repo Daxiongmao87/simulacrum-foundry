@@ -4,6 +4,7 @@
  */
 
 export class WorldCreationV13 {
+  static meta = { name: 'world-creation', description: 'Create test world' };
   async createWorld(page, permutation, config) {
     console.log(`[V13 World] 🌍 Creating world for ${permutation.id}...`);
     

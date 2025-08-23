@@ -4,6 +4,7 @@
  */
 
 export class StepButtonHandlingV13 {
+  static meta = { name: 'step-button-handling', description: 'Click step button to proceed' };
   async handleStepButton(page) {
     console.log('[V13 Step] 📍 Clicking step-button to proceed...');
     

@@ -4,6 +4,7 @@
  */
 
 export class EULAHandlingV12 {
+  static meta = { name: 'eula-handling', description: 'Accept EULA if present' };
   async handleEULA(page) {
     console.log('[V12 EULA] 📝 Checking for EULA...');
     

@@ -4,6 +4,7 @@
  */
 
 export class LicenseSubmissionV12 {
+  static meta = { name: 'license-submission', description: 'Submit FoundryVTT license key' };
   async submitLicense(page, licenseKey) {
     console.log('[V12 License] 🔑 Submitting license key...');
     

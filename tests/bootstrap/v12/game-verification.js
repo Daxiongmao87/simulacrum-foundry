@@ -4,6 +4,7 @@
  */
 
 export class GameVerificationV12 {
+  static meta = { name: 'game-verification', description: 'Verify world is ready' };
   async verifyGame(page, config) {
     console.log('[V12 Game] 🎯 Verifying game world...');
     

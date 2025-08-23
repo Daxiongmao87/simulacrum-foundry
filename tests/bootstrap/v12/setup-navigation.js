@@ -4,6 +4,7 @@
  */
 
 export class SetupNavigationV12 {
+  static meta = { name: 'setup-navigation', description: 'Navigate to setup page' };
   async navigateToSetup(page, port, config) {
     console.log('[V12 Setup] 📍 Navigating to setup page...');
     

@@ -4,6 +4,7 @@
  */
 
 export class UserAuthenticationV12 {
+  static meta = { name: 'user-authentication', description: 'Authenticate Gamemaster if needed' };
   async authenticateIfNeeded(page, config) {
     console.log('[V12 Auth] 📍 Checking if user authentication is required...');
     
