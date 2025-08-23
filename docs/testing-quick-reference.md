@@ -24,6 +24,10 @@ node tests/run-tests.js           # Main test orchestrator
 node tests/bootstrap/bootstrap-runner.js  # Bootstrap infrastructure
 node tests/run-tests.js --container-only -v v13   # Build/run container(s), print info, wait ESC, cleanup
 node tests/run-tests.js --manual -v v13           # Full bootstrap to live session, wait ESC, cleanup
+
+# List canonical bootstrap stages (version optional)
+node tests/run-tests.js -l
+node tests/run-tests.js -l -v v12,v13
 ```
 
 ### **Comprehensive Testing (Slow)**
@@ -102,8 +106,10 @@ npm run console:validate  # Verify fixes
 
 ### **Cleanup Issues**
 ```bash
-npm run test:cleanup      # Manual cleanup
-docker system prune       # Docker cleanup
+# Automatic: runner cleans containers and images after runs.
+# Manual:
+docker ps -a --filter "name=test-" --format "{{.Names}}" | xargs -r docker rm -f
+docker image ls "simulacrum-foundry-test-*" --format "{{.Repository}}" | xargs -r docker rmi -f
 ```
 
 ## File Structure
@@ -111,9 +117,20 @@ docker system prune       # Docker cleanup
 ```
 tests/
 ├── bootstrap/            # Core test infrastructure
-│   ├── bootstrap-runner.js     # Main orchestrator
-│   ├── v12/                    # v12-specific UI automation
-│   ├── v13/                    # v13-specific UI automation
+│   ├── bootstrap-runner.js     # Main orchestrator (stage-first)
+│   ├── stages/                 # Canonical stages with per-version adapters
+│   │   ├── application-initialization/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   ├── system-installation/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   ├── world-creation/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   └── session-activation/
+│   │       ├── v12/index.js
+│   │       └── v13/index.js
 │   └── common/                 # Shared utilities (e.g., Docker ops, port management, browser utils)
 │       ├── docker-utils.js     # Docker build/run/health-check
 │       ├── browser-utils.js    # Browser automation utilities

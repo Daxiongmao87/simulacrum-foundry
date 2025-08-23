@@ -178,10 +178,12 @@ class TestOrchestrator {
       }
     }
     
-    // Initialize bootstrap infrastructure
-    this.bootstrap = new BootstrapRunner(this.config, DEBUG_MODE);
-    await this.bootstrap.initialize();
-    this.logger.success('Bootstrap infrastructure initialized');
+    // Initialize bootstrap infrastructure (skip for --list-steps)
+    if (!options.listSteps) {
+      this.bootstrap = new BootstrapRunner(this.config, DEBUG_MODE);
+      await this.bootstrap.initialize();
+      this.logger.success('Bootstrap infrastructure initialized');
+    }
     
     // Configuration details - debug mode only (too verbose for normal operation)
     this.logger.config(`Versions: ${this.config['foundry-versions'].join(', ')}`);
@@ -645,21 +647,26 @@ class TestOrchestrator {
   }
 
   async listSteps() {
-    this.logger.essential('📋 Listing available bootstrap steps...');
-    const version = this.config['foundry-versions'][0];
-    const steps = await this.bootstrap.getStepList(version);
-    steps.forEach((s, idx) => {
-      this.logger.info(`${idx + 1}. ${s.name} - ${s.description}`);
-    });
+    const versions = this.config['foundry-versions'];
+    for (const v of versions) {
+      const header = `Version ${v}`;
+      console.log(header);
+      console.log('-'.repeat(header.length));
+      const steps = await BootstrapRunner.getStepList(v);
+      steps.forEach((s, idx) => {
+        console.log(`${idx + 1}. ${s.name} - ${s.description}`);
+      });
+      if (v !== versions[versions.length - 1]) console.log('');
+    }
   }
 
   async cleanup() {
     this.logger.essential('🧹 Performing final cleanup...');
     
     try {
-      // Cleanup any remaining containers
-      if (this.bootstrap && this.bootstrap.containerManager) {
-        await this.bootstrap.containerManager.cleanupAllContainers();
+      // Delegate container cleanup to BootstrapRunner (unconditional)
+      if (this.bootstrap) {
+        await this.bootstrap.cleanup();
         this.logger.success('All containers cleaned up');
       }
     } catch (error) {
@@ -834,6 +841,31 @@ async function main() {
   if (options.help) {
     showHelp();
     process.exit(0);
+  }
+  
+  // Quiet, focused fast-path for --list-steps: avoid any orchestrator/bootstrap logging
+  if (options.listSteps) {
+    try {
+      const configPath = join(PROJECT_ROOT, 'tests', 'config', 'test.config.json');
+      const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
+      if (options.versions) cfg['foundry-versions'] = options.versions;
+      if (options.systems) cfg['foundry-systems'] = options.systems;
+      const versions = cfg['foundry-versions'] || [];
+      for (const v of versions) {
+        const header = `Version ${v}`;
+        console.log(header);
+        console.log('-'.repeat(header.length));
+        const steps = await BootstrapRunner.getStepList(v);
+        steps.forEach((s, idx) => {
+          console.log(`${idx + 1}. ${s.name} - ${s.description}`);
+        });
+        if (v !== versions[versions.length - 1]) console.log('');
+      }
+      process.exit(0);
+    } catch (error) {
+      console.error('[Test Runner] ❌ Failed to list steps:', error.message);
+      process.exit(1);
+    }
   }
   
   // Show debug mode status

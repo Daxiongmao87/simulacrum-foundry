@@ -33,20 +33,21 @@ This directory contains the complete integration testing infrastructure for the 
 - **System Installation**: Installs required game systems automatically  
 - **Session Management**: Creates authenticated GM sessions ready for testing
 - **Resource Management**: Dynamic port allocation and cleanup
-- **Version Compatibility**: Handles FoundryVTT v12/v13 differences in UI automation
+- **Version Compatibility**: Handles FoundryVTT v12/v13 differences via per-version adapters
 
-#### **Modular Design for Version Compatibility**
-The bootstrap infrastructure uses a modular approach to handle UI differences between FoundryVTT versions:
+#### **Stage-First Design (Version Adapters per Stage)**
+The bootstrap infrastructure uses a stage-first architecture aligned to Foundry's lifecycle, with per-version adapters under each stage:
 
-- **`bootstrap-runner.js`**: Main orchestrator that delegates to version-specific modules
-- **`v12/` & `v13/`**: Version-specific UI automation (button selectors, page flows, etc.)
-- **`common/`**: Shared utilities (e.g., Docker operations, port management, browser automation)
+- **`bootstrap-runner.js`**: Main orchestrator that executes four canonical stages
+- **Stages**: `application-initialization`, `system-installation`, `world-creation`, `session-activation`
+- **Per-version adapters**: `bootstrap/stages/<stage>/v12|v13/index.js`
+- **`common/`**: Shared utilities (Docker ops, port management, browser automation)
 
 This architecture ensures:
-- **Clean Separation**: Version logic isolated from core orchestration
-- **Easy Extension**: New versions can be added without touching existing code
-- **Maintainable**: Each version's UI quirks are contained in dedicated modules
-- **Testable**: Version modules can be tested independently
+- **Clean Separation**: Version-specific logic localized inside stage adapters
+- **Stable CLI**: The same four stages across all versions; `-l` lists stages only
+- **Easy Extension**: Add new versions by implementing stage adapters without changing the runner
+- **Maintainable/Testable**: Smaller, focused stage modules
 
 ### 🧪 Integration Tests (`integration/`)
 **Purpose**: Test specific functionality against live FoundryVTT sessions  
@@ -65,7 +66,8 @@ This architecture ensures:
 - **Resource Coordination**: Manages Docker images, containers, ports
 - **Concurrency Control**: Respects `maxConcurrentInstances` configuration  
 - **Comprehensive Reporting**: Aggregates results with success rates and timing
-- **Version-Aware Testing**: Dynamically discovers and runs version-specific tests
+- **Version-Aware Testing**: Dynamically discovers and runs tests across versions
+ - **Stage Listing (`-l`)**: Lists the four canonical stages per version; version flag optional
 
 ## Quick Start
 
@@ -74,6 +76,10 @@ This architecture ensures:
 ```bash
 # Run all integration tests across all permutations
 node tests/run-tests.js
+
+# List available bootstrap stages (version optional)
+node tests/run-tests.js -l
+node tests/run-tests.js -l -v v12,v13
 
 # The orchestrator will:
 # 1. Load configuration from tests/config/test.config.json
@@ -126,15 +132,20 @@ tests/
 │       ├── v12/FoundryVTT-*.zip        # FoundryVTT v12 binaries
 │       └── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
 ├── bootstrap/                           # Core test infrastructure
-│   ├── bootstrap-runner.js             # Main orchestrator (version-agnostic)
-│   ├── v12/                            # v12-specific UI automation
-│   │   ├── setup-foundry.js            # v12 setup logic
-│   │   ├── install-system.js           # v12 system installation
-│   │   └── install-module.js           # v12 module installation
-│   ├── v13/                            # v13-specific UI automation
-│   │   ├── setup-foundry.js            # v13 setup logic
-│   │   ├── install-system.js           # v13 system installation
-│   │   └── install-module.js           # v13 module installation
+│   ├── bootstrap-runner.js             # Main orchestrator (stage-first)
+│   ├── stages/                         # Canonical stages with per-version adapters
+│   │   ├── application-initialization/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   ├── system-installation/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   ├── world-creation/
+│   │   │   ├── v12/index.js
+│   │   │   └── v13/index.js
+│   │   └── session-activation/
+│   │       ├── v12/index.js
+│   │       └── v13/index.js
 │   └── common/                         # Shared utilities (single source of truth)
 │       ├── docker-utils.js             # Docker build/run/health-check
 │       ├── browser-utils.js            # Browser automation utilities
@@ -143,14 +154,13 @@ tests/
 ├── helpers/                             # Test utilities and mocks (legacy/general)
 │   └── container-manager.js            # Legacy container lifecycle (avoid for bootstrap)
 ├── integration/                         # Integration test scripts
-│   ├── hello-world-clean.test.js       # Example clean integration test
-│   ├── hello-world.test.js             # Legacy test (old architecture)
-│   └── integration-test-template.js    # Legacy template
+│   ├── v12/001-simulacrum-init.test.js
+│   └── v13/001-simulacrum-init.test.js
 ├── docker/
 │   ├── Dockerfile.foundry              # FoundryVTT container definition
 │   └── entrypoint.sh                   # Container startup script
 └── poc/
-    └── foundry-bootstrap-poc.js         # Working POC that inspired the architecture
+    └── foundry-bootstrap-poc.js        # Working POC that inspired the architecture
 ```
 
 ## Writing Integration Tests
@@ -303,9 +313,12 @@ node tests/helpers/bootstrap/manual-bootstrap-test.js v13-dnd5e --debug
 
 If tests leave containers running:
 
+The runner performs automatic cleanup of containers and images at the end of runs.
+
+If you still need to clean manually:
 ```bash
-# Emergency cleanup
-node tests/cleanup-test-containers.js
+docker ps -a --filter "name=test-" --format "{{.Names}}" | xargs -r docker rm -f
+docker image ls "simulacrum-foundry-test-*" --format "{{.Repository}}" | xargs -r docker rmi -f
 ```
 
 ## Migration from Legacy Tests

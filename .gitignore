@@ -69,3 +69,4 @@ tests/.jest-cache/
 .env.test
 .env.test.local
 foundry-source/
+research/
