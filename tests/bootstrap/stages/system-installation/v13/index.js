@@ -1,4 +1,4 @@
-import { SystemInstallerV13 } from '../../../v13/install-system.js';
+import { SystemInstallerV13 } from './install-system.js';
 
 export class SystemInstallationV13 {
   static meta = { name: 'system-installation', description: 'Install configured game system' };

@@ -1,7 +1,7 @@
-import { WorldLaunchV12 } from '../../../v12/world-launch.js';
-import { UserAuthenticationV12 } from '../../../v12/user-authentication.js';
-import { GameVerificationV12 } from '../../../v12/game-verification.js';
-import { EnableModuleV12 } from '../../../v12/enable-module.js';
+import { WorldLaunchV12 } from './world-launch.js';
+import { UserAuthenticationV12 } from './user-authentication.js';
+import { GameVerificationV12 } from './game-verification.js';
+import { EnableModuleV12 } from './enable-module.js';
 
 export class SessionActivationV12 {
   static meta = { name: 'session-activation', description: 'Launch world, authenticate, verify, enable module' };

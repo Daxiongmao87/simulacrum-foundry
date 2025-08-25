@@ -19,15 +19,29 @@ import { DockerUtils, BrowserUtils } from './common/index.js';
 
 // Dynamic imports for version-specific modules
 
-import { ApplicationInitializationV12 } from './stages/application-initialization/v12/index.js';
-import { SystemInstallationV12 } from './stages/system-installation/v12/index.js';
-import { WorldCreationStageV12 } from './stages/world-creation/v12/index.js';
-import { SessionActivationV12 } from './stages/session-activation/v12/index.js';
+import { LicenseSubmissionV12 } from './v12/license-submission.js';
+import { EULAHandlingV12 } from './v12/eula-handling.js';
+import { SetupNavigationV12 } from './v12/setup-navigation.js';
+import { DeclineDataSharingV12 } from './v12/decline-data-sharing.js';
+import { StepButtonHandlingV12 } from './v12/step-button-handling.js';
+import { SystemInstallerV12 } from './v12/install-system.js';
+import { WorldCreationV12 } from './v12/world-creation.js';
+import { WorldLaunchV12 } from './v12/world-launch.js';
+import { UserAuthenticationV12 } from './v12/user-authentication.js';
+import { GameVerificationV12 } from './v12/game-verification.js';
+import { EnableModuleV12 } from './v12/enable-module.js';
 
-import { ApplicationInitializationV13 } from './stages/application-initialization/v13/index.js';
-import { SystemInstallationV13 } from './stages/system-installation/v13/index.js';
-import { WorldCreationStageV13 } from './stages/world-creation/v13/index.js';
-import { SessionActivationV13 } from './stages/session-activation/v13/index.js';
+import { LicenseSubmissionV13 } from './v13/license-submission.js';
+import { EULAHandlingV13 } from './v13/eula-handling.js';
+import { SetupNavigationV13 } from './v13/setup-navigation.js';
+import { DeclineDataSharingV13 } from './v13/decline-data-sharing.js';
+import { StepButtonHandlingV13 } from './v13/step-button-handling.js';
+import { SystemInstallerV13 } from './v13/install-system.js';
+import { WorldCreationV13 } from './v13/world-creation.js';
+import { WorldLaunchV13 } from './v13/world-launch.js';
+import { UserAuthenticationV13 } from './v13/user-authentication.js';
+import { GameVerificationV13 } from './v13/game-verification.js';
+import { EnableModuleV13 } from './v13/enable-module.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -100,20 +114,30 @@ class BootstrapRunner {
   getVersionModules(version) {
     const moduleMap = {
       'v12': {
-        stages: {
-          'application-initialization': new ApplicationInitializationV12(),
-          'system-installation': new SystemInstallationV12(),
-          'world-creation': new WorldCreationStageV12(),
-          'session-activation': new SessionActivationV12()
-        }
+        licenseSubmission: new LicenseSubmissionV12(),
+        eulaHandling: new EULAHandlingV12(),
+        setupNavigation: new SetupNavigationV12(),
+        declineDataSharing: new DeclineDataSharingV12(),
+        stepButtonHandling: new StepButtonHandlingV12(),
+        systemInstaller: new SystemInstallerV12(),
+        worldCreation: new WorldCreationV12(),
+        worldLaunch: new WorldLaunchV12(),
+        userAuthentication: new UserAuthenticationV12(),
+        gameVerification: new GameVerificationV12(),
+        enableModule: new EnableModuleV12()
       },
       'v13': {
-        stages: {
-          'application-initialization': new ApplicationInitializationV13(),
-          'system-installation': new SystemInstallationV13(),
-          'world-creation': new WorldCreationStageV13(),
-          'session-activation': new SessionActivationV13()
-        }
+        licenseSubmission: new LicenseSubmissionV13(),
+        eulaHandling: new EULAHandlingV13(),
+        setupNavigation: new SetupNavigationV13(),
+        declineDataSharing: new DeclineDataSharingV13(),
+        stepButtonHandling: new StepButtonHandlingV13(),
+        systemInstaller: new SystemInstallerV13(),
+        worldCreation: new WorldCreationV13(),
+        worldLaunch: new WorldLaunchV13(),
+        userAuthentication: new UserAuthenticationV13(),
+        gameVerification: new GameVerificationV13(),
+        enableModule: new EnableModuleV13()
       }
     };
     
@@ -416,24 +440,66 @@ class BootstrapRunner {
       // Get version-specific modules
       const modules = this.getVersionModules(permutation.version);
 
-      // Define ordered stages
+      // Define ordered steps (names must match v12 script filenames for CLI input)
       const steps = [
-        { name: 'application-initialization', run: async () => {
-            console.log(`📍 Stage 1: Application initialization for ${permutation.version}...`);
-            await modules.stages['application-initialization'].run(page, permutation, this.config, port);
-          }, description: modules.stages['application-initialization'].constructor?.meta?.description },
-        { name: 'system-installation', run: async () => {
-            console.log(`📍 Stage 2: System installation for ${permutation.version}...`);
-            await modules.stages['system-installation'].run(page, permutation, this.config, port);
-          }, description: modules.stages['system-installation'].constructor?.meta?.description },
+        { name: 'license-submission', run: async () => {
+            console.log(`📍 Phase 1: Submitting license for ${permutation.version}...`);
+            const r = await modules.licenseSubmission.submitLicense(page, this.config.foundryLicenseKey);
+            if (!r.success) throw new Error(`License submission failed: ${r.error}`);
+          }, description: modules.licenseSubmission.constructor?.meta?.description },
+        { name: 'setup-navigation', run: async () => {
+            console.log(`📍 Phase 2: Navigating to setup for ${permutation.version}...`);
+            const r = await modules.setupNavigation.navigateToSetup(page, port, this.config);
+            if (!r.success) throw new Error(`Setup navigation failed: ${r.error}`);
+          }, description: modules.setupNavigation.constructor?.meta?.description },
+        { name: 'eula-handling', run: async () => {
+            console.log(`📍 Phase 3: Handling EULA on setup page for ${permutation.version}...`);
+            const r = await modules.eulaHandling.handleEULAOnSetupPage(page, this.config);
+            if (!r.success) console.warn(`⚠️ EULA handling had issues: ${r.error}`);
+          }, description: modules.eulaHandling.constructor?.meta?.description },
+        { name: 'decline-data-sharing', run: async () => {
+            console.log(`📍 Phase 4: Handling decline data sharing for ${permutation.version}...`);
+            const r = await modules.declineDataSharing.handleDeclineSharing(page);
+            if (!r.success) console.warn(`⚠️ Decline sharing had issues: ${r.error}`);
+          }, description: modules.declineDataSharing.constructor?.meta?.description },
+        { name: 'step-button-handling', run: async () => {
+            console.log(`📍 Phase 5: Handling step button for ${permutation.version}...`);
+            const r = await modules.stepButtonHandling.handleStepButton(page);
+            if (!r.success) console.warn(`⚠️ Step button handling had issues: ${r.error}`);
+          }, description: modules.stepButtonHandling.constructor?.meta?.description },
+        { name: 'install-system', run: async () => {
+            console.log(`📍 Phase 6: Installing system ${permutation.system} for ${permutation.version}...`);
+            const r = await modules.systemInstaller.installSystem(page, permutation.system);
+            if (!r.success) throw new Error(`System installation failed: ${r.error}`);
+          }, description: modules.systemInstaller.constructor?.meta?.description },
         { name: 'world-creation', run: async () => {
-            console.log(`📍 Stage 3: World creation for ${permutation.version}...`);
-            await modules.stages['world-creation'].run(page, permutation, this.config, port);
-          }, description: modules.stages['world-creation'].constructor?.meta?.description },
-        { name: 'session-activation', run: async () => {
-            console.log(`📍 Stage 4: Session activation for ${permutation.version}...`);
-            await modules.stages['session-activation'].run(page, permutation, this.config, port);
-          }, description: modules.stages['session-activation'].constructor?.meta?.description }
+            console.log(`📍 Phase 7: Creating world for ${permutation.version}...`);
+            const r = await modules.worldCreation.createWorld(page, permutation, this.config);
+            if (!r.success) throw new Error(`World creation failed: ${r.error}`);
+            // attach worldId on page context for next step
+            page.__simu_worldId = r.worldId;
+          }, description: modules.worldCreation.constructor?.meta?.description },
+        { name: 'world-launch', run: async () => {
+            const worldId = page.__simu_worldId;
+            console.log(`📍 Phase 8: Launching world ${worldId}...`);
+            const r = await modules.worldLaunch.launchWorld(page, worldId, port, this.config);
+            if (!r.success) throw new Error(`World launch failed: ${r.error}`);
+          }, description: modules.worldLaunch.constructor?.meta?.description },
+        { name: 'user-authentication', run: async () => {
+            console.log('📍 Phase 9: Authenticating user...');
+            const r = await modules.userAuthentication.authenticateIfNeeded(page, this.config);
+            if (!r.success) throw new Error(`User authentication failed: ${r.error}`);
+          }, description: modules.userAuthentication.constructor?.meta?.description },
+        { name: 'game-verification', run: async () => {
+            console.log('📍 Phase 10: Verifying game world...');
+            const r = await modules.gameVerification.verifyGame(page, this.config);
+            if (!r.success) throw new Error(`Game verification failed: ${r.error}`);
+          }, description: modules.gameVerification.constructor?.meta?.description },
+        { name: 'enable-module', run: async () => {
+            console.log('📍 Phase 11: Enabling Simulacrum module...');
+            const r = await modules.enableModule.enableModule(page, this.config);
+            if (!r.success) console.warn(`⚠️ Module enabling had issues: ${r.error}`);
+          }, description: modules.enableModule.constructor?.meta?.description }
       ];
 
       const stopAt = (options.stopAtStep || '').trim();
@@ -577,26 +643,23 @@ class BootstrapRunner {
    */
   async getStepList(version) {
     const modules = this.getVersionModules(version);
-    return [
-      { name: 'application-initialization', description: modules.stages['application-initialization'].constructor?.meta?.description || 'Initialize Foundry application' },
-      { name: 'system-installation', description: modules.stages['system-installation'].constructor?.meta?.description || 'Install configured game system' },
-      { name: 'world-creation', description: modules.stages['world-creation'].constructor?.meta?.description || 'Create test world' },
-      { name: 'session-activation', description: modules.stages['session-activation'].constructor?.meta?.description || 'Launch world, authenticate, verify, enable module' }
+    const steps = [
+      { name: 'license-submission', description: modules.licenseSubmission.constructor?.meta?.description || 'Submit FoundryVTT license key' },
+      { name: 'setup-navigation', description: modules.setupNavigation.constructor?.meta?.description || 'Navigate to setup page' },
+      { name: 'eula-handling', description: modules.eulaHandling.constructor?.meta?.description || 'Accept EULA if present' },
+      { name: 'decline-data-sharing', description: modules.declineDataSharing.constructor?.meta?.description || 'Click Decline Sharing if prompted' },
+      { name: 'step-button-handling', description: modules.stepButtonHandling.constructor?.meta?.description || 'Click step button to proceed' },
+      { name: 'install-system', description: modules.systemInstaller.constructor?.meta?.description || 'Install configured game system' },
+      { name: 'world-creation', description: modules.worldCreation.constructor?.meta?.description || 'Create test world' },
+      { name: 'world-launch', description: modules.worldLaunch.constructor?.meta?.description || 'Launch created world' },
+      { name: 'user-authentication', description: modules.userAuthentication.constructor?.meta?.description || 'Authenticate Gamemaster if needed' },
+      { name: 'game-verification', description: modules.gameVerification.constructor?.meta?.description || 'Verify world is ready' },
+      { name: 'enable-module', description: modules.enableModule.constructor?.meta?.description || 'Enable Simulacrum module' }
     ];
+    return steps;
   }
 }
 
 // Main execution block removed as this is now a module controlled by run-tests.js
 
 export { BootstrapRunner };
-
-// Static API for quiet consumers (e.g., list-steps) that must not instantiate BootstrapRunner
-BootstrapRunner.getStepList = function(version) {
-  // Four canonical stages only, version-agnostic listing helper
-  return [
-    { name: 'application-initialization', description: 'Initialize Foundry application (license, EULA, setup flow)' },
-    { name: 'system-installation', description: 'Install configured game system' },
-    { name: 'world-creation', description: 'Create test world' },
-    { name: 'session-activation', description: 'Launch world, authenticate, verify, enable module' }
-  ];
-};

@@ -1,4 +1,4 @@
-import { WorldCreationV13 } from '../../../v13/world-creation.js';
+import { WorldCreationV13 } from './world-creation.js';
 
 export class WorldCreationStageV13 {
   static meta = { name: 'world-creation', description: 'Create test world' };

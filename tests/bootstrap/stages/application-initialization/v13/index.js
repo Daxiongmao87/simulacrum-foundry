@@ -1,8 +1,8 @@
-import { LicenseSubmissionV13 } from '../../../v13/license-submission.js';
-import { EULAHandlingV13 } from '../../../v13/eula-handling.js';
-import { SetupNavigationV13 } from '../../../v13/setup-navigation.js';
-import { DeclineDataSharingV13 } from '../../../v13/decline-data-sharing.js';
-import { StepButtonHandlingV13 } from '../../../v13/step-button-handling.js';
+import { LicenseSubmissionV13 } from './license-submission.js';
+import { EULAHandlingV13 } from './eula-handling.js';
+import { SetupNavigationV13 } from './setup-navigation.js';
+import { DeclineDataSharingV13 } from './decline-data-sharing.js';
+import { StepButtonHandlingV13 } from './step-button-handling.js';
 
 export class ApplicationInitializationV13 {
   static meta = { name: 'application-initialization', description: 'Initialize Foundry application (license, EULA, setup flow)' };
