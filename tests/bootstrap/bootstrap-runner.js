@@ -8,7 +8,7 @@
  * for each combination, using the existing working Docker setup.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, rmSync, existsSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -19,29 +19,29 @@ import { DockerUtils, BrowserUtils } from './common/index.js';
 
 // Dynamic imports for version-specific modules
 
-import { LicenseSubmissionV12 } from './v12/license-submission.js';
-import { EULAHandlingV12 } from './v12/eula-handling.js';
-import { SetupNavigationV12 } from './v12/setup-navigation.js';
-import { DeclineDataSharingV12 } from './v12/decline-data-sharing.js';
-import { StepButtonHandlingV12 } from './v12/step-button-handling.js';
-import { SystemInstallerV12 } from './v12/install-system.js';
-import { WorldCreationV12 } from './v12/world-creation.js';
-import { WorldLaunchV12 } from './v12/world-launch.js';
-import { UserAuthenticationV12 } from './v12/user-authentication.js';
-import { GameVerificationV12 } from './v12/game-verification.js';
-import { EnableModuleV12 } from './v12/enable-module.js';
+import { LicenseSubmissionV12 } from './stages/application-initialization/v12/license-submission.js';
+import { EULAHandlingV12 } from './stages/application-initialization/v12/eula-handling.js';
+import { SetupNavigationV12 } from './stages/application-initialization/v12/setup-navigation.js';
+import { DeclineDataSharingV12 } from './stages/application-initialization/v12/decline-data-sharing.js';
+import { StepButtonHandlingV12 } from './stages/application-initialization/v12/step-button-handling.js';
+import { SystemInstallerV12 } from './stages/system-installation/v12/install-system.js';
+import { WorldCreationV12 } from './stages/world-creation/v12/world-creation.js';
+import { WorldLaunchV12 } from './stages/session-activation/v12/world-launch.js';
+import { UserAuthenticationV12 } from './stages/session-activation/v12/user-authentication.js';
+import { GameVerificationV12 } from './stages/session-activation/v12/game-verification.js';
+import { EnableModuleV12 } from './stages/session-activation/v12/enable-module.js';
 
-import { LicenseSubmissionV13 } from './v13/license-submission.js';
-import { EULAHandlingV13 } from './v13/eula-handling.js';
-import { SetupNavigationV13 } from './v13/setup-navigation.js';
-import { DeclineDataSharingV13 } from './v13/decline-data-sharing.js';
-import { StepButtonHandlingV13 } from './v13/step-button-handling.js';
-import { SystemInstallerV13 } from './v13/install-system.js';
-import { WorldCreationV13 } from './v13/world-creation.js';
-import { WorldLaunchV13 } from './v13/world-launch.js';
-import { UserAuthenticationV13 } from './v13/user-authentication.js';
-import { GameVerificationV13 } from './v13/game-verification.js';
-import { EnableModuleV13 } from './v13/enable-module.js';
+import { LicenseSubmissionV13 } from './stages/application-initialization/v13/license-submission.js';
+import { EULAHandlingV13 } from './stages/application-initialization/v13/eula-handling.js';
+import { SetupNavigationV13 } from './stages/application-initialization/v13/setup-navigation.js';
+import { DeclineDataSharingV13 } from './stages/application-initialization/v13/decline-data-sharing.js';
+import { StepButtonHandlingV13 } from './stages/application-initialization/v13/step-button-handling.js';
+import { SystemInstallerV13 } from './stages/system-installation/v13/install-system.js';
+import { WorldCreationV13 } from './stages/world-creation/v13/world-creation.js';
+import { WorldLaunchV13 } from './stages/session-activation/v13/world-launch.js';
+import { UserAuthenticationV13 } from './stages/session-activation/v13/user-authentication.js';
+import { GameVerificationV13 } from './stages/session-activation/v13/game-verification.js';
+import { EnableModuleV13 } from './stages/session-activation/v13/enable-module.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -309,6 +309,10 @@ class BootstrapRunner {
     console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
 
     try {
+      // Ensure module is packaged before manual docker build path
+      console.log('[BootstrapRunner] 📦 Packaging module into dist/ ...');
+      execSync('node tools/package-module.js', { stdio: 'inherit', cwd: PROJECT_ROOT });
+
       // Determine the zip file based on version
       const zipFileName = this.getZipFileForVersion(permutation.version);
       const contextZipPath = `tests/fixtures/binary_versions/${permutation.version}/${zipFileName}`;
@@ -318,6 +322,20 @@ class BootstrapRunner {
     } catch (error) {
       console.error('❌ Docker build failed:', error.message);
       throw error;
+    } finally {
+      // Clean dist/ contents after manual docker build (keep folder)
+      try {
+        const distPath = join(PROJECT_ROOT, 'dist');
+        if (existsSync(distPath)) {
+          console.log('[BootstrapRunner] 🧹 Clearing dist/ contents after build (keeping folder)');
+          const { readdirSync } = await import('fs');
+          for (const entry of readdirSync(distPath)) {
+            rmSync(join(distPath, entry), { recursive: true, force: true });
+          }
+        }
+      } catch (cleanupError) {
+        console.warn(`[BootstrapRunner] ⚠️ Failed to clear dist/: ${cleanupError.message}`);
+      }
     }
 
     try {
@@ -557,7 +575,9 @@ class BootstrapRunner {
       console.warn(`⚠️ Container cleanup failed: ${e.message}`);
     }
     if (session.port) {
-      this.portManager.releasePort(session.containerId, session.port);
+      // Release using the same identifier used during allocation (instanceId)
+      const releaserId = session.instanceId || session.containerId;
+      this.portManager.releasePort(releaserId, session.port);
     }
   }
 
@@ -657,6 +677,15 @@ class BootstrapRunner {
       { name: 'enable-module', description: modules.enableModule.constructor?.meta?.description || 'Enable Simulacrum module' }
     ];
     return steps;
+  }
+
+  /**
+   * Static helper to list steps without requiring an instance (used by --list-steps fast path)
+   */
+  static async getStepList(version) {
+    // Reuse instance method to avoid duplication
+    const tmp = new BootstrapRunner({});
+    return await tmp.getStepList(version);
   }
 }
 

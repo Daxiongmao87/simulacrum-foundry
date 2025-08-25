@@ -6,7 +6,7 @@
  */
 
 import { execSync } from 'child_process';
-import { readdirSync } from 'fs';
+import { readdirSync, rmSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,6 +27,10 @@ export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
   console.log(`[Docker Utils] 🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
   
   try {
+    // Ensure module is packaged into dist/ before building the image
+    console.log('[Docker Utils] 📦 Packaging module into dist/ ...');
+    execSync('node tools/package-module.js', { stdio: 'inherit', cwd: PROJECT_ROOT });
+
     // Determine the zip file based on version
     const zipFileName = getZipFileForVersion(version);
     const dockerfilePath = join(PROJECT_ROOT, 'tests', 'docker', 'Dockerfile.foundry');
@@ -42,6 +46,19 @@ export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
   } catch (error) {
     console.error('❌ Docker build failed:', error.message);
     throw error;
+  } finally {
+    // Always clean dist/ after the Docker build process
+    try {
+      const distPath = join(PROJECT_ROOT, 'dist');
+      if (existsSync(distPath)) {
+        console.log('[Docker Utils] 🧹 Clearing dist/ contents after build (keeping folder)');
+        for (const entry of readdirSync(distPath)) {
+          rmSync(join(distPath, entry), { recursive: true, force: true });
+        }
+      }
+    } catch (cleanupError) {
+      console.warn(`[Docker Utils] ⚠️ Failed to remove dist/: ${cleanupError.message}`);
+    }
   }
 }
 

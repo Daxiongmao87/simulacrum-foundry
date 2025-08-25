@@ -416,13 +416,15 @@ class TestOrchestrator {
       }
     }
     
-    // Cleanup Docker images after all permutations for this test
-    this.logger.essential(`🧹 Cleaning up Docker images for ${testFile}...`);
-    try {
-      await this.bootstrap.cleanupImages(permutations);
-      this.logger.success(`Docker images cleaned up for ${testFile}`);
-    } catch (error) {
-      this.logger.warn(`⚠️ Docker image cleanup failed: ${error.message}`);
+    // Cleanup Docker images per permutation to avoid image accumulation
+    this.logger.essential(`🧹 Cleaning up Docker images for ${testFile} (per permutation)...`);
+    for (const permutation of permutations) {
+      try {
+        await this.bootstrap.cleanupImages([permutation]);
+        this.logger.success(`Docker image cleaned up for ${permutation.id}`);
+      } catch (error) {
+        this.logger.warn(`⚠️ Docker image cleanup failed for ${permutation.id}: ${error.message}`);
+      }
     }
     
     return testResults;
