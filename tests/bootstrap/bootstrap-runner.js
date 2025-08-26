@@ -3,7 +3,7 @@
 /**
  * @file tests/bootstrap/bootstrap-runner.js
  * @description Clean orchestrator for bootstrap process using version-specific modules
- * 
+ *
  * This creates version/system permutations and runs the bootstrap process
  * for each combination, using the existing working Docker setup.
  */
@@ -57,28 +57,28 @@ class BootstrapRunner {
 
   async initialize() {
     console.log('🚀 Initializing Bootstrap Runner...');
-    
+
     // Config is now passed in constructor, so no need to read it here.
     // this.config = JSON.parse(readFileSync('tests/config/test.config.json', 'utf8'));
     // console.log('✅ Config loaded');
-    
+
     // Get versions and systems from config
     this.versions = this.config['foundry-versions'] || [];
     this.systems = this.config['foundry-systems'] || [];
-    
+
     console.log(`📊 Versions: ${this.versions.join(', ')}`);
     console.log(`📊 Systems: ${this.systems.join(', ')}`);
-    
+
     // Generate permutations
     this.permutations = this.generatePermutations();
     console.log(`🔄 Generated ${this.permutations.length} permutations`);
-    
+
     return true;
   }
 
   generatePermutations() {
     const perms = [];
-    
+
     for (const version of this.versions) {
       for (const system of this.systems) {
         perms.push({
@@ -89,7 +89,7 @@ class BootstrapRunner {
         });
       }
     }
-    
+
     return perms;
   }
 
@@ -98,7 +98,9 @@ class BootstrapRunner {
     const fixtureDir = join(PROJECT_ROOT, 'tests/fixtures/binary_versions', version);
     try {
       const entries = execSync(`ls -1 "${fixtureDir}" | grep -E '\\.(zip|ZIP)$' | head -1`, { encoding: 'utf8' }).trim();
-      if (entries) return entries;
+      if (entries) {
+return entries;
+}
     } catch (_) {}
     // Fallback names
     const versionMap = {
@@ -140,21 +142,21 @@ class BootstrapRunner {
         enableModule: new EnableModuleV13()
       }
     };
-    
+
     return moduleMap[version] || moduleMap['v13']; // Default to v13
   }
 
   async discoverAvailableVersions() {
     console.log('🔍 Discovering available Foundry versions...');
-    
+
     const availableVersions = [];
-    
+
     for (const version of this.versions) {
       const versionPath = join(PROJECT_ROOT, 'tests/fixtures/binary_versions', version);
       try {
         const entries = await readdir(versionPath);
         const zipFiles = entries.filter(entry => entry.endsWith('.zip'));
-        
+
         if (zipFiles.length > 0) {
           availableVersions.push({
             version,
@@ -169,35 +171,35 @@ class BootstrapRunner {
         console.log(`⚠️ Could not read ${version}: ${error.message}`);
       }
     }
-    
+
     return availableVersions;
   }
 
   async runBootstrapTest(permutation, options = {}) {
     console.log(`🎯 Running bootstrap test: ${permutation.id}`);
-    
+
     const testId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const port = await this.portManager.allocatePort(testId);
-    
+
     // Step 0: Build Docker image (like POC)
     const imageName = `${this.config.docker.imagePrefix}-${permutation.id}`;
     const foundryLicenseKey = this.config.foundryLicenseKey;
-    
+
     if (!foundryLicenseKey) {
       console.error('❌ foundryLicenseKey not found in config');
       throw new Error('foundryLicenseKey not set in test.config.json');
     }
-    
+
     console.log(`🔨 Building Docker image: ${imageName}...`);
     console.log(`🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
-    
+
     try {
       await DockerUtils.buildFoundryImage(imageName, permutation.version, foundryLicenseKey);
     } catch (error) {
       console.error('❌ Docker build failed:', error.message);
       throw error;
     }
-    
+
     try {
       // Step 1: Clean up any existing containers (like POC)
       console.log('🧹 Cleaning up existing containers...');
@@ -207,34 +209,34 @@ class BootstrapRunner {
       } catch (e) {
         // Container might not exist, which is fine
       }
-      
+
       // Step 2: Start fresh container (like POC)
       console.log(`🚀 Starting fresh FoundryVTT container from image: ${imageName}...`);
       const containerId = await DockerUtils.startFoundryContainer(testId, imageName, port, permutation.version);
       console.log(`📦 Container ID: ${containerId}`);
-      
+
       // Step 2: Wait for container to be ready
       console.log('⏳ Waiting for container to be ready...');
       const ready = await DockerUtils.waitForContainerReady(port, this.config);
-      
+
       if (!ready) {
         throw new Error('Container failed to start properly');
       }
-      
+
       console.log('✅ Container is ready');
-      
+
       // Step 3: Run bootstrap process using version-specific modules
       const bootstrapResult = await this.runBootstrapProcess(port, permutation, { stopAtStep: options.stopAtStep });
-      
+
       if (!bootstrapResult.success) {
         throw new Error(`Bootstrap failed: ${bootstrapResult.error}`);
       }
-      
+
       console.log('✅ Bootstrap completed successfully');
-      
+
       // Optional: capture a proof screenshot but keep browser alive for integration tests
       const screenshotPath = await this.takeScreenshot(bootstrapResult.page, permutation.id);
-      
+
       // Do NOT cleanup here on success; the orchestrator will call cleanupSession.
       // Return a live session object expected by integration tests.
       return {
@@ -248,10 +250,10 @@ class BootstrapRunner {
         screenshotPath,
         gameState: { phase: bootstrapResult.phase, ready: true }
       };
-      
+
     } catch (error) {
       console.error(`❌ Bootstrap test failed for ${permutation.id}:`, error.message);
-      
+
       // Try to print container logs before cleanup for diagnostics
       try {
         const logName = testId; // container was started with --name ${testId}
@@ -269,7 +271,7 @@ class BootstrapRunner {
       } catch (e) {
         console.warn(`⚠️ Failed container cleanup failed: ${e.message}`);
       }
-      
+
       // Clean up the Docker image on failure too - like POC
       console.log(`🧹 Cleaning up Docker image ${imageName}...`);
       try {
@@ -278,9 +280,9 @@ class BootstrapRunner {
       } catch (e) {
         console.warn(`⚠️ Docker image cleanup failed: ${e.message}`);
       }
-      
+
       this.portManager.releasePort(testId, port);
-      
+
       return {
         success: false,
         permutation,
@@ -409,9 +411,9 @@ class BootstrapRunner {
     const interval = this.config?.bootstrap?.retries?.healthCheckInterval ?? 1000;
     for (let i = 0; i < retries; i++) {
       try {
-        const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}`, { 
-          encoding: 'utf8', 
-          timeout: curlTimeout 
+        const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}`, {
+          encoding: 'utf8',
+          timeout: curlTimeout
         });
         if (response.trim() === '302') {
           return true;
@@ -424,10 +426,10 @@ class BootstrapRunner {
 
   async runBootstrapProcess(port, permutation, options = {}) {
     console.log(`🔄 Running bootstrap process for ${permutation.id}...`);
-    
+
     const browser = await BrowserUtils.launchBrowser(this.config);
     const page = await BrowserUtils.createPageWithHandlers(browser, this.config);
-    
+
     // Handle console messages and filter Chromium warnings (like POC)
     page.on('console', (msg) => {
       const text = msg.text();
@@ -438,7 +440,7 @@ class BootstrapRunner {
       }
       console.log(`[BROWSER] ${msg.type()}: ${text}`);
     });
-    
+
     // Handle page errors without terminating (like POC)
     page.on('pageerror', (error) => {
       if (error.message.includes('modern JavaScript features') && error.message.includes('Chromium version')) {
@@ -447,14 +449,14 @@ class BootstrapRunner {
       }
       console.log(`[BROWSER] pageerror: ${error.message}`);
     });
-    
+
     try {
       // Set longer timeout for the entire process
       page.setDefaultTimeout(300000); // 5 minutes
-      
+
       // Navigate to Foundry
       await page.goto(`http://localhost:${port}`, { waitUntil: 'domcontentloaded', timeout: this.config?.puppeteer?.timeout ?? 30000 });
-      
+
       // Get version-specific modules
       const modules = this.getVersionModules(permutation.version);
 
@@ -463,33 +465,45 @@ class BootstrapRunner {
         { name: 'license-submission', run: async () => {
             console.log(`📍 Phase 1: Submitting license for ${permutation.version}...`);
             const r = await modules.licenseSubmission.submitLicense(page, this.config.foundryLicenseKey);
-            if (!r.success) throw new Error(`License submission failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`License submission failed: ${r.error}`);
+}
           }, description: modules.licenseSubmission.constructor?.meta?.description },
         { name: 'setup-navigation', run: async () => {
             console.log(`📍 Phase 2: Navigating to setup for ${permutation.version}...`);
             const r = await modules.setupNavigation.navigateToSetup(page, port, this.config);
-            if (!r.success) throw new Error(`Setup navigation failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`Setup navigation failed: ${r.error}`);
+}
           }, description: modules.setupNavigation.constructor?.meta?.description },
         { name: 'eula-handling', run: async () => {
             console.log(`📍 Phase 3: Handling EULA on setup page for ${permutation.version}...`);
             const r = await modules.eulaHandling.handleEULAOnSetupPage(page, this.config);
-            if (!r.success) throw new Error(`EULA handling failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`EULA handling failed: ${r.error}`);
+}
           }, description: modules.eulaHandling.constructor?.meta?.description },
         { name: 'decline-data-sharing', run: async () => {
             console.log(`📍 Phase 4: Handling decline data sharing for ${permutation.version}...`);
             const r = await modules.declineDataSharing.handleDeclineSharing(page);
-            if (!r.success) throw new Error(`Decline data sharing failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`Decline data sharing failed: ${r.error}`);
+}
           }, description: modules.declineDataSharing.constructor?.meta?.description },
 
         { name: 'install-system', run: async () => {
             console.log(`📍 Phase 5: Installing system ${permutation.system} for ${permutation.version}...`);
             const r = await modules.systemInstaller.installSystem(page, permutation.system);
-            if (!r.success) throw new Error(`System installation failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`System installation failed: ${r.error}`);
+}
           }, description: modules.systemInstaller.constructor?.meta?.description },
         { name: 'world-creation', run: async () => {
             console.log(`📍 Phase 7: Creating world for ${permutation.version}...`);
             const r = await modules.worldCreation.createWorld(page, permutation, this.config);
-            if (!r.success) throw new Error(`World creation failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`World creation failed: ${r.error}`);
+}
             // attach worldId on page context for next step
             page.__simu_worldId = r.worldId;
           }, description: modules.worldCreation.constructor?.meta?.description },
@@ -497,24 +511,32 @@ class BootstrapRunner {
             const worldId = page.__simu_worldId;
             console.log(`📍 Phase 8: Launching world ${worldId}...`);
             const r = await modules.worldLaunch.launchWorld(page, worldId, port, this.config);
-            if (!r.success) throw new Error(`World launch failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`World launch failed: ${r.error}`);
+}
           }, description: modules.worldLaunch.constructor?.meta?.description },
         { name: 'user-authentication', run: async () => {
             console.log('📍 Phase 9: Authenticating user...');
             const r = await modules.userAuthentication.authenticateIfNeeded(page, this.config);
-            if (!r.success) throw new Error(`User authentication failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`User authentication failed: ${r.error}`);
+}
           }, description: modules.userAuthentication.constructor?.meta?.description },
         { name: 'game-verification', run: async () => {
             console.log('📍 Phase 10: Verifying game world...');
             const r = await modules.gameVerification.verifyGame(page, this.config);
-            if (!r.success) throw new Error(`Game verification failed: ${r.error}`);
+            if (!r.success) {
+throw new Error(`Game verification failed: ${r.error}`);
+}
           }, description: modules.gameVerification.constructor?.meta?.description },
         { name: 'enable-module', run: async () => {
             console.log('📍 Phase 11: Enabling Simulacrum module...');
             try {
               const r = await modules.enableModule.enableModule(page, this.config);
               console.log('📍 Phase 11 result:', r);
-              if (!r.success) throw new Error(`Module enabling failed: ${r.error}`);
+              if (!r.success) {
+throw new Error(`Module enabling failed: ${r.error}`);
+}
               console.log('📍 Phase 11 completed successfully');
             } catch (error) {
               console.error('📍 Phase 11 error:', error);
@@ -536,7 +558,7 @@ class BootstrapRunner {
 
       console.log(`✅ All phases completed successfully for ${permutation.version}`);
       return { success: true, browser, page, phase: steps.length };
-      
+
     } catch (error) {
       await browser.close();
       throw error;
@@ -547,7 +569,7 @@ class BootstrapRunner {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `bootstrap-${testId}-${timestamp}.png`;
     const path = join(PROJECT_ROOT, 'tests/artifacts', filename);
-    
+
     try {
       await page.screenshot({ path, fullPage: true });
       console.log(`📸 Screenshot saved: ${path}`);
@@ -568,7 +590,9 @@ class BootstrapRunner {
   }
 
   async cleanupSession(session) {
-    if (!session || !session.containerId) return;
+    if (!session || !session.containerId) {
+return;
+}
     console.log(`[BootstrapRunner] Cleaning up session for container: ${session.containerId}`);
     try {
       execSync(`docker stop ${session.containerId}`, { stdio: 'ignore' });
@@ -599,20 +623,20 @@ class BootstrapRunner {
 
   async runAllTests() {
     console.log('🚀 Starting all bootstrap tests...');
-    
+
     const results = [];
-    
+
     for (const permutation of this.permutations) {
       try {
         const result = await this.runBootstrapTest(permutation);
         results.push(result);
-        
+
         if (result.success) {
           console.log(`✅ ${permutation.id}: SUCCESS`);
         } else {
           console.log(`❌ ${permutation.id}: FAILED - ${result.error}`);
         }
-        
+
       } catch (error) {
         console.error(`💥 ${permutation.id}: CRASHED - ${error.message}`);
         results.push({
@@ -622,29 +646,29 @@ class BootstrapRunner {
         });
       }
     }
-    
+
     // Summary
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
-    
+
     console.log('\n📊 TEST SUMMARY:');
     console.log(`✅ Successful: ${successful}`);
     console.log(`❌ Failed: ${failed}`);
     console.log(`📊 Total: ${results.length}`);
-    
+
     return results;
   }
 
   async cleanup() {
     console.log('🧹 Cleaning up...');
-    
+
     try {
       // Clean up any leftover test containers
       const containers = execSync('docker ps -a --filter "name=test-" --format "{{.Names}}"', { encoding: 'utf8' }).trim().split('\n').filter(name => name.length > 0);
-      
+
       if (containers.length > 0) {
         console.log(`🧹 Found ${containers.length} leftover test containers, cleaning up...`);
-        
+
         for (const container of containers) {
           try {
             execSync(`docker stop ${container}`, { stdio: 'ignore' });
@@ -654,7 +678,7 @@ class BootstrapRunner {
             console.warn(`⚠️ Failed to clean up container ${container}: ${e.message}`);
           }
         }
-        
+
         console.log('✅ No leftover test containers found');
       }
     } catch (e) {
@@ -688,7 +712,7 @@ class BootstrapRunner {
   static async getStepList(version) {
     // Reuse instance method to avoid duplication
     const tmp = new BootstrapRunner({});
-    return await tmp.getStepList(version);
+    return tmp.getStepList(version);
   }
 }
 

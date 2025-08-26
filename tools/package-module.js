@@ -27,18 +27,18 @@ const filesToCopy = [
 function copyRecursive(src, dest) {
     const srcPath = path.join(projectRoot, src);
     const destPath = path.join(distDir, src);
-    
+
     if (!fs.existsSync(srcPath)) {
         console.log(`Simulacrum | Tools - Warning: ${src} not found, skipping`);
         return;
     }
-    
+
     const stat = fs.statSync(srcPath);
-    
+
     if (stat.isDirectory()) {
         // Create directory
         fs.mkdirSync(destPath, { recursive: true });
-        
+
         // Copy contents
         const items = fs.readdirSync(srcPath);
         for (const item of items) {

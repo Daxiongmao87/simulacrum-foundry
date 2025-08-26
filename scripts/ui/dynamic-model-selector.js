@@ -18,6 +18,7 @@ export class DynamicModelSelector {
     this.modelInput = null;
     this.customInput = null;
     this.debounceTimer = null;
+    this.endpointDebounceTimer = null; // New debounce timer for endpoint changes
   }
 
   /**
@@ -57,6 +58,31 @@ export class DynamicModelSelector {
       this.modelInput = modelSelect;
     } else {
       return;
+    }
+
+    // Add direct DOM event listener for API endpoint changes
+    const endpointInput = html.find('input[name="simulacrum.apiEndpoint"]');
+    if (endpointInput.length > 0) {
+      // Use input event to capture changes as user types
+      endpointInput.on('input', (e) => {
+        const newEndpoint = e.target.value;
+        if (newEndpoint && newEndpoint.trim() !== '') {
+          console.warn('Simulacrum | API endpoint changed to:', newEndpoint);
+          // Clear existing timer
+          if (this.endpointDebounceTimer) {
+            clearTimeout(this.endpointDebounceTimer);
+          }
+
+          // Set new timer - only update models after 1 second of no changes
+          this.endpointDebounceTimer = setTimeout(async () => {
+            console.warn(
+              'Simulacrum | Debounce timer expired, updating models for:',
+              newEndpoint
+            );
+            await this.updateModelSelection(newEndpoint);
+          }, 1000);
+        }
+      });
     }
 
     // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
@@ -136,7 +162,7 @@ export class DynamicModelSelector {
       this.isDetectable = detection.detectable;
       this.currentApiType = detection.type;
 
-      await this.updateModelUI(detection);
+      this.updateModelUI(detection);
     } catch (error) {
       console.error('🤖 Model selection update failed:', error);
       this.showErrorState(error.message);
@@ -147,7 +173,7 @@ export class DynamicModelSelector {
    * Update model UI based on detection results
    * @param {Object} detection - Detection result object
    */
-  async updateModelUI(detection) {
+  updateModelUI(detection) {
     this.showModelSetting();
 
     if (detection.detectable && detection.models.length > 0) {

@@ -98,7 +98,7 @@ export class ContextCompaction {
       console.warn(
         `🗜️ Context compaction triggered at ${currentUsage}/${this.maxTokens} tokens (${Math.round((currentUsage / this.maxTokens) * 100)}%)`
       );
-      return await this.performCompaction(chatHistory);
+      return this.performCompaction(chatHistory);
     }
 
     return chatHistory; // No compaction needed
