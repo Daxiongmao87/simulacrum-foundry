@@ -23,12 +23,12 @@ const PROJECT_ROOT = join(__dirname, '..', '..', '..');
  * @returns {Promise<void>}
  */
 export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
-  console.log(`[Docker Utils] 🔨 Building Docker image: ${imageName}...`);
-  console.log(`[Docker Utils] 🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
+  console.log(`Simulacrum | [Docker Utils] 🔨 Building Docker image: ${imageName}...`);
+  console.log(`Simulacrum | [Docker Utils] 🔑 Using license key: ${foundryLicenseKey.substring(0, 4)}****`);
   
   try {
     // Ensure module is packaged into dist/ before building the image
-    console.log('[Docker Utils] 📦 Packaging module into dist/ ...');
+    console.log('Simulacrum | [Docker Utils] 📦 Packaging module into dist/ ...');
     execSync('node tools/package-module.js', { stdio: 'inherit', cwd: PROJECT_ROOT });
 
     // Determine the zip file based on version
@@ -42,7 +42,7 @@ export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
       stdio: 'inherit',
       cwd: PROJECT_ROOT 
     });
-    console.log(`[Docker Utils] ✅ Docker image ${imageName} built successfully`);
+    console.log(`Simulacrum | [Docker Utils] ✅ Docker image ${imageName} built successfully`);
   } catch (error) {
     console.error('❌ Docker build failed:', error.message);
     throw error;
@@ -51,7 +51,7 @@ export async function buildFoundryImage(imageName, version, foundryLicenseKey) {
     try {
       const distPath = join(PROJECT_ROOT, 'dist');
       if (existsSync(distPath)) {
-        console.log('[Docker Utils] 🧹 Clearing dist/ contents after build (keeping folder)');
+        console.log('Simulacrum | [Docker Utils] 🧹 Clearing dist/ contents after build (keeping folder)');
         for (const entry of readdirSync(distPath)) {
           rmSync(join(distPath, entry), { recursive: true, force: true });
         }
@@ -96,7 +96,7 @@ function getZipFileForVersion(version) {
  * @returns {Promise<string>} Container ID
  */
 export async function startFoundryContainer(containerName, imageName, port, version) {
-  console.log(`[Docker Utils] 🚀 Starting FoundryVTT container from image: ${imageName}...`);
+  console.log(`Simulacrum | [Docker Utils] 🚀 Starting FoundryVTT container from image: ${imageName}...`);
   
   try {
     // Clean up any existing containers with the same name
@@ -112,7 +112,7 @@ export async function startFoundryContainer(containerName, imageName, port, vers
       ? '-e FOUNDRY_DATA_PATH=/data -e FOUNDRY_MAIN_JS_PATH=/app/resources/app/main.js'
       : '-e FOUNDRY_DATA_PATH=/data';
     const containerId = execSync(`docker run -d --name ${containerName} ${envArgs} -p ${port}:30000 ${imageName}`, { encoding: 'utf8' }).trim();
-    console.log(`[Docker Utils] 📦 Container ID: ${containerId}`);
+    console.log(`Simulacrum | [Docker Utils] 📦 Container ID: ${containerId}`);
     
     return containerId;
   } catch (error) {
@@ -128,7 +128,7 @@ export async function startFoundryContainer(containerName, imageName, port, vers
 export function removeContainer(containerId) {
   try {
     execSync(`docker rm -f ${containerId}`, { stdio: 'ignore' });
-    console.log(`[Docker Utils] ✅ Container ${containerId} force removed`);
+    console.log(`Simulacrum | [Docker Utils] ✅ Container ${containerId} force removed`);
   } catch (e) {
     console.warn(`⚠️ Container cleanup failed: ${e.message}`);
   }
@@ -154,7 +154,7 @@ export function getContainerLogs(containerId) {
 export function removeImage(imageName) {
   try {
     execSync(`docker rmi ${imageName}`, { stdio: 'ignore' });
-    console.log(`[Docker Utils] ✅ Docker image ${imageName} removed`);
+    console.log(`Simulacrum | [Docker Utils] ✅ Docker image ${imageName} removed`);
   } catch (e) {
     console.warn(`⚠️ Docker image cleanup failed for ${imageName}: ${e.message}`);
   }

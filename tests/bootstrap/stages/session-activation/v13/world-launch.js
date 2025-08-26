@@ -6,11 +6,11 @@
 export class WorldLaunchV13 {
   static meta = { name: 'world-launch', description: 'Launch created world' };
   async launchWorld(page, worldId, port, config) {
-    console.log(`[V13 Launch] 🚀 Launching world: ${worldId}`);
+    console.log(`Simulacrum | [V13 Launch] 🚀 Launching world: ${worldId}`);
     
     try {
       // Navigate back to worlds tab (exactly like working POC)
-      console.log('[V13 Launch] 📍 Navigating back to worlds tab...');
+      console.log('Simulacrum | [V13 Launch] 📍 Navigating back to worlds tab...');
       await page.click('[data-tab="worlds"]');
       
       // Wait for worlds tab content and ensure we're actually on the worlds tab
@@ -32,10 +32,10 @@ export class WorldLaunchV13 {
         };
       });
       
-      console.log('[V13 Launch] 📊 Worlds tab verification:', JSON.stringify(onWorldsTab, null, 2));
+      console.log('Simulacrum | [V13 Launch] 📊 Worlds tab verification:', JSON.stringify(onWorldsTab, null, 2));
       
       // Now find and click the launch button for the specific world (exactly like working POC)
-      console.log(`[V13 Launch] 📍 Looking for Launch World button for ${worldId}...`);
+      console.log(`Simulacrum | [V13 Launch] 📍 Looking for Launch World button for ${worldId}...`);
       
       const launchClicked = await page.evaluate((worldId) => {
         // Find the world element for the specific world - be more flexible in searching
@@ -69,31 +69,31 @@ export class WorldLaunchV13 {
           
           if (launchButton) {
             launchButton.click();
-            console.log(`[V13 Launch] Found and clicked worldLaunch button for ${worldId}`);
+            console.log(`Simulacrum | [V13 Launch] Found and clicked worldLaunch button for ${worldId}`);
             return true;
           } else {
-            console.log(`[V13 Launch] ${worldId} element found but no worldLaunch button found within it`);
-            console.log(`[V13 Launch] Element HTML: ${targetWorldElement.outerHTML.substring(0, 200)}`);
+            console.log(`Simulacrum | [V13 Launch] ${worldId} element found but no worldLaunch button found within it`);
+            console.log(`Simulacrum | [V13 Launch] Element HTML: ${targetWorldElement.outerHTML.substring(0, 200)}`);
             return false;
           }
         } else {
-          console.log(`[V13 Launch] ${worldId} element not found in DOM`);
+          console.log(`Simulacrum | [V13 Launch] ${worldId} element not found in DOM`);
           return false;
         }
       }, worldId);
       
       if (launchClicked) {
-        console.log(`[V13 Launch] ✅ Launch World button clicked for ${worldId}`);
+        console.log(`Simulacrum | [V13 Launch] ✅ Launch World button clicked for ${worldId}`);
         
         // Wait for game world to load
-        console.log('[V13 Launch] 📍 Waiting for game world to load...');
+        console.log('Simulacrum | [V13 Launch] 📍 Waiting for game world to load...');
         
         // Set up console log listener for game canvas ready
         const gameLoadedPromise = new Promise((resolve) => {
           const listener = (msg) => {
             const text = msg.text();
             if (text.includes('Foundry VTT | Drawing game canvas for scene')) {
-              console.log('[V13 Launch] ✅ Game canvas ready - world fully loaded');
+              console.log('Simulacrum | [V13 Launch] ✅ Game canvas ready - world fully loaded');
               page.off('console', listener);
               resolve();
             }
@@ -103,7 +103,7 @@ export class WorldLaunchV13 {
           // Timeout fallback after 60 seconds
           setTimeout(() => {
             page.off('console', listener);
-            console.log('[V13 Launch] ✅ Canvas load timeout reached (not required)');
+            console.log('Simulacrum | [V13 Launch] ✅ Canvas load timeout reached (not required)');
             resolve();
           }, 60000);
         });

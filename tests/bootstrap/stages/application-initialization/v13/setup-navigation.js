@@ -6,7 +6,7 @@
 export class SetupNavigationV13 {
   static meta = { name: 'setup-navigation', description: 'Navigate to setup page' };
   async navigateToSetup(page, port, config) {
-    console.log('[V13 Setup] 📍 Navigating to setup page...');
+    console.log('Simulacrum | [V13 Setup] 📍 Navigating to setup page...');
     
     try {
       // Navigate to setup page (EXACTLY like working POC)
@@ -14,10 +14,10 @@ export class SetupNavigationV13 {
         waitUntil: 'domcontentloaded', 
         timeout: config.puppeteer.timeout 
       });
-      console.log('[V13 Setup] 📍 Navigated to setup page');
+      console.log('Simulacrum | [V13 Setup] 📍 Navigated to setup page');
       
       // Wait for setup page to be ready (EXACTLY like working POC)
-      console.log('[V13 Setup] 📍 Waiting for setup page to be ready...');
+      console.log('Simulacrum | [V13 Setup] 📍 Waiting for setup page to be ready...');
       await page.waitForFunction(() => {
         // Check for any setup-related elements
         const hasSetupElements = !!document.querySelector('.setup-menu, .setup-packages, [data-tab], .setup-packages-systems, .setup-packages-worlds');
@@ -27,7 +27,7 @@ export class SetupNavigationV13 {
         return hasSetupElements || hasGameObject || hasAnyContent;
       }, { timeout: config.bootstrap.timeouts.setupPageReady });
       
-      console.log('[V13 Setup] ✅ FoundryVTT setup page is ready');
+      console.log('Simulacrum | [V13 Setup] ✅ FoundryVTT setup page is ready');
       
       return { success: true };
     } catch (error) {

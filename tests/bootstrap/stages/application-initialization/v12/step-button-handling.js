@@ -6,7 +6,7 @@
 export class StepButtonHandlingV12 {
   static meta = { name: 'step-button-handling', description: 'Click step button to proceed' };
   async handleStepButton(page) {
-    console.log('[V12 Step] 📍 Checking for step-button...');
+    console.log('Simulacrum | [V12 Step] 📍 Checking for step-button...');
     
     try {
       const stepButtonClicked = await page.evaluate(() => {
@@ -20,13 +20,13 @@ export class StepButtonHandlingV12 {
       });
       
       if (stepButtonClicked) {
-        console.log('[V12 Step] ✅ Step-button clicked');
+        console.log('Simulacrum | [V12 Step] ✅ Step-button clicked');
       } else {
-        console.log('[V12 Step] ✅ No step-button found (not required)');
+        console.log('Simulacrum | [V12 Step] ✅ No step-button found (not required)');
       }
       return { success: true };
     } catch (e) {
-      console.log('[V12 Step] ✅ Step-button check completed (not required)');
+      console.log('Simulacrum | [V12 Step] ✅ Step-button check completed (not required)');
       return { success: true };
     }
   }

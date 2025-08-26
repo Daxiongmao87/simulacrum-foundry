@@ -6,11 +6,11 @@
 export class SystemInstallerV12 {
   static meta = { name: 'install-system', description: 'Install configured game system' };
   async installSystem(page, system) {
-    console.log(`[V12 System] 🎲 Installing system: ${system}`);
+    console.log(`Simulacrum | [V12 System] 🎲 Installing system: ${system}`);
     
     try {
       // Step 1: Wait for setup page to be fully ready
-      console.log('[V12 System] 📍 Waiting for setup page to be fully ready...');
+      console.log('Simulacrum | [V12 System] 📍 Waiting for setup page to be fully ready...');
       
       await page.waitForFunction(() => {
         const hasSetupElements = !!document.querySelector('.setup-menu, .setup-packages, [data-tab], .setup-packages-systems, .setup-packages-worlds');
@@ -20,10 +20,10 @@ export class SystemInstallerV12 {
         return hasSetupElements || hasGameObject || hasAnyContent;
       }, { timeout: 60000 });
       
-      console.log('[V12 System] ✅ FoundryVTT setup page is ready');
+      console.log('Simulacrum | [V12 System] ✅ FoundryVTT setup page is ready');
 
       // Step 1.5: Activate Systems tab (default is Worlds)
-      console.log('[V12 System] 📍 Activating Systems tab...');
+      console.log('Simulacrum | [V12 System] 📍 Activating Systems tab...');
       await page.evaluate(() => {
         const tab = document.querySelector('[data-tab="systems"]');
         (tab instanceof HTMLElement) && tab.click();
@@ -32,7 +32,7 @@ export class SystemInstallerV12 {
       await page.waitForSelector('#systems button[data-action="installPackage"]', { timeout: 20000 });
       
       // Step 2: Click "Install System" button
-      console.log('[V12 System] 📍 Clicking Install System button...');
+      console.log('Simulacrum | [V12 System] 📍 Clicking Install System button...');
       
       const installSystemClicked = await page.evaluate(() => {
         // Prefer the data-action selector as per source template
@@ -52,16 +52,16 @@ export class SystemInstallerV12 {
       });
       
       if (!installSystemClicked) throw new Error('Install System button not found');
-      console.log('[V12 System] ✅ Install System button clicked');
+      console.log('Simulacrum | [V12 System] ✅ Install System button clicked');
       
       // Step 3: Wait for InstallPackage dialog (#install-package) and its content
-      console.log('[V12 System] ⏳ Waiting for install package dialog (#install-package)...');
+      console.log('Simulacrum | [V12 System] ⏳ Waiting for install package dialog (#install-package)...');
       await page.waitForSelector('#install-package', { timeout: 15000 });
       await page.waitForSelector('#install-package .entry-list', { timeout: 30000 });
       await page.waitForFunction(() => !!document.querySelector('#install-package input[name="filter"]'), { timeout: 15000 });
       
       // Step 4: Use the dialog filter to search for the specific system id
-      console.log(`[V12 System] 🔎 Filtering dialog for package id: ${system} ...`);
+      console.log(`Simulacrum | [V12 System] 🔎 Filtering dialog for package id: ${system} ...`);
       await page.evaluate((systemName) => {
         const dialog = document.querySelector('#install-package');
         const input = dialog?.querySelector('input[name="filter"]');
@@ -74,7 +74,7 @@ export class SystemInstallerV12 {
       
       // Wait for the filtered entry to appear
       const selectorForEntry = `#install-package .entry-list [data-package-id="${system}"]`;
-      console.log(`[V12 System] ⏳ Waiting for entry selector: ${selectorForEntry}`);
+      console.log(`Simulacrum | [V12 System] ⏳ Waiting for entry selector: ${selectorForEntry}`);
       const entryAppeared = await page.waitForFunction((sel) => !!document.querySelector(sel), { timeout: 60000 }, selectorForEntry)
         .then(() => true)
         .catch(() => false);
@@ -91,7 +91,7 @@ export class SystemInstallerV12 {
             firstEntriesPreview: (entryList?.innerText || '').slice(0, 800)
           };
         });
-        console.log('[V12 System] 📊 Dialog debug (no entry found):', JSON.stringify(debug, null, 2));
+        console.log('Simulacrum | [V12 System] 📊 Dialog debug (no entry found):', JSON.stringify(debug, null, 2));
         throw new Error(`${system} package not present in dialog after filtering`);
       }
       
@@ -106,10 +106,10 @@ export class SystemInstallerV12 {
         return true;
       }, system);
       if (!clicked) throw new Error(`Could not click install button for ${system}`);
-      console.log(`[V12 System] ✅ Install clicked for ${system}`);
+      console.log(`Simulacrum | [V12 System] ✅ Install clicked for ${system}`);
 
       // Step 6: Wait for install to complete: entry acquires installed class
-      console.log(`[V12 System] ⏳ Waiting for installed state in dialog entry...`);
+      console.log(`Simulacrum | [V12 System] ⏳ Waiting for installed state in dialog entry...`);
       const installedInDialog = await page.waitForFunction((sys) => {
         const entry = document.querySelector(`#install-package .entry-list [data-package-id="${sys}"]`);
         return !!entry && entry.classList.contains('installed');
@@ -130,7 +130,7 @@ export class SystemInstallerV12 {
       }
 
       // Step 7: Cross-verify on Systems tab
-      console.log('[V12 System] 🔄 Verifying installed state on Systems tab...');
+      console.log('Simulacrum | [V12 System] 🔄 Verifying installed state on Systems tab...');
       await page.evaluate(() => {
         const systemsTab = document.querySelector('[data-tab="systems"]');
         (systemsTab instanceof HTMLElement) && systemsTab.click();
@@ -140,13 +140,13 @@ export class SystemInstallerV12 {
         const el = document.querySelector(`#systems [data-package-id="${sys}"]`);
         return { present: !!el, classes: el?.className || null };
       }, system);
-      console.log('[V12 System] 📊 Systems tab installed check:', JSON.stringify(systemsHasInstalled, null, 2));
+      console.log('Simulacrum | [V12 System] 📊 Systems tab installed check:', JSON.stringify(systemsHasInstalled, null, 2));
 
       if (!systemsHasInstalled.present) {
         throw new Error(`${system} installation may not have reflected in Systems tab`);
       }
 
-      console.log(`[V12 System] ✅ ${system} system installed and verified`);
+      console.log(`Simulacrum | [V12 System] ✅ ${system} system installed and verified`);
       
       // Attempt to close the dialog if still open
       try {
@@ -167,7 +167,7 @@ export class SystemInstallerV12 {
           const html = dialog?.outerHTML || null;
           return html ? html.slice(0, 5000) : null;
         });
-        if (snapshot) console.log('[V12 System] 🧩 Dialog HTML snapshot (truncated):', snapshot);
+        if (snapshot) console.log('Simulacrum | [V12 System] 🧩 Dialog HTML snapshot (truncated):', snapshot);
       } catch {}
       return { success: false, error: error.message };
     }

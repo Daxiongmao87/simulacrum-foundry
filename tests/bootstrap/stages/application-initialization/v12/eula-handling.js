@@ -6,7 +6,7 @@
 export class EULAHandlingV12 {
   static meta = { name: 'eula-handling', description: 'Accept EULA if present' };
   async handleEULA(page) {
-    console.log('[V12 EULA] 📝 Checking for EULA...');
+    console.log('Simulacrum | [V12 EULA] 📝 Checking for EULA...');
     
     try {
       // Check if EULA text appears in body content (like working POC)
@@ -24,10 +24,10 @@ export class EULAHandlingV12 {
         };
       });
       
-      console.log(`[V12 EULA] 📍 EULA check:`, JSON.stringify(eulaCheck, null, 2));
+      console.log(`Simulacrum | [V12 EULA] 📍 EULA check:`, JSON.stringify(eulaCheck, null, 2));
       
       if (eulaCheck.detected) {
-        console.log('[V12 EULA] 📍 EULA detected, accepting agreement...');
+        console.log('Simulacrum | [V12 EULA] 📍 EULA detected, accepting agreement...');
         
         // Accept EULA (same logic as working POC)
         const result = await page.evaluate(() => {
@@ -36,14 +36,14 @@ export class EULAHandlingV12 {
             const eulaCheckbox = document.querySelector('#eula-agree, input[name="eula-agree"], input[type="checkbox"]');
             if (eulaCheckbox) {
               eulaCheckbox.checked = true;
-              console.log('[V12 EULA] EULA checkbox checked');
+              console.log('Simulacrum | [V12 EULA] EULA checkbox checked');
             }
             
             // Look for the sign/accept button
             const signButton = document.querySelector('#sign, button[name="sign"], button[data-action*="sign"]');
             if (signButton) {
               signButton.click();
-              console.log('[V12 EULA] EULA sign button clicked');
+              console.log('Simulacrum | [V12 EULA] EULA sign button clicked');
               return { success: true, method: 'button_click' };
             }
             
@@ -53,7 +53,7 @@ export class EULAHandlingV12 {
               const text = button.textContent.toLowerCase();
               if (text.includes('sign') || text.includes('accept') || text.includes('agree') || text.includes('continue')) {
                 button.click();
-                console.log(`[V12 EULA] EULA button clicked: ${button.textContent}`);
+                console.log(`Simulacrum | [V12 EULA] EULA button clicked: ${button.textContent}`);
                 return { success: true, method: 'text_search_click' };
               }
             }
@@ -65,7 +65,7 @@ export class EULAHandlingV12 {
         });
         
         if (result.success) {
-          console.log('[V12 EULA] ✅ EULA accepted successfully');
+          console.log('Simulacrum | [V12 EULA] ✅ EULA accepted successfully');
           
           // Wait for EULA processing
           await new Promise(resolve => setTimeout(resolve, 5000));
@@ -84,7 +84,7 @@ export class EULAHandlingV12 {
   }
 
   async handleEULAOnSetupPage(page, config) {
-    console.log('[V12 EULA] 📝 Checking for EULA on setup page...');
+    console.log('Simulacrum | [V12 EULA] 📝 Checking for EULA on setup page...');
     
     try {
       // Wait for EULA to appear dynamically on setup page (like POC does)
@@ -96,7 +96,7 @@ export class EULAHandlingV12 {
                bodyText.includes('please sign the End User License Agreement');
       }, { timeout: config?.bootstrap?.timeouts?.eulaSetupPage ?? 30000 });
       
-      console.log('[V12 EULA] 📍 EULA appeared on setup page, accepting agreement...');
+      console.log('Simulacrum | [V12 EULA] 📍 EULA appeared on setup page, accepting agreement...');
       
       // Wait for EULA form to be fully rendered
       const eulaFormTimeout = config?.bootstrap?.timeouts?.eulaFormRender ?? 2000;
@@ -105,7 +105,7 @@ export class EULAHandlingV12 {
       // Handle EULA agreement on setup page
       const eulaResult = await this.handleEULA(page, config);
       if (eulaResult.success) {
-        console.log('[V12 EULA] ✅ EULA accepted on setup page');
+        console.log('Simulacrum | [V12 EULA] ✅ EULA accepted on setup page');
         
         // Wait for EULA processing
         const eulaProcessingTimeout = config?.bootstrap?.timeouts?.eulaProcessing ?? 5000;

@@ -6,7 +6,7 @@
 export class LicenseSubmissionV13 {
   static meta = { name: 'license-submission', description: 'Submit FoundryVTT license key' };
   async submitLicense(page, licenseKey) {
-    console.log('[V13 License] 🔑 Submitting license key...');
+    console.log('Simulacrum | [V13 License] 🔑 Submitting license key...');
     
     try {
       // Submit license via form submission (like POC)
@@ -16,14 +16,14 @@ export class LicenseSubmissionV13 {
           const licenseInput = document.querySelector('input[name="licenseKey"], input[type="text"], input[placeholder*="license"]');
           if (licenseInput) {
             licenseInput.value = licenseKey;
-            console.log('[V13 License] License key entered in input field');
+            console.log('Simulacrum | [V13 License] License key entered in input field');
           }
           
           // Look for submit button
           const submitButton = document.querySelector('button[type="submit"], input[type="submit"]');
           if (submitButton) {
             submitButton.click();
-            console.log('[V13 License] Submit button clicked');
+            console.log('Simulacrum | [V13 License] Submit button clicked');
             return { success: true, method: 'form_submit' };
           }
           
@@ -34,7 +34,7 @@ export class LicenseSubmissionV13 {
           );
           if (textButton) {
             textButton.click();
-            console.log('[V13 License] Text-based submit button clicked');
+            console.log('Simulacrum | [V13 License] Text-based submit button clicked');
             return { success: true, method: 'text_button' };
           }
           
@@ -65,9 +65,9 @@ export class LicenseSubmissionV13 {
       
       if (result.success) {
         // Wait for page to actually navigate after license submission
-        console.log('[V13 License] Waiting for page navigation after license submission...');
+        console.log('Simulacrum | [V13 License] Waiting for page navigation after license submission...');
         await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 });
-        console.log('[V13 License] Page navigation completed');
+        console.log('Simulacrum | [V13 License] Page navigation completed');
       }
       
       return result;

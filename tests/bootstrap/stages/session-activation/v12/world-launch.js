@@ -6,12 +6,12 @@
 export class WorldLaunchV12 {
   static meta = { name: 'world-launch', description: 'Launch created world' };
   async launchWorld(page, worldId, port, config) {
-    console.log(`[V12 Launch] 🚀 Launching world: ${worldId}`);
+    console.log(`Simulacrum | [V12 Launch] 🚀 Launching world: ${worldId}`);
     
     try {
       // Always normalize to the Setup page which owns the Worlds list
       const setupUrl = `http://localhost:${port}/setup`;
-      console.log(`[V12 Launch] 📍 Navigating to setup: ${setupUrl}`);
+      console.log(`Simulacrum | [V12 Launch] 📍 Navigating to setup: ${setupUrl}`);
       await page.goto(setupUrl, { waitUntil: 'domcontentloaded' });
 
       // Wait for the SetupPackages app to be rendered and tabs available
@@ -19,7 +19,7 @@ export class WorldLaunchV12 {
       await page.waitForSelector('[data-tab="worlds"]', { timeout: 30000 });
 
       // Ensure Worlds tab is active
-      console.log('[V12 Launch] 📍 Activating Worlds tab...');
+      console.log('Simulacrum | [V12 Launch] 📍 Activating Worlds tab...');
       await page.evaluate(() => {
         const worldsTab = document.querySelector('[data-tab="worlds"]');
         (worldsTab instanceof HTMLElement) && worldsTab.click();
@@ -40,10 +40,10 @@ export class WorldLaunchV12 {
           packageIds: tiles
         };
       });
-      console.log('[V12 Launch] 📊 Worlds state:', JSON.stringify(worldsState, null, 2));
+      console.log('Simulacrum | [V12 Launch] 📊 Worlds state:', JSON.stringify(worldsState, null, 2));
 
       // Click the Launch button for the specific world using canonical selectors
-      console.log(`[V12 Launch] 📍 Looking for worldLaunch button for ${worldId}...`);
+      console.log(`Simulacrum | [V12 Launch] 📍 Looking for worldLaunch button for ${worldId}...`);
       const clicked = await page.evaluate((id) => {
         const list = document.getElementById('worlds-list') || document.getElementById('worlds');
         if (!list) return false;
@@ -66,21 +66,21 @@ export class WorldLaunchV12 {
           }));
           return { html, entries };
         });
-        console.log('[V12 Launch] 🔍 Worlds list debug:', JSON.stringify(debug, null, 2));
+        console.log('Simulacrum | [V12 Launch] 🔍 Worlds list debug:', JSON.stringify(debug, null, 2));
         throw new Error(`Launch button not found for ${worldId}`);
       }
 
-      console.log(`[V12 Launch] ✅ Launch World clicked for ${worldId}`);
+      console.log(`Simulacrum | [V12 Launch] ✅ Launch World clicked for ${worldId}`);
 
       // Wait for join page to appear (but don't authenticate - let User Authentication step handle that)
-      console.log('[V12 Launch] ⏳ Waiting for join page to appear...');
+      console.log('Simulacrum | [V12 Launch] ⏳ Waiting for join page to appear...');
       await page.waitForFunction(() => {
         const hasJoinSelect = !!document.querySelector('select[name="userid"]');
         const hasJoinForm = !!document.querySelector('#join-game-form');
         return hasJoinSelect || hasJoinForm;
       }, { timeout: 120000 });
 
-      console.log('[V12 Launch] ✅ Join page detected, ready for user authentication step');
+      console.log('Simulacrum | [V12 Launch] ✅ Join page detected, ready for user authentication step');
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

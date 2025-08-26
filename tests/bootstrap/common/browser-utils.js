@@ -36,7 +36,7 @@ export async function createPageWithHandlers(browser, config) {
     const text = msg.text();
     // Ignore Chromium version compatibility warnings
     if (text.includes('modern JavaScript features') && text.includes('Chromium version')) {
-      console.log(`[Browser Utils] [BROWSER] ${msg.type()}: ${text} (ignored)`);
+      console.log(`Simulacrum | [Browser Utils] [BROWSER] ${msg.type()}: ${text} (ignored)`);
       return;
     }
     
@@ -44,22 +44,22 @@ export async function createPageWithHandlers(browser, config) {
     if (text.includes('JSHandle@')) {
       try {
         const args = await Promise.all(msg.args().map(arg => arg.jsonValue().catch(() => 'Unable to serialize')));
-        console.log(`[Browser Utils] [BROWSER] ${msg.type()}:`, ...args);
+        console.log(`Simulacrum | [Browser Utils] [BROWSER] ${msg.type()}:`, ...args);
       } catch (e) {
-        console.log(`[Browser Utils] [BROWSER] ${msg.type()}: ${text}`);
+        console.log(`Simulacrum | [Browser Utils] [BROWSER] ${msg.type()}: ${text}`);
       }
     } else {
-      console.log(`[Browser Utils] [BROWSER] ${msg.type()}: ${text}`);
+      console.log(`Simulacrum | [Browser Utils] [BROWSER] ${msg.type()}: ${text}`);
     }
   });
   
   // Handle page errors without terminating
   page.on('pageerror', (error) => {
     if (error.message.includes('modern JavaScript features') && error.message.includes('Chromium version')) {
-      console.log(`[Browser Utils] [BROWSER] pageerror: ${error.message} (ignored)`);
+      console.log(`Simulacrum | [Browser Utils] [BROWSER] pageerror: ${error.message} (ignored)`);
       return;
     }
-    console.log(`[Browser Utils] [BROWSER] pageerror: ${error.message}`);
+    console.log(`Simulacrum | [Browser Utils] [BROWSER] pageerror: ${error.message}`);
   });
   
   return page;
@@ -100,7 +100,7 @@ export async function waitForPageFunction(page, fn, options, ...args) {
  */
 export async function takeScreenshot(page, filename, options = { fullPage: true }) {
   await page.screenshot({ path: filename, ...options });
-  console.log(`[Browser Utils] 📸 Screenshot saved: ${filename}`);
+  console.log(`Simulacrum | [Browser Utils] 📸 Screenshot saved: ${filename}`);
   return filename;
 }
 

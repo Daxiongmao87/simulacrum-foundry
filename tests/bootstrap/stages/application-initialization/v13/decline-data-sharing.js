@@ -6,7 +6,7 @@
 export class DeclineDataSharingV13 {
   static meta = { name: 'decline-data-sharing', description: 'Click Decline Sharing if prompted' };
   async handleDeclineSharing(page) {
-    console.log('[V13 Decline] 📍 Looking for Decline Sharing button...');
+    console.log('Simulacrum | [V13 Decline] 📍 Looking for Decline Sharing button...');
     
     try {
       const declineButton = await page.evaluate(() => {
@@ -20,7 +20,7 @@ export class DeclineDataSharingV13 {
       });
       
       if (declineButton) {
-        console.log('[V13 Decline] ✅ Decline Sharing button clicked');
+        console.log('Simulacrum | [V13 Decline] ✅ Decline Sharing button clicked');
         return { success: true };
       } else {
         return { success: false, error: 'Decline Sharing button not found' };

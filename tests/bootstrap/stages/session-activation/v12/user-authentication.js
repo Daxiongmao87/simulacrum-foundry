@@ -6,23 +6,23 @@
 export class UserAuthenticationV12 {
   static meta = { name: 'user-authentication', description: 'Authenticate Gamemaster if needed' };
   async authenticateIfNeeded(page, config) {
-    console.log('[V12 Auth] 📍 Checking if user authentication is required...');
+    console.log('Simulacrum | [V12 Auth] 📍 Checking if user authentication is required...');
     
     try {
       // Check if we're already in the game
       const onGameAlready = await page.evaluate(() => window.location.pathname.includes('/game'));
       if (onGameAlready) {
-        console.log('[V12 Auth] ✅ Already in game, no authentication needed');
+        console.log('Simulacrum | [V12 Auth] ✅ Already in game, no authentication needed');
         return { success: true };
       }
 
       // Check if we're on a join page
       const joinPageUrl = page.url();
       if (joinPageUrl.includes('/join') || document.querySelector('select[name="userid"]')) {
-        console.log('[V12 Auth] 📍 Join page detected, handling user authentication...');
+        console.log('Simulacrum | [V12 Auth] 📍 Join page detected, handling user authentication...');
         
         // Use the working logic from World Launch script
-        console.log('[V12 Auth] 👤 Join screen detected, selecting user and submitting...');
+        console.log('Simulacrum | [V12 Auth] 👤 Join screen detected, selecting user and submitting...');
         const joined = await page.evaluate(() => {
           const select = document.querySelector('select[name="userid"]');
           if (!select) return { success: false, reason: 'no_user_select' };
@@ -54,14 +54,14 @@ export class UserAuthenticationV12 {
           return { success: false, reason: 'no_submit' };
         });
         
-        console.log('[V12 Auth] 📊 Join submit result:', JSON.stringify(joined, null, 2));
+        console.log('Simulacrum | [V12 Auth] 📊 Join submit result:', JSON.stringify(joined, null, 2));
         
         if (!joined.success) {
           throw new Error(`Join submission failed: ${joined.reason}`);
         }
 
         // Wait for navigation into the game route or canvas readiness (same as World Launch)
-        console.log('[V12 Auth] ⏳ Waiting for navigation to game...');
+        console.log('Simulacrum | [V12 Auth] ⏳ Waiting for navigation to game...');
         await Promise.race([
           page.waitForFunction(() => window.location.pathname.includes('/game'), { timeout: 120000 }),
           new Promise((resolve) => {
@@ -78,12 +78,12 @@ export class UserAuthenticationV12 {
           })
         ]);
 
-        console.log('[V12 Auth] ✅ Successfully authenticated and navigated to game world');
+        console.log('Simulacrum | [V12 Auth] ✅ Successfully authenticated and navigated to game world');
         return { success: true };
         
       } else {
         // Not on join page and not in game - this might be an error
-        console.log('[V12 Auth] ⚠️ Not on join page and not in game, checking current state...');
+        console.log('Simulacrum | [V12 Auth] ⚠️ Not on join page and not in game, checking current state...');
         const currentState = await page.evaluate(() => ({
           url: window.location.href,
           pathname: window.location.pathname,
@@ -91,11 +91,11 @@ export class UserAuthenticationV12 {
           hasJoinForm: !!document.querySelector('#join-game-form'),
           inGame: window.location.pathname.includes('/game')
         }));
-        console.log('[V12 Auth] 📊 Current page state:', JSON.stringify(currentState, null, 2));
+        console.log('Simulacrum | [V12 Auth] 📊 Current page state:', JSON.stringify(currentState, null, 2));
         
         // If we're somehow already authenticated, return success
         if (currentState.inGame) {
-          console.log('[V12 Auth] ✅ Already in game, no authentication needed');
+          console.log('Simulacrum | [V12 Auth] ✅ Already in game, no authentication needed');
           return { success: true };
         }
         

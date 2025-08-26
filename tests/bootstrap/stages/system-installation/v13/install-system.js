@@ -6,11 +6,11 @@
 export class SystemInstallerV13 {
   static meta = { name: 'install-system', description: 'Install configured game system' };
   async installSystem(page, system) {
-    console.log(`[V13 System] 🎲 Installing system: ${system}`);
+    console.log(`Simulacrum | [V13 System] 🎲 Installing system: ${system}`);
     
     try {
       // Step 1: Wait for setup page to be fully ready (exactly like working POC)
-      console.log('[V13 System] 📍 Waiting for setup page to be fully ready...');
+      console.log('Simulacrum | [V13 System] 📍 Waiting for setup page to be fully ready...');
       
       // Wait for setup page to load - be more flexible about what constitutes "ready" (exactly like working POC)
       await page.waitForFunction(() => {
@@ -22,10 +22,10 @@ export class SystemInstallerV13 {
         return hasSetupElements || hasGameObject || hasAnyContent;
       }, { timeout: 60000 });
       
-      console.log('[V13 System] ✅ FoundryVTT setup page is ready');
+      console.log('Simulacrum | [V13 System] ✅ FoundryVTT setup page is ready');
       
       // Step 2: Click "Install System" button (exactly like working POC)
-      console.log('[V13 System] 📍 Step 4: Clicking Install System button...');
+      console.log('Simulacrum | [V13 System] 📍 Step 4: Clicking Install System button...');
       
       // First, let's see what buttons are actually available (exactly like working POC)
       const availableButtons = await page.evaluate(() => {
@@ -37,7 +37,7 @@ export class SystemInstallerV13 {
           type: btn.type
         }));
       });
-      console.log('[V13 System] 📊 Available buttons:', JSON.stringify(availableButtons, null, 2));
+      console.log('Simulacrum | [V13 System] 📊 Available buttons:', JSON.stringify(availableButtons, null, 2));
       
       const installSystemClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
@@ -50,7 +50,7 @@ export class SystemInstallerV13 {
       });
       
       if (installSystemClicked) {
-        console.log('[V13 System] ✅ Install System button clicked');
+        console.log('Simulacrum | [V13 System] ✅ Install System button clicked');
       } else {
         throw new Error('Install System button not found');
       }
@@ -59,7 +59,7 @@ export class SystemInstallerV13 {
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       // Step 3: Look for available packages (no search filter needed)
-      console.log(`[V13 System] 📍 Looking for available packages...`);
+      console.log(`Simulacrum | [V13 System] 📍 Looking for available packages...`);
       
       // Wait a moment for packages to load
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -76,7 +76,7 @@ export class SystemInstallerV13 {
       console.log(`[V13 System] 📊 All packages found after searching for "${system}":`, JSON.stringify(allPackages, null, 2));
       
       // Step 4: Find and click Install button for the specific system
-      console.log(`[V13 System] 📍 Looking for ${system} package specifically...`);
+      console.log(`Simulacrum | [V13 System] 📍 Looking for ${system} package specifically...`);
       
       const packageResult = await page.evaluate((systemName) => {
         // Look for package elements that might contain the system
@@ -107,14 +107,14 @@ export class SystemInstallerV13 {
         return { found: false };
       }, system);
       
-      console.log(`[V13 System] 📊 ${system} package search result:`, JSON.stringify(packageResult, null, 2));
+      console.log(`Simulacrum | [V13 System] 📊 ${system} package search result:`, JSON.stringify(packageResult, null, 2));
       
       if (!packageResult.found) {
         throw new Error(`${system} package not found in search results`);
       }
       
       // Step 5: Click the install button
-      console.log(`[V13 System] 📍 Clicking Install button for ${system}...`);
+      console.log(`Simulacrum | [V13 System] 📍 Clicking Install button for ${system}...`);
       
       const installClicked = await page.evaluate((systemName) => {
         const packageElements = Array.from(document.querySelectorAll('[data-package-id], .package, .package-tile'));
@@ -142,10 +142,10 @@ export class SystemInstallerV13 {
         throw new Error(`Could not click install button for ${system}`);
       }
       
-      console.log(`[V13 System] ✅ Install button clicked for ${system}`);
+      console.log(`Simulacrum | [V13 System] ✅ Install button clicked for ${system}`);
       
       // Step 6: Wait for installation to complete
-      console.log(`[V13 System] ⏳ Waiting for ${system} installation to complete...`);
+      console.log(`Simulacrum | [V13 System] ⏳ Waiting for ${system} installation to complete...`);
       
       await page.waitForFunction((systemName) => {
         const bodyText = document.body.textContent || '';
@@ -154,12 +154,12 @@ export class SystemInstallerV13 {
                bodyText.includes('was installed successfully');
       }, { timeout: 900000 }, system);
       
-      console.log(`[V13 System] ✅ ${system} system installed successfully`);
+      console.log(`Simulacrum | [V13 System] ✅ ${system} system installed successfully`);
       
       // Step 7: Close dialog
       try {
         await page.click('.header-control.icon.fa-solid.fa-xmark');
-        console.log('[V13 System] ✅ Dialog closed');
+        console.log('Simulacrum | [V13 System] ✅ Dialog closed');
       } catch (e) {
         throw new Error('Could not close dialog');
       }

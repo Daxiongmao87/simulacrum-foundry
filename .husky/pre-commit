@@ -13,7 +13,40 @@ const SENSITIVE_DATA_PATTERNS = [
   { pattern: /sk-ant-[a-zA-Z0-9\\-_]{95,}/g, description: 'Anthropic API Key' }
 ];
 
+// 🚨 CLAUDE ATTRIBUTION DETECTION - BLOCKS SELF-PROMOTION
+const CLAUDE_PATTERNS = [
+  /🤖\s*Generated\s+with\s+\[Claude\s+Code\]/gi,
+  /Generated\s+with\s+\[Claude\s+Code\]/gi,
+  /claude\.ai\/code/gi,
+  /Co-Authored-By:\s*Claude/gi,
+  /Co-Authored-By:\s*.*@anthropic\.com/gi,
+  /noreply@anthropic\.com/gi
+];
+
 try {
+  // 🚨 FIRST: Check commit message for Claude attribution
+  console.log('🔍 Checking commit message for Claude attribution...');
+  try {
+    const commitMsg = execSync('git log -1 --pretty=format:%B', { encoding: 'utf-8' });
+    
+    for (const pattern of CLAUDE_PATTERNS) {
+      if (pattern.test(commitMsg)) {
+        console.error('');
+        console.error('🚨 CLAUDE ATTRIBUTION DETECTED - COMMIT BLOCKED! 🚨');
+        console.error('');
+        console.error('📝 Commit Message:');
+        console.error(commitMsg);
+        console.error('');
+        console.error('🚨 Remove Claude/Anthropic attribution before committing');
+        console.error('💡 Just commit the code - no need to credit the AI tool');
+        process.exit(1);
+      }
+    }
+    console.log('✅ Commit message clean - no Claude attribution');
+  } catch (e) {
+    console.warn('⚠️  Could not read commit message, continuing...');
+  }
+
   const changedFiles = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim().split('\n').filter(f => f.length > 0);
   
   // Filter out submodule files completely
@@ -24,11 +57,31 @@ try {
   
   const nonSubmoduleFiles = changedFiles.filter(file => !file.startsWith('scripts/fimlib/'));
 
+  // 🚨 SECOND: Check staged files for Claude attribution
+  console.log('🔍 Checking staged files for Claude attribution...');
   for (const file of nonSubmoduleFiles) {
     try {
       const stagedContent = execSync(`git diff --cached -- "${file}"`, { encoding: 'utf-8' });
       const addedLines = stagedContent.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).map(line => line.substring(1));
       
+      // Check for Claude attribution in added lines
+      for (const line of addedLines) {
+        for (const pattern of CLAUDE_PATTERNS) {
+          if (pattern.test(line)) {
+            console.error('');
+            console.error('🚨 CLAUDE ATTRIBUTION DETECTED IN FILE - COMMIT BLOCKED! 🚨');
+            console.error('');
+            console.error(`📁 File: ${file}`);
+            console.error(`💥 Content: ${line.trim()}`);
+            console.error('');
+            console.error('🚨 Remove Claude/Anthropic attribution before committing');
+            console.error('💡 Just write the code - no need to credit the AI tool');
+            process.exit(1);
+          }
+        }
+      }
+      
+      // Check for sensitive data in added lines
       for (const line of addedLines) {
         for (const {pattern, description} of SENSITIVE_DATA_PATTERNS) {
           const matches = line.match(pattern);
@@ -52,9 +105,9 @@ try {
     }
   }
 
-  console.log('✅ No sensitive data detected in staged changes');
+  console.log('✅ No sensitive data or Claude attribution detected');
   
-  // Run lint-staged if no sensitive data found
+  // Run lint-staged if no violations found
   console.log('📋 Running code formatting...');
   execSync('npx lint-staged', { stdio: 'inherit' });
   

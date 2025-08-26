@@ -6,7 +6,7 @@
 export class WorldCreationV13 {
   static meta = { name: 'world-creation', description: 'Create test world' };
   async createWorld(page, permutation, config) {
-    console.log(`[V13 World] 🌍 Creating world for ${permutation.id}...`);
+    console.log(`Simulacrum | [V13 World] 🌍 Creating world for ${permutation.id}...`);
     
     try {
       // Navigate to worlds tab
@@ -35,7 +35,7 @@ export class WorldCreationV13 {
       // World Title
       try {
         await page.type('input[name="title"]', `Test World ${permutation.id}`);
-        console.log('[V13 World] ✅ World title filled');
+        console.log('Simulacrum | [V13 World] ✅ World title filled');
       } catch (e) {
         throw new Error(`Could not fill world title: ${e.message}`);
       }
@@ -43,7 +43,7 @@ export class WorldCreationV13 {
       // World ID
       try {
         await page.type('input[name="id"]', `test-world-${permutation.id}`);
-        console.log('[V13 World] ✅ World ID filled');
+        console.log('Simulacrum | [V13 World] ✅ World ID filled');
       } catch (e) {
         throw new Error(`Could not fill world ID: ${e.message}`);
       }
@@ -55,10 +55,10 @@ export class WorldCreationV13 {
           const tagName = await page.evaluate(el => el.tagName, systemField);
           if (tagName === 'SELECT') {
             await page.select('select[name="system"], #world-config-system', permutation.system);
-            console.log(`[V13 World] ✅ Game system selected: ${permutation.system}`);
+            console.log(`Simulacrum | [V13 World] ✅ Game system selected: ${permutation.system}`);
           } else {
             await page.type('input[name="system"], #world-config-system', permutation.system);
-            console.log(`[V13 World] ✅ Game system entered: ${permutation.system}`);
+            console.log(`Simulacrum | [V13 World] ✅ Game system entered: ${permutation.system}`);
           }
         } else {
           throw new Error('Game system field not found');
@@ -70,13 +70,13 @@ export class WorldCreationV13 {
       // Description - optional field
       try {
         await page.type('textarea[name="description"], textarea[placeholder*="description"], textarea[placeholder*="Description"], textarea[name="desc"]', `Test world for ${permutation.description}`);
-        console.log('[V13 World] ✅ World description filled');
+        console.log('Simulacrum | [V13 World] ✅ World description filled');
       } catch (e) {
-        console.log('[V13 World] ✅ World description not found (not required)');
+        console.log('Simulacrum | [V13 World] ✅ World description not found (not required)');
       }
       
       // Submit form (exactly like working POC)
-      console.log('[V13 World] 📍 Submitting world creation form...');
+      console.log('Simulacrum | [V13 World] 📍 Submitting world creation form...');
       
       const submitClicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
@@ -110,13 +110,13 @@ export class WorldCreationV13 {
       });
       
       if (submitClicked.success) {
-        console.log(`[V13 World] ✅ World creation form submitted via ${submitClicked.method}`);
+        console.log(`Simulacrum | [V13 World] ✅ World creation form submitted via ${submitClicked.method}`);
       } else {
         throw new Error(`Submit button not found: ${submitClicked.reason}`);
       }
       
       // Wait for world creation to complete (exactly like working POC)
-      console.log('[V13 World] 📍 Waiting for world creation to complete...');
+      console.log('Simulacrum | [V13 World] 📍 Waiting for world creation to complete...');
       await new Promise(resolve => setTimeout(resolve, 45000));
       
       // Check for creation success or error messages (exactly like working POC)
@@ -130,7 +130,7 @@ export class WorldCreationV13 {
         };
       });
       
-      console.log('[V13 World] 📊 World creation result check:', JSON.stringify(creationResult, null, 2));
+      console.log('Simulacrum | [V13 World] 📊 World creation result check:', JSON.stringify(creationResult, null, 2));
       
       // Get the actual world ID that was created by looking at the form data
       const actualWorldId = await page.evaluate((permutationId) => {
@@ -162,7 +162,7 @@ export class WorldCreationV13 {
         return null;
       }, permutation.id);
       
-      console.log('[V13 World] 📊 Actual world ID found:', JSON.stringify(actualWorldId, null, 2));
+      console.log('Simulacrum | [V13 World] 📊 Actual world ID found:', JSON.stringify(actualWorldId, null, 2));
       
       if (!actualWorldId || !actualWorldId.id) {
         throw new Error('Could not determine the actual world ID that was created');

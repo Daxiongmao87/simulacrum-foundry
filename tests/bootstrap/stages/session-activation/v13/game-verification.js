@@ -6,11 +6,11 @@
 export class GameVerificationV13 {
   static meta = { name: 'game-verification', description: 'Verify world is ready' };
   async verifyGame(page, config) {
-    console.log('[V13 Game] 🎯 Verifying game world...');
+    console.log('Simulacrum | [V13 Game] 🎯 Verifying game world...');
     
     try {
       // Wait for game world to fully load (exactly like working POC)
-      console.log('[V13 Game] ⏳ Waiting for game world to fully load...');
+      console.log('Simulacrum | [V13 Game] ⏳ Waiting for game world to fully load...');
       await new Promise(resolve => setTimeout(resolve, 60000));
       
       // Take comprehensive verification (exactly like working POC)
@@ -39,7 +39,7 @@ export class GameVerificationV13 {
         };
       });
       
-      console.log('[V13 Game] 📊 Game World Verification:', JSON.stringify(gameWorldVerification, null, 2));
+      console.log('Simulacrum | [V13 Game] 📊 Game World Verification:', JSON.stringify(gameWorldVerification, null, 2));
       
       // Verify we're actually in a working game world (exactly like working POC)
       if (!gameWorldVerification.isInGameWorld || !gameWorldVerification.hasGameUI) {
@@ -98,14 +98,14 @@ export class GameVerificationV13 {
         };
       });
       
-      console.log('[V13 Game] 📊 FINAL COMPREHENSIVE VERIFICATION:');
-      console.log('[V13 Game] 📊 Verification Data:', JSON.stringify(finalVerification, null, 2));
+      console.log('Simulacrum | [V13 Game] 📊 FINAL COMPREHENSIVE VERIFICATION:');
+      console.log('Simulacrum | [V13 Game] 📊 Verification Data:', JSON.stringify(finalVerification, null, 2));
       
       if (finalVerification.gameReady && finalVerification.worldLoaded && finalVerification.userAuthenticated) {
-        console.log('[V13 Game] ✅✅✅ COMPLETE SUCCESS VERIFICATION! ✅✅✅');
-        console.log('[V13 Game] 🎯 FoundryVTT is fully operational with a working game world');
-        console.log('[V13 Game] 🎯 User is authenticated and ready to play');
-        console.log('[V13 Game] 🎯 All essential UI components are present and functional');
+        console.log('Simulacrum | [V13 Game] ✅✅✅ COMPLETE SUCCESS VERIFICATION! ✅✅✅');
+        console.log('Simulacrum | [V13 Game] 🎯 FoundryVTT is fully operational with a working game world');
+        console.log('Simulacrum | [V13 Game] 🎯 User is authenticated and ready to play');
+        console.log('Simulacrum | [V13 Game] 🎯 All essential UI components are present and functional');
         
         return { 
           success: true,

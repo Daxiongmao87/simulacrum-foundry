@@ -1014,12 +1014,12 @@ class TestOrchestrator {
     for (const v of versions) {
       const header = `Version ${v}`;
       console.log(header);
-      console.log('-'.repeat(header.length));
+      console.log('Simulacrum | -'.repeat(header.length));
       const steps = await BootstrapRunner.getStepList(v);
       steps.forEach((s, idx) => {
-        console.log(`${idx + 1}. ${s.name} - ${s.description}`);
+        console.log(`Simulacrum | ${idx + 1}. ${s.name} - ${s.description}`);
       });
-      if (v !== versions[versions.length - 1]) console.log('');
+      if (v !== versions[versions.length - 1]) console.log('Simulacrum | ');
     }
   }
 
@@ -1235,12 +1235,12 @@ async function main() {
       for (const v of versions) {
         const header = `Version ${v}`;
         console.log(header);
-        console.log('-'.repeat(header.length));
+        console.log('Simulacrum | -'.repeat(header.length));
         const steps = await BootstrapRunner.getStepList(v);
         steps.forEach((s, idx) => {
-          console.log(`${idx + 1}. ${s.name} - ${s.description}`);
+          console.log(`Simulacrum | ${idx + 1}. ${s.name} - ${s.description}`);
         });
-        if (v !== versions[versions.length - 1]) console.log('');
+        if (v !== versions[versions.length - 1]) console.log('Simulacrum | ');
       }
       process.exit(0);
     } catch (error) {
