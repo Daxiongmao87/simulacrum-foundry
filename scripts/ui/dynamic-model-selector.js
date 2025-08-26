@@ -50,13 +50,22 @@ export class DynamicModelSelector {
    * @param {jQuery} html - Settings UI HTML
    */
   enhanceSettingsUI(html) {
-    // Look specifically for model select
+    // Look for model select OR input (element might start as input and become select)
     const modelSelect = html.find('select[name="simulacrum.modelName"]');
+    const modelInput = html.find('input[name="simulacrum.modelName"]');
+    const modelElement = modelSelect.length > 0 ? modelSelect : modelInput;
 
-    if (modelSelect.length > 0) {
-      this.settingElement = modelSelect.closest('.form-group');
-      this.modelInput = modelSelect;
+    console.log('Simulacrum | DynamicModelSelector enhancement:', {
+      selectFound: modelSelect.length,
+      inputFound: modelInput.length,
+      usingElement: modelElement.length > 0 ? modelElement.prop('tagName') : 'none'
+    });
+
+    if (modelElement.length > 0) {
+      this.settingElement = modelElement.closest('.form-group');
+      this.modelInput = modelElement;
     } else {
+      console.warn('Simulacrum | No model element found for enhancement');
       return;
     }
 
@@ -86,7 +95,9 @@ export class DynamicModelSelector {
     }
 
     // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
-    html.on('change', 'select[name="simulacrum.modelName"]', async (e) => {
+    // Handle both select and input elements
+    html.on('change', '[name="simulacrum.modelName"]', async (e) => {
+      console.log('Simulacrum | Model selection changed:', e.target.value);
       const selectedValue = e.target.value;
 
       // Get the model's context window
@@ -97,22 +108,61 @@ export class DynamicModelSelector {
       const selectedModel = availableModels.find(
         (model) => model.id === selectedValue
       );
+      
+      console.log('Simulacrum | Model lookup debug:', {
+        selectedValue,
+        availableModels,
+        selectedModel,
+        availableModelsCount: availableModels.length
+      });
 
+      // Find context input field
+      const contextInput = html.find(
+        'input[name="simulacrum.contextLength"]'
+      );
+      console.log('Simulacrum | Context input debug:', {
+        contextInputFound: contextInput.length,
+        currentValue: contextInput.val(),
+        isReadonly: contextInput.prop('readonly')
+      });
+
+      let contextWindow = null;
+      
       if (selectedModel) {
-        // Update the context length field in the UI immediately
-        const contextInput = html.find(
-          'input[name="simulacrum.contextLength"]'
-        );
-        if (contextInput.length > 0) {
-          contextInput.val(selectedModel.contextWindow);
+        contextWindow = selectedModel.contextWindow;
+        console.log('Simulacrum | Using context window from model:', contextWindow);
+      } else {
+        // Fallback: try to parse context window from model name
+        // e.g., "gpt-oss:20k" -> 20000, "gpt-oss:32k" -> 32000
+        const match = selectedValue.match(/:([0-9]+)k?$/i);
+        if (match) {
+          contextWindow = parseInt(match[1]) * (match[0].includes('k') ? 1000 : 1);
+          console.log('Simulacrum | Parsed context window from model name:', contextWindow);
+        } else {
+          console.warn('Simulacrum | Could not determine context window for model:', selectedValue);
         }
-
+      }
+      
+      if (contextWindow && contextInput.length > 0) {
+        console.log('Simulacrum | Updating context input with value:', contextWindow);
+        contextInput.val(contextWindow);
+        
         // Also update the setting for persistence
-        await game.settings.set(
-          'simulacrum',
-          'contextLength',
-          selectedModel.contextWindow
-        );
+        try {
+          await game.settings.set(
+            'simulacrum',
+            'contextLength',
+            contextWindow
+          );
+          console.log('Simulacrum | Setting updated successfully');
+        } catch (error) {
+          console.error('Simulacrum | Failed to update setting:', error);
+        }
+      } else {
+        console.warn('Simulacrum | Could not update context length:', {
+          hasContextWindow: !!contextWindow,
+          hasContextInput: contextInput.length > 0
+        });
       }
     });
 
