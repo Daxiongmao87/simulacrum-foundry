@@ -511,8 +511,15 @@ class BootstrapRunner {
           }, description: modules.gameVerification.constructor?.meta?.description },
         { name: 'enable-module', run: async () => {
             console.log('📍 Phase 11: Enabling Simulacrum module...');
-            const r = await modules.enableModule.enableModule(page, this.config);
-            if (!r.success) throw new Error(`Module enabling failed: ${r.error}`);
+            try {
+              const r = await modules.enableModule.enableModule(page, this.config);
+              console.log('📍 Phase 11 result:', r);
+              if (!r.success) throw new Error(`Module enabling failed: ${r.error}`);
+              console.log('📍 Phase 11 completed successfully');
+            } catch (error) {
+              console.error('📍 Phase 11 error:', error);
+              throw error;
+            }
           }, description: modules.enableModule.constructor?.meta?.description }
       ];
 

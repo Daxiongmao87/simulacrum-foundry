@@ -823,6 +823,20 @@ class TestOrchestrator {
 
     // Display info for all started sessions
     if (sessions.length > 0) {
+      // Close all browser instances before showing sessions ready
+      this.logger.info('🔒 Closing automation browsers to free up sessions...');
+      for (const s of sessions) {
+        try {
+          if (s.browser) {
+            await s.browser.close();
+            this.logger.info(`✅ Browser closed for ${s.permutation?.id || 'session'}`);
+          }
+        } catch (error) {
+          this.logger.warn(`⚠️ Failed to close browser for ${s.permutation?.id || 'session'}: ${error.message}`);
+        }
+      }
+      this.logger.info('✅ All automation browsers closed');
+      
       this.logger.info(' ');
       this.logger.info('🎮 FoundryVTT Sessions Ready!');
       this.logger.info('==============================');
