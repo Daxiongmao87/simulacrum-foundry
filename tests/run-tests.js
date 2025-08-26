@@ -16,11 +16,38 @@
  * - Orchestrator: Coordinates complete workflow with resource management
  */
 
-import { readFileSync, existsSync, rmSync } from 'fs';
+import { readFileSync, existsSync, rmSync, writeFileSync, appendFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { BootstrapRunner } from './bootstrap/bootstrap-runner.js';
+
+// Initialize logging to artifacts
+const LOG_FILE = join(dirname(fileURLToPath(import.meta.url)), 'artifacts', `test-run-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+writeFileSync(LOG_FILE, `Test Run Started: ${new Date().toISOString()}\nTEST INFORMATION WILL BE ADDED HERE AFTER CONFIG LOAD\n${'='.repeat(80)}\n`);
+
+// Wrap console methods to also log to file
+const originalLog = console.log;
+const originalWarn = console.warn;
+const originalError = console.error;
+
+console.log = (...args) => {
+  const message = args.join(' ');
+  originalLog(...args);
+  try { appendFileSync(LOG_FILE, `${new Date().toISOString()} [LOG] ${message}\n`); } catch {}
+};
+
+console.warn = (...args) => {
+  const message = args.join(' ');
+  originalWarn(...args);
+  try { appendFileSync(LOG_FILE, `${new Date().toISOString()} [WARN] ${message}\n`); } catch {}
+};
+
+console.error = (...args) => {
+  const message = args.join(' ');
+  originalError(...args);
+  try { appendFileSync(LOG_FILE, `${new Date().toISOString()} [ERROR] ${message}\n`); } catch {}
+};
 
 // Get the directory of this script
 const __filename = fileURLToPath(import.meta.url);
@@ -183,6 +210,16 @@ class TestOrchestrator {
       this.bootstrap = new BootstrapRunner(this.config, DEBUG_MODE);
       await this.bootstrap.initialize();
       this.logger.success('Bootstrap infrastructure initialized');
+    }
+    
+    // Update log file with version and system information
+    try {
+      const versionStr = this.config['foundry-versions'].join('-');
+      const systemStr = this.config['foundry-systems'].join('-');
+      const logHeader = `Test Run Started: ${new Date().toISOString()}\nVersions: ${versionStr}\nSystems: ${systemStr}\n${'='.repeat(80)}\n`;
+      writeFileSync(LOG_FILE, logHeader);
+    } catch (error) {
+      this.logger.warn(`Failed to update log file with version/system info: ${error.message}`);
     }
     
     // Configuration details - debug mode only (too verbose for normal operation)

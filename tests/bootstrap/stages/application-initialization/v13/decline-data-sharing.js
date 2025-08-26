@@ -23,12 +23,10 @@ export class DeclineDataSharingV13 {
         console.log('[V13 Decline] ✅ Decline Sharing button clicked');
         return { success: true };
       } else {
-        console.log('[V13 Decline] ⚠️ Decline Sharing button not found, proceeding...');
-        return { success: true, reason: 'button_not_found' };
+        return { success: false, error: 'Decline Sharing button not found' };
       }
     } catch (e) {
-      console.log('[V13 Decline] ⚠️ Decline Sharing button not found, proceeding...');
-      return { success: true, reason: 'error_continue' };
+      return { success: false, error: `Decline data sharing failed: ${e.message}` };
     }
   }
 }

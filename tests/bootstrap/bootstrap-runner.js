@@ -23,7 +23,7 @@ import { LicenseSubmissionV12 } from './stages/application-initialization/v12/li
 import { EULAHandlingV12 } from './stages/application-initialization/v12/eula-handling.js';
 import { SetupNavigationV12 } from './stages/application-initialization/v12/setup-navigation.js';
 import { DeclineDataSharingV12 } from './stages/application-initialization/v12/decline-data-sharing.js';
-import { StepButtonHandlingV12 } from './stages/application-initialization/v12/step-button-handling.js';
+
 import { SystemInstallerV12 } from './stages/system-installation/v12/install-system.js';
 import { WorldCreationV12 } from './stages/world-creation/v12/world-creation.js';
 import { WorldLaunchV12 } from './stages/session-activation/v12/world-launch.js';
@@ -35,7 +35,7 @@ import { LicenseSubmissionV13 } from './stages/application-initialization/v13/li
 import { EULAHandlingV13 } from './stages/application-initialization/v13/eula-handling.js';
 import { SetupNavigationV13 } from './stages/application-initialization/v13/setup-navigation.js';
 import { DeclineDataSharingV13 } from './stages/application-initialization/v13/decline-data-sharing.js';
-import { StepButtonHandlingV13 } from './stages/application-initialization/v13/step-button-handling.js';
+
 import { SystemInstallerV13 } from './stages/system-installation/v13/install-system.js';
 import { WorldCreationV13 } from './stages/world-creation/v13/world-creation.js';
 import { WorldLaunchV13 } from './stages/session-activation/v13/world-launch.js';
@@ -118,7 +118,7 @@ class BootstrapRunner {
         eulaHandling: new EULAHandlingV12(),
         setupNavigation: new SetupNavigationV12(),
         declineDataSharing: new DeclineDataSharingV12(),
-        stepButtonHandling: new StepButtonHandlingV12(),
+
         systemInstaller: new SystemInstallerV12(),
         worldCreation: new WorldCreationV12(),
         worldLaunch: new WorldLaunchV12(),
@@ -131,7 +131,7 @@ class BootstrapRunner {
         eulaHandling: new EULAHandlingV13(),
         setupNavigation: new SetupNavigationV13(),
         declineDataSharing: new DeclineDataSharingV13(),
-        stepButtonHandling: new StepButtonHandlingV13(),
+
         systemInstaller: new SystemInstallerV13(),
         worldCreation: new WorldCreationV13(),
         worldLaunch: new WorldLaunchV13(),
@@ -473,20 +473,16 @@ class BootstrapRunner {
         { name: 'eula-handling', run: async () => {
             console.log(`📍 Phase 3: Handling EULA on setup page for ${permutation.version}...`);
             const r = await modules.eulaHandling.handleEULAOnSetupPage(page, this.config);
-            if (!r.success) console.warn(`⚠️ EULA handling had issues: ${r.error}`);
+            if (!r.success) throw new Error(`EULA handling failed: ${r.error}`);
           }, description: modules.eulaHandling.constructor?.meta?.description },
         { name: 'decline-data-sharing', run: async () => {
             console.log(`📍 Phase 4: Handling decline data sharing for ${permutation.version}...`);
             const r = await modules.declineDataSharing.handleDeclineSharing(page);
-            if (!r.success) console.warn(`⚠️ Decline sharing had issues: ${r.error}`);
+            if (!r.success) throw new Error(`Decline data sharing failed: ${r.error}`);
           }, description: modules.declineDataSharing.constructor?.meta?.description },
-        { name: 'step-button-handling', run: async () => {
-            console.log(`📍 Phase 5: Handling step button for ${permutation.version}...`);
-            const r = await modules.stepButtonHandling.handleStepButton(page);
-            if (!r.success) console.warn(`⚠️ Step button handling had issues: ${r.error}`);
-          }, description: modules.stepButtonHandling.constructor?.meta?.description },
+
         { name: 'install-system', run: async () => {
-            console.log(`📍 Phase 6: Installing system ${permutation.system} for ${permutation.version}...`);
+            console.log(`📍 Phase 5: Installing system ${permutation.system} for ${permutation.version}...`);
             const r = await modules.systemInstaller.installSystem(page, permutation.system);
             if (!r.success) throw new Error(`System installation failed: ${r.error}`);
           }, description: modules.systemInstaller.constructor?.meta?.description },
@@ -516,7 +512,7 @@ class BootstrapRunner {
         { name: 'enable-module', run: async () => {
             console.log('📍 Phase 11: Enabling Simulacrum module...');
             const r = await modules.enableModule.enableModule(page, this.config);
-            if (!r.success) console.warn(`⚠️ Module enabling had issues: ${r.error}`);
+            if (!r.success) throw new Error(`Module enabling failed: ${r.error}`);
           }, description: modules.enableModule.constructor?.meta?.description }
       ];
 

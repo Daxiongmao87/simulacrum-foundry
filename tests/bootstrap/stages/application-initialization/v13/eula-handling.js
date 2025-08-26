@@ -72,17 +72,14 @@ export class EULAHandlingV13 {
           
           return result;
         } else {
-          console.log(`[V13 EULA] ⚠️ EULA acceptance failed: ${result.reason}`);
           return result;
         }
       } else {
-        console.log('[V13 EULA] 📍 No EULA detected, continuing to setup...');
-        return { success: true, method: 'no_eula' };
+        return { success: false, error: 'No EULA detected when it should be present' };
       }
       
     } catch (error) {
-      console.log(`[V13 EULA] ⚠️ EULA check failed: ${error.message}, continuing...`);
-      return { success: true, method: 'error_continue' };
+      return { success: false, error: `EULA check failed: ${error.message}` };
     }
   }
 
@@ -116,12 +113,10 @@ export class EULAHandlingV13 {
         
         return { success: true };
       } else {
-        console.log(`[V13 EULA] ⚠️ EULA acceptance failed: ${eulaResult.error}`);
         return { success: false, error: eulaResult.error };
       }
     } catch (e) {
-      console.log('[V13 EULA] 📍 No EULA appeared on setup page, continuing...');
-      return { success: true, noEula: true };
+      return { success: false, error: 'No EULA appeared on setup page when it should be present' };
     }
   }
 }

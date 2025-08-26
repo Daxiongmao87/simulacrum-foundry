@@ -37,7 +37,7 @@ export class WorldCreationV13 {
         await page.type('input[name="title"]', `Test World ${permutation.id}`);
         console.log('[V13 World] ✅ World title filled');
       } catch (e) {
-        console.log(`[V13 World] ⚠️ Could not fill world title: ${e.message}`);
+        throw new Error(`Could not fill world title: ${e.message}`);
       }
       
       // World ID
@@ -45,7 +45,7 @@ export class WorldCreationV13 {
         await page.type('input[name="id"]', `test-world-${permutation.id}`);
         console.log('[V13 World] ✅ World ID filled');
       } catch (e) {
-        console.log(`[V13 World] ⚠️ Could not fill world ID: ${e.message}`);
+        throw new Error(`Could not fill world ID: ${e.message}`);
       }
       
       // Game System - critical for world creation
@@ -61,18 +61,18 @@ export class WorldCreationV13 {
             console.log(`[V13 World] ✅ Game system entered: ${permutation.system}`);
           }
         } else {
-          console.log('[V13 World] ⚠️ Game system field not found - this may cause world creation to fail');
+          throw new Error('Game system field not found');
         }
       } catch (e) {
-        console.log(`[V13 World] ⚠️ Could not set game system: ${e.message} - this may cause world creation to fail`);
+        throw new Error(`Could not set game system: ${e.message}`);
       }
       
-      // Description - try multiple approaches, but don't fail if not found
+      // Description - optional field
       try {
         await page.type('textarea[name="description"], textarea[placeholder*="description"], textarea[placeholder*="Description"], textarea[name="desc"]', `Test world for ${permutation.description}`);
         console.log('[V13 World] ✅ World description filled');
       } catch (e) {
-        console.log(`[V13 World] ⚠️ Could not fill world description: ${e.message} - continuing without it`);
+        console.log('[V13 World] ✅ World description not found (not required)');
       }
       
       // Submit form (exactly like working POC)

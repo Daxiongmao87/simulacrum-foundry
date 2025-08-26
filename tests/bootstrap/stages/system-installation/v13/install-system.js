@@ -161,7 +161,7 @@ export class SystemInstallerV13 {
         await page.click('.header-control.icon.fa-solid.fa-xmark');
         console.log('[V13 System] ✅ Dialog closed');
       } catch (e) {
-        console.log('[V13 System] ⚠️ Could not close dialog, continuing...');
+        throw new Error('Could not close dialog');
       }
       
       return { success: true };

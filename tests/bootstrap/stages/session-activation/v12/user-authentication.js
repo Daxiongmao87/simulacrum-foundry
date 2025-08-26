@@ -126,8 +126,7 @@ export class UserAuthenticationV12 {
         
         return { success: true };
       } else {
-        console.log('[V12 Auth] 📍 Not on join page, proceeding with verification...');
-        return { success: true, reason: 'no_auth_needed' };
+        return { success: false, error: 'Not on join page when authentication should be required' };
       }
       
     } catch (error) {

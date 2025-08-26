@@ -103,7 +103,7 @@ export class WorldLaunchV13 {
           // Timeout fallback after 60 seconds
           setTimeout(() => {
             page.off('console', listener);
-            console.log('[V13 Launch] ⚠️ Timeout waiting for game canvas - continuing anyway');
+            console.log('[V13 Launch] ✅ Canvas load timeout reached (not required)');
             resolve();
           }, 60000);
         });
@@ -112,23 +112,7 @@ export class WorldLaunchV13 {
         
         return { success: true };
       } else {
-        console.log(`[V13 Launch] ⚠️ Launch World button not found for ${worldId}`);
-        
-        // Debug what world elements actually exist (exactly like working POC)
-        const worldDebug = await page.evaluate(() => {
-          const worldElements = Array.from(document.querySelectorAll('[data-package-id], .package-tile, .world-item, .package'));
-          return worldElements.map(el => ({
-            tagName: el.tagName,
-            id: el.id,
-            className: el.className,
-            dataPackageId: el.getAttribute('data-package-id'),
-            textContent: el.textContent?.substring(0, 100),
-            launchButtons: Array.from(el.querySelectorAll('[data-action="worldLaunch"]')).length
-          }));
-        });
-        
-        console.log('[V13 Launch] 📊 Available world elements:', JSON.stringify(worldDebug, null, 2));
-        throw new Error(`Could not find Launch World button for ${worldId}`);
+        return { success: false, error: `Launch World button not found for ${worldId}` };
       }
       
     } catch (error) {

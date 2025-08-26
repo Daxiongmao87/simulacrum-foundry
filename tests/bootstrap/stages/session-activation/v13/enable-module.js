@@ -102,8 +102,7 @@ export class EnableModuleV13 {
         page.on('console', listener);
         setTimeout(() => {
           page.off('console', listener);
-          console.log('[V13 Module] ⚠️ Timeout waiting for FoundryVTT initialization log');
-          resolve();
+          reject(new Error('Timeout waiting for FoundryVTT initialization log'));
         }, 30000);
       });
       

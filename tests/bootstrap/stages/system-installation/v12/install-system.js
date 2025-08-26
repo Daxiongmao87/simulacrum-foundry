@@ -126,7 +126,7 @@ export class SystemInstallerV12 {
             buttonDisabled: !!entry?.querySelector('button.install')?.disabled
           };
         }, system);
-        console.log('[V12 System] ⚠️ Dialog did not report installed state:', JSON.stringify(diagState, null, 2));
+        throw new Error(`Dialog did not report installed state: ${JSON.stringify(diagState, null, 2)}`);
       }
 
       // Step 7: Cross-verify on Systems tab
