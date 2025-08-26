@@ -178,9 +178,18 @@ class TestOrchestrator {
     }
     
     // Store selected tests from command line
-    this.selectedTests = options.tests || null;
-    if (this.selectedTests) {
-      this.logger.config(`Selected tests from command line: ${this.selectedTests.join(', ')}`);
+    this.selectedIntegrationTest = options['integration-test'] || null;
+    this.selectedRegressionTest = options['regression-test'] || null;
+    this.selectedUnitTest = options['unit-test'] || null;
+
+    if (this.selectedIntegrationTest) {
+      this.logger.config(`Selected integration test from command line: ${this.selectedIntegrationTest}`);
+    }
+    if (this.selectedRegressionTest) {
+      this.logger.config(`Selected regression test from command line: ${this.selectedRegressionTest}`);
+    }
+    if (this.selectedUnitTest) {
+      this.logger.config(`Selected unit test from command line: ${this.selectedUnitTest}`);
     }
     
     // Set manual mode flag and optional stop-at-step
@@ -282,78 +291,141 @@ class TestOrchestrator {
       this.logger.info(`Filtered to ${testFiles.length} tests based on --versions flag (${versionDirs.join(', ')})`);
     }
     
-    // Step 3: Filter by --tests flag if provided (highest priority)
-    if (this.selectedTests && this.selectedTests.length > 0) {
+    // Step 3: Filter by specific test name if provided via -i flag
+    if (this.selectedIntegrationTest) {
       testFiles = testFiles.filter(file => {
         const testName = basename(file, '.test.js');
         const fileName = basename(file);
         // Match against both test name (without extension) and full filename
-        return this.selectedTests.some(selected => 
-          testName === selected || 
-          fileName === selected ||
-          fileName === `${selected}.test.js`
-        );
+        return testName === this.selectedIntegrationTest || 
+               fileName === this.selectedIntegrationTest ||
+               fileName === `${this.selectedIntegrationTest}.test.js`;
       });
-      this.logger.info(`Filtered to ${testFiles.length} tests based on --tests flag`);
+      this.logger.info(`Filtered to ${testFiles.length} tests based on -i flag`);
       
-      // Warn if any selected tests were not found
-      const foundTestNames = testFiles.map(f => basename(f, '.test.js'));
-      const notFound = this.selectedTests.filter(selected => 
-        !foundTestNames.includes(selected) && 
-        !foundTestNames.includes(selected.replace('.test.js', ''))
-      );
-      if (notFound.length > 0) {
-        this.logger.warn(`Tests not found: ${notFound.join(', ')}`);
+      // Warn if the selected test was not found
+      if (testFiles.length === 0) {
+        this.logger.warn(`Integration test not found: ${this.selectedIntegrationTest}`);
       }
-    }
-    // Step 4: Filter by configuration if no --tests flag and config exists
-    else if (this.config['integration-tests'] && this.config['integration-tests'].length > 0) {
-      const configuredTests = this.config['integration-tests'].map(test => 
-        join(PROJECT_ROOT, 'tests', 'integration', test)
-      );
-      testFiles = testFiles.filter(file => configuredTests.includes(file));
-      this.logger.info(`Filtered to ${testFiles.length} tests based on configuration`);
-    }
-    // Step 5: Otherwise filter by enabled status in test metadata and config
-    else {
-      const enabledTests = [];
-      const testConfigs = this.config['test-configurations'] || {};
-      
-      for (const testFile of testFiles) {
-        const testName = basename(testFile, '.test.js');
-        let isEnabled = true;
-        
-        try {
-          // Check test configuration in test.config.json first
-          if (testConfigs[testName] && typeof testConfigs[testName].enabled === 'boolean') {
-            isEnabled = testConfigs[testName].enabled;
-            this.logger.debug(`Test ${testName} enabled status from config: ${isEnabled}`);
-          } else {
-            // Import and check test metadata
-            const testModule = await import(testFile);
-            const metadata = testModule.testMetadata || {};
-            
-            // Default to enabled if metadata doesn't exist or enabled is not specified
-            isEnabled = metadata.enabled !== false;
-            this.logger.debug(`Test ${testName} enabled status from metadata: ${isEnabled}`);
-          }
-          
-          if (isEnabled) {
-            enabledTests.push(testFile);
-            this.logger.debug(`Test enabled: ${basename(testFile)}`);
-          } else {
-            this.logger.debug(`Test disabled: ${basename(testFile)}`);
-          }
-        } catch (error) {
-          // If we can't load metadata, include the test by default
-          this.logger.debug(`Could not load metadata for ${basename(testFile)}, including by default`);
-          enabledTests.push(testFile);
-        }
-      }
-      testFiles = enabledTests;
-      this.logger.info(`Discovered ${testFiles.length} enabled test files`);
     }
     
+    this.logger.info(`Discovered ${testFiles.length} integration test files`);
+    return testFiles;
+  }
+
+  async discoverRegressionTests() {
+    this.logger.essential('🔍 Discovering regression tests...');
+    
+    // Step 1: Discover all test files
+    const testPattern = join(PROJECT_ROOT, 'tests', 'regression', '**', '*.test.js');
+    let testFiles = await glob(testPattern);
+    this.logger.debug(`Found ${testFiles.length} regression test files via glob`);
+    
+    // Step 2: Filter by --versions flag if provided (filter by version directories)
+    if (this.config['foundry-versions'] && this.config['foundry-versions'].length > 0) {
+      const versionDirs = this.config['foundry-versions'];
+      testFiles = testFiles.filter(file => {
+        // Extract version directory from file path
+        const relativePath = file.replace(join(PROJECT_ROOT, 'tests', 'regression'), '');
+        const pathParts = relativePath.split('/').filter(part => part.length > 0);
+        
+        // Check if the first directory matches any of the specified versions
+        if (pathParts.length > 0) {
+          const versionDir = pathParts[0];
+          const isVersionMatch = versionDirs.some(version => 
+            versionDir === version || versionDir.startsWith(version)
+          );
+          
+          if (!isVersionMatch) {
+            this.logger.debug(`Filtering out test from version directory ${versionDir}: ${basename(file)}`);
+          }
+          
+          return isVersionMatch;
+        }
+        
+        // If no version directory structure, include the test
+        return true;
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on --versions flag (${versionDirs.join(', ')})`);
+    }
+    
+    // Step 3: Filter by specific test name if provided via -r flag
+    if (this.selectedRegressionTest) {
+      testFiles = testFiles.filter(file => {
+        const testName = basename(file, '.test.js');
+        const fileName = basename(file);
+        // Match against both test name (without extension) and full filename
+        return testName === this.selectedRegressionTest || 
+               fileName === this.selectedRegressionTest ||
+               fileName === `${this.selectedRegressionTest}.test.js`;
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on -r flag`);
+      
+      // Warn if the selected test was not found
+      if (testFiles.length === 0) {
+        this.logger.warn(`Regression test not found: ${this.selectedRegressionTest}`);
+      }
+    }
+    
+    this.logger.info(`Discovered ${testFiles.length} regression test files`);
+    return testFiles;
+  }
+
+  async discoverUnitTests() {
+    this.logger.essential('🔍 Discovering unit tests...');
+    
+    // Step 1: Discover all test files
+    const testPattern = join(PROJECT_ROOT, 'tests', 'unit', '**', '*.test.js');
+    let testFiles = await glob(testPattern);
+    this.logger.debug(`Found ${testFiles.length} unit test files via glob`);
+    
+    // Step 2: Filter by --versions flag if provided (filter by version directories)
+    if (this.config['foundry-versions'] && this.config['foundry-versions'].length > 0) {
+      const versionDirs = this.config['foundry-versions'];
+      testFiles = testFiles.filter(file => {
+        // Extract version directory from file path
+        const relativePath = file.replace(join(PROJECT_ROOT, 'tests', 'unit'), '');
+        const pathParts = relativePath.split('/').filter(part => part.length > 0);
+        
+        // Check if the first directory matches any of the specified versions
+        if (pathParts.length > 0) {
+          const versionDir = pathParts[0];
+          const isVersionMatch = versionDirs.some(version => 
+            versionDir === version || versionDir.startsWith(version)
+          );
+          
+          if (!isVersionMatch) {
+            this.logger.debug(`Filtering out test from version directory ${versionDir}: ${basename(file)}`);
+          }
+          
+          return isVersionMatch;
+        }
+        
+        // If no version directory structure, include the test
+        return true;
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on --versions flag (${versionDirs.join(', ')})`);
+    }
+    
+    // Step 3: Filter by specific test name if provided via -u flag
+    if (this.selectedUnitTest) {
+      testFiles = testFiles.filter(file => {
+        const testName = basename(file, '.test.js');
+        const fileName = basename(file);
+        // Match against both test name (without extension) and full filename
+        return testName === this.selectedUnitTest || 
+               fileName === this.selectedUnitTest ||
+               fileName === `${this.selectedUnitTest}.test.js`;
+      });
+      this.logger.info(`Filtered to ${testFiles.length} tests based on -u flag`);
+      
+      // Warn if the selected test was not found
+      if (testFiles.length === 0) {
+        this.logger.warn(`Unit test not found: ${this.selectedUnitTest}`);
+      }
+    }
+    
+    this.logger.info(`Discovered ${testFiles.length} unit test files`);
     return testFiles;
   }
 
@@ -379,20 +451,7 @@ class TestOrchestrator {
     // Apply test-specific configuration overrides if available
     const testConfig = { ...this.config };
     const testName = basename(testFile, '.test.js');
-    const testConfigFromFile = this.config['test-configurations']?.[testName];
-    
-    // Priority: testMetadata.configuration > test-configurations > global config
-    if (testConfigFromFile?.overrides) {
-      // Apply overrides from test.config.json
-      if (testConfigFromFile.overrides['foundry-versions']) {
-        testConfig['foundry-versions'] = testConfigFromFile.overrides['foundry-versions'];
-        this.logger.debug(`Applied version override from test config for ${testName}`);
-      }
-      if (testConfigFromFile.overrides['foundry-systems']) {
-        testConfig['foundry-systems'] = testConfigFromFile.overrides['foundry-systems'];
-        this.logger.debug(`Applied system override from test config for ${testName}`);
-      }
-    }
+
     
     if (testMetadata.configuration) {
       // Merge test-specific configuration from metadata (highest priority)
@@ -467,29 +526,280 @@ class TestOrchestrator {
     return testResults;
   }
 
+  async runSingleRegressionTest(testFile, permutations) {
+    this.logger.essential(`🧪 Running regression test: ${testFile}`);
+    
+    // Import the test function and metadata
+    let testFunction;
+    let testMetadata = {};
+    try {
+      const testModule = await import(testFile);
+      testFunction = testModule.default;
+      testMetadata = testModule.testMetadata || {};
+      
+      if (typeof testFunction !== 'function') {
+        throw new Error('Regression test must export a default function');
+      }
+    } catch (error) {
+      this.logger.error(`Failed to load test ${testFile}: ${error.message}`);
+      return [];
+    }
+    
+    // Apply test-specific configuration overrides if available
+    const testConfig = { ...this.config };
+    const testName = basename(testFile, '.test.js');
+    
+    if (testMetadata.configuration) {
+      // Merge test-specific configuration from metadata
+      Object.assign(testConfig, testMetadata.configuration);
+      this.logger.debug(`Applied test-specific configuration from metadata for ${testMetadata.name || testName}`);
+    }
+    
+    const testResults = [];
+    
+    // Run test across all permutations
+    for (const permutation of permutations) {
+      this.logger.progress(`Testing ${permutation.description}...`);
+      
+      let session = null;
+      try {
+        // Create live FoundryVTT session
+        session = await this.bootstrap.createSession(permutation);
+        this.logger.success(`Session created for ${permutation.id}`);
+        
+        // Execute regression test
+        const testResult = await testFunction(session, permutation, this.config);
+        
+        testResults.push({
+          testFile,
+          permutation,
+          success: testResult.success,
+          result: testResult,
+          timestamp: Date.now()
+        });
+        
+        if (testResult.success) {
+          this.logger.success(`${permutation.id}: PASSED`);
+        } else {
+          this.logger.error(`${permutation.id}: FAILED - ${testResult.message}`);
+        }
+        
+      } catch (error) {
+        this.logger.error(`  ❌ ${permutation.id}: ERROR - ${error.message}`);
+        
+        testResults.push({
+          testFile,
+          permutation,
+          success: false,
+          error: error.message,
+          timestamp: Date.now()
+        });
+        
+      } finally {
+        // Always cleanup session
+        if (session) {
+          try {
+            await this.bootstrap.cleanupSession(session);
+            this.logger.debug(`Session cleaned up for ${permutation.id}`);
+          } catch (error) {
+            this.logger.warn(`  ⚠️ Session cleanup failed for ${permutation.id}: ${error.message}`);
+          }
+        }
+      }
+    }
+    
+    // Cleanup Docker images per permutation to avoid image accumulation
+    this.logger.essential(`🧹 Cleaning up Docker images for ${testFile} (per permutation)...`);
+    for (const permutation of permutations) {
+      try {
+        await this.bootstrap.cleanupImages([permutation]);
+        this.logger.success(`Docker image cleaned up for ${permutation.id}`);
+      } catch (error) {
+        this.logger.warn(`⚠️ Docker image cleanup failed for ${permutation.id}: ${error.message}`);
+      }
+    }
+    
+    return testResults;
+  }
+
+  async runSingleUnitTest(testFile, permutations) {
+    this.logger.essential(`🧪 Running unit test: ${testFile}`);
+    
+    // Import the test function and metadata
+    let testFunction;
+    let testMetadata = {};
+    try {
+      const testModule = await import(testFile);
+      testFunction = testModule.default;
+      testMetadata = testModule.testMetadata || {};
+      
+      if (typeof testFunction !== 'function') {
+        throw new Error('Unit test must export a default function');
+      }
+    } catch (error) {
+      this.logger.error(`Failed to load test ${testFile}: ${error.message}`);
+      return [];
+    }
+    
+    // Apply test-specific configuration overrides if available
+    const testConfig = { ...this.config };
+    const testName = basename(testFile, '.test.js');
+    
+    if (testMetadata.configuration) {
+      // Merge test-specific configuration from metadata
+      Object.assign(testConfig, testMetadata.configuration);
+      this.logger.debug(`Applied test-specific configuration from metadata for ${testMetadata.name || testName}`);
+    }
+    
+    const testResults = [];
+    
+    // Run test across all permutations
+    for (const permutation of permutations) {
+      this.logger.progress(`Testing ${permutation.description}...`);
+      
+      let session = null;
+      try {
+        // Create live FoundryVTT session
+        session = await this.bootstrap.createSession(permutation);
+        this.logger.success(`Session created for ${permutation.id}`);
+        
+        // Execute unit test
+        const testResult = await testFunction(session, permutation, this.config);
+        
+        testResults.push({
+          testFile,
+          permutation,
+          success: testResult.success,
+          result: testResult,
+          timestamp: Date.now()
+        });
+        
+        if (testResult.success) {
+          this.logger.success(`${permutation.id}: PASSED`);
+        } else {
+          this.logger.error(`${permutation.id}: FAILED - ${testResult.message}`);
+        }
+        
+      } catch (error) {
+        this.logger.error(`  ❌ ${permutation.id}: ERROR - ${error.message}`);
+        
+        testResults.push({
+          testFile,
+          permutation,
+          success: false,
+          error: error.message,
+          timestamp: Date.now()
+        });
+        
+      } finally {
+        // Always cleanup session
+        if (session) {
+          try {
+            await this.bootstrap.cleanupSession(session);
+            this.logger.debug(`Session cleaned up for ${permutation.id}`);
+          } catch (error) {
+            this.logger.warn(`  ⚠️ Session cleanup failed for ${permutation.id}: ${error.message}`);
+          }
+        }
+      }
+    }
+    
+    // Cleanup Docker images per permutation to avoid image accumulation
+    this.logger.essential(`🧹 Cleaning up Docker images for ${testFile} (per permutation)...`);
+    for (const permutation of permutations) {
+      try {
+        await this.bootstrap.cleanupImages([permutation]);
+        this.logger.success(`Docker image cleaned up for ${permutation.id}`);
+      } catch (error) {
+        this.logger.warn(`⚠️ Docker image cleanup failed for ${permutation.id}: ${error.message}`);
+      }
+    }
+    
+    return testResults;
+  }
+
   async runAllTests() {
-    this.logger.essential('🎯 Running all integration tests...');
+    this.logger.essential('🎯 Running tests...');
     
     const permutations = this.generatePermutations();
-    const testFiles = await this.discoverIntegrationTests();
+    let allResults = [];
     
-    if (testFiles.length === 0) {
-      this.logger.warn('No integration tests found');
-      return;
+    // Determine which test types to run based on command line options
+    const runIntegration = !this.selectedRegressionTest && !this.selectedUnitTest;
+    const runRegression = !this.selectedIntegrationTest && !this.selectedUnitTest;
+    const runUnit = !this.selectedIntegrationTest && !this.selectedRegressionTest;
+    
+    // If specific test types are selected, only run those
+    if (this.selectedIntegrationTest) {
+      this.logger.info('🎯 Running specific integration test...');
+      const testFiles = await this.discoverIntegrationTests();
+      if (testFiles.length > 0) {
+        for (const testFile of testFiles) {
+          const testResults = await this.runSingleIntegrationTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
+    } else if (this.selectedRegressionTest) {
+      this.logger.info('🎯 Running specific regression test...');
+      const testFiles = await this.discoverRegressionTests();
+      if (testFiles.length > 0) {
+        for (const testFile of testFiles) {
+          const testResults = await this.runSingleRegressionTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
+    } else if (this.selectedUnitTest) {
+      this.logger.info('🎯 Running specific unit test...');
+      const testFiles = await this.discoverUnitTests();
+      if (testFiles.length > 0) {
+        for (const testFile of testFiles) {
+          const testResults = await this.runSingleUnitTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
+    } else {
+      // Run all test types
+      this.logger.info('🎯 Running all test types...');
+      
+      // Integration tests
+      if (runIntegration) {
+        this.logger.info('🧪 Running integration tests...');
+        const integrationTests = await this.discoverIntegrationTests();
+        for (const testFile of integrationTests) {
+          const testResults = await this.runSingleIntegrationTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
+      
+      // Regression tests
+      if (runRegression) {
+        this.logger.info('🧪 Running regression tests...');
+        const regressionTests = await this.discoverRegressionTests();
+        for (const testFile of regressionTests) {
+          const testResults = await this.runSingleRegressionTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
+      
+      // Unit tests
+      if (runUnit) {
+        this.logger.info('🧪 Running unit tests...');
+        const unitTests = await this.discoverUnitTests();
+        for (const testFile of unitTests) {
+          const testResults = await this.runSingleUnitTest(testFile, permutations);
+          allResults.push(...testResults);
+        }
+      }
     }
+    
+    this.results = allResults;
     
     try {
-      // Run each test file across all permutations
-      for (const testFile of testFiles) {
-        const testResults = await this.runSingleIntegrationTest(testFile, permutations);
-        this.results.push(...testResults);
-      }
-    } finally {
       // Always cleanup containers and images, even if tests failed
       await this.cleanup();
+    } finally {
+      this.generateReport();
     }
-    
-    this.generateReport();
   }
 
   async runManualSession() {
@@ -813,14 +1123,30 @@ function parseArgs() {
       }
     } else if (arg.startsWith('--systems=')) {
       options.systems = arg.split('=')[1].split(',').map(s => s.trim());
-    } else if (arg === '--tests' || arg === '-t') {
+    } else if (arg === '--integration-test' || arg === '-i') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
-        options.tests = nextArg.split(',').map(t => t.trim());
+        options['integration-test'] = nextArg.trim();
         i++; // Skip next argument as it's the value
       }
-    } else if (arg.startsWith('--tests=')) {
-      options.tests = arg.split('=')[1].split(',').map(t => t.trim());
+    } else if (arg.startsWith('--integration-test=')) {
+      options['integration-test'] = arg.split('=')[1].trim();
+    } else if (arg === '--regression-test' || arg === '-r') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options['regression-test'] = nextArg.trim();
+        i++; // Skip next argument as it's the value
+      }
+    } else if (arg.startsWith('--regression-test=')) {
+      options['regression-test'] = arg.split('=')[1].trim();
+    } else if (arg === '--unit-test' || arg === '-u') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options['unit-test'] = nextArg.trim();
+        i++; // Skip next argument as it's the value
+      }
+    } else if (arg.startsWith('--unit-test=')) {
+      options['unit-test'] = arg.split('=')[1].trim();
     }
   }
   
@@ -841,7 +1167,9 @@ Options:
   --list-steps, -l        List available bootstrap steps for selected version
   --versions, -v <list>   Override FoundryVTT versions (comma-separated)
   --systems, -s <list>    Override game systems (comma-separated)
-  --tests, -t <list>      Run specific tests only (comma-separated test names)
+  --integration-test, -i <name>  Run a specific integration test by name
+  --regression-test, -r <name>  Run a specific regression test by name
+  --unit-test, -u <name>  Run a specific unit test by name
   
 Description:
   This orchestrator runs integration tests against live FoundryVTT sessions.
@@ -867,8 +1195,8 @@ Examples:
   node run-tests.js --systems dnd5e,pf2e,swade  # Test multiple systems
   node run-tests.js -v v13 -s dnd5e              # Test specific combination
   node run-tests.js -m -v v13 -s dnd5e           # Manual mode with specific version/system
-  node run-tests.js --tests simulacrum-init      # Run specific test
-  node run-tests.js -t test1,test2               # Run multiple specific tests
+  node run-tests.js --integration-test simulacrum-init      # Run specific integration test
+  node run-tests.js -i test1,test2               # Run multiple specific integration tests
   DEBUG=true node run-tests.js                   # Environment variable debug mode
 `);
 }
