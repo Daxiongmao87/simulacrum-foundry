@@ -230,7 +230,7 @@ export class AgenticLoopController {
 
         // Get AI response with accumulated context
         const chatPrompt = await context.toChatPrompt(); // Ensure to await if toChatPrompt is async
-        const response = await this.aiService.sendMessage(
+        const response = await this.aiService.sendJsonMessage(
           chatPrompt,
           this.abortController.signal
         );

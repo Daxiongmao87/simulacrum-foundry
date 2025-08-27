@@ -34,25 +34,33 @@ This document outlines the comprehensive testing strategy for the Simulacrum Fou
   - `validateSettings()` input validation
   - `parseUserInput()` string processing
 
-#### **Integration Tests**
-- **Scope**: Multiple components working together
-- **Dependencies**: Real external systems (FoundryVTT, Docker)
-- **Execution**: Medium (seconds to minutes)
+#### **Integration Tests (Level 1: End-to-End User Flow)**
+- **Scope**: Complete user workflows through the actual UI
+- **Dependencies**: Full system stack (FoundryVTT, Docker, real browser)
+- **Execution**: Medium to Slow (2-10 minutes)
 - **Framework**: Puppeteer + Docker (via custom test runner)
+- **Philosophy**: Test what users actually do, not internal APIs
 - **Examples**:
-  - Module initialization in FoundryVTT
-  - Database operations with real data
-  - API endpoint testing
+  - User opens Simulacrum chat interface and sends messages
+  - User creates documents through AI assistance workflow
+  - User configures settings through FoundryVTT UI
+  - Error recovery and retry scenarios as experienced by users
 
-#### **End-to-End Tests**
-- **Scope**: Complete user workflows
-- **Dependencies**: Full system stack
-- **Execution**: Slow (minutes)
-- **Framework**: Puppeteer + Docker
+#### **Component Integration Tests (Level 2: API Integration)**
+- **Scope**: Multiple components working together via APIs
+- **Dependencies**: Live FoundryVTT system with real components
+- **Execution**: Fast to Medium (seconds to minutes)
+- **Framework**: Puppeteer page.evaluate() for direct API access
+- **Philosophy**: Test data flow and component interactions
 - **Examples**:
-  - Complete user registration flow
-  - Full combat sequence
-  - Module configuration workflow
+  - AI service → parser → agentic loop integration
+  - Tool registry → tool execution → result handling
+  - Context management → history compaction → token tracking
+  - Performance metrics and edge case validation
+
+#### **End-to-End Tests (Legacy Term - Now Level 1)**
+- **Note**: This term now refers to Level 1 Integration Tests above
+- **Reason**: True integration tests should be end-to-end by definition
 
 ### **Non-Functional Tests (Technical/Performance)**
 

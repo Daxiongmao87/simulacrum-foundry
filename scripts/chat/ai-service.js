@@ -80,8 +80,19 @@ export class SimulacrumAIService {
 
   /**
    * Send message to AI service with streaming response
+   * @param {string} userMessage - The message to send
+   * @param {Function} onChunk - Callback for streaming chunks (optional)
+   * @param {Function} onComplete - Callback for completion (optional)
+   * @param {AbortSignal} abortSignal - Signal to cancel the request (optional)
+   * @param {boolean} forceJsonMode - Whether to force JSON response format (optional)
    */
-  async sendMessage(userMessage, onChunk, onComplete, abortSignal) {
+  async sendMessage(
+    userMessage,
+    onChunk,
+    onComplete,
+    abortSignal,
+    forceJsonMode = false
+  ) {
     if (abortSignal?.aborted) {
       return;
     }
@@ -97,9 +108,13 @@ export class SimulacrumAIService {
       const isOllama =
         baseEndpoint.includes('localhost') ||
         baseEndpoint.includes('127.0.0.1') ||
-        baseEndpoint.includes('ollama');
+        baseEndpoint.includes('ollama') ||
+        baseEndpoint.includes('11434'); // Add explicit check for Ollama port
+
+      console.log('🔍 Simulacrum | Base endpoint:', baseEndpoint);
+      console.log('🔍 Simulacrum | Is Ollama detected:', isOllama);
       const apiEndpoint = isOllama
-        ? `${baseEndpoint}/api/chat`
+        ? `${baseEndpoint}/chat/completions`
         : `${baseEndpoint}/chat/completions`;
       const modelName = game.settings.get('simulacrum', 'modelName');
       const systemPrompt = game.settings.get('simulacrum', 'systemPrompt');
@@ -107,13 +122,16 @@ export class SimulacrumAIService {
       const apiKey = game.settings.get('simulacrum', 'apiKey');
 
       // Build messages array with system prompt
+      const defaultPrompt = await this.getDefaultSystemPrompt();
+      const userAdditions =
+        typeof systemPrompt === 'string' && systemPrompt.length > 0
+          ? `\n\nADDITIONAL INSTRUCTIONS:\n${systemPrompt}`
+          : '';
+
       const messages = [
         {
           role: 'system',
-          content:
-            typeof systemPrompt === 'string' && systemPrompt.length > 0
-              ? systemPrompt
-              : await this.getDefaultSystemPrompt(),
+          content: defaultPrompt + userAdditions,
         },
         ...this.getContextualHistory(contextLength),
         {
@@ -136,7 +154,15 @@ export class SimulacrumAIService {
             model: modelName,
             messages: messages,
             temperature: 0.7,
+            ...(forceJsonMode
+              ? { response_format: { type: 'json_object' } }
+              : {}),
           };
+
+      console.log(
+        '🔍 Simulacrum | Request body:',
+        JSON.stringify(requestBody, null, 2)
+      );
 
       // Make request
       const response = await fetch(apiEndpoint, {
@@ -173,13 +199,33 @@ export class SimulacrumAIService {
       }
 
       if (isOllama) {
-        await this.processStreamingResponse(
-          response,
-          onChunk,
-          onComplete,
-          abortSignal
-        );
-        return;
+        // For Ollama, always handle as streaming since it ignores stream: false
+        if (forceJsonMode) {
+          // For JSON mode, process streaming response and return final content
+          let finalContent = '';
+          let finalFunctionCalls = [];
+
+          await this.processStreamingResponse(
+            response,
+            onChunk,
+            (content, functionCalls) => {
+              finalContent = content;
+              finalFunctionCalls = functionCalls || [];
+            },
+            abortSignal
+          );
+
+          return finalContent;
+        } else {
+          // For regular mode, process streaming response
+          await this.processStreamingResponse(
+            response,
+            onChunk,
+            onComplete,
+            abortSignal
+          );
+          return;
+        }
       }
 
       const data = await response.json();
@@ -187,7 +233,10 @@ export class SimulacrumAIService {
       const aiResponse = data.choices?.[0]?.message?.content;
 
       if (!aiResponse) {
-        console.warn('⚠️ Simulacrum | No AI response content found in:', data);
+        console.warn(
+          '⚠️ Simulacrum | No AI response content found in:',
+          JSON.stringify(data, null, 2)
+        );
       }
 
       if (onComplete) {
@@ -208,6 +257,16 @@ export class SimulacrumAIService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Send a message specifically for JSON responses (used by agentic loop)
+   * @param {string} userMessage - The message to send
+   * @param {AbortSignal} abortSignal - Signal to cancel the request
+   * @returns {Promise<string>} The AI's JSON response as a string
+   */
+  async sendJsonMessage(userMessage, abortSignal) {
+    return this.sendMessage(userMessage, null, null, abortSignal, true);
   }
 
   /**
@@ -245,6 +304,8 @@ export class SimulacrumAIService {
 
             try {
               const chunk = JSON.parse(data);
+              // Debug logging disabled - was causing console spam
+              // console.log('🔍 Simulacrum | Streaming chunk:', JSON.stringify(chunk, null, 2));
               const delta = chunk.choices?.[0]?.delta;
 
               if (delta?.content) {
@@ -307,7 +368,17 @@ export class SimulacrumAIService {
         });
       }
 
-      onComplete?.(currentMessage, functionCalls);
+      // For JSON mode, we need to pass the content and function calls separately
+      console.log(
+        '🔍 Simulacrum | Final streaming content:',
+        currentMessage.content
+      );
+      console.log('🔍 Simulacrum | Final function calls:', functionCalls);
+      if (onComplete) {
+        if (typeof onComplete === 'function') {
+          onComplete(currentMessage.content, functionCalls);
+        }
+      }
     } catch (error) {
       console.error('Streaming response error:', error);
       throw error;
@@ -384,6 +455,85 @@ export class SimulacrumAIService {
    * Default system prompt for Simulacrum - enforces JSON response format for agentic behavior
    */
   async getDefaultSystemPrompt() {
+    // Load system prompt from localization array using FoundryVTT's pattern
+    let promptTemplate;
+    try {
+      // Access the array by reconstructing it from individual indexed elements
+      // First, try to get the first element to see if the array exists
+      const firstLine = game.i18n.localize('SIMULACRUM.SYSTEM_PROMPT_LINES.0');
+
+      if (firstLine !== 'SIMULACRUM.SYSTEM_PROMPT_LINES.0') {
+        // Array exists, reconstruct it by accessing indexed elements
+        const lines = [];
+        let index = 0;
+        let currentLine;
+
+        // Keep reading array elements until we can't find more
+        while (true) {
+          currentLine = game.i18n.localize(
+            `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`
+          );
+          if (currentLine === `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`) {
+            // This index doesn't exist, we've reached the end
+            break;
+          }
+          lines.push(currentLine);
+          index++;
+        }
+
+        if (lines.length > 0) {
+          promptTemplate = lines.join('\n');
+        } else {
+          throw new Error('System prompt array is empty');
+        }
+      } else {
+        throw new Error('System prompt not found in localization');
+      }
+    } catch (error) {
+      console.error(
+        'Simulacrum | Failed to load system prompt from localization:',
+        error
+      );
+      console.warn('Simulacrum | Using fallback system prompt');
+
+      // Comprehensive fallback prompt with explicit JSON-only instructions
+      promptTemplate = `You are Simulacrum, an AI campaign assistant for FoundryVTT designed to output JSON. 
+
+CRITICAL: You MUST respond with raw JSON only. Never use markdown code blocks or any formatting.
+
+Required JSON format:
+{
+    "message": "Your response to the user",
+    "tool_calls": [
+        {
+            "tool_name": "exact_tool_name",
+            "parameters": {"param1": "value1"},
+            "reasoning": "Why you're using this specific tool"
+        }
+    ],
+    "continuation": {
+        "in_progress": true/false,
+        "gerund": "Single descriptive word ending in -ing or null"
+    }
+}
+
+MANDATORY RULES:
+- Respond with raw JSON only - NO markdown, NO code blocks, NO formatting
+- If you provide tool_calls, you MUST set in_progress: true
+- Only set in_progress: false when NO tools are needed and task is complete
+- tool_calls can be empty array [] if no tools needed
+- reasoning is MANDATORY for each tool call
+- gerund is MANDATORY if in_progress=true, null if in_progress=false
+
+AVAILABLE TOOLS:
+{TOOL_LIST}
+
+CONTEXT:
+Current world: {WORLD_TITLE}
+System: {SYSTEM_TITLE} v{SYSTEM_VERSION}`;
+    }
+
+    // Generate dynamic tool list
     const toolSchemas = await this.generateToolSchemas();
     const toolList = toolSchemas
       .map((schema) => {
@@ -400,79 +550,12 @@ export class SimulacrumAIService {
       })
       .join('\n');
 
-    return `You are Simulacrum, an AI campaign assistant for FoundryVTT. You MUST always respond in this exact JSON format:
-
-{
-    "message": "Your response to the user",
-    "tool_calls": [
-        {
-            "tool_name": "exact_tool_name",
-            "parameters": {"param1": "value1"},
-            "reasoning": "Why you're using this specific tool"
-        }
-    ],
-    "continuation": {
-        "in_progress": true/false,
-        "gerund": "Single descriptive word ending in -ing"
-    }
-}
-
-MANDATORY RULES:
-- You MUST respond in valid JSON format only
-- If you provide tool_calls, you MUST set in_progress: true (tools need to execute first)
-- Only set in_progress: false when NO tools are needed and task is complete
-- tool_calls can be empty array [] if no tools needed
-- reasoning is MANDATORY for each tool call - explain why you chose this tool
-- in_progress: true means you will continue working, false means task complete
-- gerund is MANDATORY if in_progress=true, null if in_progress=false
-- Use gerunds: Creating, Analyzing, Configuring, Updating, Searching, Processing, Validating, Optimizing, Placing, Generating, Calculating, Reviewing, Organizing, Monitoring, Executing, Investigating, Planning, Building, Testing, Implementing
-
-AVAILABLE TOOLS:
-${toolList || 'No tools currently available'}
-
-EXAMPLES:
-
-Good response (with tool):
-{
-    "message": "I'll create a new NPC actor for your tavern scene.",
-    "tool_calls": [
-        {
-            "tool_name": "create_document",
-            "parameters": {"documentType": "Actor", "data": {"name": "Innkeeper Bob", "type": "npc"}},
-            "reasoning": "Creating an NPC actor to populate the tavern scene as requested"
-        }
-    ],
-    "continuation": {
-        "in_progress": true,
-        "gerund": "Creating"
-    }
-}
-
-Good response (no tools):
-{
-    "message": "The tavern scene looks great! Your NPC has been successfully added.",
-    "tool_calls": [],
-    "continuation": {
-        "in_progress": false,
-        "gerund": null
-    }
-}
-
-ERROR RECOVERY: If you cannot provide valid JSON, respond with:
-{
-    "message": "I apologize, I encountered a formatting error. Could you please rephrase your request?",
-    "tool_calls": [],
-    "continuation": {
-        "in_progress": false,
-        "gerund": null
-    }
-}
-
-CONTEXT:
-Current world: ${game.world?.title || 'Unknown'}
-System: ${game.system?.title || 'Unknown'} v${game.system?.version || '?'} 
-
-Remember: You MUST respond in JSON format. No exceptions.`;
+    // Replace template placeholders
+    return promptTemplate
+      .replace('{TOOL_LIST}', toolList || 'No tools currently available')
+      .replace('{WORLD_TITLE}', game.world?.title || 'Unknown')
+      .replace('{SYSTEM_TITLE}', game.system?.title || 'Unknown')
+      .replace('{SYSTEM_VERSION}', game.system?.version || '?');
   }
 
   /**

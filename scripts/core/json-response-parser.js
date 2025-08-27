@@ -1,6 +1,6 @@
 /**
  * @class AgentResponseParser
- * @description Parses and validates JSON responses from the AI agent, with unlimited retry for malformed responses.
+ * @description Parses and validates JSON responses from the AI agent, with retry limit to prevent infinite loops.
  */
 export class AgentResponseParser {
   /**
@@ -17,7 +17,10 @@ export class AgentResponseParser {
    * @returns {Promise<object>} A promise that resolves with the parsed and validated JSON object.
    */
   async parseAgentResponse(rawResponse) {
-    while (true) {
+    const MAX_RETRIES = 10; // Match agentic loop controller limit to prevent infinite loops
+    let retryCount = 0;
+
+    while (retryCount < MAX_RETRIES) {
       try {
         const parsed = JSON.parse(rawResponse);
 
@@ -30,9 +33,30 @@ export class AgentResponseParser {
 
         return parsed;
       } catch (error) {
-        console.warn('Simulacrum | Parsing error, retrying:', error.message);
-        // Request a new response from the AI service
-        rawResponse = await this.aiService.sendMessage(
+        retryCount++;
+        console.warn(
+          `Simulacrum | Parsing error (attempt ${retryCount}/${MAX_RETRIES}), retrying:`,
+          error.message
+        );
+        console.warn('Simulacrum | Problematic JSON:', rawResponse);
+
+        if (retryCount >= MAX_RETRIES) {
+          console.error(
+            `Simulacrum | Failed to parse JSON after ${MAX_RETRIES} attempts. Returning fallback response.`
+          );
+          // Return a fallback response to prevent system failure
+          return {
+            message: `I encountered persistent JSON formatting errors after ${MAX_RETRIES} attempts. Please try rephrasing your request.`,
+            tool_calls: [],
+            continuation: {
+              in_progress: false,
+              gerund: null,
+            },
+          };
+        }
+
+        // Request a new response from the AI service using JSON mode
+        rawResponse = await this.aiService.sendJsonMessage(
           'Please respond in the required JSON format.'
         );
       }

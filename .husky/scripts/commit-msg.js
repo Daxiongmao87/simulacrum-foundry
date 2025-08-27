@@ -203,6 +203,108 @@ function hasFeatureImplementationChanges(changedFiles) {
 }
 
 /**
+ * Validate integration test patterns and naming conventions
+ */
+function validateIntegrationTestPatterns(changedFiles) {
+  const integrationTestFiles = changedFiles.filter(file => 
+    file.startsWith('tests/integration/') && file.endsWith('.test.js')
+  );
+  
+  const warnings = [];
+  const errors = [];
+  
+  for (const testFile of integrationTestFiles) {
+    const fileName = testFile.split('/').pop();
+    
+    // Check naming conventions
+    if (!fileName.includes('-user-workflow.test.js') && 
+        !fileName.includes('-api-integration.test.js')) {
+      warnings.push(`${testFile}: Consider using naming convention '*-user-workflow.test.js' (Level 1) or '*-api-integration.test.js' (Level 2)`);
+    }
+    
+    // Check for proper test type indicators
+    if (fileName.includes('-user-workflow.test.js')) {
+      console.log(`✅ Level 1 User Workflow Test detected: ${fileName}`);
+    } else if (fileName.includes('-api-integration.test.js')) {
+      console.log(`📋 Level 2 API Integration Test detected: ${fileName}`);
+    } else {
+      warnings.push(`${testFile}: Unclear test type - recommend '*-user-workflow.test.js' or '*-api-integration.test.js'`);
+    }
+  }
+  
+  return { warnings, errors };
+}
+
+/**
+ * Read test file content to validate patterns (if file exists in staged changes)
+ */
+function validateIntegrationTestContent(changedFiles) {
+  const integrationTestFiles = changedFiles.filter(file => 
+    file.startsWith('tests/integration/') && file.endsWith('.test.js')
+  );
+  
+  const warnings = [];
+  const errors = [];
+  
+  for (const testFile of integrationTestFiles) {
+    try {
+      // Get staged content of the file
+      const content = execSync(`git show :${testFile}`, { encoding: 'utf-8' });
+      
+      // Check for user workflow indicators
+      const hasUserWorkflowPattern = content.includes('page.click(') || 
+                                    content.includes('page.type(') || 
+                                    content.includes('page.waitForSelector(');
+      
+      const hasDirectAPIPattern = content.includes('page.evaluate(') && 
+                                 content.includes('game.simulacrum.');
+      
+      const hasTestMetadata = content.includes('export const testMetadata');
+      const hasUserWorkflowFlag = content.includes('userWorkflow: true') || 
+                                 content.includes('userWorkflow: false');
+      
+      // Validate Level 1 tests (user workflow)
+      if (testFile.includes('-user-workflow.test.js')) {
+        if (!hasUserWorkflowPattern) {
+          errors.push(`${testFile}: Level 1 user workflow test should include UI interactions (page.click, page.type, etc.)`);
+        }
+        
+        if (hasDirectAPIPattern && !hasUserWorkflowPattern) {
+          errors.push(`${testFile}: Level 1 test should focus on user interactions, not direct API calls`);
+        }
+      }
+      
+      // Validate Level 2 tests (API integration)
+      if (testFile.includes('-api-integration.test.js')) {
+        if (hasUserWorkflowPattern && !hasDirectAPIPattern) {
+          warnings.push(`${testFile}: Level 2 API test has UI interactions - consider if this should be Level 1 user workflow test`);
+        }
+      }
+      
+      // Check for required metadata
+      if (!hasTestMetadata) {
+        warnings.push(`${testFile}: Missing 'export const testMetadata' - see tests/docs/integration-testing-patterns.md`);
+      }
+      
+      if (hasTestMetadata && !hasUserWorkflowFlag) {
+        warnings.push(`${testFile}: Missing 'userWorkflow: true/false' in testMetadata`);
+      }
+      
+      // Check for anti-patterns
+      if (content.includes('aiService.sendMessage(') && hasUserWorkflowPattern) {
+        warnings.push(`${testFile}: Mixing UI interactions with direct API calls - consider separating into Level 1 and Level 2 tests`);
+      }
+      
+    } catch (error) {
+      // File might be new or have other issues - skip content validation
+      console.log(`⚠️  Could not validate content of ${testFile} (likely new file)`);
+    }
+  }
+  
+  return { warnings, errors };
+}
+
+/**
  * Main validation logic
  */
 function validateCommitMessage() {
@@ -337,7 +439,45 @@ function validateCommitMessage() {
     console.log('⚠️ No test requirements found in GitHub issue content');
   }
   
-  // 6. Check for feature issue requirements
+  // 6. Validate integration test patterns
+  const hasTestChanges = hasIntegrationTestChanges(changedFiles);
+  if (hasTestChanges) {
+    console.log('🧪 Validating integration test patterns...');
+    
+    // Validate naming conventions
+    const patternValidation = validateIntegrationTestPatterns(changedFiles);
+    
+    // Validate test content
+    const contentValidation = validateIntegrationTestContent(changedFiles);
+    
+    // Display warnings
+    const allWarnings = [...patternValidation.warnings, ...contentValidation.warnings];
+    if (allWarnings.length > 0) {
+      console.log('\n⚠️  Integration Test Warnings:');
+      allWarnings.forEach(warning => console.log(`   ${warning}`));
+      console.log('\n💡 See tests/docs/integration-testing-patterns.md for best practices');
+    }
+    
+    // Check for errors that block commit
+    const allErrors = [...patternValidation.errors, ...contentValidation.errors];
+    if (allErrors.length > 0) {
+      console.error('\n❌ Integration Test Validation Errors:');
+      allErrors.forEach(error => console.error(`   ${error}`));
+      console.error('\n📚 Guidelines:');
+      console.error('   • Level 1 (*-user-workflow.test.js): Test complete user interactions through UI');
+      console.error('   • Level 2 (*-api-integration.test.js): Test component interactions via APIs');
+      console.error('   • Include testMetadata with userWorkflow: true/false');
+      console.error('   • See tests/docs/integration-testing-patterns.md');
+      console.error('');
+      process.exit(1);
+    }
+    
+    if (allWarnings.length === 0 && allErrors.length === 0) {
+      console.log('✅ Integration test patterns validated');
+    }
+  }
+
+  // 7. Check for feature issue requirements
   if (isFeatureIssue(issue)) {
     console.log('🚀 Detected feature issue - checking integration test requirements...');
     
@@ -347,6 +487,7 @@ function validateCommitMessage() {
     if (hasFeatureChanges && !hasTestChanges) {
       console.error('❌ Feature issue with implementation changes requires integration test updates');
       console.error('💡 Add or modify tests in tests/integration/ directory');
+      console.error('📚 Prefer Level 1 user workflow tests (*-user-workflow.test.js) for new features');
       console.error(`📋 Issue labels: ${issue.labels.map(l => l.name).join(', ')}`);
       console.error('🔧 Changed implementation files:');
       changedFiles

@@ -164,40 +164,146 @@ tests/
 
 ## Writing Integration Tests
 
-### Test Structure
+### Integration Test Philosophy
 
-Integration tests are simple functions that receive a live FoundryVTT session:
+Integration tests must simulate **real user workflows**, not internal API calls. They should test the complete user experience from UI interaction to final outcome.
+
+### Three Levels of Testing
+
+**🎯 Level 1: End-to-End User Flow Tests (TRUE Integration)**
+- Simulate complete user interactions through the UI
+- Test how users actually interact with the system
+- Validate UI states, loading indicators, error handling
+- **Use this for**: Major user workflows, UI validation, complete feature testing
+
+**🔧 Level 2: Component Integration Tests**
+- Test component interactions via direct API calls
+- Focus on data flow between components
+- More controlled environment for specific scenarios
+- **Use this for**: API validation, performance metrics, edge case testing
+
+**⚙️ Level 3: Unit Tests**
+- Test individual components in isolation with mocks
+- **Use this for**: Component logic, error handling, data validation
+
+### True Integration Test Structure (Level 1 - PREFERRED)
 
 ```javascript
-// tests/integration/my-test.test.js
+// tests/integration/simulacrum-user-workflow.test.js
 
 /**
- * My Integration Test
+ * Simulacrum User Workflow Integration Test
+ * Tests complete user interaction flow through the Simulacrum interface
  * @param {Object} session - Live FoundryVTT session from bootstrap
  * @param {Object} permutation - Test permutation (version, system)  
  * @param {Object} config - Test configuration
  * @returns {Object} Test result with success status and details
  */
-export default async function myIntegrationTest(session, permutation, config) {
+export default async function simulacrumUserWorkflowTest(session, permutation, config) {
   const { page, gameState } = session;
   
   try {
-    // Test your functionality using the live FoundryVTT session
-    const result = await page.evaluate(() => {
-      // Interact with FoundryVTT: game.*, ui.*, etc.
-      return { success: true, data: "test results" };
+    // 1. SIMULATE USER OPENING SIMULACRUM (like a real user would)
+    await page.click('[data-tool="simulacrum"]'); // Click scene control button
+    await page.waitForSelector('.simulacrum-chat-modal', { timeout: 5000 });
+    
+    // 2. SIMULATE USER TYPING A MESSAGE
+    const testMessage = 'Create a character named Test Warrior';
+    await page.type('.simulacrum-chat-input', testMessage);
+    await page.click('.simulacrum-send-button');
+    
+    // 3. VERIFY LOADING STATES (real user experience)
+    await page.waitForSelector('.simulacrum-thinking-indicator', { timeout: 2000 });
+    
+    // 4. WAIT FOR RESPONSE (with realistic timeout)
+    await page.waitForSelector('.simulacrum-chat-message.ai-response', { timeout: 30000 });
+    
+    // 5. VALIDATE USER-VISIBLE RESULTS
+    const response = await page.$eval('.simulacrum-chat-message.ai-response', 
+      el => el.textContent
+    );
+    
+    const isValidResponse = response.length > 10 && !response.includes('Error');
+    
+    // 6. TEST ERROR HANDLING (user perspective)
+    if (!isValidResponse) {
+      const errorElement = await page.$('.simulacrum-error-message');
+      if (errorElement) {
+        const errorText = await page.$eval('.simulacrum-error-message', el => el.textContent);
+        return {
+          success: false,
+          permutation,
+          message: `User-visible error: ${errorText}`
+        };
+      }
+    }
+    
+    // 7. CAPTURE USER EXPERIENCE ARTIFACTS
+    const screenshot = await page.screenshot({ 
+      path: `tests/artifacts/user-workflow-${permutation.id}-${Date.now()}.png`,
+      fullPage: true
     });
     
-    // Generate test artifacts
-    const screenshot = await page.screenshot({ 
-      path: `test-results/my-test-${permutation.id}-${Date.now()}.png` 
+    return {
+      success: isValidResponse,
+      permutation,
+      message: "Complete user workflow test passed",
+      artifacts: { screenshot },
+      metrics: {
+        userExperience: 'positive',
+        responseReceived: true,
+        uiStatesWorked: true
+      }
+    };
+    
+  } catch (error) {
+    // Even error handling should consider user experience
+    const failureScreenshot = await page.screenshot({ 
+      path: `tests/artifacts/user-workflow-FAILED-${permutation.id}-${Date.now()}.png`,
+      fullPage: true
+    });
+    
+    return {
+      success: false,
+      permutation,
+      message: `User workflow failed: ${error.message}`,
+      artifacts: { failureScreenshot }
+    };
+  }
+}
+```
+
+### Component Integration Test Structure (Level 2)
+
+```javascript
+// tests/integration/simulacrum-api-integration.test.js
+
+/**
+ * Simulacrum API Integration Test
+ * Tests component interactions and data flow (NOT user workflow)
+ * @param {Object} session - Live FoundryVTT session from bootstrap
+ * @param {Object} permutation - Test permutation (version, system)  
+ * @param {Object} config - Test configuration
+ * @returns {Object} Test result with success status and details
+ */
+export default async function simulacrumApiIntegrationTest(session, permutation, config) {
+  const { page, gameState } = session;
+  
+  try {
+    // Test component interactions via page.evaluate (direct API access)
+    const result = await page.evaluate(() => {
+      // Direct access to game objects (NOT how users interact)
+      const aiService = game.simulacrum.aiService;
+      const agenticLoop = game.simulacrum.agenticLoopController;
+      
+      // Test API interactions directly
+      return { success: true, data: "component integration results" };
     });
     
     return {
       success: result.success,
       permutation,
-      message: "Test completed successfully",
-      artifacts: { screenshot }
+      message: "API integration test completed"
     };
     
   } catch (error) {
@@ -208,6 +314,69 @@ export default async function myIntegrationTest(session, permutation, config) {
     };
   }
 }
+```
+
+### Integration Test Patterns
+
+#### ✅ DO: Simulate Real User Actions
+```javascript
+// GOOD: Simulate how users actually interact
+await page.click('[data-tool="simulacrum"]');
+await page.type('.chat-input', 'Hello world');
+await page.click('.send-button');
+await page.waitForSelector('.response-message');
+```
+
+#### ❌ DON'T: Call Internal APIs Directly
+```javascript
+// BAD: This bypasses the user interface entirely
+const result = await page.evaluate(() => {
+  return game.simulacrum.aiService.sendMessage('Hello world');
+});
+```
+
+#### ✅ DO: Test Complete User Workflows
+```javascript
+// GOOD: Test the entire user experience
+1. User opens Simulacrum interface
+2. User types and sends message  
+3. User sees loading indicator
+4. User receives response
+5. User can continue conversation
+```
+
+#### ❌ DON'T: Test Only Technical Components
+```javascript
+// BAD: Users don't interact with parsers directly
+const parser = agenticLoop.responseParser;
+const parsed = await parser.parseAgentResponse(rawJson);
+```
+
+### Required Integration Test Elements
+
+All TRUE integration tests (Level 1) must include:
+
+1. **UI Interaction**: Click, type, navigate like a real user
+2. **State Validation**: Verify loading states, error states, success states
+3. **User-Visible Outcomes**: Test what users actually see
+4. **Error Handling**: How errors appear to users
+5. **Performance**: Real-world response times including UI rendering
+6. **Artifacts**: Screenshots of actual user interface states
+
+### Naming Conventions
+
+- `*-user-workflow.test.js` - End-to-end user flow tests (Level 1)
+- `*-api-integration.test.js` - Component integration tests (Level 2)  
+- `*-component.test.js` - Unit tests (Level 3)
+
+### Common User Workflows to Test
+
+- **Opening and using Simulacrum chat interface**
+- **Creating documents through AI assistance**  
+- **Tool confirmation and execution workflows**
+- **Error recovery and retry scenarios**
+- **Multi-step conversations with context**
+- **Settings and configuration changes**
 ```
 
 ### Test Requirements

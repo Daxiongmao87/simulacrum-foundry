@@ -22,11 +22,13 @@ import { AddDocumentContextTool } from './tools/add-document-context.js';
 import { ListContextTool } from './tools/list-context.js';
 import { ClearContextTool } from './tools/clear-context.js';
 import { ListImagesTool } from './tools/list-images.js';
+import { GetDocumentSchemaTool } from './tools/get-document-schema.js';
 import { SimulacrumAIService } from './chat/ai-service.js';
 import { ContextManager } from './context-manager.js';
 // import { setupGlobalErrorHandling } from "./error-handling.js"; // Currently unused
 // import './tool-test.js'; // Load testing functions - file doesn't exist
 import { AgenticLoopController } from './core/agentic-loop-controller.js';
+import { AgentResponseParser } from './core/json-response-parser.js';
 import { SimulacrumToolScheduler } from './core/tool-scheduler.js';
 import { TokenTracker, formatToolResultsForAI } from './core/token-tracker.js';
 import {
@@ -179,6 +181,7 @@ Hooks.once('init', () => {
     toolRegistry.registerTool(new ListContextTool());
     toolRegistry.registerTool(new ClearContextTool());
     toolRegistry.registerTool(new ListImagesTool());
+    toolRegistry.registerTool(new GetDocumentSchemaTool());
 
     // Initialize Tool Scheduler
     const toolScheduler = new SimulacrumToolScheduler(toolRegistry);
@@ -205,6 +208,7 @@ Hooks.once('init', () => {
       documentDiscoveryEngine,
       genericCrudTools,
       agenticLoopController,
+      AgentResponseParser,
       TokenTracker,
       formatToolResultsForAI,
       showProgress,
