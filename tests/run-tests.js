@@ -166,6 +166,9 @@ class TestOrchestrator {
     this.config = JSON.parse(readFileSync(configPath, 'utf8'));
     this.logger.success('Configuration loaded');
     
+    // Proactive cleanup: Clean up any containers using our port range before starting
+    await this.proactivePortCleanup();
+    
     // Override with command-line options if provided
     if (options.versions) {
       this.config['foundry-versions'] = options.versions;
@@ -1020,6 +1023,89 @@ class TestOrchestrator {
         console.log(`Simulacrum | ${idx + 1}. ${s.name} - ${s.description}`);
       });
       if (v !== versions[versions.length - 1]) console.log('Simulacrum | ');
+    }
+  }
+
+  /**
+   * Proactive cleanup of containers using our port range before starting tests
+   * This prevents "port already allocated" errors from previous test runs
+   */
+  async proactivePortCleanup() {
+    if (!this.config?.docker) {
+      return; // No docker config, skip cleanup
+    }
+
+    const portBeginning = this.config.docker.portBeginning;
+    const maxConcurrentInstances = this.config.docker.maxConcurrentInstances || 1;
+    const portRange = Array.from({ length: maxConcurrentInstances }, (_, i) => portBeginning + i);
+    
+    this.logger.essential(`🧹 Proactive cleanup: Checking for containers using ports ${portRange.join(', ')}...`);
+
+    try {
+      const { execSync } = await import('child_process');
+      
+      // Find containers using our port range
+      let containersToClean = [];
+      
+      for (const port of portRange) {
+        try {
+          // Check if port is in use and find the container
+          const result = execSync(`docker ps -a --format "{{.ID}} {{.Names}} {{.Ports}}" | grep ":${port}->"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+          if (result.trim()) {
+            const lines = result.trim().split('\n');
+            for (const line of lines) {
+              const [containerId, containerName] = line.split(' ');
+              if (containerId && containerName) {
+                containersToClean.push({ containerId, containerName, port });
+              }
+            }
+          }
+        } catch (error) {
+          // No containers using this port, which is good
+        }
+      }
+
+      // Clean up any found containers
+      if (containersToClean.length > 0) {
+        this.logger.essential(`🧹 Found ${containersToClean.length} containers using our port range, cleaning them up...`);
+        
+        for (const { containerId, containerName, port } of containersToClean) {
+          try {
+            this.logger.essential(`🧹 Stopping and removing container ${containerName} (${containerId}) using port ${port}...`);
+            execSync(`docker rm -f ${containerId}`, { stdio: 'ignore' });
+            this.logger.success(`✅ Cleaned up container ${containerName}`);
+          } catch (error) {
+            this.logger.warn(`⚠️ Failed to clean up container ${containerName}: ${error.message}`);
+          }
+        }
+
+        // Also clean up related test images
+        try {
+          const imagePrefix = this.config.docker.imagePrefix || 'simulacrum-foundry-test';
+          const images = execSync(`docker image ls "${imagePrefix}-*" --format "{{.Repository}}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+          if (images.trim()) {
+            this.logger.essential('🧹 Cleaning up related Docker images...');
+            const imageList = images.trim().split('\n');
+            for (const image of imageList) {
+              try {
+                execSync(`docker rmi ${image}`, { stdio: 'ignore' });
+                this.logger.success(`✅ Cleaned up image ${image}`);
+              } catch (error) {
+                // Image might be in use, that's ok
+              }
+            }
+          }
+        } catch (error) {
+          // No images to clean, that's fine
+        }
+
+        this.logger.success(`✅ Proactive cleanup complete - port range ${portRange.join(', ')} is now available`);
+      } else {
+        this.logger.success(`✅ Port range ${portRange.join(', ')} is clean and available`);
+      }
+    } catch (error) {
+      this.logger.warn(`⚠️ Proactive cleanup failed: ${error.message}`);
+      // Don't fail the entire test run if cleanup fails
     }
   }
 
