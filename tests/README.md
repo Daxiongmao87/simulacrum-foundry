@@ -2,8 +2,8 @@
 
 ## Testing Paradigm
 
-> **📚 For detailed testing strategy and philosophy, see [`docs/testing-strategy.md`](../docs/testing-strategy.md)**  
-> **🚀 For quick commands and troubleshooting, see [`docs/testing-quick-reference.md`](../docs/testing-quick-reference.md)**
+> **📚 For detailed testing strategy and philosophy, see [`tests/docs/testing-strategy.md`](docs/testing-strategy.md)**  
+> **🚀 For quick commands and troubleshooting, see [`tests/docs/testing-quick-reference.md`](docs/testing-quick-reference.md)**
 
 ### **Quick Overview:**
 - **Pre-Commit**: Unit tests + code quality (fast, < 30s)
@@ -146,21 +146,20 @@ tests/
 │   │   └── session-activation/
 │   │       ├── v12/index.js
 │   │       └── v13/index.js
-│   └── common/                         # Shared utilities (single source of truth)
+│   └── common/                         # Shared utilities
 │       ├── docker-utils.js             # Docker build/run/health-check
 │       ├── browser-utils.js            # Browser automation utilities
-│       ├── port-manager.js             # Port allocation (portBeginning + maxConcurrentInstances)
+│       ├── port-manager.js             # Port allocation
 │       └── index.js                    # Re-exports for common utilities
-├── helpers/                             # Test utilities and mocks (legacy/general)
-│   └── container-manager.js            # Legacy container lifecycle (avoid for bootstrap)
-├── integration/                         # Integration test scripts
-│   ├── v12/001-simulacrum-init.test.js
-│   └── v13/001-simulacrum-init.test.js
-├── docker/
+├── fixtures/                           # Test data and FoundryVTT binaries
+│   └── binary_versions/
+│       ├── v12/FoundryVTT-*.zip        # FoundryVTT v12 binaries
+│       └── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
+├── helpers/                            # Test utilities and mocks (legacy/general)
+├── docker/                             # Docker configuration for live FoundryVTT sessions
 │   ├── Dockerfile.foundry              # FoundryVTT container definition
 │   └── entrypoint.sh                   # Container startup script
-└── poc/
-    └── foundry-bootstrap-poc.js        # Working POC that inspired the architecture
+└── artifacts/                          # Test results, logs, screenshots
 ```
 
 ## Writing Integration Tests

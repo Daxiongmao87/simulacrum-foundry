@@ -58,7 +58,8 @@ export class DynamicModelSelector {
     console.log('Simulacrum | DynamicModelSelector enhancement:', {
       selectFound: modelSelect.length,
       inputFound: modelInput.length,
-      usingElement: modelElement.length > 0 ? modelElement.prop('tagName') : 'none'
+      usingElement:
+        modelElement.length > 0 ? modelElement.prop('tagName') : 'none',
     });
 
     if (modelElement.length > 0) {
@@ -108,52 +109,59 @@ export class DynamicModelSelector {
       const selectedModel = availableModels.find(
         (model) => model.id === selectedValue
       );
-      
+
       console.log('Simulacrum | Model lookup debug:', {
         selectedValue,
         availableModels,
         selectedModel,
-        availableModelsCount: availableModels.length
+        availableModelsCount: availableModels.length,
       });
 
       // Find context input field
-      const contextInput = html.find(
-        'input[name="simulacrum.contextLength"]'
-      );
+      const contextInput = html.find('input[name="simulacrum.contextLength"]');
       console.log('Simulacrum | Context input debug:', {
         contextInputFound: contextInput.length,
         currentValue: contextInput.val(),
-        isReadonly: contextInput.prop('readonly')
+        isReadonly: contextInput.prop('readonly'),
       });
 
       let contextWindow = null;
-      
+
       if (selectedModel) {
         contextWindow = selectedModel.contextWindow;
-        console.log('Simulacrum | Using context window from model:', contextWindow);
+        console.log(
+          'Simulacrum | Using context window from model:',
+          contextWindow
+        );
       } else {
         // Fallback: try to parse context window from model name
         // e.g., "gpt-oss:20k" -> 20000, "gpt-oss:32k" -> 32000
         const match = selectedValue.match(/:([0-9]+)k?$/i);
         if (match) {
-          contextWindow = parseInt(match[1]) * (match[0].includes('k') ? 1000 : 1);
-          console.log('Simulacrum | Parsed context window from model name:', contextWindow);
-        } else {
-          console.warn('Simulacrum | Could not determine context window for model:', selectedValue);
-        }
-      }
-      
-      if (contextWindow && contextInput.length > 0) {
-        console.log('Simulacrum | Updating context input with value:', contextWindow);
-        contextInput.val(contextWindow);
-        
-        // Also update the setting for persistence
-        try {
-          await game.settings.set(
-            'simulacrum',
-            'contextLength',
+          contextWindow =
+            parseInt(match[1]) * (match[0].includes('k') ? 1000 : 1);
+          console.log(
+            'Simulacrum | Parsed context window from model name:',
             contextWindow
           );
+        } else {
+          console.warn(
+            'Simulacrum | Could not determine context window for model:',
+            selectedValue
+          );
+        }
+      }
+
+      if (contextWindow && contextInput.length > 0) {
+        console.log(
+          'Simulacrum | Updating context input with value:',
+          contextWindow
+        );
+        contextInput.val(contextWindow);
+
+        // Also update the setting for persistence
+        try {
+          await game.settings.set('simulacrum', 'contextLength', contextWindow);
           console.log('Simulacrum | Setting updated successfully');
         } catch (error) {
           console.error('Simulacrum | Failed to update setting:', error);
@@ -161,7 +169,7 @@ export class DynamicModelSelector {
       } else {
         console.warn('Simulacrum | Could not update context length:', {
           hasContextWindow: !!contextWindow,
-          hasContextInput: contextInput.length > 0
+          hasContextInput: contextInput.length > 0,
         });
       }
     });
@@ -268,7 +276,7 @@ export class DynamicModelSelector {
 
     // Add custom option
     const customOption = document.createElement('option');
-    customOption.value = '__custom__';
+    customOption.value = 'custom';
     customOption.textContent = '-- Custom Model --';
     select.appendChild(customOption);
 
@@ -334,7 +342,7 @@ export class DynamicModelSelector {
    * @param {string} value - Selected model value
    */
   async onModelSelectionChange(value) {
-    if (value === '__custom__') {
+    if (value === 'custom') {
       this.showCustomInput();
     } else {
       this.hideCustomInput();
