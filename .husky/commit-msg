@@ -1,2 +1,2 @@
 #!/bin/sh
-node .husky/scripts/commit-msg.js "$@"
+exec bash -c 'node .husky/scripts/commit-msg.js "$@"' -- "$@"
