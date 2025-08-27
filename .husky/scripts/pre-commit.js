@@ -72,18 +72,24 @@ function getGitHubIssue(issueNumber) {
  * Get commit message from git
  */
 function getCommitMessage() {
+  // First, check if there's a pending commit message (from -m flag or editor)
+  // This is stored in .git/COMMIT_EDITMSG during the pre-commit hook
   try {
-    // Try to get commit message from git log (most recent commit being prepared)
+    const msgContent = execSync('cat .git/COMMIT_EDITMSG 2>/dev/null', { encoding: 'utf-8' });
+    if (msgContent && msgContent.trim()) {
+      return msgContent.trim();
+    }
+  } catch (e) {
+    // File doesn't exist or can't be read, continue to fallback
+  }
+  
+  // Fallback: If no pending commit message, check the last commit
+  // This should only happen in edge cases
+  try {
     const commitMsg = execSync('git log -1 --pretty=format:%B 2>/dev/null', { encoding: 'utf-8' });
     return commitMsg || null;
   } catch (e) {
-    // If no commits exist yet, try to read from .git/COMMIT_EDITMSG
-    try {
-      const msgContent = execSync('cat .git/COMMIT_EDITMSG 2>/dev/null', { encoding: 'utf-8' });
-      return msgContent.trim() || null;
-    } catch (e2) {
-      return null;
-    }
+    return null;
   }
 }
 
@@ -91,29 +97,94 @@ function getCommitMessage() {
  * Detect required test types from GitHub issue content
  */
 function detectTestRequirementsFromGitHubIssue(issue) {
-  if (!issue || !issue.title || !issue.body) {
+  if (!issue) {
     return [];
   }
   
-  const content = (issue.title + ' ' + issue.body).toLowerCase();
   const requiredTests = [];
   
-  // Check for unit test requirements
-  if (content.match(/unit\s+test/gi)) {
-    requiredTests.push('unit');
+  // First, check labels (most reliable indicator)
+  if (issue.labels && Array.isArray(issue.labels)) {
+    for (const label of issue.labels) {
+      const labelName = label.name ? label.name.toLowerCase() : '';
+      
+      // Check for unit test labels
+      if (labelName.match(/unit[\s-]?test(?:s|ing)?/gi)) {
+        if (!requiredTests.includes('unit')) {
+          requiredTests.push('unit');
+        }
+      }
+      
+      // Check for integration test labels  
+      if (labelName.match(/integration[\s-]?test(?:s|ing)?/gi)) {
+        if (!requiredTests.includes('integration')) {
+          requiredTests.push('integration');
+        }
+      }
+      
+      // Check for regression test labels
+      if (labelName.match(/regression[\s-]?test(?:s|ing)?/gi)) {
+        if (!requiredTests.includes('regression')) {
+          requiredTests.push('regression');
+        }
+      }
+    }
   }
   
-  // Check for integration test requirements  
-  if (content.match(/integration\s+test/gi)) {
-    requiredTests.push('integration');
-  }
-  
-  // Check for regression test requirements
-  if (content.match(/regression\s+test/gi)) {
-    requiredTests.push('regression');
+  // Then check title and body with improved patterns (if we have them)
+  if (issue.title || issue.body) {
+    const content = ((issue.title || '') + ' ' + (issue.body || '')).toLowerCase();
+    
+    // Check for unit test requirements - improved pattern
+    if (content.match(/unit[\s-]?test(?:s|ing)?/gi)) {
+      if (!requiredTests.includes('unit')) {
+        requiredTests.push('unit');
+      }
+    }
+    
+    // Check for integration test requirements - improved pattern
+    if (content.match(/integration[\s-]?test(?:s|ing)?/gi)) {
+      if (!requiredTests.includes('integration')) {
+        requiredTests.push('integration');
+      }
+    }
+    
+    // Check for regression test requirements - improved pattern
+    if (content.match(/regression[\s-]?test(?:s|ing)?/gi)) {
+      if (!requiredTests.includes('regression')) {
+        requiredTests.push('regression');
+      }
+    }
   }
   
   return requiredTests;
+}
+
+/**
+ * Get static guidance for test types
+ */
+function getTestTypeGuidance(testType) {
+  const guidance = {
+    unit: {
+      why: "Unit tests verify individual functions work correctly in isolation. They catch bugs early, run fast (no Docker needed), and ensure your code logic is solid before integration.",
+      example: "Test that your new function handles edge cases, error conditions, and expected inputs correctly.",
+      template: "tests/unit/v13/sample.test.js",
+      run: "npm run test:unit:v13"
+    },
+    integration: {
+      why: "Integration tests verify your changes work in a real FoundryVTT game session. They catch issues that only appear when modules interact with the actual game system.",
+      example: "Test that your UI changes render correctly, API calls work, and game data updates properly.",
+      template: "tests/integration/v13/001-simulacrum-init.test.js", 
+      run: "node tests/run-tests.js -i your-test-name"
+    },
+    regression: {
+      why: "Regression tests ensure your changes don't break existing functionality. They protect against accidentally breaking features that users depend on.",
+      example: "Test that core features like chat, document CRUD, and tool execution still work after your changes.",
+      template: "tests/regression/v13/001-basic-functionality.test.js",
+      run: "node tests/run-tests.js -r your-test-name"
+    }
+  };
+  return guidance[testType] || {};
 }
 
 /**
@@ -211,23 +282,43 @@ async function validateTestRequirementsFromGitHubIssue() {
     errorMessage += `\n\n🚨 Missing test types: ${missingTestTypes.join(', ')}`;
     errorMessage += `\n\n📋 Required by issue: "${issue.title}"`;
     errorMessage += `\n🔗 Issue URL: https://github.com/${repoUrl}/issues/${issueNumber}`;
-    errorMessage += `\n\n📁 Please create or modify test files in:`;
-    
-    // Dynamically discover available test version directories for missing types
+
+    // Add detailed guidance for each missing test type
+    errorMessage += `\n\n📚 Test Implementation Guide:\n`;
     for (const testType of missingTestTypes) {
+      const guide = getTestTypeGuidance(testType);
+      const typeName = testType.charAt(0).toUpperCase() + testType.slice(1);
+      
+      // Discover available test version directories
+      let whereInfo = '';
       try {
         const versionDirs = execSync(`ls tests/${testType}/ 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
         if (versionDirs) {
           const versions = versionDirs.split('\n').filter(v => v.trim());
-          errorMessage += `\n  • ${testType.charAt(0).toUpperCase() + testType.slice(1)}: tests/${testType}/${versions.join('/ or tests/' + testType + '/')}/`;
+          whereInfo = `tests/${testType}/${versions.join('/ or tests/' + testType + '/')}/`;
         } else {
-          errorMessage += `\n  • ${testType.charAt(0).toUpperCase() + testType.slice(1)}: tests/${testType}/<version>/`;
+          whereInfo = `tests/${testType}/<version>/`;
         }
       } catch (e) {
-        errorMessage += `\n  • ${testType.charAt(0).toUpperCase() + testType.slice(1)}: tests/${testType}/<version>/`;
+        whereInfo = `tests/${testType}/<version>/`;
       }
+      
+      errorMessage += `\n━━━ ${typeName} Tests ━━━`;
+      errorMessage += `\n  WHY: ${guide.why}`;
+      errorMessage += `\n  EXAMPLE: ${guide.example}`;
+      errorMessage += `\n  WHERE: ${whereInfo}`;
+      errorMessage += `\n  TEMPLATE: ${guide.template}`;
+      errorMessage += `\n  NAMING: ${issueNumber.toString().padStart(3, '0')}-descriptive-name.test.js`;
+      errorMessage += `\n  RUN: ${guide.run}`;
+      errorMessage += `\n`;
     }
-    
+
+    errorMessage += `\n💡 Quick Start:`;
+    errorMessage += `\n  1. Copy the template file for your test type`;
+    errorMessage += `\n  2. Name it: ${issueNumber.toString().padStart(3, '0')}-descriptive-name.test.js`;
+    errorMessage += `\n  3. Write tests for the changes you made`;
+    errorMessage += `\n  4. Stage: git add tests/...`;
+    errorMessage += `\n  5. Commit again`;
     errorMessage += `\n\n✅ After creating the required test files, stage them and commit again.`;
     
     return {
