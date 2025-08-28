@@ -68,8 +68,8 @@ export class SimulacrumAIService {
         });
       }
     } catch (error) {
-      console.error(
-        'Simulacrum | Failed to generate create_document tool schema:',
+      game.simulacrum?.logger?.error(
+        'Failed to generate create_document tool schema:',
         error
       );
       // Optionally, add a fallback schema or handle the error gracefully
@@ -111,8 +111,8 @@ export class SimulacrumAIService {
         baseEndpoint.includes('ollama') ||
         baseEndpoint.includes('11434'); // Add explicit check for Ollama port
 
-      console.log('🔍 Simulacrum | Base endpoint:', baseEndpoint);
-      console.log('🔍 Simulacrum | Is Ollama detected:', isOllama);
+      game.simulacrum?.logger?.debug('🔍 Base endpoint:', baseEndpoint);
+      game.simulacrum?.logger?.debug('🔍 Is Ollama detected:', isOllama);
       const apiEndpoint = isOllama
         ? `${baseEndpoint}/chat/completions`
         : `${baseEndpoint}/chat/completions`;
@@ -159,8 +159,8 @@ export class SimulacrumAIService {
               : {}),
           };
 
-      console.log(
-        '🔍 Simulacrum | Request body:',
+      game.simulacrum?.logger?.debug(
+        '🔍 Request body:',
         JSON.stringify(requestBody, null, 2)
       );
 
@@ -182,14 +182,20 @@ export class SimulacrumAIService {
         let errorBody = 'No error details available';
         try {
           errorBody = await response.text();
-          console.error('❌ Simulacrum | API Error Response Body:', errorBody);
+          game.simulacrum?.logger?.error(
+            '❌ API Error Response Body:',
+            errorBody
+          );
         } catch (e) {
-          console.error('❌ Simulacrum | Could not read error response:', e);
+          game.simulacrum?.logger?.error(
+            '❌ Could not read error response:',
+            e
+          );
         }
         const error = new Error(
           `AI API error: ${response.status} ${response.statusText}`
         );
-        console.error('❌ Simulacrum | API Request Failed:', {
+        game.simulacrum?.logger?.error('❌ API Request Failed:', {
           status: response.status,
           statusText: response.statusText,
           url: apiEndpoint,
@@ -229,12 +235,16 @@ export class SimulacrumAIService {
       }
 
       const data = await response.json();
+      game.simulacrum?.logger?.debug(
+        '🔍 Raw API response:',
+        JSON.stringify(data, null, 2)
+      );
 
       const aiResponse = data.choices?.[0]?.message?.content;
 
       if (!aiResponse) {
-        console.warn(
-          '⚠️ Simulacrum | No AI response content found in:',
+        game.simulacrum?.logger?.warn(
+          '⚠️ No AI response content found in:',
           JSON.stringify(data, null, 2)
         );
       }
@@ -248,7 +258,7 @@ export class SimulacrumAIService {
       if (error.name === 'AbortError') {
         // Request cancelled by user
       } else {
-        console.error('💥 Simulacrum | AI Service Error:', {
+        game.simulacrum?.logger?.error('💥 AI Service Error:', {
           name: error.name,
           message: error.message,
           stack: error.stack,
@@ -305,7 +315,7 @@ export class SimulacrumAIService {
             try {
               const chunk = JSON.parse(data);
               // Debug logging disabled - was causing console spam
-              // console.log('🔍 Simulacrum | Streaming chunk:', JSON.stringify(chunk, null, 2));
+              // console.log('Simulacrum | 🔍 Simulacrum | Streaming chunk:', JSON.stringify(chunk, null, 2));
               const delta = chunk.choices?.[0]?.delta;
 
               if (delta?.content) {
@@ -332,7 +342,10 @@ export class SimulacrumAIService {
                 }
               }
             } catch (parseError) {
-              console.warn('Failed to parse streaming chunk:', parseError);
+              game.simulacrum?.logger?.warn(
+                'Failed to parse streaming chunk:',
+                parseError
+              );
             }
           }
         }
@@ -350,7 +363,10 @@ export class SimulacrumAIService {
             );
             onChunk?.(result, 'tool_result');
           } catch (error) {
-            console.error('Function call execution error:', error);
+            game.simulacrum?.logger?.error(
+              'Function call execution error:',
+              error
+            );
             onChunk?.(
               `Error executing ${functionCall.name}: ${error.message}`,
               'error'
@@ -369,18 +385,18 @@ export class SimulacrumAIService {
       }
 
       // For JSON mode, we need to pass the content and function calls separately
-      console.log(
-        '🔍 Simulacrum | Final streaming content:',
+      game.simulacrum?.logger?.debug(
+        '🔍 Final streaming content:',
         currentMessage.content
       );
-      console.log('🔍 Simulacrum | Final function calls:', functionCalls);
+      game.simulacrum?.logger?.debug('🔍 Final function calls:', functionCalls);
       if (onComplete) {
         if (typeof onComplete === 'function') {
           onComplete(currentMessage.content, functionCalls);
         }
       }
     } catch (error) {
-      console.error('Streaming response error:', error);
+      game.simulacrum?.logger?.error('Streaming response error:', error);
       throw error;
     } finally {
       reader.releaseLock();
@@ -414,7 +430,7 @@ export class SimulacrumAIService {
 
       return result;
     } catch (error) {
-      console.error('💥 Simulacrum | Tool execution error:', {
+      game.simulacrum?.logger?.error('💥 Tool execution error:', {
         toolName,
         errorName: error.name,
         errorMessage: error.message,
@@ -490,11 +506,11 @@ export class SimulacrumAIService {
         throw new Error('System prompt not found in localization');
       }
     } catch (error) {
-      console.error(
-        'Simulacrum | Failed to load system prompt from localization:',
+      game.simulacrum?.logger?.error(
+        'Failed to load system prompt from localization:',
         error
       );
-      console.warn('Simulacrum | Using fallback system prompt');
+      game.simulacrum?.logger?.warn('Using fallback system prompt');
 
       // Comprehensive fallback prompt with explicit JSON-only instructions
       promptTemplate = `You are Simulacrum, an AI campaign assistant for FoundryVTT designed to output JSON. 

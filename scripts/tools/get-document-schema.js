@@ -55,8 +55,8 @@ export class GetDocumentSchemaTool extends Tool {
         },
       };
     } catch (error) {
-      console.error(
-        `Simulacrum | GetDocumentSchemaTool: Failed to get schema for ${params.documentType}:`,
+      game.simulacrum?.logger?.error(
+        `GetDocumentSchemaTool: Failed to get schema for ${params.documentType}:`,
         error
       );
       return {
@@ -110,8 +110,8 @@ export class GetDocumentSchemaTool extends Tool {
         formatted.fields[fieldName] = fieldInfo;
         formatted.summary.totalFields++;
       } catch (error) {
-        console.warn(
-          `Simulacrum | Error processing field ${fieldName}:`,
+        game.simulacrum?.logger?.warn(
+          `Error processing field ${fieldName}:`,
           error
         );
       }

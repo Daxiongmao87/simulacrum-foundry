@@ -52,7 +52,10 @@ export class CreateDocumentTool extends Tool {
       );
       return result;
     } catch (error) {
-      console.error('Simulacrum | crudService.createDocument() failed:', error);
+      game.simulacrum?.logger?.error(
+        'crudService.createDocument() failed:',
+        error
+      );
       throw error;
     }
   }

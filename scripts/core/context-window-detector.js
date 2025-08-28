@@ -116,7 +116,9 @@ export class ContextWindowDetector {
         return result;
       }
     } catch (error) {
-      console.warn(`🔍 API endpoint detection failed: ${error.message}`);
+      game.simulacrum?.logger?.warn(
+        `🔍 API endpoint detection failed: ${error.message}`
+      );
       const result = {
         type: 'error',
         editable: true,
@@ -175,18 +177,18 @@ export class ContextWindowDetector {
           return contextWindow;
         }
 
-        console.warn(
+        game.simulacrum?.logger?.warn(
           `⚠️ No context window found for ${modelName}, using default 8192`
         );
         return 8192;
       }
 
-      console.warn(
+      game.simulacrum?.logger?.warn(
         `⚠️ Failed to get model info for ${modelName}: HTTP ${response.status}`
       );
       return 8192;
     } catch (error) {
-      console.warn(
+      game.simulacrum?.logger?.warn(
         `⚠️ Context window detection failed for ${modelName}: ${error.message}`
       );
       return 8192;

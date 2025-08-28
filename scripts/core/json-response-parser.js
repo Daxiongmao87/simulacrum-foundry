@@ -14,39 +14,70 @@ export class AgentResponseParser {
    * Parses and validates a raw JSON response from the AI agent.
    * If the response is malformed or missing required fields, it retries by requesting a new response from the AI service.
    * @param {string} rawResponse - The raw JSON string received from the AI.
+   * @param {AbortSignal} abortSignal - Signal to cancel the operation.
    * @returns {Promise<object>} A promise that resolves with the parsed and validated JSON object.
    */
-  async parseAgentResponse(rawResponse) {
-    const MAX_RETRIES = 10; // Match agentic loop controller limit to prevent infinite loops
-    let retryCount = 0;
+  async parseAgentResponse(rawResponse, abortSignal) {
+    const MAX_RETRIES = 5; // Limit retries to prevent infinite loops
+    let attemptCount = 0;
 
-    while (retryCount < MAX_RETRIES) {
+    while (attemptCount < MAX_RETRIES) {
       try {
+        // Handle empty response
+        if (!rawResponse || rawResponse.trim() === '') {
+          throw new Error('No response received from AI service');
+        }
+
         const parsed = JSON.parse(rawResponse);
 
-        // Validate required fields
-        if (!parsed.message || !parsed.tool_calls || !parsed.continuation) {
+        // Validate required fields existence (treat null as missing)
+        const requiredFields = ['message', 'tool_calls', 'continuation'];
+        const missingFields = requiredFields.filter(
+          (field) => parsed[field] === undefined || parsed[field] === null
+        );
+
+        if (missingFields.length > 0) {
           throw new Error(
-            'Missing required fields: message, tool_calls, or continuation.'
+            `Missing required fields: ${missingFields.join(', ')}`
           );
+        }
+
+        // Validate field types
+        if (typeof parsed.message !== 'string') {
+          throw new Error('Field "message" must be a string');
+        }
+
+        if (!Array.isArray(parsed.tool_calls)) {
+          throw new Error('Field "tool_calls" must be an array');
+        }
+
+        if (
+          typeof parsed.continuation !== 'object' ||
+          parsed.continuation === null
+        ) {
+          throw new Error('Field "continuation" must be an object');
+        }
+
+        if (typeof parsed.continuation.in_progress !== 'boolean') {
+          throw new Error('Field "continuation.in_progress" must be a boolean');
         }
 
         return parsed;
       } catch (error) {
-        retryCount++;
-        console.warn(
-          `Simulacrum | Parsing error (attempt ${retryCount}/${MAX_RETRIES}), retrying:`,
+        attemptCount++;
+        game.simulacrum?.logger?.warn(
+          `Parsing error (attempt ${attemptCount}/${MAX_RETRIES}), retrying:`,
           error.message
         );
-        console.warn('Simulacrum | Problematic JSON:', rawResponse);
 
-        if (retryCount >= MAX_RETRIES) {
-          console.error(
-            `Simulacrum | Failed to parse JSON after ${MAX_RETRIES} attempts. Returning fallback response.`
+        if (attemptCount >= MAX_RETRIES) {
+          game.simulacrum?.logger?.error(
+            `Failed to parse JSON after ${MAX_RETRIES} attempts. Returning fallback response.`
           );
           // Return a fallback response to prevent system failure
           return {
-            message: `I encountered persistent JSON formatting errors after ${MAX_RETRIES} attempts. Please try rephrasing your request.`,
+            message:
+              'I encountered a formatting error and reached maximum retry attempts. Please try rephrasing your request.',
             tool_calls: [],
             continuation: {
               in_progress: false,
@@ -55,9 +86,29 @@ export class AgentResponseParser {
           };
         }
 
-        // Request a new response from the AI service using JSON mode
+        // Generate detailed error message for retry
+        let errorMessage;
+        if (!rawResponse || rawResponse.trim() === '') {
+          errorMessage =
+            'No response received from AI service. You MUST respond with valid JSON.';
+        } else {
+          // Create snippet for context, truncate if too long
+          const snippet =
+            rawResponse.length > 200
+              ? rawResponse.substring(0, 200) + '...'
+              : rawResponse;
+
+          if (error.message.includes('JSON')) {
+            errorMessage = `JSON parsing error: ${error.message}\n\nProblem occurred in this response snippet:\n${snippet}\n\nYou MUST respond with valid JSON.`;
+          } else {
+            errorMessage = `Validation error: ${error.message}\n\nProblem occurred in this response snippet:\n${snippet}\n\nYou MUST respond with valid JSON.`;
+          }
+        }
+
+        // Request a new response from the AI service
         rawResponse = await this.aiService.sendJsonMessage(
-          'Please respond in the required JSON format.'
+          errorMessage,
+          abortSignal
         );
       }
     }

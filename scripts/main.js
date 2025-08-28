@@ -25,7 +25,7 @@ import { ListImagesTool } from './tools/list-images.js';
 import { GetDocumentSchemaTool } from './tools/get-document-schema.js';
 import { SimulacrumAIService } from './chat/ai-service.js';
 import { ContextManager } from './context-manager.js';
-// import { setupGlobalErrorHandling } from "./error-handling.js"; // Currently unused
+import { setupGlobalErrorHandling } from './error-handling.js';
 // import './tool-test.js'; // Load testing functions - file doesn't exist
 import { AgenticLoopController } from './core/agentic-loop-controller.js';
 import { AgentResponseParser } from './core/json-response-parser.js';
@@ -42,6 +42,7 @@ import { ContextWindowDetector } from './core/context-window-detector.js';
 import { DynamicContextWindowSetting } from './ui/dynamic-context-window-setting.js';
 import { ModelDetector } from './core/model-detector.js';
 import { DynamicModelSelector } from './ui/dynamic-model-selector.js';
+import { initializeLogger } from './core/logger.js';
 
 let toolRegistry; // Global tool registry
 let aiService; // Global AI service
@@ -63,8 +64,8 @@ async function checkEndpointAccessibility() {
   try {
     apiEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
   } catch (error) {
-    console.warn(
-      'Simulacrum | Could not retrieve API endpoint setting:',
+    game.simulacrum?.logger?.warn(
+      'Could not retrieve API endpoint setting:',
       error
     );
     connectionState = 'disabled';
@@ -87,19 +88,19 @@ async function checkEndpointAccessibility() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const response = await fetch(`${apiEndpoint}/chat/completions`, {
-        method: 'HEAD',
+      const response = await fetch(`${apiEndpoint}/models`, {
+        method: 'GET',
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
 
-      if (response.ok || response.status === 405) {
-        // 405 Method Not Allowed is fine - means server is responding
+      if (response.ok) {
+        // 200 OK from /v1/models means server is responding properly
         connectionState = 'accessible';
       } else {
         connectionState = 'inaccessible';
-        console.warn(
-          `Simulacrum | API endpoint returned status: ${response.status}`
+        game.simulacrum?.logger?.warn(
+          `API endpoint returned status: ${response.status}`
         );
         ui.notifications.warn(
           `Simulacrum | API endpoint inaccessible (Status: ${response.status}). Check console for details.`
@@ -107,8 +108,8 @@ async function checkEndpointAccessibility() {
       }
     } catch (error) {
       connectionState = 'inaccessible';
-      console.error(
-        'Simulacrum | Error checking API endpoint accessibility:',
+      game.simulacrum?.logger?.error(
+        'Error checking API endpoint accessibility:',
         error
       );
       if (error.name === 'AbortError') {
@@ -200,6 +201,10 @@ Hooks.once('init', () => {
     const dynamicModelSelector = new DynamicModelSelector();
     dynamicModelSelector.initialize();
 
+    // Initialize logger (must be done before creating game.simulacrum object)
+    // The error logger will be connected later via setupGlobalErrorHandling
+    const logger = initializeLogger();
+
     // Make tool registry, AI service, context manager, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
     game.simulacrum = {
       toolRegistry,
@@ -222,6 +227,7 @@ Hooks.once('init', () => {
       ModelDetector,
       DynamicModelSelector,
       dynamicModelSelector,
+      logger,
       // Initialization state for testing
       _initState: {
         initComplete: true,
@@ -230,6 +236,7 @@ Hooks.once('init', () => {
       },
     };
   } catch (error) {
+    // Use console.error here since logger might not be initialized yet
     console.error('Simulacrum | Failed to register tools:', error);
     ui.notifications.error(
       'Simulacrum | Tool registration failed. Check console for details.'
@@ -270,6 +277,11 @@ Hooks.once('ready', async () => {
     checkEndpointAccessibility();
   });
 
+  // Connect error logger to main logger if both exist
+  if (game.simulacrum?.errorLogger && game.simulacrum?.logger) {
+    game.simulacrum.logger.connectErrorLogger(game.simulacrum.errorLogger);
+  }
+
   // Hook for adding robot context buttons to document sheets
   Hooks.on('renderDocumentSheet', (app, html, _data) => {
     if (!SimulacrumSettings.hasSimulacrumPermission(game.user)) {
@@ -298,8 +310,8 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
       return;
     }
   } catch (e) {
-    console.error(
-      'Simulacrum | Error checking permission:',
+    game.simulacrum?.logger?.error(
+      'Error checking permission:',
       e.message,
       e.stack
     );

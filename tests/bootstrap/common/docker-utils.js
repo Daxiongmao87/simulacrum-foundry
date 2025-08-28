@@ -18,7 +18,7 @@ const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 /**
  * Build a FoundryVTT Docker image
  * @param {string} imageName - Name for the Docker image
- * @param {string} version - FoundryVTT version (v12, v13, etc.)
+ * @param {string} version - FoundryVTT version (v13)
  * @param {string} foundryLicenseKey - License key for FoundryVTT
  * @returns {Promise<void>}
  */
@@ -107,10 +107,8 @@ export async function startFoundryContainer(containerName, imageName, port, vers
       // Container might not exist, which is fine
     }
     
-    // Start fresh container (mirror runner env args)
-    const envArgs = version === 'v12'
-      ? '-e FOUNDRY_DATA_PATH=/data -e FOUNDRY_MAIN_JS_PATH=/app/resources/app/main.js'
-      : '-e FOUNDRY_DATA_PATH=/data';
+    // Start fresh container (v13 only)
+    const envArgs = '-e FOUNDRY_DATA_PATH=/data';
     const containerId = execSync(`docker run -d --name ${containerName} ${envArgs} -p ${port}:30000 ${imageName}`, { encoding: 'utf8' }).trim();
     console.log(`Simulacrum | [Docker Utils] 📦 Container ID: ${containerId}`);
     

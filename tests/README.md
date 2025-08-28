@@ -33,14 +33,14 @@ This directory contains the complete integration testing infrastructure for the 
 - **System Installation**: Installs required game systems automatically  
 - **Session Management**: Creates authenticated GM sessions ready for testing
 - **Resource Management**: Dynamic port allocation and cleanup
-- **Version Compatibility**: Handles FoundryVTT v12/v13 differences via per-version adapters
+- **Version Compatibility**: Supports FoundryVTT v13
 
 #### **Stage-First Design (Version Adapters per Stage)**
 The bootstrap infrastructure uses a stage-first architecture aligned to Foundry's lifecycle, with per-version adapters under each stage:
 
 - **`bootstrap-runner.js`**: Main orchestrator that executes four canonical stages
 - **Stages**: `application-initialization`, `system-installation`, `world-creation`, `session-activation`
-- **Per-version adapters**: `bootstrap/stages/<stage>/v12|v13/index.js`
+- **Version adapter**: `bootstrap/stages/<stage>/v13/index.js`
 - **`common/`**: Shared utilities (Docker ops, port management, browser automation)
 
 This architecture ensures:
@@ -79,7 +79,7 @@ node tests/run-tests.js
 
 # List available bootstrap stages (version optional)
 node tests/run-tests.js -l
-node tests/run-tests.js -l -v v12,v13
+node tests/run-tests.js -l -v v13
 
 # The orchestrator will:
 # 1. Load configuration from tests/config/test.config.json
@@ -98,7 +98,7 @@ All testing behavior is controlled via `tests/config/test.config.json`:
 
 ```json
 {
-  "foundry-versions": ["v12", "v13"],
+  "foundry-versions": ["v13"],
   "foundry-systems": ["dnd5e", "pf2e"],
   "foundryLicenseKey": "YOUR-LICENSE-KEY",
   "docker": {
@@ -129,22 +129,22 @@ tests/
 │   └── test.config.json                # Test configuration
 ├── fixtures/
 │   └── binary_versions/
-│       ├── v12/FoundryVTT-*.zip        # FoundryVTT v12 binaries
+│       ├── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
 │       └── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
 ├── bootstrap/                           # Core test infrastructure
 │   ├── bootstrap-runner.js             # Main orchestrator (stage-first)
 │   ├── stages/                         # Canonical stages with per-version adapters
 │   │   ├── application-initialization/
-│   │   │   ├── v12/index.js
+│   │   │   ├── v13/index.js
 │   │   │   └── v13/index.js
 │   │   ├── system-installation/
-│   │   │   ├── v12/index.js
+│   │   │   ├── v13/index.js
 │   │   │   └── v13/index.js
 │   │   ├── world-creation/
-│   │   │   ├── v12/index.js
+│   │   │   ├── v13/index.js
 │   │   │   └── v13/index.js
 │   │   └── session-activation/
-│   │       ├── v12/index.js
+│   │       ├── v13/index.js
 │   │       └── v13/index.js
 │   └── common/                         # Shared utilities
 │       ├── docker-utils.js             # Docker build/run/health-check
@@ -153,7 +153,7 @@ tests/
 │       └── index.js                    # Re-exports for common utilities
 ├── fixtures/                           # Test data and FoundryVTT binaries
 │   └── binary_versions/
-│       ├── v12/FoundryVTT-*.zip        # FoundryVTT v12 binaries
+│       ├── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
 │       └── v13/FoundryVTT-*.zip        # FoundryVTT v13 binaries
 ├── helpers/                            # Test utilities and mocks (legacy/general)
 ├── docker/                             # Docker configuration for live FoundryVTT sessions
@@ -530,10 +530,10 @@ When adding new testing infrastructure:
 The bootstrap infrastructure follows an iterative development approach:
 
 #### **Phase 1: Foundation** ✅
-- Create version-specific directories (v12/, v13/)
+- Create version-specific directory (v13/)
 - Create common utilities directory (common/)
 - Extract Docker operations into docker-utils.js
-- **Verification**: Docker operations work for both v12 and v13
+- **Verification**: Docker operations work for v13
 
 #### **Phase 2: FoundryVTT Setup** 🚧
 - Extract FoundryVTT startup logic into version-specific setup-foundry.js
@@ -555,7 +555,7 @@ The bootstrap infrastructure follows an iterative development approach:
 
 #### **Phase 5: Integration** 🔗
 - Refactor bootstrap-runner.js to orchestrate version-specific modules
-- **Verification**: Full bootstrap process works for both v12 and v13
+- **Verification**: Full bootstrap process works for v13
 - Update imports and ensure backward compatibility
 - **Verification**: No regression in existing functionality
 

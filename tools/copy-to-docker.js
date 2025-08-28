@@ -86,8 +86,8 @@ try {
   execSync(`docker cp "${distPath}" "${containerName}:${simulacrumPath}"`, { stdio: 'inherit' });
   
   console.log(`✅ Successfully copied Simulacrum module to container "${containerName}" (${version})`);
-  console.log(`📁 Module installed at: ${simulacrumPath}`);
-  console.log('🔄 You may need to restart FoundryVTT or refresh the modules list');
+  console.log(`Simulacrum | 📁 Module installed at: ${simulacrumPath}`);
+  console.log('Simulacrum | 🔄 You may need to restart FoundryVTT or refresh the modules list');
   
 } catch (error) {
   console.error(`❌ Error: ${error.message}`);

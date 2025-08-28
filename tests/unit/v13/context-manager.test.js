@@ -45,6 +45,15 @@ describe('ContextManager', () => {
     // Mock FoundryVTT globals
     global.game = {
       collections: mockCollections,
+      simulacrum: {
+        logger: {
+          debug: jest.fn(),
+          info: jest.fn(), 
+          warn: jest.fn(),
+          error: jest.fn(),
+          log: jest.fn()
+        }
+      },
       settings: {
         get: jest.fn((scope, key) => {
           if (scope === 'simulacrum' && key === 'contextItems') {
@@ -66,11 +75,6 @@ describe('ContextManager', () => {
       utils: {
         randomID: jest.fn(() => 'mock-id-' + Math.random().toString(36).substr(2, 9))
       }
-    };
-
-    global.console = {
-      warn: jest.fn(),
-      error: jest.fn()
     };
 
     contextManager = new ContextManager();
@@ -98,8 +102,8 @@ describe('ContextManager', () => {
       const manager = new ContextManager();
       
       expect(manager.contextItems).toEqual([]);
-      expect(global.console.warn).toHaveBeenCalledWith(
-        'Simulacrum | Failed to load context from settings:',
+      expect(game.simulacrum.logger.warn).toHaveBeenCalledWith(
+        'Failed to load context from settings:',
         expect.any(Error)
       );
     });
@@ -405,8 +409,8 @@ describe('ContextManager', () => {
       
       contextManager.saveToSettings();
       
-      expect(global.console.error).toHaveBeenCalledWith(
-        'Simulacrum | Failed to save context to settings:',
+      expect(game.simulacrum.logger.error).toHaveBeenCalledWith(
+        'Failed to save context to settings:',
         expect.any(Error)
       );
     });
@@ -440,8 +444,8 @@ describe('ContextManager', () => {
       contextManager.loadFromSettings();
       
       expect(contextManager.contextItems).toEqual([]);
-      expect(global.console.warn).toHaveBeenCalledWith(
-        'Simulacrum | Failed to load context from settings:',
+      expect(game.simulacrum.logger.warn).toHaveBeenCalledWith(
+        'Failed to load context from settings:',
         expect.any(Error)
       );
     });

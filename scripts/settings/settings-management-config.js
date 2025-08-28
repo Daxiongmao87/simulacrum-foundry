@@ -94,7 +94,7 @@ export class SettingsManagementConfig extends FormApplication {
         button.html('<i class="fas fa-times"></i> Failed').addClass('failure');
       }
     } catch (error) {
-      console.error('Simulacrum | API Connection Test Error:', error);
+      game.simulacrum?.logger?.error('API Connection Test Error:', error);
       ui.notifications.error(
         game.i18n.format('SIMULACRUM.ConnectionError', {
           message: error.message,
@@ -180,7 +180,7 @@ export class SettingsManagementConfig extends FormApplication {
           );
           this.render(true); // Re-render to show updated settings
         } catch (error) {
-          console.error('Simulacrum | Settings Import Error:', error);
+          game.simulacrum?.logger?.error('Settings Import Error:', error);
           ui.notifications.error(
             game.i18n.format('SIMULACRUM.ImportFailed', {
               message: error.message,

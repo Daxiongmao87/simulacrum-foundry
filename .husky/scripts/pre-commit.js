@@ -25,25 +25,80 @@ const CLAUDE_PATTERNS = [
   /noreply@anthropic\.com/gi
 ];
 
+// 🔍 CONSOLE VALIDATION - Valid prefixes for console statements
+const VALID_CONSOLE_PREFIXES = ['Simulacrum |', 'Foundry VTT |'];
+
 /**
- * Detect staged test files for targeted test execution
- * @returns {Object} Object with arrays of staged integration and regression test files
+ * Validate console statements in staged files
+ * @param {string[]} stagedFiles - Array of staged file paths
+ */
+function validateConsoleStatements(stagedFiles) {
+  const jsFiles = stagedFiles.filter(file => 
+    file.endsWith('.js') && 
+    !file.startsWith('node_modules/') &&
+    !file.startsWith('scripts/fimlib/') // Skip submodules
+  );
+
+  let unprefixedCount = 0;
+  const violations = [];
+
+  for (const file of jsFiles) {
+    try {
+      const stagedContent = execSync(`git diff --cached -- "${file}"`, { encoding: 'utf-8' });
+      const addedLines = stagedContent.split('\n')
+        .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+        .map(line => line.substring(1));
+
+      for (let i = 0; i < addedLines.length; i++) {
+        const line = addedLines[i];
+        
+        // Check for console.log statements (ignore console.warn, console.error)
+        const consoleLogMatch = line.match(/console\.log\s*\(\s*['"`]([^'"`]*)/);
+        if (consoleLogMatch) {
+          const message = consoleLogMatch[1];
+          const hasValidPrefix = VALID_CONSOLE_PREFIXES.some(prefix => 
+            message.startsWith(prefix)
+          );
+          
+          if (!hasValidPrefix) {
+            unprefixedCount++;
+            violations.push(`${file}: console.log missing prefix - "${message}"`);
+          }
+        }
+      }
+    } catch (e) {
+      // Skip files that can't be read
+    }
+  }
+
+  if (unprefixedCount > 0) {
+    console.log(`⚠️  Found ${unprefixedCount} console.log statements without valid prefix:`);
+    violations.slice(0, 5).forEach(violation => console.log(`   ${violation}`));
+    if (violations.length > 5) {
+      console.log(`   ... and ${violations.length - 5} more`);
+    }
+    console.log('💡 Valid prefixes: "Simulacrum |" or "Foundry VTT |"');
+  } else {
+    console.log('✅ All console.log statements have valid prefixes');
+  }
+}
+
+/**
+ * Detect staged unit test files
+ * @returns {Object} Object with array of staged unit test files
  */
 function getStagedTestFiles() {
   try {
     const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim().split('\n').filter(f => f.length > 0);
     
     return {
-      integrationTests: stagedFiles.filter(file => 
-        file.startsWith('tests/integration/') && file.endsWith('.test.js')
-      ),
-      regressionTests: stagedFiles.filter(file => 
-        file.startsWith('tests/regression/') && file.endsWith('.test.js')  
+      unitTests: stagedFiles.filter(file => 
+        file.startsWith('tests/unit/') && file.endsWith('.test.js')
       )
     };
   } catch (error) {
     console.warn('⚠️ Failed to detect staged test files:', error.message);
-    return { integrationTests: [], regressionTests: [] };
+    return { unitTests: [] };
   }
 }
 
@@ -142,10 +197,10 @@ try {
   // NOTE: Submodules are completely ignored by console validation
   console.log('🔍 Checking console statements (excluding submodules)...');
   try {
-    execSync('npm run console:validate', { stdio: 'inherit' });
+    validateConsoleStatements(nonSubmoduleFiles);
   } catch (e) {
     console.warn('⚠️  Console validation failed - consider fixing before next commit');
-    console.warn('💡 Run "npm run console:prefix" to auto-fix prefix issues');
+    console.warn(`💡 Error: ${e.message}`);
     // Don't block commit for now, just warn
   }
   
@@ -162,8 +217,8 @@ try {
     }
   }
   
-  // 🧪 FOURTH: Run tests based on staged files
-  console.log('🧪 Running tests...');
+  // 🧪 FOURTH: Run unit tests only
+  console.log('🧪 Running unit tests...');
   
   const stagedTests = getStagedTestFiles();
   let testsFailed = false;
@@ -176,42 +231,6 @@ try {
   } catch (error) {
     console.error('❌ Unit tests failed');
     testsFailed = true;
-  }
-  
-  // Run ONLY staged integration tests (if any)
-  if (stagedTests.integrationTests.length > 0) {
-    console.log(`📋 Running ${stagedTests.integrationTests.length} staged integration test(s)...`);
-    for (const testFile of stagedTests.integrationTests) {
-      const testName = basename(testFile, '.test.js');
-      console.log(`🧪 Running integration test: ${testName}`);
-      try {
-        execSync(`node tests/run-tests.js --integration-test ${testName}`, { stdio: 'inherit' });
-        console.log(`✅ Integration test passed: ${testName}`);
-      } catch (error) {
-        console.error(`❌ Integration test failed: ${testName}`);
-        testsFailed = true;
-      }
-    }
-  } else {
-    console.log('📋 No staged integration tests to run');
-  }
-  
-  // Run ONLY staged regression tests (if any)  
-  if (stagedTests.regressionTests.length > 0) {
-    console.log(`📋 Running ${stagedTests.regressionTests.length} staged regression test(s)...`);
-    for (const testFile of stagedTests.regressionTests) {
-      const testName = basename(testFile, '.test.js');
-      console.log(`🧪 Running regression test: ${testName}`);
-      try {
-        execSync(`node tests/run-tests.js --regression-test ${testName}`, { stdio: 'inherit' });
-        console.log(`✅ Regression test passed: ${testName}`);
-      } catch (error) {
-        console.error(`❌ Regression test failed: ${testName}`);
-        testsFailed = true;
-      }
-    }
-  } else {
-    console.log('📋 No staged regression tests to run');
   }
   
   // Block commit if any tests failed

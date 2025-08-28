@@ -62,7 +62,7 @@ export class ToolRegistry {
       throw new Error('Attempted to register an invalid tool');
     }
     if (this.tools.has(tool.name)) {
-      console.warn(
+      game.simulacrum?.logger?.warn(
         `Tool with name "${tool.name}" is already registered. Overwriting.`
       );
     }

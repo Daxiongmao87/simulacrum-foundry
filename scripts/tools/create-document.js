@@ -44,8 +44,8 @@ export class CreateDocumentTool extends Tool {
         },
       };
     } catch (error) {
-      console.error(
-        `Simulacrum | CreateDocumentTool: Failed to create ${params.documentType}:`,
+      game.simulacrum?.logger?.error(
+        `CreateDocumentTool: Failed to create ${params.documentType}:`,
         error
       );
       return {

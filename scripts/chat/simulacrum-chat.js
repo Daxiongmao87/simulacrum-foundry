@@ -392,7 +392,7 @@ export class SimulacrumChatModal {
           try {
             await this._copyMessageContent(contentEl[0], tooltip, copyButton);
           } catch (err) {
-            console.error('Simulacrum | Failed to copy text: ', err);
+            game.simulacrum?.logger?.error('Failed to copy text: ', err);
             ui.notifications.error('Failed to copy message to clipboard');
           }
 
@@ -455,7 +455,7 @@ export class SimulacrumChatModal {
         tooltip.removeClass('visible');
       }, 2000);
     } catch (err) {
-      console.error('Simulacrum | Copy operation failed:', err);
+      game.simulacrum?.logger?.error('Copy operation failed:', err);
       throw err;
     }
   }
@@ -706,7 +706,7 @@ export class SimulacrumChatModal {
       // Transform cancel button back to send button when processing is complete
       this.transformCancelButtonToSend();
     } catch (error) {
-      console.error('Error sending message:', error);
+      game.simulacrum?.logger?.error('Error sending message:', error);
 
       // Clear any active placeholder on error
       this.clearCurrentPlaceholder();
@@ -822,8 +822,8 @@ export class SimulacrumChatModal {
    */
   addDocumentContext(document) {
     if (!document || !(document instanceof foundry.abstract.Document)) {
-      console.error(
-        'Simulacrum | Invalid document provided for context.',
+      game.simulacrum?.logger?.error(
+        'Invalid document provided for context.',
         document
       );
       ui.notifications.error(

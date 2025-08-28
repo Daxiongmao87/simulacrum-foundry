@@ -190,20 +190,16 @@ describe('AgentResponseParser', () => {
         .mockResolvedValueOnce('still invalid')
         .mockResolvedValueOnce(validJsonResponse);
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-
       const result = await parser.parseAgentResponse(malformedJson, mockAbortSignal);
       
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(game.simulacrum.logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('(attempt 1/5)'),
         expect.any(String)
       );
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(game.simulacrum.logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('(attempt 2/5)'),
         expect.any(String)
       );
-      
-      consoleSpy.mockRestore();
     });
 
     test('should handle very long responses by truncating error snippets', async () => {

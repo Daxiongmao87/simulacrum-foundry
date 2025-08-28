@@ -75,7 +75,7 @@ Every Level 1 integration test MUST include:
 
 ```javascript
 /**
- * @file tests/integration/v12/simulacrum-user-workflow.test.js
+ * @file tests/integration/v13/simulacrum-user-workflow.test.js
  * @description Tests complete user workflow for Simulacrum chat interface
  */
 
@@ -220,7 +220,7 @@ export default async function simulacrumUserWorkflowTest(session, permutation, c
 
 ```javascript
 /**
- * @file tests/integration/v12/simulacrum-api-integration.test.js
+ * @file tests/integration/v13/simulacrum-api-integration.test.js
  * @description Tests Simulacrum component interactions and API contracts
  */
 
@@ -304,7 +304,7 @@ export const testMetadata = {
   tags: ['ui', 'chat'],               // Tags for filtering
   userWorkflow: true,                  // TRUE for Level 1, FALSE for Level 2
   requirements: {                      // Optional requirements
-    minFoundryVersion: 'v12',
+    minFoundryVersion: 'v13',
     requiredModules: [],
     aiEndpoint: false
   }

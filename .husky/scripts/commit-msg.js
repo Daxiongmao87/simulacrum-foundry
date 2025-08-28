@@ -40,22 +40,10 @@ function extractIssueNumber(commitMessage) {
 function getTestTypeGuidance(testType) {
   const guidance = {
     unit: {
-      why: "Unit tests verify individual functions work correctly in isolation. They catch bugs early, run fast (no Docker needed), and ensure your code logic is solid before integration.",
+      why: "Unit tests verify individual functions work correctly in isolation. They catch bugs early, run fast, and ensure your code logic is solid.",
       example: "Test that your new function handles edge cases, error conditions, and expected inputs correctly.",
       template: "tests/unit/v13/sample.test.js",
-      run: "npm run test:unit:v13"
-    },
-    integration: {
-      why: "Integration tests verify your changes work in a real FoundryVTT game session. They catch issues that only appear when modules interact with the actual game system.",
-      example: "Test that your UI changes render correctly, API calls work, and game data updates properly.",
-      template: "tests/integration/v13/001-simulacrum-init.test.js", 
-      run: "node tests/run-tests.js -i your-test-name"
-    },
-    regression: {
-      why: "Regression tests ensure your changes don't break existing functionality. They protect against accidentally breaking features that users depend on.",
-      example: "Test that core features like chat, document CRUD, and tool execution still work after your changes.",
-      template: "tests/regression/v13/001-basic-functionality.test.js",
-      run: "node tests/run-tests.js -r your-test-name"
+      run: "npm run test:unit"
     }
   };
   return guidance[testType] || {};
@@ -82,20 +70,6 @@ function detectTestRequirementsFromGitHubIssue(issue) {
           requiredTests.push('unit');
         }
       }
-      
-      // Check for integration test labels  
-      if (labelName.match(/integration[\s-]?test(?:s|ing)?/gi)) {
-        if (!requiredTests.includes('integration')) {
-          requiredTests.push('integration');
-        }
-      }
-      
-      // Check for regression test labels
-      if (labelName.match(/regression[\s-]?test(?:s|ing)?/gi)) {
-        if (!requiredTests.includes('regression')) {
-          requiredTests.push('regression');
-        }
-      }
     }
   }
   
@@ -107,20 +81,6 @@ function detectTestRequirementsFromGitHubIssue(issue) {
     if (content.match(/unit[\s-]?test(?:s|ing)?/gi)) {
       if (!requiredTests.includes('unit')) {
         requiredTests.push('unit');
-      }
-    }
-    
-    // Check for integration test requirements - improved pattern
-    if (content.match(/integration[\s-]?test(?:s|ing)?/gi)) {
-      if (!requiredTests.includes('integration')) {
-        requiredTests.push('integration');
-      }
-    }
-    
-    // Check for regression test requirements - improved pattern
-    if (content.match(/regression[\s-]?test(?:s|ing)?/gi)) {
-      if (!requiredTests.includes('regression')) {
-        requiredTests.push('regression');
       }
     }
   }
@@ -135,13 +95,15 @@ function validateStagedTestFiles(requiredTestTypes, stagedFiles) {
   const missingTestTypes = [];
   
   for (const testType of requiredTestTypes) {
-    const hasTestFiles = stagedFiles.some(file => {
-      const pattern = `tests/${testType}/`;
-      return file.startsWith(pattern) && file.endsWith('.test.js');
-    });
-    
-    if (!hasTestFiles) {
-      missingTestTypes.push(testType);
+    if (testType === 'unit') {
+      const hasTestFiles = stagedFiles.some(file => {
+        const pattern = `tests/unit/`;
+        return file.startsWith(pattern) && file.endsWith('.test.js');
+      });
+      
+      if (!hasTestFiles) {
+        missingTestTypes.push(testType);
+      }
     }
   }
   

@@ -114,7 +114,10 @@ export class DynamicContextWindowSetting {
           );
         }
       } catch (error) {
-        console.error('🔥 Context window detection failed:', error);
+        game.simulacrum?.logger?.error(
+          '🔥 Context window detection failed:',
+          error
+        );
         this.showErrorState(error.message);
       }
     }, 1500);
@@ -154,7 +157,10 @@ export class DynamicContextWindowSetting {
 
       this.hideLoadingState();
     } catch (error) {
-      console.error('🔥 Model context window update failed:', error);
+      game.simulacrum?.logger?.error(
+        '🔥 Model context window update failed:',
+        error
+      );
       this.showErrorState(error.message);
     }
   }
@@ -397,7 +403,10 @@ export class DynamicContextWindowSetting {
    * @param {string} errorMessage - Error message to display
    */
   showErrorState(errorMessage) {
-    console.error('🔥 Context window setting error:', errorMessage);
+    game.simulacrum?.logger?.error(
+      '🔥 Context window setting error:',
+      errorMessage
+    );
 
     this.hideLoadingState();
 

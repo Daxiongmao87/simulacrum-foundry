@@ -119,8 +119,8 @@ export class ListImagesTool extends Tool {
           );
         }
       } catch (error) {
-        console.warn(
-          `Simulacrum | Error browsing root of source ${source}:`,
+        game.simulacrum?.logger?.warn(
+          `Error browsing root of source ${source}:`,
           error
         );
       }
@@ -177,8 +177,8 @@ export class ListImagesTool extends Tool {
       }
     } catch (error) {
       // Log but don't throw - some directories might not be accessible (e.g., permissions)
-      console.warn(
-        `Simulacrum | Cannot recursively scan ${source}/${basePath}:`,
+      game.simulacrum?.logger?.warn(
+        `Cannot recursively scan ${source}/${basePath}:`,
         error
       );
     }
@@ -216,8 +216,8 @@ export class ListImagesTool extends Tool {
           }))
         );
       } catch (error) {
-        console.warn(
-          `Simulacrum | Error scanning ${source}/${searchPath}:`,
+        game.simulacrum?.logger?.warn(
+          `Error scanning ${source}/${searchPath}:`,
           error
         );
       }
@@ -313,7 +313,7 @@ export class ListImagesTool extends Tool {
       }
     } catch (error) {
       // Log but don't throw - some directories might not be accessible
-      console.warn(`Simulacrum | Cannot scan ${basePath}:`, error);
+      game.simulacrum?.logger?.warn(`Cannot scan ${basePath}:`, error);
     }
 
     return images;

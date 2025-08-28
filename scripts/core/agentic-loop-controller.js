@@ -164,8 +164,8 @@ export class AgenticLoopController {
           result: result,
         });
       } catch (error) {
-        console.error(
-          `Simulacrum | Tool execution failed for ${toolCall.tool_name}:`,
+        game.simulacrum?.logger?.error(
+          `Tool execution failed for ${toolCall.tool_name}:`,
           error
         );
         ui.notifications.error(
@@ -292,7 +292,7 @@ export class AgenticLoopController {
           // For now, we'll just continue, but this might need more sophisticated handling.
         }
       } catch (error) {
-        console.error('Simulacrum | Agentic loop error:', error);
+        game.simulacrum?.logger?.error('Agentic loop error:', error);
         ui.notifications.error(
           `Simulacrum | Agentic loop error: ${error.message}`
         );

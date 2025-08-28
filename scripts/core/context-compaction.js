@@ -36,12 +36,15 @@ class ModelContextDetector {
         return contextWindow;
       }
     } catch (error) {
-      console.warn('🔍 Context window detection failed:', error);
+      game.simulacrum?.logger?.warn(
+        '🔍 Context window detection failed:',
+        error
+      );
     }
 
     // Fallback to reasonable default
     const fallbackWindow = 4096;
-    console.warn(
+    game.simulacrum?.logger?.warn(
       `🔍 Using fallback context window: ${fallbackWindow} tokens for ${modelName || 'unknown model'}`
     );
     return fallbackWindow;
@@ -95,7 +98,7 @@ export class ContextCompaction {
     const thresholdTokens = this.maxTokens * this.compactionThreshold;
 
     if (currentUsage > thresholdTokens) {
-      console.warn(
+      game.simulacrum?.logger?.warn(
         `🗜️ Context compaction triggered at ${currentUsage}/${this.maxTokens} tokens (${Math.round((currentUsage / this.maxTokens) * 100)}%)`
       );
       return this.performCompaction(chatHistory);
@@ -148,7 +151,7 @@ export class ContextCompaction {
 
       return compactedHistory;
     } catch (error) {
-      console.error('📦 Context compaction failed:', error);
+      game.simulacrum?.logger?.error('📦 Context compaction failed:', error);
       // Return original history on failure
       return chatHistory;
     }
@@ -190,7 +193,7 @@ Summary:`;
       const response = await this.aiService.sendMessage(prompt);
       return response.trim();
     } catch (error) {
-      console.error('📦 History summarization failed:', error);
+      game.simulacrum?.logger?.error('📦 History summarization failed:', error);
       // Fallback to a simple concatenation
       return `Previous conversation covered: ${messages.map((m) => m.content.substring(0, 50)).join('; ')}...`;
     }

@@ -55,7 +55,7 @@ export class DynamicModelSelector {
     const modelInput = html.find('input[name="simulacrum.modelName"]');
     const modelElement = modelSelect.length > 0 ? modelSelect : modelInput;
 
-    console.log('Simulacrum | DynamicModelSelector enhancement:', {
+    game.simulacrum?.logger?.debug('DynamicModelSelector enhancement:', {
       selectFound: modelSelect.length,
       inputFound: modelInput.length,
       usingElement:
@@ -66,7 +66,7 @@ export class DynamicModelSelector {
       this.settingElement = modelElement.closest('.form-group');
       this.modelInput = modelElement;
     } else {
-      console.warn('Simulacrum | No model element found for enhancement');
+      game.simulacrum?.logger?.warn('No model element found for enhancement');
       return;
     }
 
@@ -77,7 +77,10 @@ export class DynamicModelSelector {
       endpointInput.on('input', (e) => {
         const newEndpoint = e.target.value;
         if (newEndpoint && newEndpoint.trim() !== '') {
-          console.warn('Simulacrum | API endpoint changed to:', newEndpoint);
+          game.simulacrum?.logger?.warn(
+            'API endpoint changed to:',
+            newEndpoint
+          );
           // Clear existing timer
           if (this.endpointDebounceTimer) {
             clearTimeout(this.endpointDebounceTimer);
@@ -85,8 +88,8 @@ export class DynamicModelSelector {
 
           // Set new timer - only update models after 1 second of no changes
           this.endpointDebounceTimer = setTimeout(async () => {
-            console.warn(
-              'Simulacrum | Debounce timer expired, updating models for:',
+            game.simulacrum?.logger?.warn(
+              'Debounce timer expired, updating models for:',
               newEndpoint
             );
             await this.updateModelSelection(newEndpoint);
@@ -98,7 +101,10 @@ export class DynamicModelSelector {
     // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
     // Handle both select and input elements
     html.on('change', '[name="simulacrum.modelName"]', async (e) => {
-      console.log('Simulacrum | Model selection changed:', e.target.value);
+      game.simulacrum?.logger?.debug(
+        'Model selection changed:',
+        e.target.value
+      );
       const selectedValue = e.target.value;
 
       // Get the model's context window
@@ -110,7 +116,7 @@ export class DynamicModelSelector {
         (model) => model.id === selectedValue
       );
 
-      console.log('Simulacrum | Model lookup debug:', {
+      game.simulacrum?.logger?.debug('Model lookup debug:', {
         selectedValue,
         availableModels,
         selectedModel,
@@ -119,7 +125,7 @@ export class DynamicModelSelector {
 
       // Find context input field
       const contextInput = html.find('input[name="simulacrum.contextLength"]');
-      console.log('Simulacrum | Context input debug:', {
+      game.simulacrum?.logger?.debug('Context input debug:', {
         contextInputFound: contextInput.length,
         currentValue: contextInput.val(),
         isReadonly: contextInput.prop('readonly'),
@@ -129,8 +135,8 @@ export class DynamicModelSelector {
 
       if (selectedModel) {
         contextWindow = selectedModel.contextWindow;
-        console.log(
-          'Simulacrum | Using context window from model:',
+        game.simulacrum?.logger?.debug(
+          'Using context window from model:',
           contextWindow
         );
       } else {
@@ -140,21 +146,21 @@ export class DynamicModelSelector {
         if (match) {
           contextWindow =
             parseInt(match[1]) * (match[0].includes('k') ? 1000 : 1);
-          console.log(
-            'Simulacrum | Parsed context window from model name:',
+          game.simulacrum?.logger?.debug(
+            'Parsed context window from model name:',
             contextWindow
           );
         } else {
-          console.warn(
-            'Simulacrum | Could not determine context window for model:',
+          game.simulacrum?.logger?.warn(
+            'Could not determine context window for model:',
             selectedValue
           );
         }
       }
 
       if (contextWindow && contextInput.length > 0) {
-        console.log(
-          'Simulacrum | Updating context input with value:',
+        game.simulacrum?.logger?.debug(
+          'Updating context input with value:',
           contextWindow
         );
         contextInput.val(contextWindow);
@@ -162,12 +168,12 @@ export class DynamicModelSelector {
         // Also update the setting for persistence
         try {
           await game.settings.set('simulacrum', 'contextLength', contextWindow);
-          console.log('Simulacrum | Setting updated successfully');
+          game.simulacrum?.logger?.debug('Setting updated successfully');
         } catch (error) {
-          console.error('Simulacrum | Failed to update setting:', error);
+          game.simulacrum?.logger?.error('Failed to update setting:', error);
         }
       } else {
-        console.warn('Simulacrum | Could not update context length:', {
+        game.simulacrum?.logger?.warn('Could not update context length:', {
           hasContextWindow: !!contextWindow,
           hasContextInput: contextInput.length > 0,
         });
@@ -222,7 +228,10 @@ export class DynamicModelSelector {
 
       this.updateModelUI(detection);
     } catch (error) {
-      console.error('🤖 Model selection update failed:', error);
+      game.simulacrum?.logger?.error(
+        '🤖 Model selection update failed:',
+        error
+      );
       this.showErrorState(error.message);
     }
   }
@@ -511,7 +520,10 @@ export class DynamicModelSelector {
       contextWindowSetting.removeAutoDetectedIndicator();
       contextWindowSetting.addAutoDetectedIndicator(contextWindow);
     } catch (error) {
-      console.error('🔥 Immediate context window update failed:', error);
+      game.simulacrum?.logger?.error(
+        '🔥 Immediate context window update failed:',
+        error
+      );
       contextWindowSetting.hideLoadingState();
     }
   }
@@ -631,7 +643,7 @@ export class DynamicModelSelector {
    * @param {string} errorMessage - Error message to display
    */
   showErrorState(errorMessage) {
-    console.error('🤖 Model selection error:', errorMessage);
+    game.simulacrum?.logger?.error('🤖 Model selection error:', errorMessage);
 
     this.hideLoadingState();
 

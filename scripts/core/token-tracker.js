@@ -52,8 +52,8 @@ export class TokenTracker {
    */
   addPromptTokens(count) {
     if (typeof count !== 'number' || count < 0) {
-      console.warn(
-        'Simulacrum | TokenTracker: Invalid prompt token count provided.',
+      game.simulacrum?.logger?.warn(
+        'TokenTracker: Invalid prompt token count provided.',
         count
       );
       return;
@@ -68,8 +68,8 @@ export class TokenTracker {
    */
   addCompletionTokens(count) {
     if (typeof count !== 'number' || count < 0) {
-      console.warn(
-        'Simulacrum | TokenTracker: Invalid completion token count provided.',
+      game.simulacrum?.logger?.warn(
+        'TokenTracker: Invalid completion token count provided.',
         count
       );
       return;

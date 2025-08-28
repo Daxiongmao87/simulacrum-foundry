@@ -48,7 +48,7 @@ export class ModelDetector {
       this.cache.set(cacheKey, fallbackResult);
       return fallbackResult;
     } catch (error) {
-      console.warn('🤖 Model detection failed:', error);
+      game.simulacrum?.logger?.warn('🤖 Model detection failed:', error);
       const errorResult = {
         type: 'error',
         models: [],
@@ -180,7 +180,10 @@ export class ModelDetector {
         throw new Error(`Unknown API type: ${apiType}`);
       }
     } catch (error) {
-      console.warn(`🤖 Failed to get models for ${apiType}:`, error);
+      game.simulacrum?.logger?.warn(
+        `🤖 Failed to get models for ${apiType}:`,
+        error
+      );
       return {
         type: apiType,
         models: [],

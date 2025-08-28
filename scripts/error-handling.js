@@ -80,8 +80,10 @@ export class ErrorRecoveryManager {
         return result;
       } catch (error) {
         attempt++;
+        // Use console.warn directly here since this is part of the ErrorRecoveryManager
+        // and we don't want circular dependency with the main logger
         console.warn(
-          `Operation ${operationId} failed, attempt ${attempt}:`,
+          `Simulacrum | Operation ${operationId} failed, attempt ${attempt}:`,
           error
         );
 
@@ -129,7 +131,8 @@ export class ErrorRecoveryManager {
    * Handle critical errors that require system-level response
    */
   handleCriticalError(error) {
-    console.error('Critical error detected:', error);
+    // Use console.error directly here since this is part of the ErrorRecoveryManager
+    console.error('Simulacrum | Critical error detected:', error);
 
     // Notify user
     ui.notifications.error(
@@ -144,7 +147,8 @@ export class ErrorRecoveryManager {
    * Activate safe mode with limited functionality
    */
   activateSafeMode() {
-    console.warn('Activating Simulacrum safe mode');
+    // Use console.warn directly here since this is part of the ErrorRecoveryManager
+    console.warn('Simulacrum | Activating Simulacrum safe mode');
 
     // Disable AI service
     if (game.simulacrum?.aiService) {
@@ -332,6 +336,11 @@ export function setupGlobalErrorHandling() {
   game.simulacrum = game.simulacrum || {};
   game.simulacrum.errorLogger = errorLogger;
   game.simulacrum.recoveryManager = recoveryManager;
+
+  // Connect the error logger to the main logger if it exists
+  if (game.simulacrum.logger) {
+    game.simulacrum.logger.connectErrorLogger(errorLogger);
+  }
 }
 
 // Initialize global error handling when module loads

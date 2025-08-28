@@ -209,8 +209,8 @@ export class ImageValidator {
 
       return false;
     } catch (error) {
-      console.error(
-        `Simulacrum | ImageValidator | Error checking file existence for ${path}:`,
+      game.simulacrum?.logger?.error(
+        `ImageValidator | Error checking file existence for ${path}:`,
         error
       );
       return false;
@@ -274,8 +274,8 @@ export class ImageValidator {
     }
 
     if (availableSources.length === 0) {
-      console.warn(
-        'Simulacrum | ImageValidator | No FilePicker sources discovered, using emergency fallback'
+      game.simulacrum?.logger?.warn(
+        'ImageValidator | No FilePicker sources discovered, using emergency fallback'
       );
       return ['data', 'public']; // Should never happen with properly configured FoundryVTT
     }

@@ -35,8 +35,8 @@ export class FoundrySchemaExtractor {
 
       return this.convertFoundrySchemaToJSONSchema(schemaObj);
     } catch (e) {
-      console.warn(
-        `Simulacrum | Schema extraction failed for ${documentType}:`,
+      game.simulacrum?.logger?.warn(
+        `Schema extraction failed for ${documentType}:`,
         e
       );
       return null;

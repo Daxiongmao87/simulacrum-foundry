@@ -64,6 +64,7 @@ tests/docker/test-results/
 tests/screenshots/
 tests/coverage/
 tests/.jest-cache/
+tests/unit/*/coverage/
 
 # Test environment files
 .env.test

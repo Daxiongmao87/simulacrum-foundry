@@ -64,7 +64,7 @@ export function safeStringify(value, replacer = null, space = null) {
 
     return JSON.stringify(value, circularReplacer, space);
   } catch (error) {
-    console.warn('Simulacrum | Safe JSON serialization failed:', error);
+    game.simulacrum?.logger?.warn('Safe JSON serialization failed:', error);
     return `[Serialization Error: ${error.message}]`;
   }
 }
