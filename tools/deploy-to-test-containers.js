@@ -2,12 +2,12 @@
 
 /**
  * Deploy packaged Simulacrum module to all running test containers
- * 
+ *
  * This script:
  * 1. Runs npm run package to create the distribution
  * 2. Finds all running Docker containers matching the test prefix
  * 3. Deploys the packaged module to each container using copy-to-docker.js
- * 
+ *
  * Usage: node tools/deploy-to-test-containers.js
  */
 
@@ -48,7 +48,7 @@ try {
 
   // Step 2: Find running containers with the test prefix
   console.log('Simulacrum | \n🔍 Step 2: Finding running test containers...');
-  
+
   let runningContainers;
   try {
     const containerOutput = execSync(
@@ -72,14 +72,14 @@ try {
 
   // Step 3: Deploy to each container
   console.log('Simulacrum | \n🚚 Step 3: Deploying to containers...');
-  
+
   let deployedCount = 0;
   let failedCount = 0;
 
   for (const containerName of runningContainers) {
     // Extract version from container name (assuming format like: simulacrum-foundry-test-v12-dnd5e-12345)
     const versionMatch = containerName.match(/-v(\d+)-/);
-    
+
     if (!versionMatch) {
       console.log(`Simulacrum | ⚠️  Skipping ${containerName}: Could not determine version from name`);
       failedCount++;
@@ -87,7 +87,7 @@ try {
     }
 
     const version = `v${versionMatch[1]}`;
-    
+
     if (!supportedVersions.includes(version)) {
       console.log(`Simulacrum | ⚠️  Skipping ${containerName}: Unsupported version ${version}`);
       failedCount++;
@@ -95,7 +95,7 @@ try {
     }
 
     console.log(`Simulacrum | \n📤 Deploying to ${containerName} (${version})...`);
-    
+
     try {
       execSync(
         `node tools/copy-to-docker.js "${containerName}" "${version}"`,
@@ -114,7 +114,7 @@ try {
   if (failedCount > 0) {
     console.log(`Simulacrum | ❌ Failed to deploy to ${failedCount} container(s)`);
   }
-  
+
   if (deployedCount > 0) {
     console.log('Simulacrum | \n🎉 Deployment complete!');
     console.log('Simulacrum | 🔄 You may need to restart FoundryVTT or refresh the modules list in each instance');

@@ -21,10 +21,10 @@ const baseConfig = {
   // verbose is deprecated in multi-project configs
 };
 
-// v13 configuration  
+// v13 configuration
 const v13Config = {
   ...baseConfig,
-  displayName: 'v13 Unit Tests', 
+  displayName: 'v13 Unit Tests',
   testMatch: ['<rootDir>/tests/unit/v13/**/*.test.js'],
   setupFilesAfterEnv: [join(PROJECT_ROOT, 'tests/unit/v13/jest.setup.js')]
 };

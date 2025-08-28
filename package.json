@@ -23,7 +23,7 @@
   },
   "lint-staged": {
     "scripts/**/*.js": [
-      "eslint --fix",
+      "eslint --fix --max-warnings 250",
       "prettier --write"
     ]
   },

@@ -56,7 +56,7 @@ const getVersionConfig = (version) => {
         dataPath: '/data',  // Standard data path for v12 containers
         modulesPath: '/data/Data/modules'
       };
-    case 'v13':  
+    case 'v13':
       return {
         dataPath: '/data',  // Standard data path for v13 containers
         modulesPath: '/data/Data/modules'
@@ -72,26 +72,26 @@ try {
   // Check if container exists and is running
   console.log(`Checking if container "${containerName}" (${version}) is running...`);
   execSync(`docker ps -q -f name=${containerName}`, { stdio: 'pipe' });
-  
+
   // Container paths for FoundryVTT modules
   const foundryModulesPath = config.modulesPath;
   const simulacrumPath = `${foundryModulesPath}/simulacrum`;
-  
+
   console.log(`Copying package to container "${containerName}"...`);
-  
+
   // Remove existing module directory in container
   execSync(`docker exec "${containerName}" rm -rf "${simulacrumPath}"`, { stdio: 'inherit' });
-  
+
   // Copy the entire dist directory to the container as simulacrum module
   execSync(`docker cp "${distPath}" "${containerName}:${simulacrumPath}"`, { stdio: 'inherit' });
-  
+
   console.log(`✅ Successfully copied Simulacrum module to container "${containerName}" (${version})`);
   console.log(`Simulacrum | 📁 Module installed at: ${simulacrumPath}`);
   console.log('Simulacrum | 🔄 You may need to restart FoundryVTT or refresh the modules list');
-  
+
 } catch (error) {
   console.error(`❌ Error: ${error.message}`);
-  
+
   if (error.message.includes('No such container')) {
     console.error(`Container "${containerName}" does not exist or is not running`);
     console.error('Available containers:');
@@ -101,6 +101,6 @@ try {
       console.error('Could not list containers');
     }
   }
-  
+
   process.exit(1);
 }
