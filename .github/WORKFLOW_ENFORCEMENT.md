@@ -1,92 +1,78 @@
-# WORKFLOW ENFORCEMENT: STOP IGNORING ISSUE REQUIREMENTS
+# WORKFLOW ENFORCEMENT: DEVELOPMENT GUIDELINES
 
-## ROOT CAUSE: I DON'T READ ISSUE DESCRIPTIONS CAREFULLY
+## DEVELOPMENT WORKFLOW
 
-The problem is NOT that I need checklists - **I IGNORE THE CHECKLISTS**.
+### Code Quality Standards
+- **ESLint**: Use `npm run lint` for validation and `npm run lint:fix` for auto-fixing issues.
+- **Prettier**: Use `npm run format` for code formatting.
+- **Console Prefixes**: All console.log statements must use `'Simulacrum | '` prefix.
 
-The problem is that **I SCAN ISSUES TOO QUICKLY AND MISS CRITICAL WARNINGS**.
+### Git Workflow
+- **Commit Messages**: Provide clear, descriptive commit messages that explain what was changed and why.
+- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
+- **Feature Branches**: Work on feature branches (e.g., `git checkout -b feature-name`).
 
-## MANDATORY STEP 1 ENFORCEMENT: SLOW DOWN AND READ
+### Testing Requirements
+- **Unit Tests**: Create unit tests for new functionality in `tests/unit/v12/` or `tests/unit/v13/`.
+- **Integration Tests**: Create integration tests for new features in `tests/integration/v12/` or `tests/integration/v13/`.
+- **Test Coverage**: Ensure adequate test coverage for new code.
 
-**BEFORE DOING ANYTHING ELSE:**
+### Implementation Guidelines
 
-1. **COPY THE ENTIRE ISSUE DESCRIPTION** into my analysis
-2. **SEARCH FOR 🚨 WARNINGS** and highlight them
-3. **IDENTIFY THE EXACT DELIVERABLE TYPE** required
-4. **QUOTE THE SPECIFIC REQUIREMENTS** word-for-word
+#### Tool-Based Architecture
+- All tools extend the `Tool` base class in `scripts/tools/tool-registry.js`.
+- Implement `execute(params)` in subclasses.
+- Override `shouldConfirmExecute()` if the tool does not require user confirmation (defaults to `true`).
+- Define `parameterSchema` using JSON schema for input validation.
 
-## STEP 1 TEMPLATE:
+#### System-Agnostic Architecture
+**NEVER hardcode game system assumptions.** This module MUST work with ALL FoundryVTT systems.
+- Use `DocumentDiscoveryEngine.getAvailableTypes()` for document types.
+- Use `FoundrySchemaExtractor.getDocumentSchema()` for schemas.
+- Use `CONFIG` inspection for system-specific types.
+- NEVER assume D&D 5e, Pathfinder, etc., exist.
 
-```
-ISSUE ANALYSIS - MANDATORY SLOW READ:
+#### Document Operations
+- Always use the system-agnostic `DocumentDiscoveryEngine` from `scripts/core/document-discovery-engine.js` for discovering, normalizing, and interacting with Foundry VTT document types.
+- Use `GenericCRUDTools` from `scripts/core/generic-crud-tools.js` for creating, reading, updating, and deleting documents.
 
-ISSUE TITLE: [exact title]
+#### AI Integration
+- Follow the AI service pattern in `scripts/chat/ai-service.js` for OpenAI-compatible API integration, streaming responses, and tool call parsing.
+- Utilize `ModelDetector` and `ContextWindowDetector` (`scripts/core/`) for dynamic AI model and context window detection.
+- Employ `TokenTracker` (`scripts/core/`) for managing context window limits and truncating tool results for AI consumption.
 
-🚨 WARNING DETECTION:
-[Search for 🚨 symbols and copy ALL warning text]
+#### Settings Pattern
+- Register module settings using FoundryVTT's system as demonstrated in `scripts/settings.js`.
+- Leverage dynamic settings for `modelName` and `contextLength` based on API detection.
 
-DELIVERABLE TYPE REQUIRED:
-□ Bootstrap Helper Method (modify ConcurrentDockerTestRunner class)
-□ Integration Test File (create .test.js file)
-□ Other: [specify]
+#### Error Handling
+- Implement robust `try/catch` blocks.
+- Return structured results: `{ success: boolean, result?: any, error?: string }`.
+- Ensure graceful degradation for API failures using `SimulacrumError` and `ErrorRecoveryManager` (`scripts/error-handling.js`).
 
-SPECIFIC REQUIREMENTS (QUOTED):
-"[exact quote from issue]"
+### Testing and Verification
 
-FILE TO MODIFY/CREATE:
-[exact file path from issue]
+#### Working Commands
+- `npm run lint` - ESLint validation
+- `npm run lint:fix` - Auto-fix ESLint issues
+- `npm run format` - Prettier formatting
+- `npm run prepare` - Husky git hooks setup
+- `npm test` - Jest testing (Currently broken due to ES6 module config issues; avoid relying on this until fixed).
 
-FORBIDDEN ACTIONS (if any):
-[list what the issue says NOT to do]
-```
+#### Docker Integration Testing
+- The project uses a sophisticated Docker-based integration testing infrastructure, detailed in `tests/README.md`.
+- Use `node tests/run-tests.js` to execute integration tests.
+- **CRITICAL**: Understand the distinction between "BOOTSTRAP HELPER" (modifying `tests/helpers/concurrent-docker-test-runner.js` or related bootstrap files) and "INTEGRATION TEST" (creating `.test.js` files in `tests/integration/`).
+- For manual debugging of the bootstrap process, use `node tests/run-tests.js --manual`.
 
-## ENFORCEMENT: AGENT INSTRUCTIONS MUST MATCH ISSUE TYPE
+### Key Files to Understand
 
-**IF BOOTSTRAP HELPER DETECTED:**
-- Agent instruction MUST include: "MODIFY tests/helpers/concurrent-docker-test-runner.js"
-- Agent instruction MUST include: "DO NOT CREATE .test.js FILES"
-
-**IF INTEGRATION TEST DETECTED:**
-- Agent instruction MUST include: "CREATE tests/integration/*.test.js"
-- Agent instruction MUST include: "DO NOT MODIFY ConcurrentDockerTestRunner class"
-
-## STEP 6 ENFORCEMENT: VERIFY CORRECT DELIVERABLE TYPE
-
-**VALIDATION COMMANDS:**
-
-For Bootstrap Helper Issues:
-```bash
-# 1. Verify NO test files created
-find tests/integration -name "*.test.js" -newer /tmp/before_agent | wc -l
-# Should be 0
-
-# 2. Verify helper method added
-git diff --name-only | grep "concurrent-docker-test-runner.js"
-# Should show the helper file
-```
-
-For Integration Test Issues:
-```bash
-# 1. Verify test file created
-find tests/integration -name "*.test.js" -newer /tmp/before_agent
-# Should show new test file
-
-# 2. Verify test syntax works
-node -c tests/integration/*.test.js
-# Should not error
-```
-
-## IMMEDIATE REJECTION TRIGGERS:
-
-1. **Issue says "BOOTSTRAP HELPER"** → Agent created .test.js file = **REJECT**
-2. **Issue says "INTEGRATION TEST"** → Agent only modified helper class = **REJECT**
-3. **Issue has 🚨 warning** → Warning ignored in deliverable = **REJECT**
-4. **File path specified in issue** → Different file modified = **REJECT**
-
-## COMMIT PREVENTION:
-
-**NEVER COMMIT IF:**
-- Wrong deliverable type created
-- Issue warnings ignored
-- Specified file not modified
-- Tests don't pass syntax check
+- `scripts/main.js`: Module initialization and tool registration.
+- `scripts/core/agentic-loop-controller.js`: AI workflow orchestration.
+- `scripts/tools/tool-registry.js`: Tool base class and registry.
+- `scripts/core/document-discovery-engine.js`: System-agnostic document handling.
+- `scripts/settings.js`: Module settings integration.
+- `scripts/error-handling.js`: Comprehensive error handling system.
+- `tests/run-tests.js`: Main test orchestrator.
+- `tests/README.md`: Detailed documentation for the testing infrastructure.
+- `.github/copilot-instructions.md`: Detailed project overview and architectural patterns.

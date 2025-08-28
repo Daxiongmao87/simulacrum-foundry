@@ -13,12 +13,10 @@ Before any implementation or bug fix, thorough research is **mandatory**.
 
 - **Foundry VTT Online API Database**: For any module changes that require interacting with Foundry VTT, it is **imperative** to search the official Foundry VTT online API database for the specific version(s) you are targeting. This ensures correct API usage and compatibility.
 
-- **Issue Analysis (Slow Read)**: Before starting any task, **SLOW DOWN AND READ** the entire GitHub issue description carefully, as detailed in `.github/WORKFLOW_ENFORCEMENT.md`.
-    - Copy the entire issue description into your analysis.
-    - Search for `🚨 WARNINGS` and highlight them.
+- **Task Analysis**: Before starting any task, carefully analyze the requirements and understand what needs to be implemented.
     - Identify the exact deliverable type required.
-    - Quote the specific requirements word-for-word.
-    - List any forbidden actions.
+    - Understand the specific requirements.
+    - Plan the implementation approach.
 
 ### 2. System-Agnostic Architecture
 **NEVER hardcode game system assumptions.** This module MUST work with ALL FoundryVTT systems.
@@ -38,8 +36,8 @@ Before any implementation or bug fix, thorough research is **mandatory**.
 - **Prettier**: Use `npm run format` for code formatting.
 
 ### Git Workflow
-- **Commit Messages**: Commits MUST reference GitHub issues (e.g., "Fix chat persistence (#36)").
-- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality and issue validation. Do NOT bypass these hooks.
+- **Commit Messages**: Provide clear, descriptive commit messages that explain what was changed and why.
+- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
 - **Feature Branches**: Work on feature branches (e.g., `git checkout -b feature-name`).
 
 ## Implementation Guidelines
@@ -84,13 +82,13 @@ Before any implementation or bug fix, thorough research is **mandatory**.
 ### Docker Integration Testing
 - The project uses a sophisticated Docker-based integration testing infrastructure, detailed in `tests/README.md`.
 - Use `node tests/run-tests.js` to execute integration tests.
-- **CRITICAL**: Understand the distinction between "BOOTSTRAP HELPER" (modifying `tests/helpers/concurrent-docker-test-runner.js` or related bootstrap files) and "INTEGRATION TEST" (creating `.test.js` files in `tests/integration/`). This distinction is strictly enforced by `.github/WORKFLOW_ENFORCEMENT.md`.
+- **CRITICAL**: Understand the distinction between "BOOTSTRAP HELPER" (modifying `tests/helpers/concurrent-docker-test-runner.js` or related bootstrap files) and "INTEGRATION TEST" (creating `.test.js` files in `tests/integration/`).
 - For manual debugging of the bootstrap process, use `node tests/run-tests.js --manual`.
 
-### Validation and Rejection Triggers
-- **Verify Correct Deliverable Type**: Ensure your implementation matches the deliverable type specified in the GitHub issue.
-- **Immediate Rejection Triggers**: Strictly adhere to the rules outlined in `.github/WORKFLOW_ENFORCEMENT.md` to avoid immediate rejection of work.
-- **Commit Prevention**: NEVER commit if wrong deliverable type created, issue warnings ignored, specified file not modified, or tests don't pass syntax check.
+### Validation and Quality Assurance
+- **Code Quality**: Ensure all code follows project standards and passes linting checks.
+- **Testing**: Create appropriate tests for new functionality.
+- **Documentation**: Update relevant documentation when making changes.
 
 ## Key Files to Understand
 
@@ -103,4 +101,4 @@ Before any implementation or bug fix, thorough research is **mandatory**.
 - `tests/run-tests.js`: Main test orchestrator.
 - `tests/README.md`: Detailed documentation for the testing infrastructure.
 - `.github/copilot-instructions.md`: Detailed project overview and architectural patterns.
-- `.github/WORKFLOW_ENFORCEMENT.md`: Strict workflow and issue analysis guidelines.
+- `.github/WORKFLOW_ENFORCEMENT.md`: Development workflow guidelines.
