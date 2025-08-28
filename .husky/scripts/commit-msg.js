@@ -18,7 +18,7 @@ import { readFileSync } from 'fs';
  */
 function getGitHubIssue(issueNumber) {
   try {
-    const issueJson = execSync(`gh issue view ${issueNumber} --json title,body,labels,state`, { encoding: 'utf-8' });
+    const issueJson = execSync(`/home/patrick/.local/bin/gh issue view ${issueNumber} --json title,body,labels,state`, { encoding: 'utf-8' });
     return JSON.parse(issueJson);
   } catch (error) {
     console.error(`❌ Failed to fetch GitHub issue #${issueNumber}: ${error.message}`);

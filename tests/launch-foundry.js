@@ -20,6 +20,7 @@
 import { readFileSync, existsSync, writeFileSync, appendFileSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import { BootstrapRunner } from './bootstrap/bootstrap-runner.js';
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -114,8 +115,158 @@ class FoundryLauncher {
     this.bootstrap = new BootstrapRunner(this.config, this.logger);
   }
 
+  async discoverSessions() {
+    this.logger.debug('Discovering running FoundryVTT sessions...');
+    
+    try {
+      // Find running Docker containers that look like FoundryVTT test containers
+      const dockerCommand = 'docker ps --format "table {{.ID}}\\t{{.Names}}\\t{{.Ports}}\\t{{.Status}}\\t{{.Image}}"';
+      const containerList = execSync(dockerCommand, { encoding: 'utf8' });
+      
+      const sessions = [];
+      const lines = containerList.split('\n').slice(1); // Skip header
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        const parts = line.split('\t');
+        if (parts.length >= 4) {
+          const [containerId, name, ports, status, image] = parts;
+          
+          // Look for containers that appear to be FoundryVTT test containers
+          if (name.includes('test-') || ports.includes('30000')) {
+            // Extract port number from ports string (e.g., "0.0.0.0:30001->30000/tcp")
+            const portMatch = ports.match(/0\.0\.0\.0:(\d+)->30000/);
+            const port = portMatch ? portMatch[1] : null;
+            
+            if (port) {
+              sessions.push({
+                id: containerId.substring(0, 12), // Short container ID
+                name,
+                port: parseInt(port),
+                url: `http://localhost:${port}`,
+                status: status.trim(),
+                image: image || 'unknown',
+                containerId
+              });
+            }
+          }
+        }
+      }
+      
+      return sessions;
+    } catch (error) {
+      this.logger.debug(`Failed to discover sessions: ${error.message}`);
+      return [];
+    }
+  }
+
+  async listSessions() {
+    this.logger.info('Listing running FoundryVTT sessions...');
+    
+    const sessions = await this.discoverSessions();
+    
+    if (sessions.length === 0) {
+      this.logger.info('No running FoundryVTT sessions found.');
+      this.logger.info('Start a session using: node tests/launch-foundry.js --daemon -v v13 -s dnd5e');
+      return { success: true, sessions: [] };
+    }
+    
+    this.logger.success(`Found ${sessions.length} running session${sessions.length === 1 ? '' : 's'}:`);
+    console.log(''); // Empty line for readability
+    
+    for (const session of sessions) {
+      this.logger.info(`📋 Session: ${session.name}`);
+      this.logger.info(`   ID: ${session.id}`);
+      this.logger.info(`   URL: ${session.url}`);
+      this.logger.info(`   Status: ${session.status}`);
+      this.logger.info(`   Image: ${session.image}`);
+      console.log(''); // Empty line between sessions
+    }
+    
+    return { success: true, sessions };
+  }
+
+  async stopSession(sessionId) {
+    this.logger.info(`Stopping session: ${sessionId}`);
+    
+    const sessions = await this.discoverSessions();
+    
+    // Find session by ID (partial match) or name
+    const targetSession = sessions.find(s => 
+      s.id.startsWith(sessionId) || 
+      s.name.includes(sessionId) ||
+      s.containerId.startsWith(sessionId)
+    );
+    
+    if (!targetSession) {
+      this.logger.error(`Session '${sessionId}' not found.`);
+      this.logger.info('Available sessions:');
+      for (const session of sessions) {
+        this.logger.info(`  ${session.id}: ${session.name}`);
+      }
+      throw new Error(`Session '${sessionId}' not found`);
+    }
+    
+    try {
+      this.logger.info(`Stopping container: ${targetSession.name} (${targetSession.id})`);
+      execSync(`docker stop ${targetSession.containerId}`, { stdio: 'inherit' });
+      
+      this.logger.info(`Removing container: ${targetSession.name} (${targetSession.id})`);
+      execSync(`docker rm ${targetSession.containerId}`, { stdio: 'inherit' });
+      
+      // Try to remove the Docker image as well
+      if (targetSession.image && !targetSession.image.includes('unknown')) {
+        this.logger.info(`Removing Docker image: ${targetSession.image}`);
+        try {
+          execSync(`docker rmi ${targetSession.image}`, { stdio: 'inherit' });
+        } catch (e) {
+          this.logger.debug(`Docker image removal failed (may be in use): ${e.message}`);
+        }
+      }
+      
+      this.logger.success(`Session ${targetSession.name} stopped and cleaned up successfully`);
+      return { success: true, session: targetSession };
+      
+    } catch (error) {
+      this.logger.error(`Failed to stop session: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async stopAllSessions() {
+    this.logger.info('Stopping all FoundryVTT sessions...');
+    
+    const sessions = await this.discoverSessions();
+    
+    if (sessions.length === 0) {
+      this.logger.info('No running sessions found.');
+      return { success: true, stopped: [] };
+    }
+    
+    const results = [];
+    
+    for (const session of sessions) {
+      try {
+        this.logger.info(`Stopping: ${session.name} (${session.id})`);
+        await this.stopSession(session.id);
+        results.push({ session, success: true });
+      } catch (error) {
+        this.logger.error(`Failed to stop ${session.name}: ${error.message}`);
+        results.push({ session, success: false, error: error.message });
+      }
+    }
+    
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+    
+    this.logger.info(`Cleanup complete: ${successful} stopped, ${failed} failed`);
+    
+    return { success: failed === 0, results };
+  }
+
   async launch(options = {}) {
-    const { versions = null, systems = null } = options;
+    const { versions = null, systems = null, daemon = false } = options;
 
     // Determine which versions to test
     const versionsToTest = versions || [this.config['foundry-versions'][0]]; // Default to first version
@@ -127,25 +278,66 @@ class FoundryLauncher {
       // Clean up any existing artifacts
       this.cleanArtifacts();
 
-      // Create session for manual testing
-      const session = await this.bootstrap.createSession(versionsToTest[0], systemsToTest[0]);
+      // Create permutation object for bootstrap
+      const permutation = {
+        id: `${versionsToTest[0]}-${systemsToTest[0]}`,
+        version: versionsToTest[0],
+        system: systemsToTest[0],
+        description: `${systemsToTest[0]} on Foundry VTT ${versionsToTest[0]}`
+      };
+
+      // Create session for testing
+      const session = await this.bootstrap.createSession(permutation);
       this.logger.success(`FoundryVTT session created: ${session.name}`);
       this.logger.info(`Access URL: http://localhost:${session.port}`);
+      this.logger.info(`Container ID: ${session.containerId || session.instanceId}`);
       this.logger.info('');
       this.logger.info('🎮 FoundryVTT is now running!');
-      this.logger.info('📝 You can now manually test the Simulacrum module');
+      this.logger.info('📝 You can now test the Simulacrum module');
       this.logger.info('🌐 Open your browser and navigate to the URL above');
       this.logger.info('');
-      this.logger.info('⌨️  Press ESC key to stop and cleanup when done...');
 
-      // Wait for user to press ESC
-      await this.waitForEscapeKey();
+      if (daemon) {
+        // Daemon mode: return immediately, don't wait for user input
+        this.logger.info('🔄 Running in daemon mode');
+        this.logger.info('📋 Use --list-sessions to see running sessions');
+        this.logger.info('🛑 Use --stop <session-id> to stop this session');
+        this.logger.info('🧹 Use --stop-all to stop all sessions');
+        this.logger.info('');
+        this.logger.success(`Daemon session started successfully!`);
+        this.logger.info(`Session ID: ${session.containerId || session.instanceId}`);
+        this.logger.info(`URL: http://localhost:${session.port}`);
+        
+        const totalTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+        this.logger.success(`Session launched in ${totalTime}s`);
+        
+        // Return session info for potential use by calling code
+        return {
+          success: true,
+          session: {
+            id: session.containerId || session.instanceId,
+            name: session.instanceId,
+            port: session.port,
+            url: `http://localhost:${session.port}`,
+            containerId: session.containerId
+          }
+        };
+      } else {
+        // Interactive mode: wait for ESC key
+        this.logger.info('⌨️  Press ESC key to stop and cleanup when done...');
+        this.logger.info('💡 Tip: Use --daemon flag to run in background mode');
 
-      this.logger.info('🧹 Cleaning up session...');
-      await this.bootstrap.cleanup();
-      
-      const totalTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
-      this.logger.success(`Session completed in ${totalTime}s`);
+        // Wait for user to press ESC
+        await this.waitForEscapeKey();
+
+        this.logger.info('🧹 Cleaning up session...');
+        await this.bootstrap.cleanup();
+        
+        const totalTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+        this.logger.success(`Session completed in ${totalTime}s`);
+        
+        return { success: true };
+      }
 
     } catch (error) {
       this.logger.error(`Launch failed: ${error.message}`);
@@ -218,7 +410,11 @@ function parseArgs() {
   const options = {
     help: false,
     versions: null,
-    systems: null
+    systems: null,
+    daemon: false,
+    listSessions: false,
+    stop: null,
+    stopAll: false
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -226,6 +422,25 @@ function parseArgs() {
     
     if (arg === '--help' || arg === '-h') {
       options.help = true;
+    } else if (arg === '--daemon' || arg === '-d') {
+      options.daemon = true;
+    } else if (arg === '--list-sessions') {
+      options.listSessions = true;
+    } else if (arg === '--stop') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        options.stop = nextArg;
+        i++; // Skip next argument as it's the value
+      } else {
+        throw new Error('--stop requires a session ID');
+      }
+    } else if (arg.startsWith('--stop=')) {
+      options.stop = arg.split('=')[1];
+      if (!options.stop) {
+        throw new Error('--stop requires a session ID');
+      }
+    } else if (arg === '--stop-all') {
+      options.stopAll = true;
     } else if (arg === '--versions' || arg === '-v') {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
@@ -242,6 +457,8 @@ function parseArgs() {
       }
     } else if (arg.startsWith('--systems=')) {
       options.systems = arg.split('=')[1].split(',').map(s => s.trim());
+    } else {
+      throw new Error(`Unknown argument: ${arg}. Use --help for usage information.`);
     }
   }
   
@@ -251,29 +468,44 @@ function parseArgs() {
 // Display help message
 function showHelp() {
   console.log(`[FoundryVTT Launcher] 
-FoundryVTT Manual Testing Launcher
+FoundryVTT Testing Launcher with Daemon Support
 
 Usage: node launch-foundry.js [options]
 
-Options:
+Launch Options:
   --help, -h              Show this help message
   --debug                 Enable verbose debug output (same as DEBUG=true)
   --versions, -v <list>   Override FoundryVTT version (defaults to first configured)
   --systems, -s <list>    Override game system (defaults to first configured)
+  --daemon, -d            Run in background daemon mode (no interactive ESC wait)
+
+Session Management:
+  --list-sessions         List all running FoundryVTT sessions
+  --stop <session-id>     Stop specific session by ID or container name
+  --stop-all              Stop all running FoundryVTT sessions
   
 Description:
-  This launcher creates a live FoundryVTT session using Docker containers
-  for manual testing and development. It performs complete bootstrap setup
-  including license acceptance, EULA handling, system installation, and
-  world creation.
+  This launcher creates live FoundryVTT sessions using Docker containers
+  for testing and development. It performs complete bootstrap setup including
+  license acceptance, EULA handling, system installation, and world creation.
   
-  The session will remain active until you press the ESC key, allowing
-  you to manually test the Simulacrum module in a real FoundryVTT environment.
+  Interactive Mode (default): Session runs until you press ESC key
+  Daemon Mode (--daemon): Session runs in background, use --stop to cleanup
   
 Examples:
-  node launch-foundry.js                    # Launch default version and system
-  node launch-foundry.js -v v13 -s dnd5e   # Launch FoundryVTT v13 with D&D 5e
-  node launch-foundry.js --debug           # Launch with verbose debug output
+  # Interactive mode (traditional usage)
+  node launch-foundry.js -v v13 -s dnd5e   # Launch and wait for ESC
+  
+  # Daemon mode (AI/automation friendly)  
+  node launch-foundry.js --daemon -v v13 -s dnd5e  # Launch in background
+  node launch-foundry.js --list-sessions           # Show running sessions
+  node launch-foundry.js --stop session-id         # Stop specific session
+  node launch-foundry.js --stop-all                # Stop all sessions
+  
+  # Use with foundry-inspector
+  node launch-foundry.js --daemon -v v13 -s dnd5e
+  node tools/foundry-inspector.js --extract-schema "Actor"
+  node launch-foundry.js --stop-all
 
 For automated unit testing, use:
   node run-tests.js
@@ -293,10 +525,40 @@ async function main() {
     const launcher = new FoundryLauncher();
     await launcher.initialize();
 
-    await launcher.launch({
+    // Handle session management commands
+    if (options.listSessions) {
+      await launcher.listSessions();
+      return;
+    }
+
+    if (options.stop) {
+      await launcher.stopSession(options.stop);
+      return;
+    }
+
+    if (options.stopAll) {
+      await launcher.stopAllSessions();
+      return;
+    }
+
+    // Validate launch options
+    if (options.daemon && (options.stop || options.stopAll || options.listSessions)) {
+      throw new Error('Cannot combine --daemon with session management commands');
+    }
+
+    // Launch FoundryVTT session
+    const result = await launcher.launch({
       versions: options.versions,
-      systems: options.systems
+      systems: options.systems,
+      daemon: options.daemon
     });
+
+    if (result && result.session && options.daemon) {
+      // In daemon mode, output session info for potential script usage
+      console.log(`SESSION_ID=${result.session.id}`);
+      console.log(`SESSION_URL=${result.session.url}`);
+      console.log(`SESSION_PORT=${result.session.port}`);
+    }
 
   } catch (error) {
     console.error(`[FoundryVTT Launcher] ❌ Fatal error: ${error.message}`);
