@@ -32,15 +32,50 @@ export class DynamicModelSelector {
 
     // Listen for API key changes
     this.watchApiKeySetting();
+
+    // Listen for availableModels setting changes
+    this.watchAvailableModelsSetting();
   }
 
   /**
    * Watch for changes to API key setting
    */
   watchApiKeySetting() {
-    Hooks.on('updateSetting', (setting, value) => {
-      if (setting.key === 'simulacrum.apiKey') {
-        this.onApiKeyChange(value);
+    Hooks.on('updateSetting', (setting, _value) => {
+      try {
+        const key = setting?.key ?? '';
+        const namespace = setting?.namespace ?? setting?.module ?? '';
+        const isSimulacrum =
+          namespace === 'simulacrum' || key?.startsWith?.('simulacrum.');
+        const isApiKey = key === 'apiKey' || key === 'simulacrum.apiKey';
+        if (isSimulacrum && isApiKey) {
+          const latest = game.settings.get('simulacrum', 'apiKey');
+          this.onApiKeyChange(latest);
+        }
+      } catch (_) {
+        // ignore
+      }
+    });
+  }
+
+  /**
+   * Watch for changes to availableModels setting
+   */
+  watchAvailableModelsSetting() {
+    Hooks.on('updateSetting', (setting, _value) => {
+      try {
+        const key = setting?.key ?? '';
+        const namespace = setting?.namespace ?? setting?.module ?? '';
+        const isSimulacrum =
+          namespace === 'simulacrum' || key?.startsWith?.('simulacrum.');
+        const isAvailableModels =
+          key === 'availableModels' || key === 'simulacrum.availableModels';
+        if (isSimulacrum && isAvailableModels) {
+          const models = game.settings.get('simulacrum', 'availableModels');
+          this.onAvailableModelsChange(models);
+        }
+      } catch (_) {
+        // ignore
       }
     });
   }
@@ -50,9 +85,33 @@ export class DynamicModelSelector {
    * @param {jQuery} html - Settings UI HTML
    */
   enhanceSettingsUI(html) {
+    // Ensure jQuery wrapper; Foundry may pass a plain HTMLElement
+    if (!html || typeof html.find !== 'function') {
+      try {
+        html = $(html);
+      } catch (_) {
+        return;
+      }
+    }
+
+    // Find the Simulacrum tab container to delegate within (more reliable than the whole form)
+    const simTab = html.find(
+      'section.tab[data-group="categories"][data-tab="simulacrum"], section[data-category="simulacrum"]'
+    );
+    const delegateRoot = simTab.length ? simTab : html;
+
+    game.simulacrum?.logger?.debug(
+      'DynamicModelSelector: delegate root chosen',
+      {
+        hasSimTab: !!simTab.length,
+      }
+    );
+
     // Look for model select OR input (element might start as input and become select)
-    const modelSelect = html.find('select[name="simulacrum.modelName"]');
-    const modelInput = html.find('input[name="simulacrum.modelName"]');
+    const modelSelect = delegateRoot.find(
+      'select[name="simulacrum.modelName"]'
+    );
+    const modelInput = delegateRoot.find('input[name="simulacrum.modelName"]');
     const modelElement = modelSelect.length > 0 ? modelSelect : modelInput;
 
     game.simulacrum?.logger?.debug('DynamicModelSelector enhancement:', {
@@ -66,48 +125,84 @@ export class DynamicModelSelector {
       this.settingElement = modelElement.closest('.form-group');
       this.modelInput = modelElement;
     } else {
-      game.simulacrum?.logger?.warn('No model element found for enhancement');
-      return;
+      game.simulacrum?.logger?.warn(
+        'No model element found yet; attaching endpoint listeners only'
+      );
+      // Do not return; keep listeners attached so detection can update settings
     }
 
-    // Add direct DOM event listener for API endpoint changes
-    const endpointInput = html.find('input[name="simulacrum.apiEndpoint"]');
-    if (endpointInput.length > 0) {
-      // Use input event to capture changes as user types
-      endpointInput.on('input', (e) => {
-        const newEndpoint = e.target.value;
-        if (newEndpoint && newEndpoint.trim() !== '') {
-          game.simulacrum?.logger?.warn(
-            'API endpoint changed to:',
-            newEndpoint
-          );
-          // Clear existing timer
-          if (this.endpointDebounceTimer) {
-            clearTimeout(this.endpointDebounceTimer);
+    // Add delegated DOM event listeners on the SettingsConfig container for API endpoint changes
+    const handleEndpointEvent = (e) => {
+      const raw = e.target?.value ?? '';
+      const newEndpoint = String(raw).trim();
+
+      // Clear existing timer
+      if (this.endpointDebounceTimer) {
+        clearTimeout(this.endpointDebounceTimer);
+      }
+
+      // If empty, fall back to manual input UI and clear models
+      if (!newEndpoint) {
+        try {
+          game.settings.set('simulacrum', 'availableModels', []);
+        } catch (_) {}
+        this.detectedModels = [];
+        this.isDetectable = false;
+        this.currentApiType = 'unknown';
+        this.updateModelUIFromAvailableModels();
+        return;
+      }
+
+      game.simulacrum?.logger?.debug('API endpoint changed to:', newEndpoint);
+
+      // Debounce detection for 1s after last change
+      this.endpointDebounceTimer = setTimeout(async () => {
+        game.simulacrum?.logger?.debug(
+          'Debounce timer expired, updating models for:',
+          newEndpoint
+        );
+        const apiKey = (() => {
+          try {
+            return game.settings.get('simulacrum', 'apiKey');
+          } catch {
+            return null;
           }
+        })();
+        await this.updateModelSelection(newEndpoint, apiKey);
+      }, 1000);
+    };
 
-          // Set new timer - only update models after 1 second of no changes
-          this.endpointDebounceTimer = setTimeout(async () => {
-            game.simulacrum?.logger?.warn(
-              'Debounce timer expired, updating models for:',
-              newEndpoint
-            );
-            await this.updateModelSelection(newEndpoint);
-          }, 1000);
-        }
-      });
-    }
+    // Delegate to survive any internal re-renders within the Settings window
+    delegateRoot.on(
+      'input',
+      'input[name="simulacrum.apiEndpoint"]',
+      handleEndpointEvent
+    );
+    delegateRoot.on(
+      'change',
+      'input[name="simulacrum.apiEndpoint"]',
+      handleEndpointEvent
+    );
+    delegateRoot.on(
+      'keyup',
+      'input[name="simulacrum.apiEndpoint"]',
+      handleEndpointEvent
+    );
 
     // Add direct DOM event listener since FoundryVTT onChange handlers don't work with UI changes
     // Handle both select and input elements
     html.on('change', '[name="simulacrum.modelName"]', async (e) => {
-      game.simulacrum?.logger?.debug(
-        'Model selection changed:',
-        e.target.value
-      );
       const selectedValue = e.target.value;
+      game.simulacrum?.logger?.debug('Model selection changed:', selectedValue);
 
-      // Get the model's context window
+      // Persist the selected model immediately and trigger downstream updates
+      try {
+        await this.onModelSelectionChange(selectedValue);
+      } catch (err) {
+        game.simulacrum?.logger?.warn('onModelSelectionChange failed:', err);
+      }
+
+      // Try to reflect context length in the UI immediately
       const availableModels = game.settings.get(
         'simulacrum',
         'availableModels'
@@ -116,77 +211,74 @@ export class DynamicModelSelector {
         (model) => model.id === selectedValue
       );
 
-      game.simulacrum?.logger?.debug('Model lookup debug:', {
-        selectedValue,
-        availableModels,
-        selectedModel,
-        availableModelsCount: availableModels.length,
-      });
-
-      // Find context input field
-      const contextInput = html.find('input[name="simulacrum.contextLength"]');
-      game.simulacrum?.logger?.debug('Context input debug:', {
-        contextInputFound: contextInput.length,
-        currentValue: contextInput.val(),
-        isReadonly: contextInput.prop('readonly'),
-      });
-
       let contextWindow = null;
-
       if (selectedModel) {
         contextWindow = selectedModel.contextWindow;
-        game.simulacrum?.logger?.debug(
-          'Using context window from model:',
-          contextWindow
-        );
       } else {
-        // Fallback: try to parse context window from model name
-        // e.g., "gpt-oss:20k" -> 20000, "gpt-oss:32k" -> 32000
-        const match = selectedValue.match(/:([0-9]+)k?$/i);
+        const match = selectedValue?.match?.(/:([0-9]+)k?$/i);
         if (match) {
           contextWindow =
             parseInt(match[1]) * (match[0].includes('k') ? 1000 : 1);
-          game.simulacrum?.logger?.debug(
-            'Parsed context window from model name:',
-            contextWindow
-          );
-        } else {
-          game.simulacrum?.logger?.warn(
-            'Could not determine context window for model:',
-            selectedValue
-          );
         }
       }
 
-      if (contextWindow && contextInput.length > 0) {
-        game.simulacrum?.logger?.debug(
-          'Updating context input with value:',
-          contextWindow
-        );
-        contextInput.val(contextWindow);
-
-        // Also update the setting for persistence
-        try {
+      try {
+        if (contextWindow) {
+          // Update underlying setting
           await game.settings.set('simulacrum', 'contextLength', contextWindow);
-          game.simulacrum?.logger?.debug('Setting updated successfully');
-        } catch (error) {
-          game.simulacrum?.logger?.error('Failed to update setting:', error);
+
+          // Update range-picker if present
+          const rangePicker = html.find(
+            'range-picker[name="simulacrum.contextLength"]'
+          );
+          if (rangePicker.length > 0) {
+            const rangeInput = rangePicker.find('input[type="range"]');
+            const numberInput = rangePicker.find('input[type="number"]');
+            if (rangeInput.length) {
+              rangeInput.val(contextWindow).trigger('input');
+            }
+            if (numberInput.length) {
+              numberInput.val(contextWindow).trigger('input');
+            }
+          }
         }
-      } else {
-        game.simulacrum?.logger?.warn('Could not update context length:', {
-          hasContextWindow: !!contextWindow,
-          hasContextInput: contextInput.length > 0,
-        });
+      } catch (error) {
+        game.simulacrum?.logger?.error(
+          'Failed to update context length:',
+          error
+        );
       }
     });
 
-    // Initially hide the setting
-    this.hideModelSetting();
+    // Initially hide the setting if we have a container
+    if (this.settingElement) {
+      this.hideModelSetting();
+    }
 
-    // Check current API endpoint and update UI
-    const currentEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
-    if (currentEndpoint) {
-      this.updateModelSelection(currentEndpoint);
+    // Initialize UI based on current available models
+    game.simulacrum?.logger?.debug(
+      'DynamicModelSelector init: reading availableModels'
+    );
+    const availableModels = game.settings.get('simulacrum', 'availableModels');
+    if (availableModels && availableModels.length > 0 && this.modelInput) {
+      this.detectedModels = availableModels.map((model) => ({
+        id: model.id,
+        name: model.id,
+        contextWindow: model.contextWindow,
+      }));
+      this.isDetectable = true;
+      this.currentApiType = 'detected';
+      this.updateModelUIFromAvailableModels();
+    } else if (this.modelInput) {
+      // Check current API endpoint and update UI if no models available
+      const currentEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+      game.simulacrum?.logger?.debug(
+        'DynamicModelSelector init: no models, endpoint=',
+        currentEndpoint
+      );
+      if (currentEndpoint) {
+        this.updateModelSelection(currentEndpoint);
+      }
     }
   }
 
@@ -196,11 +288,6 @@ export class DynamicModelSelector {
    * @param {string} apiKey - Optional API key
    */
   async updateModelSelection(apiEndpoint, apiKey = null) {
-    // Skip if UI elements not ready
-    if (!this.modelInput) {
-      return;
-    }
-
     // Use current API key if not provided
     if (!apiKey) {
       try {
@@ -215,6 +302,7 @@ export class DynamicModelSelector {
       return;
     }
 
+    // Show loading state if UI is available
     this.showLoadingState();
 
     try {
@@ -226,7 +314,27 @@ export class DynamicModelSelector {
       this.isDetectable = detection.detectable;
       this.currentApiType = detection.type;
 
-      this.updateModelUI(detection);
+      // Also synchronize availableModels setting so other UI logic stays in sync
+      try {
+        const mappedModels =
+          detection.detectable && Array.isArray(detection.models)
+            ? detection.models.map((model) => ({
+                id: model.id,
+                contextWindow: 32000,
+              }))
+            : [];
+        await game.settings.set('simulacrum', 'availableModels', mappedModels);
+      } catch (settingsError) {
+        game.simulacrum?.logger?.warn(
+          'Failed to sync availableModels setting after detection:',
+          settingsError
+        );
+      }
+
+      // Update UI if model input is present; otherwise rely on settings update
+      if (this.modelInput) {
+        this.updateModelUI(detection);
+      }
     } catch (error) {
       game.simulacrum?.logger?.error(
         '🤖 Model selection update failed:',
@@ -247,6 +355,29 @@ export class DynamicModelSelector {
       this.showDropdownSelector(detection.models);
     } else {
       this.showTextInput(detection.type);
+    }
+
+    this.hideLoadingState();
+  }
+
+  /**
+   * Update model UI based on available models from settings
+   */
+  updateModelUIFromAvailableModels() {
+    // Try to reacquire the model input if missing (handles re-renders)
+    if (!this.modelInput || this.modelInput.length === 0) {
+      this.tryReacquireModelInputFromDOM();
+      if (!this.modelInput || this.modelInput.length === 0) {
+        return;
+      }
+    }
+
+    this.showModelSetting();
+
+    if (this.isDetectable && this.detectedModels.length > 0) {
+      this.showDropdownSelector(this.detectedModels);
+    } else {
+      this.showTextInput(this.currentApiType);
     }
 
     this.hideLoadingState();
@@ -289,10 +420,12 @@ export class DynamicModelSelector {
     customOption.textContent = '-- Custom Model --';
     select.appendChild(customOption);
 
-    // Set current value if it exists in the models
+    // Set current value if it exists; otherwise keep previous 'custom'
     const currentValue = game.settings.get('simulacrum', 'modelName');
     if (currentValue && models.some((m) => m.id === currentValue)) {
       select.value = currentValue;
+    } else if (currentValue === 'custom') {
+      select.value = 'custom';
     }
 
     // Use event delegation through the form container to survive FoundryVTT DOM changes
@@ -300,6 +433,11 @@ export class DynamicModelSelector {
 
     // Replace the input with select
     this.replaceModelInput(select);
+
+    // Ensure change events are handled even if delegation fails
+    select.addEventListener('change', (ev) => {
+      this.onModelSelectionChange(ev.target.value);
+    });
 
     // Add model info display
     this.addModelInfoDisplay(models.length);
@@ -460,6 +598,34 @@ export class DynamicModelSelector {
   }
 
   /**
+   * Handle availableModels setting changes
+   * @param {Array} availableModels - New available models array
+   */
+  onAvailableModelsChange(availableModels) {
+    game.simulacrum?.logger?.debug(
+      'Available models changed:',
+      availableModels
+    );
+
+    // Update the UI based on the new available models
+    if (availableModels && availableModels.length > 0) {
+      this.detectedModels = availableModels.map((model) => ({
+        id: model.id,
+        name: model.id,
+        contextWindow: model.contextWindow,
+      }));
+      this.isDetectable = true;
+      this.currentApiType = 'detected';
+      this.updateModelUIFromAvailableModels();
+    } else {
+      this.detectedModels = [];
+      this.isDetectable = false;
+      this.currentApiType = 'unknown';
+      this.updateModelUIFromAvailableModels();
+    }
+  }
+
+  /**
    * Trigger context window update for model change
    * @param {string} modelName - Model name that changed
    */
@@ -511,7 +677,7 @@ export class DynamicModelSelector {
         contextWindowSetting.overrideCheckbox.is(':checked');
 
       if (!isOverridden) {
-        await game.settings.set('simulacrum', 'contextWindow', contextWindow);
+        await game.settings.set('simulacrum', 'contextLength', contextWindow);
       }
 
       contextWindowSetting.hideLoadingState();
@@ -546,6 +712,30 @@ export class DynamicModelSelector {
       // Replace the element
       this.modelInput.replaceWith(newElement);
       this.modelInput = $(newElement);
+    }
+  }
+
+  /**
+   * Attempt to reacquire the model input/select from the live Settings DOM
+   */
+  tryReacquireModelInputFromDOM() {
+    try {
+      const container = $(
+        'section.tab[data-group="categories"][data-tab="simulacrum"], section[data-category="simulacrum"]'
+      );
+      if (container && container.length > 0) {
+        const modelSelect = container.find(
+          'select[name="simulacrum.modelName"]'
+        );
+        const modelInput = container.find('input[name="simulacrum.modelName"]');
+        const modelElement = modelSelect.length > 0 ? modelSelect : modelInput;
+        if (modelElement.length > 0) {
+          this.settingElement = modelElement.closest('.form-group');
+          this.modelInput = modelElement;
+        }
+      }
+    } catch (_) {
+      // ignore
     }
   }
 

@@ -40,11 +40,20 @@ export class DynamicContextWindowSetting {
   watchApiEndpointSetting() {
     // Create observer for settings changes
     Hooks.on('updateSetting', (setting, value) => {
-      if (setting.key === 'simulacrum.apiEndpoint') {
-        this.onApiEndpointChange(value);
-      }
-      if (setting.key === 'simulacrum.modelName') {
-        this.onModelChange(value);
+      try {
+        const key = setting?.key ?? '';
+        const namespace = setting?.namespace ?? setting?.module ?? '';
+        const isSim =
+          namespace === 'simulacrum' || key?.startsWith?.('simulacrum.');
+        const keyName = key.includes('.') ? key.split('.')[1] : key;
+        if (isSim && keyName === 'apiEndpoint') {
+          this.onApiEndpointChange(value);
+        }
+        if (isSim && keyName === 'modelName') {
+          this.onModelChange(value);
+        }
+      } catch (_) {
+        // ignore
       }
     });
   }
@@ -54,14 +63,32 @@ export class DynamicContextWindowSetting {
    * @param {jQuery} html - Settings UI HTML
    */
   enhanceSettingsUI(html) {
-    // Find context window setting
-    const contextSetting = html.find('input[name="simulacrum.contextWindow"]');
-    if (contextSetting.length === 0) {
+    // Ensure we have a jQuery wrapper; Foundry V13 may pass a plain HTMLElement
+    if (!html || typeof html.find !== 'function') {
+      try {
+        html = $(html);
+      } catch (_) {
+        return; // Cannot enhance without query helpers
+      }
+    }
+
+    // Find context length setting (supports range-picker wrapper or plain input)
+    let settingElement = html.find(
+      'range-picker[name="simulacrum.contextLength"]'
+    );
+    let numberInput = null;
+    if (settingElement.length > 0) {
+      numberInput = settingElement.find('input[type="number"]');
+    } else {
+      numberInput = html.find('input[name="simulacrum.contextLength"]');
+      settingElement = numberInput.closest('.form-group');
+    }
+    if (!numberInput || numberInput.length === 0) {
       return;
     }
 
-    this.settingElement = contextSetting.closest('.form-group');
-    this.contextInput = contextSetting;
+    this.settingElement = settingElement.closest('.form-group');
+    this.contextInput = numberInput;
 
     // Initially hide the setting
     this.hideContextWindowSetting();
@@ -152,7 +179,7 @@ export class DynamicContextWindowSetting {
       const isOverridden =
         this.overrideCheckbox && this.overrideCheckbox.is(':checked');
       if (!isOverridden) {
-        await game.settings.set('simulacrum', 'contextWindow', contextWindow);
+        await game.settings.set('simulacrum', 'contextLength', contextWindow);
       }
 
       this.hideLoadingState();
@@ -208,10 +235,17 @@ export class DynamicContextWindowSetting {
       }
     }
 
-    // Make input read-only
+    // Make input read-only and fill value (range-picker number input)
     this.contextInput.prop('readonly', true);
     this.contextInput.addClass('auto-detected');
-    this.contextInput.val(detectedValue);
+    this.contextInput.val(detectedValue).trigger('input');
+    // If there is a paired range input, update it too
+    try {
+      const rangeInput = this.settingElement.find('input[type="range"]');
+      if (rangeInput.length) {
+        rangeInput.val(detectedValue).trigger('input');
+      }
+    } catch (_) {}
 
     // Show override checkbox
     this.showOverrideCheckbox();
@@ -223,7 +257,7 @@ export class DynamicContextWindowSetting {
     const isOverridden =
       this.overrideCheckbox && this.overrideCheckbox.is(':checked');
     if (!isOverridden) {
-      await game.settings.set('simulacrum', 'contextWindow', detectedValue);
+      await game.settings.set('simulacrum', 'contextLength', detectedValue);
     }
   }
 
@@ -239,7 +273,13 @@ export class DynamicContextWindowSetting {
     // Set default value if current value is empty
     const currentValue = this.contextInput.val();
     if (!currentValue || currentValue === '0') {
-      this.contextInput.val(defaultValue);
+      this.contextInput.val(defaultValue).trigger('input');
+      try {
+        const rangeInput = this.settingElement.find('input[type="range"]');
+        if (rangeInput.length) {
+          rangeInput.val(defaultValue).trigger('input');
+        }
+      } catch (_) {}
     }
 
     // Hide override checkbox
@@ -348,7 +388,13 @@ export class DynamicContextWindowSetting {
    */
   updateDetectedValue(value) {
     if (this.contextInput.prop('readonly')) {
-      this.contextInput.val(value);
+      this.contextInput.val(value).trigger('input');
+      try {
+        const rangeInput = this.settingElement.find('input[type="range"]');
+        if (rangeInput.length) {
+          rangeInput.val(value).trigger('input');
+        }
+      } catch (_) {}
 
       // Update indicator
       const indicator = this.settingElement.find('.simulacrum-auto-indicator');
@@ -385,7 +431,8 @@ export class DynamicContextWindowSetting {
   showLoadingState() {
     if (this.contextInput) {
       this.contextInput.prop('disabled', true);
-      this.contextInput.val('Detecting...');
+      // Avoid putting text into number input; use placeholder-like effect via title
+      this.contextInput.attr('data-detecting', 'true');
     }
   }
 
@@ -395,6 +442,7 @@ export class DynamicContextWindowSetting {
   hideLoadingState() {
     if (this.contextInput) {
       this.contextInput.prop('disabled', false);
+      this.contextInput.removeAttr('data-detecting');
     }
   }
 
