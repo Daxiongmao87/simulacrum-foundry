@@ -306,6 +306,11 @@ export class DynamicModelSelector {
     this.showLoadingState();
 
     try {
+      // Clear any stale detection cache to force fresh detection for current endpoint/key
+      try {
+        this.modelDetector.clearCache();
+      } catch (_) {}
+
       const detection = await this.modelDetector.detectModels(
         apiEndpoint,
         apiKey

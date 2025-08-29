@@ -44,19 +44,17 @@ export class ModelDetector {
       }
 
       // No models found
-      const fallbackResult = { type: 'unknown', models: [], detectable: false };
-      this.cache.set(cacheKey, fallbackResult);
-      return fallbackResult;
+      // Do not cache unknown results to allow future re-detection
+      return { type: 'unknown', models: [], detectable: false };
     } catch (error) {
       game.simulacrum?.logger?.warn('🤖 Model detection failed:', error);
-      const errorResult = {
+      // Do not cache error results to allow future re-detection
+      return {
         type: 'error',
         models: [],
         detectable: false,
         error: error.message,
       };
-      this.cache.set(cacheKey, errorResult);
-      return errorResult;
     }
   }
 
@@ -124,34 +122,71 @@ export class ModelDetector {
     });
 
     if (response.ok) {
-      const data = await response.json();
+      const body = await response.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(body);
+      } catch (e) {
+        // Not JSON, treat as failure
+        parsed = null;
+      }
 
-      if (data.data && Array.isArray(data.data)) {
-        // Filter to common chat models
-        const models = data.data
-          .filter(
-            (model) =>
-              model.id.includes('gpt') ||
-              model.id.includes('o1') ||
-              model.id.includes('o3') ||
-              model.id.includes('anthropic') ||
-              model.id.includes('llama') ||
-              model.id.includes('mistral')
-          )
-          .map((model) => ({
-            id: model.id,
-            name: model.id,
-            created: model.created,
-            owned_by: model.owned_by || 'unknown',
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
+      if (parsed) {
+        // Case 1: OpenAI spec { data: [...] }
+        let modelsArray = null;
+        if (Array.isArray(parsed.data)) {
+          modelsArray = parsed.data;
+        }
+        // Case 2: Object with models: [...] (some providers)
+        else if (Array.isArray(parsed.models)) {
+          modelsArray = parsed.models.map((m) => ({
+            id: m.id || m.name,
+            ...m,
+          }));
+        }
+        // Case 3: Top-level array [...]
+        else if (Array.isArray(parsed)) {
+          modelsArray = parsed;
+        }
 
-        return {
-          type: 'openai',
-          models,
-          detectable: true,
-          endpoint: modelsUrl,
-        };
+        try {
+          // Best-effort debug logging for diagnosis in Foundry console
+          // Uses optional chaining to avoid ReferenceErrors if game is unavailable
+          const shape = Array.isArray(parsed?.data)
+            ? 'openai_data'
+            : Array.isArray(parsed?.models)
+              ? 'object_models'
+              : Array.isArray(parsed)
+                ? 'top_level_array'
+                : 'unrecognized';
+          game?.simulacrum?.logger?.debug?.('ModelDetector: /models shape', {
+            status: response.status,
+            shape,
+            count: (Array.isArray(modelsArray) && modelsArray.length) || 0,
+          });
+        } catch (_) {}
+
+        if (Array.isArray(modelsArray) && modelsArray.length > 0) {
+          const normalized = modelsArray
+            .map((model) => {
+              const modelId = model?.id || model?.name || '';
+              return {
+                id: modelId,
+                name: modelId,
+                created: model.created,
+                owned_by: model.owned_by || 'unknown',
+              };
+            })
+            .filter((m) => typeof m.id === 'string' && m.id.length > 0)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+          return {
+            type: 'openai',
+            models: normalized,
+            detectable: true,
+            endpoint: modelsUrl,
+          };
+        }
       }
     }
 

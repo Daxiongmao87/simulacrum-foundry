@@ -327,56 +327,51 @@ Hooks.on('renderSceneControls', (app, html, _data) => {
     }
   }
 
-  let simulacrumButton = html.find('.scene-control[data-control="simulacrum"]');
-  if (simulacrumButton.length > 0) {
-    // Update existing button's state
-    updateSimulacrumButtonState(simulacrumButton);
+  // v13: inject into menu#scene-controls-layers as <li><button ...></button></li>
+  const layersMenu = html.find('#scene-controls-layers');
+  if (!layersMenu.length) {
     return;
   }
 
-  // Find the main controls tablist
-  const tablist = html.find('ol.main-controls[role="tablist"]');
-
-  if (tablist.length) {
-    // Create the Simulacrum button matching the exact HTML structure
-    simulacrumButton = $(`
-            <li class="scene-control" 
-                data-control="simulacrum" 
-                data-canvas-layer="controls" 
-                aria-label="Simulacrum AI Assistant" 
-                role="tab" 
-                aria-controls="tools-panel-simulacrum">
-                <i class="fas fa-hand-sparkles"></i>
-            </li>
-        `);
-
-    // Add click handler for direct chat opening
-    simulacrumButton.on('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Only open if not disabled and ui.simulacrum exists
-      if (connectionState !== 'disabled' && ui.simulacrum) {
-        ui.simulacrum.render(true);
-      } else if (!ui.simulacrum) {
-        ui.notifications.warn(
-          'Simulacrum | Chat interface not available. Check permissions.'
-        );
-      } else {
-        ui.notifications.warn(
-          'Simulacrum | Cannot open. API endpoint not configured.'
-        );
-      }
-
-      return false;
-    });
-
-    // Append as the last item in the tablist
-    tablist.append(simulacrumButton);
-
-    // Update the newly injected button's state
-    updateSimulacrumButtonState(simulacrumButton);
+  // Skip if already present
+  const existing = layersMenu.find('button.control[data-control="simulacrum"]');
+  if (existing.length) {
+    return;
   }
+
+  const li = document.createElement('li');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'control ui-control layer icon  fa-solid fa-hat-wizard';
+  button.setAttribute('role', 'tab');
+  button.setAttribute('data-action', 'control');
+  button.setAttribute('data-control', 'simulacrum');
+  button.setAttribute('data-tooltip', '');
+  button.setAttribute('aria-pressed', 'false');
+  button.setAttribute('aria-label', 'Simulacrum AI Assistant');
+  button.setAttribute('aria-controls', 'scene-controls-tools');
+
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (connectionState !== 'disabled' && ui.simulacrum) {
+      ui.simulacrum.render(true);
+    } else if (!ui.simulacrum) {
+      ui.notifications.warn(
+        'Simulacrum | Chat interface not available. Check permissions.'
+      );
+    } else {
+      ui.notifications.warn(
+        'Simulacrum | Cannot open. API endpoint not configured.'
+      );
+    }
+
+    return false;
+  });
+
+  li.appendChild(button);
+  layersMenu[0].appendChild(li);
 });
 
 /**

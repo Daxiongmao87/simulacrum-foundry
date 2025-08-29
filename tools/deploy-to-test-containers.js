@@ -46,29 +46,53 @@ try {
   execSync('npm run package', { stdio: 'inherit' });
   console.log('Simulacrum | ✅ Module packaged successfully');
 
-  // Step 2: Find running containers with the test prefix
+  // Step 2: Find running containers started from images with our prefix
   console.log('Simulacrum | \n🔍 Step 2: Finding running test containers...');
 
-  let runningContainers;
+  let runningContainers = [];
   try {
     const containerOutput = execSync(
-      `docker ps --format "{{.Names}}" --filter "name=${containerPrefix}"`,
+      'docker ps --format "{{.Names}}||{{.Image}}"',
       { encoding: 'utf8', stdio: 'pipe' }
     );
-    runningContainers = containerOutput.trim().split('\n').filter(name => name);
+
+    const lines = containerOutput
+      .trim()
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    const parsed = lines
+      .map(line => {
+        const [name, image] = line.split('||');
+        return { name: name?.trim(), image: image?.trim() };
+      })
+      .filter(entry => entry.name && entry.image);
+
+    // Match images that start with our configured imagePrefix (optionally with a tag suffix)
+    runningContainers = parsed.filter(({ image }) => {
+      // Remove tag if present (e.g., ":latest") for matching
+      const imageBase = image.split(':')[0];
+      return (
+        imageBase === containerPrefix ||
+        imageBase.startsWith(`${containerPrefix}-`)
+      );
+    });
   } catch (error) {
-    console.log('Simulacrum | 📋 No running containers found matching prefix');
+    console.log('Simulacrum | 📋 No running containers found');
     runningContainers = [];
   }
 
   if (runningContainers.length === 0) {
-    console.log(`⚠️  No running containers found with prefix "${containerPrefix}"`);
+    console.log(`⚠️  No running containers found for images with prefix "${containerPrefix}"`);
     console.log('Simulacrum | 💡 Try running some tests first with: node tests/run-tests.js --manual');
     process.exit(0);
   }
 
   console.log(`Simulacrum | ✅ Found ${runningContainers.length} running test container(s):`);
-  runningContainers.forEach(name => console.log(`Simulacrum |    - ${name}`));
+  runningContainers.forEach(({ name, image }) =>
+    console.log(`Simulacrum |    - ${name} (image: ${image})`)
+  );
 
   // Step 3: Deploy to each container
   console.log('Simulacrum | \n🚚 Step 3: Deploying to containers...');
@@ -76,12 +100,13 @@ try {
   let deployedCount = 0;
   let failedCount = 0;
 
-  for (const containerName of runningContainers) {
-    // Extract version from container name (assuming format like: simulacrum-foundry-test-v12-dnd5e-12345)
-    const versionMatch = containerName.match(/-v(\d+)-/);
+  for (const { name: containerName, image: imageNameRaw } of runningContainers) {
+    // Extract version from image name (expected: simulacrum-foundry-test-v13-<system>[:tag])
+    const imageName = imageNameRaw.split(':')[0];
+    const versionMatch = imageName.match(/-v(\d+)-/);
 
     if (!versionMatch) {
-      console.log(`Simulacrum | ⚠️  Skipping ${containerName}: Could not determine version from name`);
+      console.log(`Simulacrum | ⚠️  Skipping ${containerName}: Could not determine version from image ${imageName}`);
       failedCount++;
       continue;
     }
