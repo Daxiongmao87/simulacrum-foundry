@@ -201,7 +201,14 @@ export class SimulacrumToolScheduler {
     for (const call of this.toolCalls.filter((c) => c.status === 'scheduled')) {
       this.setStatusInternal(call.request.callId, 'executing');
       try {
-        const result = await call.tool.execute(call.request.args, signal);
+        const result = await call.tool.execute(
+          call.request.args,
+          signal,
+          // Provide output handler to tools for progress updates
+          typeof this.outputUpdateHandler === 'function'
+            ? this.outputUpdateHandler
+            : undefined
+        );
         this.setStatusInternal(call.request.callId, 'success', result);
       } catch (e) {
         this.setStatusInternal(call.request.callId, 'error', {

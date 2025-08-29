@@ -7,10 +7,9 @@
 - **Prettier**: Use `npm run format` for code formatting.
 - **Console Prefixes**: All console.log statements must use `'Simulacrum | '` prefix.
 
-### Git Workflow
-- **Commit Messages**: Provide clear, descriptive commit messages that explain what was changed and why.
-- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
-- **Feature Branches**: Work on feature branches (e.g., `git checkout -b feature-name`).
+### Pre-commit Quality Gates
+- **Husky Hooks**: Pre-commit hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
+- **Automated Checks**: ESLint, Prettier, and console validation run automatically before commits.
 
 ### Testing Requirements
 - **Unit Tests**: Create unit tests for new functionality in `tests/unit/v12/` or `tests/unit/v13/`.

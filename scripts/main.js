@@ -99,26 +99,37 @@ async function checkEndpointAccessibility() {
         connectionState = 'accessible';
       } else {
         connectionState = 'inaccessible';
-        game.simulacrum?.logger?.warn(
-          `API endpoint returned status: ${response.status}`
-        );
-        ui.notifications.warn(
-          `Simulacrum | API endpoint inaccessible (Status: ${response.status}). Check console for details.`
-        );
+        // Only log warnings for non-CORS errors
+        if (response.status !== 0) {
+          game.simulacrum?.logger?.warn(
+            `API endpoint returned status: ${response.status}`
+          );
+        }
       }
     } catch (error) {
       connectionState = 'inaccessible';
-      game.simulacrum?.logger?.error(
-        'Error checking API endpoint accessibility:',
-        error
-      );
-      if (error.name === 'AbortError') {
-        ui.notifications.error('Simulacrum | API endpoint check timed out.');
-      } else {
-        ui.notifications.error(
-          `Simulacrum | API endpoint inaccessible: ${error.message}. Check console for details.`
+
+      // Check if this is a CORS error (TypeError: Failed to fetch)
+      const isCorsError =
+        error.message === 'Failed to fetch' ||
+        error.message.includes('CORS') ||
+        error.message.includes('cross-origin');
+
+      if (!isCorsError) {
+        // Only log/notify for non-CORS errors
+        game.simulacrum?.logger?.error(
+          'Error checking API endpoint accessibility:',
+          error
         );
+        if (error.name === 'AbortError') {
+          ui.notifications.error('Simulacrum | API endpoint check timed out.');
+        } else {
+          ui.notifications.error(
+            `Simulacrum | API endpoint inaccessible: ${error.message}. Check console for details.`
+          );
+        }
       }
+      // For CORS errors, fail silently but still set state
     }
   }
   // Always trigger a re-render after state change

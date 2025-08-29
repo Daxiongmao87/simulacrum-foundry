@@ -266,6 +266,13 @@ export class SimulacrumSettings {
 
     // Register a hook to convert the systemPrompt setting to a textarea and handle dynamic model/context length inputs
     Hooks.on('renderSettingsConfig', (app, html) => {
+      // Ensure html is a jQuery object (v13 may pass HTMLElement)
+      if (!html || typeof html.find !== 'function') {
+        html = $(html);
+        if (typeof html.find !== 'function') {
+          return; // Unable to enhance without jQuery-like interface
+        }
+      }
       // Handle systemPrompt as textarea
       const systemPromptSetting = html.find('[name="simulacrum.systemPrompt"]');
       if (systemPromptSetting.length) {

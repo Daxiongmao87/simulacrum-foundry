@@ -103,7 +103,12 @@ export class ListImagesTool extends Tool {
 
       try {
         // Start recursive discovery from the root of each source
-        const rootBrowse = await FilePicker.browse(source, '', {});
+        const rootBrowse =
+          await foundry.applications.apps.FilePicker.implementation.browse(
+            source,
+            '',
+            {}
+          );
         const initialDirs = rootBrowse.dirs || [];
 
         for (const dir of initialDirs) {
@@ -160,7 +165,12 @@ export class ListImagesTool extends Tool {
     discoveredPaths.push({ source, path: basePath, category });
 
     try {
-      const browseResult = await FilePicker.browse(source, basePath, {});
+      const browseResult =
+        await foundry.applications.apps.FilePicker.implementation.browse(
+          source,
+          basePath,
+          {}
+        );
       const subDirs = browseResult.dirs || [];
 
       for (const subDir of subDirs) {
@@ -271,9 +281,14 @@ export class ListImagesTool extends Tool {
 
     try {
       // Use FoundryVTT's FilePicker API to scan directories
-      const files = await FilePicker.browse(source, basePath, {
-        extensions: imageExtensions,
-      });
+      const files =
+        await foundry.applications.apps.FilePicker.implementation.browse(
+          source,
+          basePath,
+          {
+            extensions: imageExtensions,
+          }
+        );
 
       // Process files in current directory
       for (const file of files.files) {
@@ -281,7 +296,7 @@ export class ListImagesTool extends Tool {
           break;
         }
 
-        // FilePicker.browse returns complete paths, so we use 'file' directly.
+        // FilePicker.implementation.browse returns complete paths, so we use 'file' directly.
         const fullPath = file;
 
         if (this.matchesKeyword(fullPath, keyword)) {

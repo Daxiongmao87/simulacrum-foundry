@@ -68,11 +68,6 @@ cd tests
 node helpers/concurrent-docker-test-runner.js  # Requires FoundryVTT license
 ```
 
-### Git Workflow
-- Commits MUST reference GitHub issues: "Fix chat persistence (#36)"
-- Pre-commit hooks enforce code quality and issue validation
-- Use feature branches: `git checkout -b feature-name`
-
 ### Testing Infrastructure
 Docker-based integration testing in `tests/helpers/concurrent-docker-test-runner.js`:
 - Multi-version FoundryVTT testing with dynamic port allocation
@@ -170,7 +165,10 @@ import { DocumentDiscoveryEngine } from './core/document-discovery-engine.js';
 ## Essential Development Patterns
 
 ### Pre-commit Quality Gates
-- Husky hooks enforce issue references in commits: "Fix chat persistence (#36)"
+- Husky hooks enforce code quality: ESLint, Prettier, console validation
+- Use `npm run lint:fix` for automated fixes before commits
+
+### Code Quality Tools
 - ESLint + Prettier run automatically via lint-staged
 - Use `npm run lint:fix` for automated fixes before commits
 

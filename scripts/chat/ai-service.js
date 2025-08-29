@@ -164,16 +164,47 @@ export class SimulacrumAIService {
         JSON.stringify(requestBody, null, 2)
       );
 
-      // Make request
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(isOllama ? {} : { Authorization: `Bearer ${apiKey || ''}` }),
-        },
-        body: JSON.stringify(requestBody),
-        signal: abortSignal,
-      });
+      // Make request with bounded quick retries (no backoff) to smooth transient CORS/network hiccups
+      let response;
+      let lastError;
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(isOllama ? {} : { Authorization: `Bearer ${apiKey || ''}` }),
+            },
+            body: JSON.stringify(requestBody),
+            signal: abortSignal,
+          });
+
+          // Retry only on transient statuses
+          const retryable = [408, 429, 500, 502, 503, 504];
+          if (
+            !response.ok &&
+            retryable.includes(response.status) &&
+            attempt < maxAttempts
+          ) {
+            // Minimal delay to yield event loop; do not lengthen user wait significantly
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+          break;
+        } catch (err) {
+          lastError = err;
+          if (err?.name === 'AbortError') {
+            throw err;
+          }
+          // TypeError: Failed to fetch (often CORS) → quick retry
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // Response time tracking for potential future use
       // const responseTime = Date.now() - startTime;
@@ -258,12 +289,21 @@ export class SimulacrumAIService {
       if (error.name === 'AbortError') {
         // Request cancelled by user
       } else {
-        game.simulacrum?.logger?.error('💥 AI Service Error:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-          cause: error.cause,
-        });
+        // Check if this is a CORS error
+        const isCorsError =
+          error.message === 'Failed to fetch' ||
+          error.message.includes('CORS') ||
+          error.message.includes('cross-origin');
+
+        if (!isCorsError) {
+          // Only log non-CORS errors
+          game.simulacrum?.logger?.error('💥 AI Service Error:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            cause: error.cause,
+          });
+        }
         throw error;
       }
     }

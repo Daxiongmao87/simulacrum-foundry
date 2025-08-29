@@ -35,10 +35,14 @@ Before any implementation or bug fix, thorough research is **mandatory**.
 - **ESLint**: Use `npm run lint` for validation and `npm run lint:fix` for auto-fixing issues.
 - **Prettier**: Use `npm run format` for code formatting.
 
-### Git Workflow
-- **Commit Messages**: Provide clear, descriptive commit messages that explain what was changed and why.
-- **Pre-commit Hooks**: Husky git hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
-- **Feature Branches**: Work on feature branches (e.g., `git checkout -b feature-name`).
+### Code Quality Standards
+- **ESLint**: Use `npm run lint` for validation and `npm run lint:fix` for auto-fixing issues.
+- **Prettier**: Use `npm run format` for code formatting.
+- **Console Prefixes**: All console.log statements must use `'Simulacrum | '` prefix.
+
+### Pre-commit Quality Gates
+- **Husky Hooks**: Pre-commit hooks are set up (`npm run prepare`) to enforce code quality. Do NOT bypass these hooks.
+- **Automated Checks**: ESLint, Prettier, and console validation run automatically before commits.
 
 ## Implementation Guidelines
 
