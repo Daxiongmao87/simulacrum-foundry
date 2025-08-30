@@ -89,17 +89,27 @@ export function getOllamaStructuredFormat() {
 }
 
 /**
- * Fallback JSON format instructions for system prompt
+ * Fallback natural language instructions for system prompt
  * Used when structured output is not supported by the API
  */
-export const FALLBACK_JSON_INSTRUCTIONS = `
-## RESPONSE FORMAT - CRITICAL:
-You MUST respond with valid JSON only. No markdown, no code blocks, no additional text.
+export const FALLBACK_NATURAL_LANGUAGE_INSTRUCTIONS = `
+## NATURAL LANGUAGE COMMUNICATION:
+Use natural language to communicate with users. Be concise and action-oriented.
+The system will handle tool calling through native function calling mechanisms.
+Focus on executing the user's request efficiently using available tools.
+`;
 
-Required structure:
+/**
+ * Fallback JSON instructions when neither native tool calling nor structured output is supported
+ * This is the last resort for very basic AI systems
+ */
+export const FALLBACK_JSON_INSTRUCTIONS = `
+## RESPONSE FORMAT - FALLBACK MODE:
+Your system does not support native tool calling. Please respond with JSON in this format:
+
 {
-  "message": "Your response to the user",
-  "tool_calls": [  // OPTIONAL - omit entirely or use empty array [] if no tools needed
+  "message": "Your natural language response to the user",
+  "tool_calls": [
     {
       "tool_name": "exact_tool_name",
       "parameters": {"param1": "value1"},
@@ -108,13 +118,9 @@ Required structure:
   ],
   "continuation": {
     "in_progress": true/false,
-    "gerund": "Single descriptive word ending in -ing or null"
+    "gerund": "describing_action or null"
   }
 }
 
-JSON Rules:
-- NEVER use JavaScript comments (// or /* */)
-- NEVER include trailing commas
-- ALWAYS use double quotes for strings
-- gerund: Required when in_progress=true, null when in_progress=false
+Use natural language in the "message" field, but format the overall response as JSON.
 `;

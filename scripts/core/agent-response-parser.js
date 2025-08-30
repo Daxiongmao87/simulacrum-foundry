@@ -31,14 +31,28 @@ export class AgentResponseParser {
       let parsed;
       try {
         parsed = JSON.parse(rawResponse);
-        // If JSON parsing succeeds and has expected structure, use it directly
+        // If JSON parsing succeeds and has expected structure, validate and use it
         if (parsed.message && parsed.continuation) {
-          // Ensure tool_calls exists
-          if (!parsed.tool_calls) {
-            parsed.tool_calls = [];
+          // Validate types to ensure it's actually valid
+          if (
+            typeof parsed.message === 'string' &&
+            typeof parsed.continuation === 'object' &&
+            typeof parsed.continuation.in_progress === 'boolean'
+          ) {
+            // Ensure tool_calls exists and is valid
+            if (!parsed.tool_calls || parsed.tool_calls === null) {
+              parsed.tool_calls = [];
+              return parsed;
+            } else if (!Array.isArray(parsed.tool_calls)) {
+              // Invalid tool_calls type - treat as natural language
+              // Fall through to natural language parsing
+            } else {
+              return parsed;
+            }
           }
-          return parsed;
         }
+        // JSON parsed successfully but doesn't have expected structure
+        // Fall through to treat as natural language
       } catch {
         // Not JSON, parse as natural language - this is expected now
       }

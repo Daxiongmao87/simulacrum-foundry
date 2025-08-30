@@ -8,6 +8,7 @@
 import {
   getOpenAIStructuredFormat,
   getOllamaStructuredFormat,
+  FALLBACK_NATURAL_LANGUAGE_INSTRUCTIONS,
   FALLBACK_JSON_INSTRUCTIONS,
 } from './structured-output-schema.js';
 
@@ -17,12 +18,12 @@ export class StructuredOutputDetector {
   }
 
   /**
-   * Detects structured output support for an API endpoint
+   * Detects both tool calling and structured output support for an API endpoint
    * @param {string} endpoint - API endpoint URL
    * @param {string} modelName - Model name to test
    * @returns {Promise<Object>} Detection result with support info
    */
-  async detectStructuredOutputSupport(endpoint, modelName) {
+  async detectCapabilities(endpoint, modelName) {
     const cacheKey = `${endpoint}|${modelName}`;
 
     if (this.cache.has(cacheKey)) {
@@ -30,16 +31,26 @@ export class StructuredOutputDetector {
     }
 
     const result = {
+      supportsNativeToolCalling: false,
       supportsStructuredOutput: false,
       provider: 'unknown',
       formatConfig: null,
-      fallbackInstructions: FALLBACK_JSON_INSTRUCTIONS,
+      fallbackInstructions: FALLBACK_NATURAL_LANGUAGE_INSTRUCTIONS,
     };
 
     try {
-      // Detect provider type
+      // Detect provider type and capabilities
       if (this.isOllamaEndpoint(endpoint)) {
         result.provider = 'ollama';
+
+        // Test tool calling support first (more important)
+        result.supportsNativeToolCalling = await this.testToolCallingSupport(
+          endpoint,
+          modelName,
+          'ollama'
+        );
+
+        // Test structured output support (optional enhancement)
         result.supportsStructuredOutput = await this.testOllamaStructuredOutput(
           endpoint,
           modelName
@@ -49,6 +60,15 @@ export class StructuredOutputDetector {
         }
       } else {
         result.provider = 'openai';
+
+        // Test tool calling support first (more important)
+        result.supportsNativeToolCalling = await this.testToolCallingSupport(
+          endpoint,
+          modelName,
+          'openai'
+        );
+
+        // Test structured output support (optional enhancement)
         result.supportsStructuredOutput = await this.testOpenAIStructuredOutput(
           endpoint,
           modelName
@@ -59,14 +79,102 @@ export class StructuredOutputDetector {
       }
     } catch (error) {
       game.simulacrum?.logger?.warn(
-        'Structured output detection failed:',
+        'Capability detection failed:',
         error.message
       );
+      result.supportsNativeToolCalling = false;
       result.supportsStructuredOutput = false;
+    }
+
+    // Set appropriate fallback instructions based on capabilities
+    if (result.supportsNativeToolCalling) {
+      // Best case: Native tool calling with natural language
+      result.fallbackInstructions = '';
+    } else {
+      // Fallback: Custom JSON format for systems without native tool calling
+      result.fallbackInstructions = FALLBACK_JSON_INSTRUCTIONS;
     }
 
     this.cache.set(cacheKey, result);
     return result;
+  }
+
+  /**
+   * Tests native tool calling support
+   * @param {string} endpoint
+   * @param {string} modelName
+   * @param {string} provider
+   * @returns {Promise<boolean>}
+   */
+  async testToolCallingSupport(endpoint, modelName, provider) {
+    try {
+      // Simple test tool schema
+      const testTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'test_tool',
+            description: 'Test tool for capability detection',
+            parameters: {
+              type: 'object',
+              properties: {
+                test: { type: 'string', description: 'Test parameter' },
+              },
+              required: ['test'],
+            },
+          },
+        },
+      ];
+
+      const requestBody = {
+        model: modelName,
+        messages: [
+          { role: 'user', content: 'Say hello, but do not call any tools.' },
+        ],
+        tools: testTools,
+        temperature: 0.1,
+        max_tokens: 10,
+      };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(provider === 'openai'
+            ? {
+                Authorization: `Bearer ${game.settings.get('simulacrum', 'apiKey') || ''}`,
+              }
+            : {}),
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // If the response has a choices array and doesn't error, tool calling is supported
+        return data.choices && data.choices.length > 0;
+      }
+
+      return false;
+    } catch (error) {
+      game.simulacrum?.logger?.debug(
+        'Tool calling test failed:',
+        error.message
+      );
+      return false;
+    }
+  }
+
+  // Keep the old method for backward compatibility but now includes tool calling info
+  async detectStructuredOutputSupport(endpoint, modelName) {
+    const capabilities = await this.detectCapabilities(endpoint, modelName);
+    return {
+      supportsStructuredOutput: capabilities.supportsStructuredOutput,
+      supportsNativeToolCalling: capabilities.supportsNativeToolCalling,
+      provider: capabilities.provider,
+      formatConfig: capabilities.formatConfig,
+      fallbackInstructions: capabilities.fallbackInstructions,
+    };
   }
 
   /**

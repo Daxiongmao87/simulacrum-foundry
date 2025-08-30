@@ -136,18 +136,17 @@ describe('Structured Output Schema v13', () => {
   });
 
   describe('FALLBACK_JSON_INSTRUCTIONS', () => {
-    test('should contain essential JSON formatting rules', () => {
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('RESPONSE FORMAT');
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('valid JSON only');
+    test('should contain fallback mode instructions', () => {
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('RESPONSE FORMAT - FALLBACK MODE');
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('does not support native tool calling');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('message');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('tool_calls');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('continuation');
     });
 
-    test('should include critical JSON rules', () => {
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('NEVER use JavaScript comments');
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('NEVER include trailing commas');
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('ALWAYS use double quotes');
+    test('should include natural language guidance', () => {
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('natural language response');
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('JSON in this format');
     });
 
     test('should include example JSON structure', () => {
@@ -159,8 +158,7 @@ describe('Structured Output Schema v13', () => {
     });
 
     test('should explain gerund logic', () => {
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('gerund: Required when in_progress=true');
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('null when in_progress=false');
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('gerund');
     });
   });
 

@@ -78,6 +78,7 @@ describe('AI Service Structured Output Integration v13', () => {
     test('should return structured config when supported', async () => {
       const mockDetection = {
         supportsStructuredOutput: true,
+        supportsNativeToolCalling: true, // New field added in refactor
         provider: 'openai',
         formatConfig: { type: 'json_schema', json_schema: { name: 'test' } },
         fallbackInstructions: 'fallback'
@@ -90,18 +91,19 @@ describe('AI Service Structured Output Integration v13', () => {
       expect(config).toEqual({
         useStructuredOutput: true,
         formatConfig: mockDetection.formatConfig,
-        systemPromptAddition: ''
+        systemPromptAddition: 'fallback', // Now includes the fallback instructions
+        supportsNativeToolCalling: true // New field added in refactor
       });
 
       expect(global.game.simulacrum.logger.debug).toHaveBeenCalledWith(
-        'Using structured output for',
-        'openai'
+        expect.stringContaining('Capabilities detected') // New debug message format
       );
     });
 
     test('should return fallback config when not supported', async () => {
       const mockDetection = {
         supportsStructuredOutput: false,
+        supportsNativeToolCalling: false, // New field added in refactor
         provider: 'openai',
         formatConfig: null,
         fallbackInstructions: '\n\n## FALLBACK JSON RULES\nUse proper JSON formatting...'
@@ -114,11 +116,12 @@ describe('AI Service Structured Output Integration v13', () => {
       expect(config).toEqual({
         useStructuredOutput: false,
         formatConfig: null,
-        systemPromptAddition: mockDetection.fallbackInstructions
+        systemPromptAddition: mockDetection.fallbackInstructions,
+        supportsNativeToolCalling: false // New field added in refactor
       });
 
       expect(global.game.simulacrum.logger.debug).toHaveBeenCalledWith(
-        'Falling back to prompt-based JSON formatting'
+        expect.stringContaining('Capabilities detected') // New debug message format
       );
     });
 

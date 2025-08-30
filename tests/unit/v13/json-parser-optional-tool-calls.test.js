@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import { AgentResponseParser } from '../../../scripts/core/agent-response-parser.js';
 
-describe.skip('AgentResponseParser - Optional tool_calls', () => {
+describe('AgentResponseParser - Optional tool_calls', () => {
   let parser;
   let mockAIService;
 
@@ -113,7 +113,7 @@ describe.skip('AgentResponseParser - Optional tool_calls', () => {
     expect(result.tool_calls[0].tool_name).toBe("search_documents");
   });
 
-  test('should reject response with invalid tool_calls type', async () => {
+  test('should handle invalid tool_calls type as natural language', async () => {
     const response = JSON.stringify({
       message: "This should fail",
       tool_calls: "not an array",
@@ -123,23 +123,13 @@ describe.skip('AgentResponseParser - Optional tool_calls', () => {
       }
     });
 
-    // Mock the retry message to avoid actual API call
-    mockAIService.sendWithSystemAddition.mockResolvedValue(JSON.stringify({
-      message: "I corrected the format error.",
-      tool_calls: [],
-      continuation: {
-        in_progress: false,
-        gerund: null
-      }
-    }));
-
     const result = await parser.parseAgentResponse(response);
     
-    expect(game.simulacrum.logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Parsing error'),
-      expect.stringContaining('tool_calls')
-    );
-    expect(result.message).toBe("I corrected the format error.");
+    // Invalid JSON structure treated as natural language  
+    expect(mockAIService.sendWithSystemAddition).toHaveBeenCalledTimes(0);
+    expect(result.message).toBe('{"message":"This should fail","tool_calls":"not an array","continuation":{"in_progress":false,"gerund":null}}'); // Entire JSON treated as natural language
+    expect(result.tool_calls).toEqual([]);
+    expect(result.continuation).toEqual({ in_progress: false, gerund: null });
   });
 
   test('should handle simple conversational responses', async () => {

@@ -906,41 +906,22 @@ export class SimulacrumAIService {
    * @returns {Promise<Object>} Configuration object with format settings
    */
   async getStructuredOutputConfig(endpoint, modelName, isOllama) {
-    const detection =
+    const capabilities =
       await this.structuredOutputDetector.detectStructuredOutputSupport(
         endpoint,
         modelName
       );
 
-    if (detection.supportsStructuredOutput) {
-      game.simulacrum?.logger?.debug(
-        'Using structured output for',
-        detection.provider
-      );
+    game.simulacrum?.logger?.debug(
+      `Capabilities detected - Tool Calling: ${capabilities.supportsNativeToolCalling}, Structured Output: ${capabilities.supportsStructuredOutput}`
+    );
 
-      if (isOllama) {
-        return {
-          useStructuredOutput: true,
-          formatConfig: detection.formatConfig,
-          systemPromptAddition: '',
-        };
-      } else {
-        return {
-          useStructuredOutput: true,
-          formatConfig: detection.formatConfig,
-          systemPromptAddition: '',
-        };
-      }
-    } else {
-      game.simulacrum?.logger?.debug(
-        'Falling back to prompt-based JSON formatting'
-      );
-      return {
-        useStructuredOutput: false,
-        formatConfig: null,
-        systemPromptAddition: detection.fallbackInstructions,
-      };
-    }
+    return {
+      useStructuredOutput: capabilities.supportsStructuredOutput,
+      formatConfig: capabilities.formatConfig,
+      systemPromptAddition: capabilities.fallbackInstructions,
+      supportsNativeToolCalling: capabilities.supportsNativeToolCalling,
+    };
   }
 
   /**
