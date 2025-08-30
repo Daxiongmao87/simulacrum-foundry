@@ -2,7 +2,7 @@
 
 // import { SimulacrumAIService } from '../chat/ai-service.js'; // Available for future use
 // import { SimulacrumToolScheduler } from './tool-scheduler.js'; // Available for future use
-import { AgentResponseParser } from './json-response-parser.js';
+import { AgentResponseParser } from './agent-response-parser.js';
 import { AgenticContext } from './agentic-context.js';
 import { TokenTracker, formatToolResultsForAI } from './token-tracker.js';
 import { ContextCompaction } from './context-compaction.js';

@@ -85,14 +85,14 @@ export class SimulacrumAIService {
    * @param {Function} onChunk - Callback for streaming chunks (optional)
    * @param {Function} onComplete - Callback for completion (optional)
    * @param {AbortSignal} abortSignal - Signal to cancel the request (optional)
-   * @param {boolean} forceJsonMode - Whether to force JSON response format (optional)
+   * @param {boolean} useStructuredOutput - Whether to use structured output format (optional)
    */
   async sendMessage(
     userMessage,
     onChunk,
     onComplete,
     abortSignal,
-    forceJsonMode = false
+    useStructuredOutput = false
   ) {
     if (abortSignal?.aborted) {
       return;
@@ -166,11 +166,10 @@ export class SimulacrumAIService {
             model: modelName,
             messages: messages,
             temperature: 0.7,
+            ...(schemas.length > 0 ? { tools: schemas } : {}),
             ...(structuredConfig.useStructuredOutput
               ? { response_format: structuredConfig.formatConfig }
-              : forceJsonMode
-                ? { response_format: { type: 'json_object' } }
-                : {}),
+              : {}),
           };
 
       game.simulacrum?.logger?.debug(
@@ -506,9 +505,10 @@ export class SimulacrumAIService {
             model: modelName,
             messages: messages,
             temperature: 0.7,
+            ...(schemas.length > 0 ? { tools: schemas } : {}),
             ...(structuredConfig.useStructuredOutput
               ? { response_format: structuredConfig.formatConfig }
-              : { response_format: { type: 'json_object' } }),
+              : {}),
           };
 
       game.simulacrum?.logger?.debug(
@@ -831,85 +831,46 @@ export class SimulacrumAIService {
   }
 
   /**
-   * Default system prompt for Simulacrum - enforces JSON response format for agentic behavior
+   * Default system prompt for Simulacrum - natural language communication with tool calls
    */
   async getDefaultSystemPrompt() {
     // Load system prompt from localization array using FoundryVTT's pattern
     let promptTemplate;
-    try {
-      // Access the array by reconstructing it from individual indexed elements
-      // First, try to get the first element to see if the array exists
-      const firstLine = game.i18n.localize('SIMULACRUM.SYSTEM_PROMPT_LINES.0');
-
-      if (firstLine !== 'SIMULACRUM.SYSTEM_PROMPT_LINES.0') {
-        // Array exists, reconstruct it by accessing indexed elements
-        const lines = [];
-        let index = 0;
-        let currentLine;
-
-        // Keep reading array elements until we can't find more
-        while (true) {
-          currentLine = game.i18n.localize(
-            `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`
-          );
-          if (currentLine === `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`) {
-            // This index doesn't exist, we've reached the end
-            break;
-          }
-          lines.push(currentLine);
-          index++;
-        }
-
-        if (lines.length > 0) {
-          promptTemplate = lines.join('\n');
-        } else {
-          throw new Error('System prompt array is empty');
-        }
-      } else {
-        throw new Error('System prompt not found in localization');
-      }
-    } catch (error) {
-      game.simulacrum?.logger?.error(
-        'Failed to load system prompt from localization:',
-        error
+    // Load system prompt from localization
+    if (!game?.i18n?.localize) {
+      game.simulacrum?.logger?.error('Localization system not available');
+      throw new Error(
+        'Localization system not available - check FoundryVTT initialization'
       );
-      game.simulacrum?.logger?.warn('Using fallback system prompt');
-
-      // Comprehensive fallback prompt with explicit JSON-only instructions
-      promptTemplate = `You are Simulacrum, an AI campaign assistant for FoundryVTT designed to output JSON. 
-
-CRITICAL: You MUST respond with raw JSON only. Never use markdown code blocks or any formatting.
-
-Required JSON format:
-{
-    "message": "Your response to the user",
-    "tool_calls": [
-        {
-            "tool_name": "exact_tool_name",
-            "parameters": {"param1": "value1"},
-            "reasoning": "Why you're using this specific tool"
-        }
-    ],
-    "continuation": {
-        "in_progress": true/false,
-        "gerund": "Single descriptive word ending in -ing or null"
     }
-}
 
-MANDATORY RULES:
-- Respond with raw JSON only - NO markdown, NO code blocks, NO formatting
-- If you provide tool_calls, you MUST set in_progress: true
-- Only set in_progress: false when NO tools are needed and task is complete
-- tool_calls can be empty array [] if no tools needed
-- reasoning is MANDATORY for each tool call
-- gerund is MANDATORY if in_progress=true, null if in_progress=false
+    const firstLine = game.i18n.localize('SIMULACRUM.SYSTEM_PROMPT_LINES.0');
 
-AVAILABLE TOOLS:
-{TOOL_LIST}
+    if (firstLine !== 'SIMULACRUM.SYSTEM_PROMPT_LINES.0') {
+      // Array exists, reconstruct it by accessing indexed elements
+      const lines = [];
+      let index = 0;
+      let currentLine;
 
-CONTEXT:
-Current world: {WORLD_TITLE}
-System: {SYSTEM_TITLE} v{SYSTEM_VERSION}`;
+      // Keep reading array elements until we can't find more
+      while (true) {
+        currentLine = game.i18n.localize(
+          `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`
+        );
+        if (currentLine === `SIMULACRUM.SYSTEM_PROMPT_LINES.${index}`) {
+          // This index doesn't exist, we've reached the end
+          break;
+        }
+        lines.push(currentLine);
+        index++;
+      }
+
+      promptTemplate = lines.join('\n');
+    } else {
+      game.simulacrum?.logger?.error('System prompt not found in localization');
+      throw new Error(
+        'System prompt not found in localization - check lang/en.json'
+      );
     }
 
     // Generate dynamic tool list

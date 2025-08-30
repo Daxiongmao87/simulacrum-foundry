@@ -42,7 +42,29 @@ global.game = {
     }
   },
   i18n: {
-    localize: jest.fn((key) => key) // Return the key as-is for testing
+    localize: jest.fn((key) => {
+      // Mock the system prompt array for testing
+      if (key.startsWith('SIMULACRUM.SYSTEM_PROMPT_LINES.')) {
+        const index = key.split('.').pop();
+        const mockPromptLines = [
+          '# Test System Prompt',
+          'You are a test AI assistant.',
+          '',
+          '## Core Mandates',
+          '- Execute tasks autonomously',
+          '- Use tools for actions',
+          '',
+          '## Available Tools',
+          '{TOOL_LIST}',
+          '',
+          '## Context',
+          'Current world: {WORLD_TITLE}',
+          'System: {SYSTEM_TITLE} v{SYSTEM_VERSION}'
+        ];
+        return mockPromptLines[parseInt(index)] || key;
+      }
+      return key; // Return the key as-is for other localization
+    })
   }
 };
 
@@ -167,6 +189,9 @@ describe('Conversation History During Agentic Loop', () => {
       ])
     };
 
+    // Mock getDefaultSystemPrompt to avoid localization issues
+    jest.spyOn(aiService, 'getDefaultSystemPrompt').mockResolvedValue('Test system prompt with {TOOL_LIST}, {WORLD_TITLE}, {SYSTEM_TITLE}, {SYSTEM_VERSION}');
+
     // Mock the sendMessage implementation to avoid actual API call
     sendMessageSpy.mockImplementation((userMessage, onChunk, onComplete, abortSignal, forceJsonMode) => {
       // This simulates what sendMessage does - it adds to conversationHistory
@@ -216,7 +241,8 @@ describe('Conversation History During Agentic Loop', () => {
       { role: 'assistant', content: 'I need to know what type of item this is.' }
     ];
 
-    // No mocking - test the real fixed implementation
+    // Mock getDefaultSystemPrompt to avoid localization issues  
+    jest.spyOn(aiService, 'getDefaultSystemPrompt').mockResolvedValue('Test system prompt with {TOOL_LIST}, {WORLD_TITLE}, {SYSTEM_TITLE}, {SYSTEM_VERSION}');
 
     // Simulate what happens during agentic loop
     // The agentic context includes the follow-up "it's a weapon" message
