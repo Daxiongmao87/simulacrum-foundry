@@ -76,7 +76,7 @@ class UnitTestRunner {
   }
 
   async runUnitTests(options = {}) {
-    const { versions = null, specificTest = null, listTests = false } = options;
+    const { versions = null, specificTest = null, listTests = false, coverage = false, coverageHtml = false } = options;
 
     // Determine which versions to test
     const versionsToTest = versions || this.config['foundry-versions'];
@@ -115,6 +115,16 @@ class UnitTestRunner {
           const testPattern = `${specificTest}.test.js`;
           jestCommand += ` --testNamePattern="${specificTest}" --testPathPattern="${testPattern}"`;
           this.logger.debug(`Running specific test: ${specificTest}`);
+        }
+
+        if (coverage) {
+          jestCommand += ' --coverage';
+          if (coverageHtml) {
+            jestCommand += ' --coverageReporters=text --coverageReporters=html';
+            this.logger.info(`Coverage HTML report will be saved to: coverage/lcov-report/index.html`);
+          } else {
+            jestCommand += ' --coverageReporters=text';
+          }
         }
 
         if (DEBUG_MODE) {
@@ -225,7 +235,9 @@ function parseArgs() {
     help: false,
     versions: null,
     tests: null,
-    listTests: false
+    listTests: false,
+    coverage: false,
+    coverageHtml: false
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -254,6 +266,11 @@ function parseArgs() {
     } else if (arg === '--unit') {
       // Keep --unit for backward compatibility, but it's now the default behavior
       // No-op since this runner only does unit tests
+    } else if (arg === '--coverage' || arg === '-c') {
+      options.coverage = true;
+    } else if (arg === '--html') {
+      options.coverageHtml = true;
+      options.coverage = true; // HTML implies coverage
     }
   }
   
@@ -285,6 +302,8 @@ Examples:
   node run-tests.js -t logger          # Run specific test matching 'logger'
   node run-tests.js --list-tests       # Show available tests
   node run-tests.js --debug            # Run with verbose output
+  node run-tests.js --coverage         # Run with coverage analysis
+  node run-tests.js --coverage --html  # Run with HTML coverage report
 
 For manual system-agnostic testing with live FoundryVTT + game systems:
   node launch-foundry.js -s dnd5e      # Test against D&D 5e system
@@ -307,7 +326,9 @@ async function main() {
     const result = await runner.runUnitTests({
       versions: options.versions,
       specificTest: options.tests,
-      listTests: options.listTests
+      listTests: options.listTests,
+      coverage: options.coverage,
+      coverageHtml: options.coverageHtml
     });
 
     if (!result.success) {

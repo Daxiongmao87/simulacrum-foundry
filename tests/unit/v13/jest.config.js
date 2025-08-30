@@ -6,14 +6,16 @@ export default {
   verbose: true,
   collectCoverage: true,
   collectCoverageFrom: [
-    '<rootDir>/../../../scripts/core/logger.js'
+    '<rootDir>/../../../scripts/**/*.js',
+    '!<rootDir>/../../../scripts/main.js', // Exclude bootstrapping
+    '!<rootDir>/../../../scripts/fimlib/**' // Exclude submodules
   ],
   coverageThreshold: {
     global: {
-      lines: 80,
-      functions: 80,
-      branches: 80,
-      statements: 80
+      lines: 45, // Current coverage level - prevent regressions
+      functions: 45,
+      branches: 35,
+      statements: 45
     }
   },
   // v13 specific configuration

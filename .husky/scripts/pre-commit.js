@@ -217,19 +217,30 @@ try {
     }
   }
   
-  // 🧪 FOURTH: Run unit tests only
-  console.log('🧪 Running unit tests...');
+  // 🧪 FOURTH: Run unit tests and static analysis coverage
+  console.log('🧪 Running unit tests and static analysis...');
   
   const stagedTests = getStagedTestFiles();
   let testsFailed = false;
   
-  // Always run ALL unit tests (fast, comprehensive coverage)
+  // Run unit tests (fast, comprehensive)
   console.log('📋 Running unit tests...');
   try {
     execSync('npm run test:unit', { stdio: 'inherit' });
     console.log('✅ Unit tests passed');
   } catch (error) {
     console.error('❌ Unit tests failed');
+    testsFailed = true;
+  }
+  
+  // Run static analysis coverage (detects dead code)
+  console.log('📋 Running static analysis coverage...');
+  try {
+    execSync('npm run coverage:check', { stdio: 'inherit' });
+    console.log('✅ Static analysis coverage passed');
+  } catch (error) {
+    console.error('❌ Static analysis coverage failed');
+    console.error('💡 Dead code detected - remove unused files or lower threshold');
     testsFailed = true;
   }
   

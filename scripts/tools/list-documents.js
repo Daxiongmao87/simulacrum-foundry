@@ -1,5 +1,4 @@
 import { Tool } from './tool-registry.js';
-import DocumentDiscovery from './discovery-tools.js';
 // import { SimulacrumSettings } from '../settings.js'; // Available for future use
 
 export class ListDocumentsTool extends Tool {
@@ -45,15 +44,19 @@ export class ListDocumentsTool extends Tool {
 
       if (documentType) {
         // List documents of a specific type
-        const { collection, filterByType } =
-          DocumentDiscovery.findCollection(documentType);
+        const gameCollections = game?.collections;
+        if (!gameCollections) {
+          throw new Error('Foundry game collections are not available.');
+        }
+
+        const collection = gameCollections.get(documentType);
+        if (!collection) {
+          throw new Error(
+            `No collection found for document type: ${documentType}`
+          );
+        }
 
         documents = collection.contents;
-
-        // Apply subtype filtering if needed
-        if (filterByType) {
-          documents = documents.filter((doc) => doc.type === filterByType);
-        }
 
         // Apply additional filtering
         if (Object.keys(filter).length > 0) {
