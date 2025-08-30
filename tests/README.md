@@ -86,7 +86,7 @@ tests/
 │       ├── jest.config.js             # Jest configuration
 │       ├── jest.setup.js              # Global test setup
 │       ├── context-manager.test.js    # ContextManager tests
-│       ├── json-response-parser.test.js # JSON response parser tests
+│       ├── agent-response-parser.test.js # Agent response parser tests (natural language + JSON)
 │       ├── logger.test.js             # Logger system tests
 │       └── sample.test.js             # Sample test template
 ├── bootstrap/                         # Manual testing infrastructure

@@ -27,7 +27,7 @@ import { SimulacrumAIService } from './chat/ai-service.js';
 import { setupGlobalErrorHandling } from './error-handling.js';
 // import './tool-test.js'; // Load testing functions - file doesn't exist
 import { AgenticLoopController } from './core/agentic-loop-controller.js';
-import { AgentResponseParser } from './core/json-response-parser.js';
+import { AgentResponseParser } from './core/agent-response-parser.js';
 import { SimulacrumToolScheduler } from './core/tool-scheduler.js';
 import { TokenTracker, formatToolResultsForAI } from './core/token-tracker.js';
 import { WorkflowEnforcer } from './core/workflow-enforcer.js';

@@ -8,7 +8,7 @@ After analyzing Simulacrum's current system prompt and architecture against esta
 
 ### Strengths
 - **Solid Technical Architecture**: Well-structured tool registry, proper JSON response parsing, context management
-  - References: `scripts/tools/tool-registry.js`, `scripts/core/json-response-parser.js`, `scripts/core/agentic-context.js`
+  - References: `scripts/tools/tool-registry.js`, `scripts/core/agent-response-parser.js`, `scripts/core/agentic-context.js`
 - **Domain Expertise**: Deep FoundryVTT integration with system-agnostic design
   - References: `scripts/core/document-discovery-engine.js`, `scripts/core/generic-crud-tools.js`
 - **Tool Ecosystem**: Comprehensive 13+ tools specifically designed for worldbuilding
@@ -244,14 +244,14 @@ ${(function() {
 **References for Implementation**:
 - Current system prompt generation: `scripts/settings.js:200-220` (where system prompt is built)
 - AI service integration: `scripts/chat/ai-service.js:15-80` (tool schema generation)
-- Response parsing: `scripts/core/json-response-parser.js` (current JSON-only parsing)
+- Response parsing: `scripts/core/agent-response-parser.js` (current JSON-only parsing)
 
 ## Implementation Priority
 
 ### Phase 1 (Critical - Immediate)
 1. Remove JSON response requirement
    - **Modify**: `lang/en.json:58,61,151` (remove JSON-only requirements)
-   - **Update**: `scripts/core/json-response-parser.js` (allow natural language parsing)
+   - **Update**: `scripts/core/agent-response-parser.js` (allow natural language parsing)
 2. Restructure system prompt with clear hierarchy
    - **Restructure**: `lang/en.json:56-154` (follow gemini-cli hierarchy pattern)
    - **Reference pattern**: `research/gemini-cli/packages/core/src/core/prompts.ts:49-266`
@@ -336,14 +336,14 @@ The key insight from analyzing successful agentic tools is that **clarity and wo
 - **Agentic loop controller**: `scripts/core/agentic-loop-controller.js`
 - **Tool registry**: `scripts/tools/tool-registry.js`
 - **AI service**: `scripts/chat/ai-service.js`
-- **Response parser**: `scripts/core/json-response-parser.js`
+- **Response parser**: `scripts/core/agent-response-parser.js`
 
 ## Iterative Implementation Plan with Unit Testing
 
 ### Iteration 1: Foundation - Remove JSON Constraint
 
 #### Implementation Tasks
-1. **Update Response Parser** (`scripts/core/json-response-parser.js`)
+1. **Update Response Parser** (`scripts/core/agent-response-parser.js`)
    - Add support for natural language responses with embedded tool calls
    - Maintain backward compatibility with current JSON responses
    - Extract tool calls from markdown-style tool call blocks
