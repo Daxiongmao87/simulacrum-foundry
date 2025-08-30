@@ -291,6 +291,47 @@ export class AgenticLoopController {
         // Check if we're done
         if (!parsed.continuation.in_progress) {
           this.showMessage('Workflow completed.');
+
+          // Update main conversation history with final result
+          // Add the initial user message and final AI response to main history
+          const contextMessages = context.toMessagesArray();
+          const firstUserMessage = contextMessages.find(
+            (msg) => msg.role === 'user'
+          );
+          const lastAIMessage = contextMessages[contextMessages.length - 1];
+
+          if (
+            firstUserMessage &&
+            lastAIMessage &&
+            lastAIMessage.role === 'assistant'
+          ) {
+            // Clear any duplicate entries that might exist
+            const existingHistory = this.aiService.getHistory();
+            const lastUserInHistory =
+              existingHistory[existingHistory.length - 1];
+
+            // Only add if the user message isn't already the last entry
+            if (
+              !lastUserInHistory ||
+              lastUserInHistory.content !== firstUserMessage.content
+            ) {
+              this.aiService.conversationHistory.push({
+                role: 'user',
+                content: firstUserMessage.content,
+              });
+            }
+
+            // Add the final AI response
+            this.aiService.conversationHistory.push({
+              role: 'assistant',
+              content: parsed.message,
+            });
+
+            game.simulacrum?.logger?.debug(
+              'Updated main conversation history with agentic loop results'
+            );
+          }
+
           return; // Complete
         }
 

@@ -5,7 +5,7 @@ export class GetUserPreferencesTool extends Tool {
   constructor() {
     super(
       'getUserPreferences',
-      'Returns user-specific settings and preferences',
+      'Returns user settings, permissions, active character, and Simulacrum-specific configuration for the specified or current user',
       {
         type: 'object',
         properties: {

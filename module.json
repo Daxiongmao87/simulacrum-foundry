@@ -1,0 +1,36 @@
+{
+  "id": "simulacrum",
+  "title": "Simulacrum - AI Campaign Assistant",
+  "description": "An AI campaign assistant for FoundryVTT Game Masters and Assistant Game Masters.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "esmodules": ["scripts/main.js"],
+  "styles": ["styles/simulacrum.css"],
+  "authors": [
+    {
+      "name": "Daxiongmao87",
+      "url": "https://github.com/Daxiongmao87"
+    }
+  ],
+  "url": "https://github.com/Daxiongmao87/simulacrum-foundry",
+  "manifest": "https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/module.json",
+  "download": "https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/simulacrum.zip",
+  "license": "LICENSE",
+  "readme": "README.md",
+  "bugs": "https://github.com/Daxiongmao87/simulacrum-foundry/issues",
+  "changelog": "CHANGELOG.md",
+  "packs": [],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "relationships": {
+    "systems": []
+  }
+}

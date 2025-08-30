@@ -3,22 +3,29 @@ import DocumentDiscovery from './discovery-tools.js';
 
 export class CreateDocumentTool extends Tool {
   constructor() {
-    super('create_document', 'Creates a new document of specified type', {
-      type: 'object',
-      properties: {
-        documentType: {
-          type: 'string',
-          description: 'Type of document to create',
+    super(
+      'create_document',
+      'Creates a new FoundryVTT document (Actor, Item, Scene, JournalEntry, etc.) with specified data and validates against system schema',
+      {
+        type: 'object',
+        properties: {
+          documentType: {
+            type: 'string',
+            description: 'Type of document to create',
+          },
+          name: {
+            type: 'string',
+            description: 'The name of the new document.',
+          },
+          data: {
+            type: 'object',
+            description:
+              'Optional: Additional data to initialize the document with, as a JSON object.',
+          },
         },
-        name: { type: 'string', description: 'The name of the new document.' },
-        data: {
-          type: 'object',
-          description:
-            'Optional: Additional data to initialize the document with, as a JSON object.',
-        },
-      },
-      required: ['documentType', 'name'],
-    });
+        required: ['documentType', 'name'],
+      }
+    );
   }
 
   async execute(params) {

@@ -6,7 +6,7 @@ export class SearchDocumentsTool extends Tool {
   constructor() {
     super(
       'search_documents',
-      'Searches for documents by content or properties with pagination.',
+      'Searches document content and properties using text matching across specified fields with filtering, pagination, and relevance scoring',
       {
         type: 'object',
         properties: {

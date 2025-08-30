@@ -12,7 +12,8 @@ export class UpdateDocumentTool extends Tool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'Type of document to update',
+            description:
+              'Optional: Type of document to update (e.g., "Actor", "Item"). If not specified, will search all collections.',
           },
           documentId: {
             type: 'string',
@@ -27,7 +28,7 @@ export class UpdateDocumentTool extends Tool {
             description: 'Data to update in the document',
           },
         },
-        required: ['documentType', 'updateData'],
+        required: ['updateData'],
         anyOf: [{ required: ['documentId'] }, { required: ['documentName'] }],
       }
     );
@@ -37,14 +38,38 @@ export class UpdateDocumentTool extends Tool {
     try {
       const { documentType, documentId, documentName, updateData } = params;
 
-      // Use DocumentDiscovery to find target collection
-      const { collection } = DocumentDiscovery.findCollection(documentType);
-
       let document;
-      if (documentId) {
-        document = collection.get(documentId);
-      } else if (documentName) {
-        document = collection.getName(documentName);
+      let actualDocumentType;
+
+      if (documentType) {
+        // Use DocumentDiscovery to find target collection
+        const { collection } = DocumentDiscovery.findCollection(documentType);
+
+        if (documentId) {
+          document = collection.get(documentId);
+        } else if (documentName) {
+          document = collection.getName(documentName);
+        }
+        actualDocumentType = documentType;
+      } else {
+        // Search all collections for the document
+        const gameCollections = game?.collections;
+        if (!gameCollections) {
+          throw new Error('Foundry game collections are not available.');
+        }
+
+        for (const [collectionName, collection] of gameCollections.entries()) {
+          if (documentId) {
+            document = collection.get(documentId);
+          } else if (documentName) {
+            document = collection.getName(documentName);
+          }
+
+          if (document) {
+            actualDocumentType = collectionName;
+            break;
+          }
+        }
       }
 
       if (!document) {
@@ -65,7 +90,7 @@ export class UpdateDocumentTool extends Tool {
         result: {
           id: updatedDocument.id,
           name: updatedDocument.name || updatedDocument.title,
-          type: documentType,
+          type: actualDocumentType,
           data: updatedDocument.toObject(),
         },
       };
@@ -73,7 +98,7 @@ export class UpdateDocumentTool extends Tool {
       return {
         success: false,
         error: {
-          message: `Failed to update ${params.documentType}: ${error.message}`,
+          message: `Failed to update document: ${error.message}`,
           code: 'UPDATE_FAILED',
         },
       };

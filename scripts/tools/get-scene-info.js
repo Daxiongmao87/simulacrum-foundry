@@ -5,7 +5,7 @@ export class GetSceneInfoTool extends Tool {
   constructor() {
     super(
       'getSceneInfo',
-      'Returns detailed information about the current scene',
+      'Returns detailed scene information including dimensions, background, tokens, lighting settings, journal notes, walls, and terrain features',
       {
         type: 'object',
         properties: {

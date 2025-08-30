@@ -12,7 +12,8 @@ export class DeleteDocumentTool extends Tool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'Type of document to delete',
+            description:
+              'Optional: Type of document to delete (e.g., "Actor", "Item"). If not specified, will search all collections.',
           },
           documentId: {
             type: 'string',
@@ -23,7 +24,7 @@ export class DeleteDocumentTool extends Tool {
             description: 'Name of document to delete',
           },
         },
-        required: ['documentType'],
+        required: [],
         anyOf: [{ required: ['documentId'] }, { required: ['documentName'] }],
       }
     );
@@ -50,14 +51,38 @@ export class DeleteDocumentTool extends Tool {
         };
       }
 
-      // Use DocumentDiscovery to find target collection
-      const { collection } = DocumentDiscovery.findCollection(documentType);
-
       let document;
-      if (documentId) {
-        document = collection.get(documentId);
-      } else if (documentName) {
-        document = collection.getName(documentName);
+      let actualDocumentType;
+
+      if (documentType) {
+        // Use DocumentDiscovery to find target collection
+        const { collection } = DocumentDiscovery.findCollection(documentType);
+
+        if (documentId) {
+          document = collection.get(documentId);
+        } else if (documentName) {
+          document = collection.getName(documentName);
+        }
+        actualDocumentType = documentType;
+      } else {
+        // Search all collections for the document
+        const gameCollections = game?.collections;
+        if (!gameCollections) {
+          throw new Error('Foundry game collections are not available.');
+        }
+
+        for (const [collectionName, collection] of gameCollections.entries()) {
+          if (documentId) {
+            document = collection.get(documentId);
+          } else if (documentName) {
+            document = collection.getName(documentName);
+          }
+
+          if (document) {
+            actualDocumentType = collectionName;
+            break;
+          }
+        }
       }
 
       if (!document) {
@@ -73,7 +98,7 @@ export class DeleteDocumentTool extends Tool {
       const documentInfo = {
         id: document.id,
         name: document.name || document.title,
-        type: documentType,
+        type: actualDocumentType,
       };
 
       // Delete the document using Foundry API
@@ -82,7 +107,7 @@ export class DeleteDocumentTool extends Tool {
       return {
         success: true,
         result: {
-          message: `Deleted ${documentType}: ${documentInfo.name}`,
+          message: `Deleted ${actualDocumentType}: ${documentInfo.name}`,
           deletedDocument: documentInfo,
         },
       };
@@ -90,7 +115,7 @@ export class DeleteDocumentTool extends Tool {
       return {
         success: false,
         error: {
-          message: `Failed to delete ${params.documentType}: ${error.message}`,
+          message: `Failed to delete document: ${error.message}`,
           code: 'DELETE_FAILED',
         },
       };

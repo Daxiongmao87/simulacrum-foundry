@@ -1,10 +1,11 @@
-// Remove unused import - settings accessed via game.settings API
+import { StructuredOutputDetector } from '../core/structured-output-detector.js';
 
 export class SimulacrumAIService {
   constructor(toolRegistry) {
     this.toolRegistry = toolRegistry;
     this.conversationHistory = [];
     this.abortController = null;
+    this.structuredOutputDetector = new StructuredOutputDetector();
   }
 
   /**
@@ -119,6 +120,13 @@ export class SimulacrumAIService {
       const contextLength = game.settings.get('simulacrum', 'contextLength');
       const apiKey = game.settings.get('simulacrum', 'apiKey');
 
+      // Get structured output configuration
+      const structuredConfig = await this.getStructuredOutputConfig(
+        baseEndpoint,
+        modelName,
+        isOllama
+      );
+
       // Build messages array with system prompt and history
       const defaultPrompt = await this.getDefaultSystemPrompt();
       const userAdditions =
@@ -126,10 +134,13 @@ export class SimulacrumAIService {
           ? `\n\nADDITIONAL INSTRUCTIONS:\n${systemPrompt}`
           : '';
 
+      const systemContent =
+        defaultPrompt + userAdditions + structuredConfig.systemPromptAddition;
+
       const messages = [
         {
           role: 'system',
-          content: defaultPrompt + userAdditions,
+          content: systemContent,
         },
         ...this.getContextualHistory(contextLength),
         {
@@ -147,14 +158,19 @@ export class SimulacrumAIService {
             temperature: 0.7,
             stream: true,
             tools: schemas,
+            ...(structuredConfig.useStructuredOutput
+              ? structuredConfig.formatConfig
+              : {}),
           }
         : {
             model: modelName,
             messages: messages,
             temperature: 0.7,
-            ...(forceJsonMode
-              ? { response_format: { type: 'json_object' } }
-              : {}),
+            ...(structuredConfig.useStructuredOutput
+              ? { response_format: structuredConfig.formatConfig }
+              : forceJsonMode
+                ? { response_format: { type: 'json_object' } }
+                : {}),
           };
 
       game.simulacrum?.logger?.debug(
@@ -312,23 +328,199 @@ export class SimulacrumAIService {
    * @returns {Promise<string>} The AI's response
    */
   async sendWithContext(context, abortSignal) {
-    // Get the last user message from context
-    const contextMessages = context.toMessagesArray();
-    const lastUserMessage = [...contextMessages]
-      .reverse()
-      .find((msg) => msg.role === 'user');
-    if (!lastUserMessage) {
-      throw new Error('No user message found in context');
+    if (abortSignal?.aborted) {
+      return;
     }
 
-    // Just send the message normally - let sendMessage handle the conversation history
-    return this.sendMessage(
-      lastUserMessage.content,
-      null,
-      null,
-      abortSignal,
-      true
-    );
+    try {
+      // Get the context messages - do NOT extract just the last user message
+      const contextMessages = context.toMessagesArray();
+
+      // Prepare request - similar to sendMessage but without modifying conversationHistory
+      const baseEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+      const isOllama =
+        baseEndpoint.includes('localhost') ||
+        baseEndpoint.includes('127.0.0.1') ||
+        baseEndpoint.includes('ollama') ||
+        baseEndpoint.includes('11434');
+
+      const apiEndpoint = isOllama
+        ? `${baseEndpoint}/chat/completions`
+        : `${baseEndpoint}/chat/completions`;
+      const modelName = game.settings.get('simulacrum', 'modelName');
+      const systemPrompt = game.settings.get('simulacrum', 'systemPrompt');
+      const apiKey = game.settings.get('simulacrum', 'apiKey');
+
+      // Get structured output configuration
+      const structuredConfig = await this.getStructuredOutputConfig(
+        baseEndpoint,
+        modelName,
+        isOllama
+      );
+
+      // Build messages array with system prompt and agentic context
+      const defaultPrompt = await this.getDefaultSystemPrompt();
+      const userAdditions =
+        typeof systemPrompt === 'string' && systemPrompt.length > 0
+          ? `\n\nADDITIONAL INSTRUCTIONS:\n${systemPrompt}`
+          : '';
+
+      const systemContent =
+        defaultPrompt + userAdditions + structuredConfig.systemPromptAddition;
+
+      const messages = [
+        {
+          role: 'system',
+          content: systemContent,
+        },
+        ...contextMessages, // Use the full agentic context, not just the last message
+      ];
+
+      const schemas = await this.generateToolSchemas();
+
+      const requestBody = isOllama
+        ? {
+            model: modelName,
+            messages: messages,
+            temperature: 0.7,
+            stream: true,
+            tools: schemas,
+            ...(structuredConfig.useStructuredOutput
+              ? structuredConfig.formatConfig
+              : {}),
+          }
+        : {
+            model: modelName,
+            messages: messages,
+            temperature: 0.7,
+            ...(structuredConfig.useStructuredOutput
+              ? { response_format: structuredConfig.formatConfig }
+              : { response_format: { type: 'json_object' } }),
+          };
+
+      game.simulacrum?.logger?.debug(
+        '🔍 Agentic sendWithContext request body:',
+        JSON.stringify(requestBody, null, 2)
+      );
+
+      // Make request with bounded quick retries (no backoff) to smooth transient CORS/network hiccups
+      let response;
+      let lastError;
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(isOllama ? {} : { Authorization: `Bearer ${apiKey || ''}` }),
+            },
+            body: JSON.stringify(requestBody),
+            signal: abortSignal,
+          });
+
+          // Retry only on transient statuses
+          const retryable = [408, 429, 500, 502, 503, 504];
+          if (
+            !response.ok &&
+            retryable.includes(response.status) &&
+            attempt < maxAttempts
+          ) {
+            // Minimal delay to yield event loop; do not lengthen user wait significantly
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+          break;
+        } catch (err) {
+          lastError = err;
+          if (err?.name === 'AbortError') {
+            throw err;
+          }
+          // TypeError: Failed to fetch (often CORS) → quick retry
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!response.ok) {
+        let errorBody = 'No error details available';
+        try {
+          errorBody = await response.text();
+          game.simulacrum?.logger?.error(
+            '❌ Agentic API Error Response Body:',
+            errorBody
+          );
+        } catch (e) {
+          game.simulacrum?.logger?.error(
+            '❌ Could not read agentic error response:',
+            e
+          );
+        }
+        const error = new Error(
+          `AI API error in agentic loop: ${response.status} ${response.statusText}`
+        );
+        game.simulacrum?.logger?.error('❌ Agentic API Request Failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: apiEndpoint,
+          errorBody,
+        });
+        throw error;
+      }
+
+      let aiResponse = '';
+
+      if (isOllama) {
+        // For Ollama, handle streaming - but don't add to conversationHistory
+        let streamedContent = '';
+
+        await this.processStreamingResponse(
+          response,
+          null, // No onChunk callback needed for agentic context
+          (content, functionCalls) => {
+            streamedContent = content;
+          },
+          abortSignal,
+          true // Skip history update - this is critical!
+        );
+
+        aiResponse = streamedContent;
+      } else {
+        // For non-Ollama APIs
+        const data = await response.json();
+        aiResponse = data.choices?.[0]?.message?.content || '';
+      }
+
+      // CRITICAL: Do NOT add to conversationHistory - this is the key fix!
+      // The agentic loop manages its own context via AgenticContext
+      // The main conversationHistory should only be updated when the entire workflow completes
+
+      return aiResponse;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        // Request cancelled by user
+      } else {
+        // Check if this is a CORS error
+        const isCorsError =
+          error.message === 'Failed to fetch' ||
+          error.message.includes('CORS') ||
+          error.message.includes('cross-origin');
+
+        if (!isCorsError) {
+          // Only log non-CORS errors
+          game.simulacrum?.logger?.error('💥 Agentic AI Service Error:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            cause: error.cause,
+          });
+        }
+        throw error;
+      }
+    }
   }
 
   /**
@@ -617,6 +809,51 @@ System: {SYSTEM_TITLE} v{SYSTEM_VERSION}`;
       .replace('{WORLD_TITLE}', game.world?.title || 'Unknown')
       .replace('{SYSTEM_TITLE}', game.system?.title || 'Unknown')
       .replace('{SYSTEM_VERSION}', game.system?.version || '?');
+  }
+
+  /**
+   * Get structured output configuration for API request
+   * @param {string} endpoint - API endpoint
+   * @param {string} modelName - Model name
+   * @param {boolean} isOllama - Whether this is an Ollama endpoint
+   * @returns {Promise<Object>} Configuration object with format settings
+   */
+  async getStructuredOutputConfig(endpoint, modelName, isOllama) {
+    const detection =
+      await this.structuredOutputDetector.detectStructuredOutputSupport(
+        endpoint,
+        modelName
+      );
+
+    if (detection.supportsStructuredOutput) {
+      game.simulacrum?.logger?.debug(
+        'Using structured output for',
+        detection.provider
+      );
+
+      if (isOllama) {
+        return {
+          useStructuredOutput: true,
+          formatConfig: detection.formatConfig,
+          systemPromptAddition: '',
+        };
+      } else {
+        return {
+          useStructuredOutput: true,
+          formatConfig: detection.formatConfig,
+          systemPromptAddition: '',
+        };
+      }
+    } else {
+      game.simulacrum?.logger?.debug(
+        'Falling back to prompt-based JSON formatting'
+      );
+      return {
+        useStructuredOutput: false,
+        formatConfig: null,
+        systemPromptAddition: detection.fallbackInstructions,
+      };
+    }
   }
 
   /**

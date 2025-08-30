@@ -56,6 +56,16 @@ describe('Conversation History - Simple Tests', () => {
       tools: new Map() // Add empty tools Map
     };
     aiService = new SimulacrumAIService(mockToolRegistry);
+    
+    // Mock structured output detector
+    aiService.structuredOutputDetector = {
+      detectStructuredOutputSupport: jest.fn().mockResolvedValue({
+        supportsStructuredOutput: false,
+        provider: 'openai',
+        formatConfig: null,
+        fallbackInstructions: ''
+      })
+    };
   });
 
   test('should maintain conversation history correctly', async () => {

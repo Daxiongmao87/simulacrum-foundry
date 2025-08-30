@@ -219,14 +219,6 @@ export class SimulacrumSettings {
       default: {},
     });
 
-    // Context Items Storage
-    game.settings.register('simulacrum', 'contextItems', {
-      scope: 'world',
-      config: false,
-      type: Array,
-      default: [],
-    });
-
     // Register a custom menu for tool permissions
     game.settings.registerMenu('simulacrum', 'toolPermissionsMenu', {
       name: 'SIMULACRUM.ToolPermissionsMenuName',

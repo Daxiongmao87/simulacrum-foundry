@@ -5,7 +5,7 @@ export class GetWorldInfoTool extends Tool {
   constructor() {
     super(
       'getWorldInfo',
-      'Returns comprehensive information about the current world',
+      'Returns comprehensive world information including title, game system, active scene, connected players, document collection counts, and active modules',
       {
         type: 'object',
         properties: {},

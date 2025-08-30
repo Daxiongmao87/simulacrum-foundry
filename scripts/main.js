@@ -18,13 +18,12 @@ import { SearchDocumentsTool } from './tools/search-documents.js';
 import { GetWorldInfoTool } from './tools/get-world-info.js';
 import { GetSceneInfoTool } from './tools/get-scene-info.js';
 import { GetUserPreferencesTool } from './tools/get-user-preferences.js';
-import { AddDocumentContextTool } from './tools/add-document-context.js';
-import { ListContextTool } from './tools/list-context.js';
-import { ClearContextTool } from './tools/clear-context.js';
+
 import { ListImagesTool } from './tools/list-images.js';
 import { GetDocumentSchemaTool } from './tools/get-document-schema.js';
+import { TodoWriteTool } from './tools/todo-write.js';
 import { SimulacrumAIService } from './chat/ai-service.js';
-import { ContextManager } from './context-manager.js';
+
 import { setupGlobalErrorHandling } from './error-handling.js';
 // import './tool-test.js'; // Load testing functions - file doesn't exist
 import { AgenticLoopController } from './core/agentic-loop-controller.js';
@@ -44,10 +43,10 @@ import { DynamicContextWindowSetting } from './ui/dynamic-context-window-setting
 import { ModelDetector } from './core/model-detector.js';
 import { DynamicModelSelector } from './ui/dynamic-model-selector.js';
 import { initializeLogger } from './core/logger.js';
+import { StructuredOutputDetector } from './core/structured-output-detector.js';
 
 let toolRegistry; // Global tool registry
 let aiService; // Global AI service
-let contextManager; // Global context manager
 
 // Connection state tracking
 let SimulacrumChatModalClass = null;
@@ -164,9 +163,6 @@ Hooks.once('init', () => {
   toolRegistry = new ToolRegistry();
 
   try {
-    // Initialize context manager
-    contextManager = new ContextManager();
-
     // Initialize document discovery engine
     const documentDiscoveryEngine = new DocumentDiscoveryEngine();
 
@@ -189,11 +185,10 @@ Hooks.once('init', () => {
     toolRegistry.registerTool(new GetWorldInfoTool());
     toolRegistry.registerTool(new GetSceneInfoTool());
     toolRegistry.registerTool(new GetUserPreferencesTool());
-    toolRegistry.registerTool(new AddDocumentContextTool());
-    toolRegistry.registerTool(new ListContextTool());
-    toolRegistry.registerTool(new ClearContextTool());
+
     toolRegistry.registerTool(new ListImagesTool());
     toolRegistry.registerTool(new GetDocumentSchemaTool());
+    toolRegistry.registerTool(new TodoWriteTool());
 
     // Initialize Workflow Enforcer
     const workflowEnforcer = new WorkflowEnforcer();
@@ -219,11 +214,10 @@ Hooks.once('init', () => {
     // The error logger will be connected later via setupGlobalErrorHandling
     const logger = initializeLogger();
 
-    // Make tool registry, AI service, context manager, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
+    // Make tool registry, AI service, document discovery engine, generic CRUD tools, and agentic loop controller globally accessible
     game.simulacrum = {
       toolRegistry,
       aiService,
-      contextManager,
       documentDiscoveryEngine,
       genericCrudTools,
       agenticLoopController,
@@ -234,6 +228,7 @@ Hooks.once('init', () => {
       showProgress,
       showProgressWithOptions,
       updateProgressText,
+      StructuredOutputDetector,
       createProgressContainer,
       ContextCompaction,
       ContextWindowDetector,
