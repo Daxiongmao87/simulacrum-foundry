@@ -31,7 +31,7 @@ export class AgentResponseParser {
         const parsed = JSON.parse(rawResponse);
 
         // Validate required fields existence (treat null as missing)
-        const requiredFields = ['message', 'tool_calls', 'continuation'];
+        const requiredFields = ['message', 'continuation'];
         const missingFields = requiredFields.filter(
           (field) => parsed[field] === undefined || parsed[field] === null
         );
@@ -47,8 +47,13 @@ export class AgentResponseParser {
           throw new Error('Field "message" must be a string');
         }
 
+        // tool_calls is optional - if not provided, default to empty array
+        if (parsed.tool_calls === undefined || parsed.tool_calls === null) {
+          parsed.tool_calls = [];
+        }
+
         if (!Array.isArray(parsed.tool_calls)) {
-          throw new Error('Field "tool_calls" must be an array');
+          throw new Error('Field "tool_calls" must be an array if provided');
         }
 
         if (

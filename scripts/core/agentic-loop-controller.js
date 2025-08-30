@@ -90,7 +90,46 @@ export class AgenticLoopController {
    */
   initializeContext(userMessage) {
     const context = new AgenticContext();
-    context.addUserMessage(userMessage);
+
+    // Load existing conversation history from AIService
+    const existingHistory = this.aiService.getHistory();
+
+    // Convert existing history to AgenticContext format
+    // Skip the last message if it matches our userMessage (to avoid duplication)
+    for (let i = 0; i < existingHistory.length; i++) {
+      const msg = existingHistory[i];
+
+      // Skip the last message if it's the same as our current userMessage
+      if (
+        i === existingHistory.length - 1 &&
+        msg.role === 'user' &&
+        msg.content === userMessage
+      ) {
+        continue;
+      }
+
+      if (msg.role === 'user') {
+        context.addUserMessage(msg.content);
+      } else if (msg.role === 'assistant') {
+        // Add AI response with minimal structure
+        context.addAIResponse({
+          message: msg.content,
+          tool_calls: msg.tool_calls || [],
+          continuation: { in_progress: false, gerund: null },
+        });
+      }
+    }
+
+    // Add the new user message only if it wasn't already in the history
+    const lastHistoryMsg = existingHistory[existingHistory.length - 1];
+    if (
+      !lastHistoryMsg ||
+      lastHistoryMsg.role !== 'user' ||
+      lastHistoryMsg.content !== userMessage
+    ) {
+      context.addUserMessage(userMessage);
+    }
+
     this.currentContext = context;
     return context;
   }
@@ -228,10 +267,9 @@ export class AgenticLoopController {
           context.replaceMessagesArray(compactedHistory);
         }
 
-        // Get AI response with accumulated context
-        const chatPrompt = await context.toChatPrompt(); // Ensure to await if toChatPrompt is async
-        const response = await this.aiService.sendJsonMessage(
-          chatPrompt,
+        // Get AI response with properly formatted context
+        const response = await this.aiService.sendWithContext(
+          context,
           this.abortController.signal
         );
 

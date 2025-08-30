@@ -97,7 +97,7 @@ export class SimulacrumAIService {
       return;
     }
     try {
-      // Add user message to history
+      // Add user message to history FIRST
       this.conversationHistory.push({
         role: 'user',
         content: userMessage,
@@ -109,10 +109,8 @@ export class SimulacrumAIService {
         baseEndpoint.includes('localhost') ||
         baseEndpoint.includes('127.0.0.1') ||
         baseEndpoint.includes('ollama') ||
-        baseEndpoint.includes('11434'); // Add explicit check for Ollama port
+        baseEndpoint.includes('11434');
 
-      game.simulacrum?.logger?.debug('🔍 Base endpoint:', baseEndpoint);
-      game.simulacrum?.logger?.debug('🔍 Is Ollama detected:', isOllama);
       const apiEndpoint = isOllama
         ? `${baseEndpoint}/chat/completions`
         : `${baseEndpoint}/chat/completions`;
@@ -121,7 +119,7 @@ export class SimulacrumAIService {
       const contextLength = game.settings.get('simulacrum', 'contextLength');
       const apiKey = game.settings.get('simulacrum', 'apiKey');
 
-      // Build messages array with system prompt
+      // Build messages array with system prompt and history
       const defaultPrompt = await this.getDefaultSystemPrompt();
       const userAdditions =
         typeof systemPrompt === 'string' && systemPrompt.length > 0
@@ -235,54 +233,41 @@ export class SimulacrumAIService {
         throw error;
       }
 
+      let aiResponse = '';
+
       if (isOllama) {
-        // For Ollama, always handle as streaming since it ignores stream: false
-        if (forceJsonMode) {
-          // For JSON mode, process streaming response and return final content
-          let finalContent = '';
-          let finalFunctionCalls = [];
+        // For Ollama, handle streaming
+        let streamedContent = '';
 
-          await this.processStreamingResponse(
-            response,
-            onChunk,
-            (content, functionCalls) => {
-              finalContent = content;
-              finalFunctionCalls = functionCalls || [];
-            },
-            abortSignal
-          );
+        await this.processStreamingResponse(
+          response,
+          onChunk,
+          (content, functionCalls) => {
+            streamedContent = content;
+            if (onComplete) {
+              onComplete(content, functionCalls);
+            }
+          },
+          abortSignal,
+          true // Don't add to history in processStreamingResponse
+        );
 
-          return finalContent;
-        } else {
-          // For regular mode, process streaming response
-          await this.processStreamingResponse(
-            response,
-            onChunk,
-            onComplete,
-            abortSignal
-          );
-          return;
+        aiResponse = streamedContent;
+      } else {
+        // For non-Ollama APIs
+        const data = await response.json();
+        aiResponse = data.choices?.[0]?.message?.content || '';
+
+        if (onComplete) {
+          onComplete(aiResponse);
         }
       }
 
-      const data = await response.json();
-      game.simulacrum?.logger?.debug(
-        '🔍 Raw API response:',
-        JSON.stringify(data, null, 2)
-      );
-
-      const aiResponse = data.choices?.[0]?.message?.content;
-
-      if (!aiResponse) {
-        game.simulacrum?.logger?.warn(
-          '⚠️ No AI response content found in:',
-          JSON.stringify(data, null, 2)
-        );
-      }
-
-      if (onComplete) {
-        onComplete(aiResponse);
-      }
+      // ALWAYS add assistant response to history after getting response
+      this.conversationHistory.push({
+        role: 'assistant',
+        content: aiResponse,
+      });
 
       return aiResponse;
     } catch (error) {
@@ -320,9 +305,47 @@ export class SimulacrumAIService {
   }
 
   /**
-   * Process streaming response from AI service
+   * Send a message with properly formatted conversation context
+   * This method is used by the agentic loop and should NOT modify the main conversation history
+   * @param {Object} context - AgenticContext instance with conversation history
+   * @param {AbortSignal} abortSignal - Signal to cancel the request
+   * @returns {Promise<string>} The AI's response
    */
-  async processStreamingResponse(response, onChunk, onComplete, abortSignal) {
+  async sendWithContext(context, abortSignal) {
+    // Get the last user message from context
+    const contextMessages = context.toMessagesArray();
+    const lastUserMessage = [...contextMessages]
+      .reverse()
+      .find((msg) => msg.role === 'user');
+    if (!lastUserMessage) {
+      throw new Error('No user message found in context');
+    }
+
+    // Just send the message normally - let sendMessage handle the conversation history
+    return this.sendMessage(
+      lastUserMessage.content,
+      null,
+      null,
+      abortSignal,
+      true
+    );
+  }
+
+  /**
+   * Process streaming response from AI service
+   * @param {Response} response - The fetch response object
+   * @param {Function} onChunk - Callback for streaming chunks
+   * @param {Function} onComplete - Callback for completion
+   * @param {AbortSignal} abortSignal - Signal to cancel the request
+   * @param {boolean} skipHistoryUpdate - If true, don't add to conversation history (caller will handle it)
+   */
+  async processStreamingResponse(
+    response,
+    onChunk,
+    onComplete,
+    abortSignal,
+    skipHistoryUpdate = false
+  ) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -354,8 +377,6 @@ export class SimulacrumAIService {
 
             try {
               const chunk = JSON.parse(data);
-              // Debug logging disabled - was causing console spam
-              // console.log('Simulacrum | 🔍 Simulacrum | Streaming chunk:', JSON.stringify(chunk, null, 2));
               const delta = chunk.choices?.[0]?.delta;
 
               if (delta?.content) {
@@ -415,14 +436,7 @@ export class SimulacrumAIService {
         }
       }
 
-      // Add assistant message to history
-      if (currentMessage.content || functionCalls.length > 0) {
-        this.conversationHistory.push({
-          role: 'assistant',
-          content: currentMessage.content,
-          tool_calls: functionCalls,
-        });
-      }
+      // Note: History is now handled by the caller, not here
 
       // For JSON mode, we need to pass the content and function calls separately
       game.simulacrum?.logger?.debug(
@@ -490,21 +504,12 @@ export class SimulacrumAIService {
 
   /**
    * Get contextual conversation history within token limits
+   * Excludes the current message that was just added to conversationHistory
    */
   getContextualHistory(_maxTokens) {
-    // Simple implementation - take recent messages up to context limit
-    // In production, would implement proper token counting and truncation
-    const recentHistory = this.conversationHistory.slice(-10);
-
-    // Ensure content is an empty string if tool_calls are present
-    const formattedHistory = recentHistory.map((msg) => {
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
-        return { ...msg, content: '' }; // Set content to empty string if tool_calls exist
-      }
-      return msg;
-    });
-
-    return formattedHistory;
+    // Exclude the last message (current user message that was just added)
+    const historyWithoutCurrent = this.conversationHistory.slice(0, -1);
+    return historyWithoutCurrent.slice(-10);
   }
 
   /**

@@ -129,11 +129,7 @@ export class AgenticContext {
           break;
         case 'ai':
           prompt += `AI: ${item.content}\n`;
-          // Optionally include tool calls/continuation details for AI to see its own previous decisions
-          if (item.details?.tool_calls && item.details.tool_calls.length > 0) {
-            prompt += `(AI previously called tools: ${JSON.stringify(item.details.tool_calls)})
-`;
-          }
+          // Don't include tool calls in the prompt - they confuse the AI
           break;
         case 'tool_result':
           prompt += `Tool Result (${item.details?.tool_name || 'unknown'}): ${item.content}\n`;
@@ -241,5 +237,52 @@ export class AgenticContext {
       default:
         return 'system';
     }
+  }
+
+  /**
+   * Converts the context history to a properly formatted messages array for the AI API
+   * @returns {Array} Array of message objects with role and content
+   */
+  toMessagesArray() {
+    const messages = [];
+
+    for (const item of this.history) {
+      switch (item.type) {
+        case 'user':
+          messages.push({
+            role: 'user',
+            content: item.content,
+          });
+          break;
+        case 'ai':
+          // Include AI responses to maintain conversation continuity
+          messages.push({
+            role: 'assistant',
+            content: item.content,
+          });
+          break;
+        case 'tool_result':
+          // Include tool results as system messages for context
+          messages.push({
+            role: 'system',
+            content: `Tool ${item.details?.tool_name || 'unknown'} result: ${item.content}`,
+          });
+          break;
+        case 'error':
+          messages.push({
+            role: 'system',
+            content: `Error: ${item.content}`,
+          });
+          break;
+        case 'system':
+          messages.push({
+            role: 'system',
+            content: item.content,
+          });
+          break;
+      }
+    }
+
+    return messages;
   }
 }
