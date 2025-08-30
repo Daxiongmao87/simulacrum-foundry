@@ -184,6 +184,13 @@ export class SimulacrumAIService {
       const maxAttempts = 3;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
+          if (typeof DEBUG !== 'undefined' && DEBUG === true) {
+            console.log(
+              'Simulacrum | API Request:',
+              JSON.stringify(requestBody, null, 2)
+            );
+          }
+
           response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
@@ -193,6 +200,11 @@ export class SimulacrumAIService {
             body: JSON.stringify(requestBody),
             signal: abortSignal,
           });
+
+          if (typeof DEBUG !== 'undefined' && DEBUG === true) {
+            const responseText = await response.clone().text();
+            console.log('Simulacrum | API Response:', responseText);
+          }
 
           // Retry only on transient statuses
           const retryable = [408, 429, 500, 502, 503, 504];
@@ -409,6 +421,13 @@ export class SimulacrumAIService {
       const maxAttempts = 3;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
+          if (typeof DEBUG !== 'undefined' && DEBUG === true) {
+            console.log(
+              'Simulacrum | API Request:',
+              JSON.stringify(requestBody, null, 2)
+            );
+          }
+
           response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
@@ -418,6 +437,11 @@ export class SimulacrumAIService {
             body: JSON.stringify(requestBody),
             signal: abortSignal,
           });
+
+          if (typeof DEBUG !== 'undefined' && DEBUG === true) {
+            const responseText = await response.clone().text();
+            console.log('Simulacrum | API Response:', responseText);
+          }
 
           // Retry only on transient statuses
           const retryable = [408, 429, 500, 502, 503, 504];
