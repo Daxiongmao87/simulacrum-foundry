@@ -1,7 +1,7 @@
 import { SimulacrumSettings } from './settings.js';
 import { SimulacrumChatModal } from './chat/simulacrum-chat.js';
 import { ToolRegistry } from './tools/tool-registry.js';
-import { ChatModal } from './fimlib/main.js';
+import { ChatModal } from './ui/chat-modal.js';
 import { DocumentDiscoveryEngine } from './core/document-discovery-engine.js';
 import { GenericCRUDTools } from './core/generic-crud-tools.js';
 import { registerDynamicSchemaModifier } from './core/dynamic-schema-modifier.js';
@@ -31,6 +31,7 @@ import { AgenticLoopController } from './core/agentic-loop-controller.js';
 import { AgentResponseParser } from './core/json-response-parser.js';
 import { SimulacrumToolScheduler } from './core/tool-scheduler.js';
 import { TokenTracker, formatToolResultsForAI } from './core/token-tracker.js';
+import { WorkflowEnforcer } from './core/workflow-enforcer.js';
 import {
   showProgress,
   showProgressWithOptions,
@@ -149,8 +150,7 @@ Hooks.once('init', () => {
   SimulacrumChatModalClass = class extends ChatModal {
     static get defaultOptions() {
       const options = super.defaultOptions;
-      options.template =
-        'modules/simulacrum/scripts/fimlib/templates/chat-modal.html';
+      options.template = 'modules/simulacrum/templates/chat-modal.html';
       return options;
     }
   };
@@ -195,6 +195,9 @@ Hooks.once('init', () => {
     toolRegistry.registerTool(new ListImagesTool());
     toolRegistry.registerTool(new GetDocumentSchemaTool());
 
+    // Initialize Workflow Enforcer
+    const workflowEnforcer = new WorkflowEnforcer();
+
     // Initialize Tool Scheduler
     const toolScheduler = new SimulacrumToolScheduler(toolRegistry);
 
@@ -224,6 +227,7 @@ Hooks.once('init', () => {
       documentDiscoveryEngine,
       genericCrudTools,
       agenticLoopController,
+      workflowEnforcer,
       AgentResponseParser,
       TokenTracker,
       formatToolResultsForAI,

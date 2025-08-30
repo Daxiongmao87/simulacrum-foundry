@@ -201,6 +201,26 @@ export class SimulacrumToolScheduler {
     for (const call of this.toolCalls.filter((c) => c.status === 'scheduled')) {
       this.setStatusInternal(call.request.callId, 'executing');
       try {
+        // Debug logging for parameter validation
+        game.simulacrum?.logger?.debug(
+          `Executing tool ${call.request.name} with args:`,
+          call.request.args
+        );
+
+        // Validate parameters before execution
+        if (call.request.name === 'create_document') {
+          if (!call.request.args?.documentType) {
+            throw new Error(
+              `Tool ${call.request.name}: Parameter 'documentType' is missing or undefined. Received args: ${JSON.stringify(call.request.args)}`
+            );
+          }
+          if (!call.request.args?.data) {
+            throw new Error(
+              `Tool ${call.request.name}: Parameter 'data' is missing or undefined. Received args: ${JSON.stringify(call.request.args)}`
+            );
+          }
+        }
+
         const result = await call.tool.execute(
           call.request.args,
           signal,
@@ -209,8 +229,22 @@ export class SimulacrumToolScheduler {
             ? this.outputUpdateHandler
             : undefined
         );
+
+        // Record tool usage for workflow enforcement
+        const workflowEnforcer = game.simulacrum?.workflowEnforcer;
+        if (workflowEnforcer) {
+          workflowEnforcer.recordToolUsage(
+            call.request.name,
+            call.request.args
+          );
+        }
+
         this.setStatusInternal(call.request.callId, 'success', result);
       } catch (e) {
+        game.simulacrum?.logger?.error(
+          `Tool execution failed for ${call.request.name}:`,
+          e
+        );
         this.setStatusInternal(call.request.callId, 'error', {
           callId: call.request.callId,
           error: e,

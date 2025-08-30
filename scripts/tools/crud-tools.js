@@ -5,6 +5,7 @@
  */
 
 import { Tool } from './tool-registry.js';
+import { WorkflowEnforcer } from '../core/workflow-enforcer.js';
 // import { GenericCRUDTools } from '../core/generic-crud-tools.js'; // Available for future use
 
 /**
@@ -17,25 +18,26 @@ export class CreateDocumentTool extends Tool {
   constructor(crudService) {
     super(
       'create_document',
-      'Creates a new FoundryVTT document of a specified type with provided data.',
+      'Creates a new FoundryVTT document of a specified type with provided data. CRITICAL: You MUST follow the mandatory 5-step workflow before calling this tool: 1) Analyze request, 2) Search context, 3) Get schema, 4) Find images, 5) Create document.',
       {
         type: 'object',
         properties: {
           documentType: {
             type: 'string',
             description:
-              'The type of document to create. Must be dynamically discovered from the active game system.',
+              'The type of document to create (e.g., "Item", "Actor", "Scene"). Must be a valid FoundryVTT document type discovered from the active game system.',
           },
           data: {
             type: 'object',
             description:
-              'The data to initialize the new document with (e.g., { name: "New Actor", img: "path/to/img.png" }).',
+              'The complete document data object with ALL required fields filled. Must include valid image paths in img field. Example: { name: "Magic Sword", img: "systems/dnd5e/icons/equipment/weapons/sword-long.png", system: {...} }',
           },
         },
         required: ['documentType', 'data'],
       }
     );
     this.crudService = crudService;
+    this.workflowEnforcer = new WorkflowEnforcer();
   }
 
   /**
@@ -46,10 +48,63 @@ export class CreateDocumentTool extends Tool {
    */
   async execute(params) {
     try {
+      // Validate required parameters
+      if (!params.documentType) {
+        throw new Error(
+          'Parameter "documentType" is required and cannot be undefined or null'
+        );
+      }
+      if (!params.data) {
+        throw new Error(
+          'Parameter "data" is required and cannot be undefined or null'
+        );
+      }
+
+      // Get global workflow enforcer instance
+      const workflowEnforcer = game.simulacrum?.workflowEnforcer;
+      if (workflowEnforcer) {
+        const validation = workflowEnforcer.validateDocumentCreation(params);
+        if (!validation.isValid) {
+          const errorMessage = `WORKFLOW ENFORCEMENT FAILED:\n${validation.errors.join('\n')}`;
+          throw new Error(errorMessage);
+        }
+      }
+
+      // Validate that data contains required img field
+      if (!params.data.img) {
+        throw new Error(
+          'WORKFLOW VIOLATION: Document data must include "img" field with valid image path. You MUST use list_images tool first to find appropriate images.'
+        );
+      }
+
+      // Validate that img field is not a placeholder or invalid path
+      if (
+        typeof params.data.img === 'string' &&
+        (params.data.img.includes('placeholder') ||
+          params.data.img.includes('example') ||
+          params.data.img.includes('path/to/') ||
+          params.data.img.includes('custom-assets'))
+      ) {
+        throw new Error(
+          'WORKFLOW VIOLATION: Invalid image path detected. You MUST use list_images tool to find real, existing image paths from FoundryVTT directories.'
+        );
+      }
+
+      game.simulacrum?.logger?.debug(
+        `CreateDocumentTool executing with documentType: ${params.documentType}, data:`,
+        params.data
+      );
+
       const result = await this.crudService.createDocument(
         params.documentType,
         params.data
       );
+
+      // Reset workflow enforcer after successful creation
+      if (workflowEnforcer) {
+        workflowEnforcer.reset();
+      }
+
       return result;
     } catch (error) {
       game.simulacrum?.logger?.error(

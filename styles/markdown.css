@@ -1,0 +1,122 @@
+/* Markdown styling for FIMLib chat messages */
+
+.foundry-im .chat-messages.message-list .chat-message .message-content {
+  /* Add better spacing for rich markdown content */
+  line-height: 1.5;
+}
+
+/* Headers */
+.foundry-im .chat-message .message-content h1,
+.foundry-im .chat-message .message-content h2,
+.foundry-im .chat-message .message-content h3 {
+  margin-top: 0.8em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(100, 100, 100, 0.3);
+  padding-bottom: 0.2em;
+}
+
+.foundry-im .chat-message .message-content h1 {
+  font-size: 1.4em;
+}
+
+.foundry-im .chat-message .message-content h2 {
+  font-size: 1.25em;
+}
+
+.foundry-im .chat-message .message-content h3 {
+  font-size: 1.1em;
+}
+
+/* Lists */
+.foundry-im .chat-message .message-content ul,
+.foundry-im .chat-message .message-content ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 2em;
+}
+
+.foundry-im .chat-message .message-content li {
+  margin-bottom: 0.3em;
+}
+
+/* Blockquotes */
+.foundry-im .chat-message .message-content blockquote {
+  border-left: 3px solid rgba(120, 120, 120, 0.5);
+  padding-left: 1em;
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+  font-style: italic;
+  color: #666;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.5em 1em;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Code blocks */
+.foundry-im .chat-message .message-content pre {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  padding: 0.5em;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  font-family: monospace;
+}
+
+.foundry-im .chat-message .message-content code {
+  font-family: monospace;
+  background-color: rgba(0, 0, 0, 0.07);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* Tables */
+.foundry-im .chat-message .message-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.9em;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.foundry-im .chat-message .message-content table th {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: #333;
+  font-weight: bold;
+  padding: 0.5em;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.foundry-im .chat-message .message-content table td {
+  padding: 0.5em;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.foundry-im .chat-message .message-content table tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Links */
+.foundry-im .chat-message .message-content a {
+  color: #4a6cd0;
+  text-decoration: none;
+}
+
+.foundry-im .chat-message .message-content a:hover {
+  text-decoration: underline;
+}
+
+/* Images */
+.foundry-im .chat-message .message-content img {
+  max-width: 100%;
+  border-radius: 4px;
+  margin: 0.5em 0;
+}
+
+/* Horizontal rule */
+.foundry-im .chat-message .message-content hr {
+  border: 0;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.2);
+  margin: 1em 0;
+} 

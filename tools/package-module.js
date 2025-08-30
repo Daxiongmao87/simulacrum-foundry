@@ -19,6 +19,7 @@ const filesToCopy = [
     'module.json',
     'scripts/',
     'styles/',
+    'templates/',
     'lang/',
     'assets/',
     'README.md'

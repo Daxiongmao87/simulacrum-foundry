@@ -50,7 +50,7 @@ export class ImageValidator {
     ) {
       return {
         isValid: cachedResult.isValid,
-        message: 'Cached result',
+        message: cachedResult.message,
       };
     }
 
@@ -129,25 +129,32 @@ export class ImageValidator {
 
   /**
    * Validates all image fields within a given document's data.
-   * Specifically enforces the 'img' field as required.
+   * For creation: enforces the 'img' field as required.
+   * For updates: only validates fields that are actually present in the update data.
    * @param {object} documentData - The data object of the FoundryVTT document.
    * @param {string} documentType - The type of the document (e.g., 'Actor', 'Item', 'Scene').
+   * @param {boolean} isCreation - Whether this is document creation (true) or update (false). Defaults to true.
    * @returns {Promise<{isValid: boolean, errors: string[]}>} - A promise that resolves to an object indicating overall validity and a list of errors.
    */
-  static async validateDocumentImages(documentData, documentType) {
+  static async validateDocumentImages(
+    documentData,
+    documentType,
+    isCreation = true
+  ) {
     const errors = [];
     const imageFields = Object.keys(documentData).filter(
       ImageValidator.isImageField
     );
 
-    // Ensure 'img' field is always treated as required
-    if (!imageFields.includes('img')) {
+    // For creation only: ensure 'img' field is always validated as required (even if missing)
+    if (isCreation && !imageFields.includes('img')) {
       imageFields.push('img');
     }
 
     for (const fieldName of imageFields) {
       const imagePath = documentData[fieldName];
-      const isRequired = fieldName === 'img'; // 'img' is always required
+      // For creation: 'img' is required. For updates: only validate fields that are present
+      const isRequired = isCreation && fieldName === 'img';
 
       const { isValid, message } = await ImageValidator.validateImagePath(
         imagePath,

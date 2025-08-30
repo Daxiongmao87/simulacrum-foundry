@@ -99,7 +99,7 @@ export class AgentResponseParser {
               : rawResponse;
 
           if (error.message.includes('JSON')) {
-            errorMessage = `JSON parsing error: ${error.message}\n\nProblem occurred in this response snippet:\n${snippet}\n\nYou MUST respond with valid JSON.`;
+            errorMessage = `JSON parsing error: ${error.message}\n\nProblem occurred in this response snippet:\n${snippet}\n\nCommon JSON errors:\n- NO JavaScript comments (// breaks JSON)\n- NO trailing commas\n- Use double quotes for strings\n- Validate JSON syntax\n\nYou MUST respond with valid JSON.`;
           } else {
             errorMessage = `Validation error: ${error.message}\n\nProblem occurred in this response snippet:\n${snippet}\n\nYou MUST respond with valid JSON.`;
           }

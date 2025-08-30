@@ -1,5 +1,5 @@
-import { MarkdownParser } from '../fimlib/main.js';
-// import { ChatModal } from '../fimlib/main.js'; // Imported but not used directly in this scope
+import { MarkdownParser } from '../core/markdown-parser.js';
+// import { ChatModal } from '../ui/chat-modal.js'; // Imported but not used directly in this scope
 // import { SimulacrumAIService } from './ai-service.js'; // Imported but not used directly
 // import { AgenticLoopController } from '../core/agentic-loop-controller.js'; // Imported but not used directly
 import { getChatModalClass } from '../main.js';

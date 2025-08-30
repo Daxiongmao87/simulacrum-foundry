@@ -57,7 +57,8 @@ export class GenericCRUDTools {
       );
       const validation = await ImageValidator.validateDocumentImages(
         data,
-        documentType
+        documentType,
+        true // isCreation = true
       );
       if (!validation.isValid) {
         const errorMessage = `Image validation failed for ${documentType}: ${validation.errors.join('; ')}`;
@@ -131,21 +132,35 @@ export class GenericCRUDTools {
   async updateDocument(documentType, documentId, updates) {
     try {
       const document = await this.readDocument(documentType, documentId);
-      ui.notifications.info(
-        `Simulacrum | Validating images for ${documentType} document update...`
+
+      // Check if any image fields are being updated
+      const imageFields = Object.keys(updates).filter(
+        ImageValidator.isImageField
       );
-      const validation = await ImageValidator.validateDocumentImages(
-        updates,
-        documentType
-      );
-      if (!validation.isValid) {
-        const errorMessage = `Image validation failed for ${documentType} update: ${validation.errors.join('; ')}`;
-        ui.notifications.error(`Simulacrum | ${errorMessage}`);
-        throw new Error(errorMessage);
+
+      // Only validate images if image fields are actually being updated
+      if (imageFields.length > 0) {
+        ui.notifications.info(
+          `Simulacrum | Validating images for ${documentType} document update...`
+        );
+        const validation = await ImageValidator.validateDocumentImages(
+          updates,
+          documentType,
+          false // isCreation = false
+        );
+        if (!validation.isValid) {
+          const errorMessage = `Image validation failed for ${documentType} update: ${validation.errors.join('; ')}`;
+          ui.notifications.error(`Simulacrum | ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+        ui.notifications.info(
+          `Simulacrum | Image validation successful for ${documentType} document update.`
+        );
+      } else {
+        game.simulacrum?.logger?.debug(
+          `Simulacrum | Skipping image validation for ${documentType} update - no image fields being modified`
+        );
       }
-      ui.notifications.info(
-        `Simulacrum | Image validation successful for ${documentType} document update.`
-      );
 
       const result = await document.update(updates);
 
