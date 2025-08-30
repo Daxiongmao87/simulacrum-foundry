@@ -102,6 +102,78 @@ function getStagedTestFiles() {
   }
 }
 
+/**
+ * Check for skipped tests in all test files (staged and unstaged)
+ * @returns {boolean} True if skipped tests found, false otherwise
+ */
+function checkForSkippedTests() {
+  try {
+    // Find all test files
+    const testFiles = execSync('find tests/unit -name "*.test.js" 2>/dev/null || true', { encoding: 'utf-8' })
+      .trim()
+      .split('\n')
+      .filter(f => f.length > 0);
+    
+    const skippedTests = [];
+    
+    for (const file of testFiles) {
+      if (!existsSync(file)) continue;
+      
+      try {
+        const content = execSync(`cat "${file}"`, { encoding: 'utf-8' });
+        
+        // Check for skipped test patterns
+        const skipPatterns = [
+          /describe\.skip\s*\(/g,
+          /test\.skip\s*\(/g,
+          /it\.skip\s*\(/g,
+          /xdescribe\s*\(/g,
+          /xtest\s*\(/g,
+          /xit\s*\(/g
+        ];
+        
+        for (const pattern of skipPatterns) {
+          const matches = content.match(pattern);
+          if (matches) {
+            skippedTests.push({
+              file: file,
+              count: matches.length,
+              pattern: pattern.source
+            });
+          }
+        }
+      } catch (e) {
+        // Skip unreadable files
+      }
+    }
+    
+    if (skippedTests.length > 0) {
+      console.error('');
+      console.error('🚨 SKIPPED TESTS DETECTED - COMMIT BLOCKED! 🚨');
+      console.error('');
+      console.error('📋 Found skipped tests in the following files:');
+      skippedTests.forEach(({ file, count, pattern }) => {
+        console.error(`   ❌ ${file}: ${count} skipped test(s) (${pattern})`);
+      });
+      console.error('');
+      console.error('🚨 POLICY VIOLATION: All tests must pass, not be skipped');
+      console.error('💡 Fix the tests instead of skipping them:');
+      console.error('   - Update test expectations to match new behavior');
+      console.error('   - Fix broken mocks or test setup');
+      console.error('   - Rewrite tests for new architecture');
+      console.error('   - Remove obsolete tests if functionality was removed');
+      console.error('');
+      console.error('🚨 Tests exist to prevent regressions - skipping defeats the purpose');
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn('⚠️ Failed to check for skipped tests:', error.message);
+    return false;
+  }
+}
+
 
 
 async function main() {
@@ -188,6 +260,14 @@ try {
   }
 
   console.log('✅ No sensitive data or Claude attribution detected');
+  
+  // 🚨 THIRD: Check for skipped tests before continuing
+  console.log('🔍 Checking for skipped tests...');
+  const hasSkippedTests = checkForSkippedTests();
+  if (hasSkippedTests) {
+    process.exit(1);
+  }
+  console.log('✅ No skipped tests detected');
   
   // Run lint-staged if no violations found
   console.log('📋 Running code formatting...');
