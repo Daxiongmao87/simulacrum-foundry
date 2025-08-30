@@ -72,8 +72,8 @@ describe('Conversation History - Isolated Unit Tests', () => {
       }
       
       getContextualHistory(maxTokens) {
-        // Simple implementation - just return last 10 messages
-        return this.conversationHistory.slice(-10);
+        // Return all history except the last message (current user message)
+        return this.conversationHistory.slice(0, -1);
       }
     }
     
@@ -152,8 +152,8 @@ describe('Conversation History - Isolated Unit Tests', () => {
       }
       
       const contextualHistory = aiService.getContextualHistory(8192);
-      // Should only return last 10 messages
-      expect(contextualHistory.length).toBeLessThanOrEqual(10);
+      // Should return all history except the last message (30 total - 1 = 29 messages)
+      expect(contextualHistory.length).toBe(29);
     });
   });
 

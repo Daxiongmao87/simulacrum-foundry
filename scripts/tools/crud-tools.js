@@ -18,7 +18,7 @@ export class CreateDocumentTool extends Tool {
   constructor(crudService) {
     super(
       'create_document',
-      'Creates a new FoundryVTT document of a specified type with provided data. CRITICAL: You MUST follow the mandatory 5-step workflow before calling this tool: 1) Analyze request, 2) Search context, 3) Get schema, 4) Find images, 5) Create document.',
+      'Creates a new FoundryVTT document of a specified type with provided data. REQUIRED: The img field is mandatory - you MUST use list_images tool to find an appropriate image before creating any document.',
       {
         type: 'object',
         properties: {
@@ -30,7 +30,7 @@ export class CreateDocumentTool extends Tool {
           data: {
             type: 'object',
             description:
-              'The complete document data object with ALL required fields filled. Must include valid image paths in img field. Example: { name: "Magic Sword", img: "systems/dnd5e/icons/equipment/weapons/sword-long.png", system: {...} }',
+              'The complete document data object with ALL required fields filled. MANDATORY: Must include valid image paths in img field obtained from list_images tool. The img field is required for ALL documents without exception. Example: { name: "Magic Sword", img: "systems/dnd5e/icons/equipment/weapons/sword-long.png", system: {...} }',
           },
         },
         required: ['documentType', 'data'],

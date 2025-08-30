@@ -333,6 +333,107 @@ export class SimulacrumAIService {
   }
 
   /**
+   * Send a message with an error appended to the system prompt, without modifying conversation history
+   * Used for JSON parsing error retries
+   * @param {string} errorMessage - Error message to append to system prompt
+   * @param {AbortSignal} abortSignal - Signal to cancel the request
+   * @returns {Promise<string>} The AI's response
+   */
+  async sendWithSystemAddition(errorMessage, abortSignal) {
+    if (abortSignal?.aborted) {
+      return;
+    }
+
+    try {
+      const baseEndpoint = game.settings.get('simulacrum', 'apiEndpoint');
+      const isOllama =
+        baseEndpoint.includes('localhost') ||
+        baseEndpoint.includes('127.0.0.1') ||
+        baseEndpoint.includes('ollama') ||
+        baseEndpoint.includes('11434');
+
+      const apiEndpoint = isOllama
+        ? `${baseEndpoint}/chat/completions`
+        : `${baseEndpoint}/chat/completions`;
+      const modelName = game.settings.get('simulacrum', 'modelName');
+      const systemPrompt = game.settings.get('simulacrum', 'systemPrompt');
+      const contextLength = game.settings.get('simulacrum', 'contextLength');
+      const apiKey = game.settings.get('simulacrum', 'apiKey');
+
+      // Get structured output configuration
+      const structuredConfig = await this.getStructuredOutputConfig(
+        baseEndpoint,
+        modelName,
+        isOllama
+      );
+
+      // Build system prompt with error message appended
+      const defaultPrompt = await this.getDefaultSystemPrompt();
+      const userAdditions =
+        typeof systemPrompt === 'string' && systemPrompt.length > 0
+          ? `\n\nADDITIONAL INSTRUCTIONS:\n${systemPrompt}`
+          : '';
+
+      const systemContent =
+        defaultPrompt +
+        userAdditions +
+        structuredConfig.systemPromptAddition +
+        `\n\nERROR TO FIX:\n${errorMessage}`;
+
+      // Use existing conversation history for context without adding new messages
+      const messages = [
+        {
+          role: 'system',
+          content: systemContent,
+        },
+        ...this.getContextualHistory(contextLength),
+      ];
+
+      const schemas = await this.generateToolSchemas();
+
+      const requestBody = isOllama
+        ? {
+            model: modelName,
+            messages: messages,
+            temperature: 0.7,
+            stream: true,
+          }
+        : {
+            model: modelName,
+            messages: messages,
+            temperature: 0.7,
+            stream: true,
+            ...(structuredConfig.useNativeStructuredOutput
+              ? { response_format: structuredConfig.responseFormat }
+              : {}),
+            ...(schemas.length > 0 ? { tools: schemas } : {}),
+          };
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify(requestBody),
+        signal: abortSignal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await this.processStreamingResponse(response, false, abortSignal);
+    } catch (error) {
+      game.simulacrum?.logger?.error(
+        'Failed to send with system addition:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Send a message with properly formatted conversation context
    * This method is used by the agentic loop and should NOT modify the main conversation history
    * @param {Object} context - AgenticContext instance with conversation history
@@ -725,7 +826,8 @@ export class SimulacrumAIService {
   getContextualHistory(_maxTokens) {
     // Exclude the last message (current user message that was just added)
     const historyWithoutCurrent = this.conversationHistory.slice(0, -1);
-    return historyWithoutCurrent.slice(-10);
+    // Return full history - let context compaction handle truncation if needed
+    return historyWithoutCurrent;
   }
 
   /**

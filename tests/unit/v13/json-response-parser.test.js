@@ -9,7 +9,8 @@ describe('AgentResponseParser', () => {
   beforeEach(() => {
     // Mock AI service
     mockAiService = {
-      sendJsonMessage: jest.fn()
+      sendJsonMessage: jest.fn(),
+      sendWithSystemAddition: jest.fn()
     };
     
     // Create parser instance
@@ -71,12 +72,12 @@ describe('AgentResponseParser', () => {
     test('should retry and recover from malformed JSON', async () => {
       const malformedJson = '{"message": "Test", "tool_calls": [], "continuation": {"in_progress": false'; // Missing closing braces
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       const result = await parser.parseAgentResponse(malformedJson, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(1);
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledWith(
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(1);
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledWith(
         expect.stringContaining('JSON parsing error'),
         mockAbortSignal
       );
@@ -89,11 +90,11 @@ describe('AgentResponseParser', () => {
         // Missing tool_calls and continuation
       });
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       const result = await parser.parseAgentResponse(incompleteJson, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(1);
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(1);
       expect(result.message).toBe("Test response");
     });
 
@@ -107,12 +108,12 @@ describe('AgentResponseParser', () => {
         }
       });
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       const result = await parser.parseAgentResponse(invalidTypesJson, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(1);
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledWith(
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(1);
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledWith(
         expect.stringContaining('Field "message" must be a string'),
         mockAbortSignal
       );
@@ -121,11 +122,11 @@ describe('AgentResponseParser', () => {
     test('should provide detailed error context in retry messages', async () => {
       const malformedJson = '{"message": "This has a syntax error"'; // Missing closing brace
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       await parser.parseAgentResponse(malformedJson, mockAbortSignal);
       
-      const errorMessage = mockAiService.sendJsonMessage.mock.calls[0][0];
+      const errorMessage = mockAiService.sendWithSystemAddition.mock.calls[0][0];
       expect(errorMessage).toContain('JSON parsing error');
       expect(errorMessage).toContain('Problem occurred in this response snippet');
       expect(errorMessage).toContain('{"message": "This has a syntax error"');
@@ -136,11 +137,11 @@ describe('AgentResponseParser', () => {
       const malformedJson = 'invalid json';
       
       // Mock AI service to keep returning malformed JSON
-      mockAiService.sendJsonMessage.mockResolvedValue('still invalid json');
+      mockAiService.sendWithSystemAddition.mockResolvedValue('still invalid json');
 
       const result = await parser.parseAgentResponse(malformedJson, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(4); // 5 attempts total - 1 original = 4 retries
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(4); // 5 attempts total - 1 original = 4 retries
       expect(result).toEqual({
         message: "I encountered a formatting error and reached maximum retry attempts. Please try rephrasing your request.",
         tool_calls: [],
@@ -154,12 +155,12 @@ describe('AgentResponseParser', () => {
     test('should handle empty response gracefully', async () => {
       const emptyResponse = '';
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       const result = await parser.parseAgentResponse(emptyResponse, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(1);
-      const errorMessage = mockAiService.sendJsonMessage.mock.calls[0][0];
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(1);
+      const errorMessage = mockAiService.sendWithSystemAddition.mock.calls[0][0];
       expect(errorMessage).toContain('No response received');
     });
 
@@ -170,13 +171,13 @@ describe('AgentResponseParser', () => {
         continuation: null // Should be an object
       });
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       const result = await parser.parseAgentResponse(invalidContinuation, mockAbortSignal);
       
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledTimes(1);
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledTimes(1);
       // The error message should contain information about the missing required fields since continuation: null fails the initial check
-      expect(mockAiService.sendJsonMessage).toHaveBeenCalledWith(
+      expect(mockAiService.sendWithSystemAddition).toHaveBeenCalledWith(
         expect.stringContaining('Missing required fields'),
         mockAbortSignal
       );
@@ -205,11 +206,11 @@ describe('AgentResponseParser', () => {
     test('should handle very long responses by truncating error snippets', async () => {
       const longMalformedJson = 'invalid json ' + 'x'.repeat(300);
       
-      mockAiService.sendJsonMessage.mockResolvedValueOnce(validJsonResponse);
+      mockAiService.sendWithSystemAddition.mockResolvedValueOnce(validJsonResponse);
 
       await parser.parseAgentResponse(longMalformedJson, mockAbortSignal);
       
-      const errorMessage = mockAiService.sendJsonMessage.mock.calls[0][0];
+      const errorMessage = mockAiService.sendWithSystemAddition.mock.calls[0][0];
       expect(errorMessage).toContain('...');
       expect(errorMessage.indexOf('invalid json')).toBe(errorMessage.lastIndexOf('invalid json')); // Should only appear once in snippet
     });

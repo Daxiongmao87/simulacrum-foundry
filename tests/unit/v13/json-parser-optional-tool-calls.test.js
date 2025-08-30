@@ -7,7 +7,8 @@ describe('AgentResponseParser - Optional tool_calls', () => {
 
   beforeEach(() => {
     mockAIService = {
-      sendJsonMessage: jest.fn()
+      sendJsonMessage: jest.fn(),
+      sendWithSystemAddition: jest.fn()
     };
     parser = new AgentResponseParser(mockAIService);
 
@@ -123,7 +124,7 @@ describe('AgentResponseParser - Optional tool_calls', () => {
     });
 
     // Mock the retry message to avoid actual API call
-    mockAIService.sendJsonMessage.mockResolvedValue(JSON.stringify({
+    mockAIService.sendWithSystemAddition.mockResolvedValue(JSON.stringify({
       message: "I corrected the format error.",
       tool_calls: [],
       continuation: {

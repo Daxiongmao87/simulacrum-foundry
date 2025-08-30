@@ -110,8 +110,8 @@ export class AgentResponseParser {
           }
         }
 
-        // Request a new response from the AI service
-        rawResponse = await this.aiService.sendJsonMessage(
+        // Request a new response from the AI service with error appended to system prompt
+        rawResponse = await this.aiService.sendWithSystemAddition(
           errorMessage,
           abortSignal
         );
