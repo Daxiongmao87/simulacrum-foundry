@@ -137,8 +137,7 @@ describe('Structured Output Schema v13', () => {
 
   describe('FALLBACK_JSON_INSTRUCTIONS', () => {
     test('should contain fallback mode instructions', () => {
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('RESPONSE FORMAT - FALLBACK MODE');
-      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('does not support native tool calling');
+      expect(FALLBACK_JSON_INSTRUCTIONS).toContain('RESPONSE FORMAT:');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('message');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('tool_calls');
       expect(FALLBACK_JSON_INSTRUCTIONS).toContain('continuation');

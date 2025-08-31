@@ -91,7 +91,7 @@ export class StructuredOutputDetector {
       // Best case: Native tool calling with natural language
       result.fallbackInstructions = '';
     } else {
-      // Fallback: Custom JSON format for systems without native tool calling
+      // Fallback: JSON format for systems without native tool calling
       result.fallbackInstructions = FALLBACK_JSON_INSTRUCTIONS;
     }
 
@@ -136,7 +136,11 @@ export class StructuredOutputDetector {
         max_tokens: 10,
       };
 
-      const response = await fetch(endpoint, {
+      const apiEndpoint = endpoint.endsWith('/chat/completions')
+        ? endpoint
+        : `${endpoint}/chat/completions`;
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,9 +156,18 @@ export class StructuredOutputDetector {
       if (response.ok) {
         const data = await response.json();
         // If the response has a choices array and doesn't error, tool calling is supported
-        return data.choices && data.choices.length > 0;
+        const supportsToolCalling = data.choices && data.choices.length > 0;
+
+        game.simulacrum?.logger?.debug(
+          `Tool calling test result for ${apiEndpoint}: ${supportsToolCalling ? 'SUPPORTED' : 'NOT SUPPORTED'}`
+        );
+
+        return supportsToolCalling;
       }
 
+      game.simulacrum?.logger?.debug(
+        `Tool calling test failed for ${apiEndpoint}: HTTP ${response.status} ${response.statusText}`
+      );
       return false;
     } catch (error) {
       game.simulacrum?.logger?.debug(

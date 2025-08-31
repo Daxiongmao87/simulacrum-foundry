@@ -104,8 +104,8 @@ Focus on executing the user's request efficiently using available tools.
  * This is the last resort for very basic AI systems
  */
 export const FALLBACK_JSON_INSTRUCTIONS = `
-## RESPONSE FORMAT - FALLBACK MODE:
-Your system does not support native tool calling. Please respond with JSON in this format:
+## RESPONSE FORMAT:
+Please respond with JSON in this format:
 
 {
   "message": "Your natural language response to the user",
