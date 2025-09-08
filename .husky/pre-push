@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "Running pre-push quality checks..."
+
+# Run ESLint
+echo "🔍 Running ESLint..."
+npm run lint:check
+if [ $? -ne 0 ]; then
+  echo "❌ ESLint failed. Please fix linting errors before pushing."
+  exit 1
+fi
+
+# Run tests
+echo "🧪 Running tests..."
+npm test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed. Please fix failing tests before pushing."
+  exit 1
+fi
+
+# Check coverage
+echo "📊 Checking coverage..."
+npm run coverage
+if [ $? -ne 0 ]; then
+  echo "❌ Coverage check failed. Please ensure 80% minimum coverage."
+  exit 1
+fi
+
+echo "✅ All quality checks passed!"

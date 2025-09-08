@@ -1,0 +1,8 @@
+node_modules/
+vendor/
+dist/
+coverage/
+.foundry-cache/
+.foundry-data/
+reference/
+package-lock.json

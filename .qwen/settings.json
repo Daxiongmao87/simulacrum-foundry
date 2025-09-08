@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "websource-browser": {
+      "command": "websource-browser",
+      "args": [
+        "--mcp"
+      ]
+    }
+  }
+}

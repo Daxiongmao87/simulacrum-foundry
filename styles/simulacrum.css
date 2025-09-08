@@ -1,0 +1,197 @@
+// SPDX-License-Identifier: MIT
+// Copyright © 2024-2025 Aaron Riechert
+
+/* 
+ * MINIMAL Simulacrum styling - inherit EVERYTHING from FoundryVTT 
+ * Only essential settings and legacy panel compatibility
+ */
+
+/* ---------------------------------------- */
+/*  Simulacrum Sidebar Layout Fix          */
+/* ---------------------------------------- */
+
+/* Make simulacrum sidebar use flexbox layout like chat */
+/* Match Chat tab container layout */
+#sidebar-content #simulacrum {
+  padding: 4px 0;
+  overflow: hidden;
+  align-items: flex-end;
+  width: 100%;
+  gap: 8px;
+}
+
+/* Ensure flex column behavior for inner layout */
+#simulacrum {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Chat scroll should fill remaining vertical space */
+#simulacrum .chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Chat form should be anchored to bottom */
+#simulacrum .chat-form {
+  flex: none;
+}
+
+/* Legacy panel styling (kept for backwards compatibility only) */
+.simulacrum-panel {
+  min-width: 400px;
+  min-height: 300px;
+}
+
+.simulacrum-panel .window-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.simulacrum-panel .chat-log {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 5px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--color-border-dark);
+  margin-bottom: 5px;
+}
+
+.simulacrum-panel .chat-input {
+  display: flex;
+}
+
+.simulacrum-panel .chat-input textarea {
+  flex-grow: 1;
+  resize: none;
+  margin-right: 5px;
+}
+
+/* ---------------------------------------- */
+/*  Settings Interface Styling             */
+/* ---------------------------------------- */
+
+.simulacrum-settings {
+  min-width: 600px;
+}
+
+.simulacrum-settings .form-group {
+  margin-bottom: 1rem;
+}
+
+.simulacrum-settings .form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+  color: var(--color-text-dark-primary);
+}
+
+.simulacrum-settings .form-group input,
+.simulacrum-settings .form-group select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border-dark);
+  border-radius: 3px;
+  background: var(--color-bg-input);
+  color: var(--color-text-light-primary);
+}
+
+.simulacrum-settings .form-group input[type="checkbox"] {
+  width: auto;
+  margin-right: 0.5rem;
+}
+
+.simulacrum-settings .form-group input.valid {
+  border-color: #28a745;
+  box-shadow: 0 0 0 0.125rem rgba(40, 167, 69, 0.25);
+}
+
+.simulacrum-settings .form-group input.invalid {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.125rem rgba(220, 53, 69, 0.25);
+}
+
+.simulacrum-settings .hint {
+  font-size: 0.8rem;
+  color: var(--color-text-dark-secondary);
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.simulacrum-settings .connection-test {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.simulacrum-settings .test-connection {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.simulacrum-settings .test-connection:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.simulacrum-settings .test-connection:disabled {
+  background: var(--color-border-dark);
+  cursor: not-allowed;
+}
+
+.simulacrum-settings .reset-defaults {
+  background: var(--color-warning);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.simulacrum-settings .reset-defaults:hover {
+  background: var(--color-warning-dark);
+}
+
+.simulacrum-settings .sheet-footer {
+  border-top: 1px solid var(--color-border-dark);
+  padding-top: 1rem;
+  margin-top: 1rem;
+  text-align: right;
+}
+
+.simulacrum-settings .sheet-footer button[type="submit"] {
+  background: var(--color-success);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.simulacrum-settings .sheet-footer button[type="submit"]:hover {
+  background: var(--color-success-dark);
+}
+
+/* ---------------------------------------- */
+/*  Sidebar Tab Visibility Control         */
+/* ---------------------------------------- */
+
+/* Hide simulacrum content when not active */
+#sidebar-content:not(.active-simulacrum) #simulacrum {
+  display: none;
+}
+
+/* Show simulacrum content only when active */
+#sidebar-content.active-simulacrum #simulacrum {
+  display: flex;
+}

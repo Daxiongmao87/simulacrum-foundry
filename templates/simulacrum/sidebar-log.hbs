@@ -1,0 +1,8 @@
+{{!-- Simulacrum Sidebar Chat Log Template - EXACT FoundryVTT Structure --}}
+<div class="chat-scroll" data-application-part="log">
+  <ol class="chat-log plain themed theme-light">
+    {{#each messages}}
+        {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
+      {{/each}}
+  </ol>
+</div>

@@ -1,0 +1,745 @@
+<div id="sidebar-content" class="flexcol expanded active-simulacrum"><section id="chat" class="tab sidebar-tab flexcol chat-sidebar" data-tab="chat" data-group="primary" data-gm-user=""><div class="chat-scroll scrolled" data-application-part="log">
+    <ol class="chat-log plain themed theme-light"><li class="chat-message message flexcol whisper dnd5e2" data-message-id="6q1wCShxdikQr6ys">
+    <header class="message-header flexrow">
+        <h4 class="message-sender"><a class="avatar"><img src="icons/svg/mystery-man.svg" alt="Foundry Virtual Tabletop"></a><span class="name-stacked"><span class="title">Foundry Virtual Tabletop</span><span class="subtitle">To: Gamemaster</span></span></h4>
+        <span class="message-metadata">
+            <time class="message-timestamp">2h 19m ago</time>
+            <a aria-label="Delete" class="message-delete" data-action="deleteMessage">
+                <i class="fa-solid fa-trash fa-fw" inert=""></i>
+            </a>
+        <a aria-label="Additional Controls" class="chat-control" data-context-menu=""><i class="fas fa-ellipsis-vertical fa-fw"></i></a></span>
+
+        
+
+    </header>
+    <div class="message-content">
+        <h3 class="nue">Getting Started</h3>
+      <p class="nue">It looks like this is a new World. To get started, you should first add any additional players you might need via the <a class="nue-tab" data-tab="settings">User Management</a> configuration. From there, you can create <a class="nue-tab" data-tab="actors">Actors</a> for them, as well as any other important personas you need to represent. Maps and other visuals can be set up using <a class="nue-tab" data-tab="scenes">Scenes</a>, and handouts, notes, and other information can be stored in <a class="nue-tab" data-tab="journal">Journal Entries</a>.</p>
+      <p class="nue">Be sure to investigate all of the tabs available in this sidebar, and for more in-depth information, you can review the <a href="https://foundryvtt.com/article/tutorial/" target="_blank">Gamemaster Tutorial</a> series in our <a href="https://foundryvtt.com/kb/" target="_blank">Knowledge Base</a>.</p>
+      <footer class="nue"><i class="fas fa-info-circle"></i> This chat card can be popped out by right-clicking it, or you can pop out the entire chat tab by right-clicking the speech bubble icon at the top. You can do the same thing to popout any of the other sidebar tabs as well.</footer>
+    </div>
+</li><li class="chat-message message flexcol whisper dnd5e2" data-message-id="rMqShSgR3Ds5D1jb">
+    <header class="message-header flexrow">
+        <h4 class="message-sender"><a class="avatar"><img src="icons/svg/mystery-man.svg" alt="Foundry Virtual Tabletop"></a><span class="name-stacked"><span class="title">Foundry Virtual Tabletop</span><span class="subtitle">To: Gamemaster</span></span></h4>
+        <span class="message-metadata">
+            <time class="message-timestamp">2h 19m ago</time>
+            <a aria-label="Delete" class="message-delete" data-action="deleteMessage">
+                <i class="fa-solid fa-trash fa-fw" inert=""></i>
+            </a>
+        <a aria-label="Additional Controls" class="chat-control" data-context-menu=""><i class="fas fa-ellipsis-vertical fa-fw"></i></a></span>
+
+        
+
+    </header>
+    <div class="message-content">
+        <h3 class="nue">Inviting Your Players</h3>
+      <p class="nue">When everything is set up and you're ready to invite your players, you can send them a link to your World from the <a class="nue-action" data-action="invite">Invitation Links</a>.</p>
+      <p class="nue">If the Invitation Links dialog indicates that your connection is closed, you may need to set up port forwarding. You can find instructions on how to do this in our <a href="https://foundryvtt.com/article/port-forwarding/" target="_blank">Port Forwarding Guide</a>. If you still need help, you are welcome to join our Discord and make a post in <a href="https://discord.com/channels/170995199584108546/689889940590690323" target="_blank">#install-and-connection</a> for invite issues, <a href="https://discord.com/channels/170995199584108546/486930822465716249" target="_blank">#troubleshooting</a> for general issues with the software, or <a href="https://discord.com/channels/170995199584108546/713259405667205193" target="_blank">#core-how-to</a> to find out how to do something in Foundry VTT.</p>
+      <footer class="nue"><i class="fas fa-info-circle"></i> This chat card can be popped out by right-clicking it, or you can pop out the entire chat tab by right-clicking the speech bubble icon at the top. You can do the same thing to popout any of the other sidebar tabs as well.</footer>
+    </div>
+</li></ol>
+</div><form class="chat-form" data-application-part="input">
+
+    <button type="button" class="ui-control icon fa-solid fa-arrow-down jump-to-bottom" data-tooltip="" aria-label="Jump to Bottom" data-action="jumpToBottom"></button>
+<div id="chat-controls">
+    <div id="roll-privacy" class="split-button">
+        <button type="button" class="ui-control icon fa-solid fa-globe" data-action="rollMode" data-roll-mode="publicroll" aria-pressed="true" data-tooltip="" aria-label="Public Roll"></button>
+        <button type="button" class="ui-control icon fa-solid fa-user-secret" data-action="rollMode" data-roll-mode="gmroll" aria-pressed="false" data-tooltip="" aria-label="Private GM Roll"></button>
+        <button type="button" class="ui-control icon fa-solid fa-eye-slash" data-action="rollMode" data-roll-mode="blindroll" aria-pressed="false" data-tooltip="" aria-label="Blind GM Roll"></button>
+        <button type="button" class="ui-control icon fa-solid fa-user" data-action="rollMode" data-roll-mode="selfroll" aria-pressed="false" data-tooltip="" aria-label="Self Roll"></button>
+    </div>
+
+    <div class="control-buttons">
+        <button type="button" class="ui-control icon fa-solid fa-floppy-disk" data-tooltip="" aria-label="Export Chat Log" data-action="export"></button>
+        <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip="" aria-label="Clear Chat Log" data-action="flush"></button>
+    </div>
+</div><textarea id="chat-message" class="chat-input" name="message" autocomplete="off" placeholder="Enter message" aria-label="Chat"></textarea></form></section><section id="combat" class="tab sidebar-tab combat-sidebar" data-tab="combat" data-group="primary"><header class="combat-tracker-header" data-application-part="header">
+
+    <nav class="encounters " aria-label="Combat Encounters Navigation">
+
+        <button type="button" class="combat-control-lg" data-action="createCombat">
+            <i class="fa-solid fa-plus" inert=""></i>
+            <span>Create Encounter</span>
+        </button>
+
+            </nav>
+
+    <div class="encounter-controls ">
+
+        <div class="control-buttons left flexrow">
+            <button type="button" class="inline-control combat-control icon fa-solid fa-users" data-action="rollAll" disabled="" data-tooltip="COMBAT.RollAll" aria-label="Roll All"></button>
+            <button type="button" class="inline-control combat-control icon fa-solid fa-users-cog" data-action="rollNPC" disabled="" data-tooltip="COMBAT.RollNPC" aria-label="Roll NPCs"></button>
+        </div>
+
+        <strong class="encounter-title">
+            No Encounter
+        </strong>
+
+        <div class="control-buttons right flexrow">
+            <div class="spacer"></div>
+            <button type="button" class="encounter-context-menu inline-control combat-control icon fa-solid fa-ellipsis-vertical" disabled=""></button>
+        </div>
+
+    </div>
+
+</header><ol class="combat-tracker plain" data-application-part="tracker">
+</ol><nav class="combat-controls" data-tooltip-direction="UP" data-application-part="footer"></nav></section><section id="scenes" class="tab sidebar-tab directory flexcol scenes-sidebar" data-tab="scenes" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-map" inert=""></i>
+            <span>Create Scene</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Scenes" aria-label="Search Scenes">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+    <li class="directory-item entry document scene" data-entry-id="NUEDEFAULTSCENE0" draggable="true" style="display: flex;">
+        <img class="thumbnail" src="nue/defaultscene/thumb.webp" alt="Foundry Virtual Tabletop" loading="lazy">
+        <a class="entry-name" data-action="activateEntry">Foundry Virtual Tabletop</a>
+    </li>
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="actors" class="tab sidebar-tab directory flexcol actors-sidebar" data-tab="actors" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-user" inert=""></i>
+            <span>Create Actor</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Actors" aria-label="Search Actors">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="items" class="tab sidebar-tab directory flexcol items-sidebar" data-tab="items" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-suitcase" inert=""></i>
+            <span>Create Item</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Items" aria-label="Search Items">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="journal" class="tab sidebar-tab directory flexcol journal-sidebar" data-tab="journal" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-book-open" inert=""></i>
+            <span>Create Entry</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Journal Entries" aria-label="Search Journal Entries">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="tables" class="tab sidebar-tab directory flexcol tables-sidebar" data-tab="tables" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-table-list" inert=""></i>
+            <span>Create Table</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Rollable Tables" aria-label="Search Rollable Tables">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="cards" class="tab sidebar-tab directory flexcol cards-sidebar" data-tab="cards" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-cards" inert=""></i>
+            <span>Create Card Stack</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Card Stacks" aria-label="Search Card Stacks">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="macros" class="tab sidebar-tab directory flexcol macros-sidebar" data-tab="macros" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-code" inert=""></i>
+            <span>Create Macro</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Macros" aria-label="Search Macros">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="playlists" class="tab sidebar-tab directory flexcol playlists-sidebar" data-tab="playlists" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-music" inert=""></i>
+            <span>Create Playlist</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    </div>
+
+    <search>
+        <button type="button" class="inline-control toggle-search-mode icon fa-solid fa-magnifying-glass" data-action="toggleSearch" data-tooltip="" aria-label="Search by Name only"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Playlists" aria-label="Search Playlists">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><div class="global-volume global-control expanded" data-application-part="controls">
+    <header class="playlist-header" data-action="volumeExpand">
+        <i class="expand fa-solid fa-angle-up" inert=""></i>
+        <strong>User Volume Controls</strong>
+    </header>
+    <div class="expandable">
+        <div class="wrapper">
+            <ol class="plain">
+                <li class="flexrow" data-tooltip="AUDIO.CHANNELS.MUSIC.tooltip">
+                    <label>Music</label>
+                    <i class="volume-icon fa-solid fa-volume-low" inert=""></i>
+                    <range-picker name="globalPlaylistVolume" value="0.6299605249474366" min="0" max="1" step="0.05" class="global-volume-slider" data-tooltip="63%" aria-label="Music" aria-valuetext="Volume: 63%"><input type="range" min="0" max="1" step="0.05"><input type="number" min="0" max="1" step="0.05"></range-picker>
+                </li>
+                <li class="flexrow" data-tooltip="AUDIO.CHANNELS.ENVIRONMENT.tooltip">
+                    <label>Environment</label>
+                    <i class="volume-icon fa-solid fa-volume-low" inert=""></i>
+                    <range-picker name="globalAmbientVolume" value="0.6299605249474366" min="0" max="1" step="0.05" class="global-volume-slider" data-tooltip="63%" aria-label="Environment" aria-valuetext="Volume: 63%"><input type="range" min="0" max="1" step="0.05"><input type="number" min="0" max="1" step="0.05"></range-picker>
+                </li>
+                <li class="flexrow" data-tooltip="AUDIO.CHANNELS.INTERFACE.tooltip">
+                    <label>Interface</label>
+                    <i class="volume-icon fa-solid fa-volume-low" inert=""></i>
+                    <range-picker name="globalInterfaceVolume" value="0.6299605249474366" min="0" max="1" step="0.05" class="global-volume-slider" data-tooltip="63%" aria-label="Interface" aria-valuetext="Volume: 63%"><input type="range" min="0" max="1" step="0.05"><input type="number" min="0" max="1" step="0.05"></range-picker>
+                </li>
+            </ol>
+        </div>
+    </div>
+</div><div class="currently-playing global-control location-top" data-application-part="playing" hidden="">
+    <header class="playlist-header">
+        <strong>Currently Playing</strong>
+        <button type="button" class="inline-control pin icon fa-solid fa-caret-down" data-tooltip="" aria-label="Pin to bottom" data-action="pinCurrentlyPlaying"></button>
+    </header>
+    <ol class="playlist-sounds plain">
+    </ol>
+</div><ol class="directory-list plain" data-application-part="directory">
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="compendium" class="tab sidebar-tab directory flexcol compendium-sidebar" data-tab="compendium" data-group="primary"><header class="directory-header flexcol" data-application-part="header">
+
+    <div class="header-actions action-buttons flexrow">
+        <button type="button" class="create-entry" data-action="createEntry">
+            <i class="fa-solid fa-book-atlas" inert=""></i>
+            <span>Create Compendium</span>
+        </button>
+        <button type="button" class="create-folder" data-action="createFolder">
+            <i class="fa-solid fa-folder" inert=""></i>
+            <span>Create Folder</span>
+        </button>
+    <button type="button" class="open-compendium-browser">
+      <i class="fa-solid fa-book-open-reader" inert=""></i>
+      Open Compendium Browser
+    </button></div>
+
+    <search>
+        <button type="button" class="inline-control filter icon fa-solid fa-filter" data-action="filter" data-tooltip="" aria-label="Filter Documents by Type"></button>
+        <input type="search" name="search" autocomplete="off" placeholder="Search Compendium Packs" aria-label="Search Compendium Packs">
+        <button type="button" class="inline-control toggle-sort icon fa-solid fa-arrow-down-a-z" data-action="toggleSort" data-tooltip="" aria-label="Sort Alphabetically"></button>
+        <button type="button" class="inline-control collapse-all icon fa-duotone fa-folder-tree" data-action="collapseFolders" data-tooltip="" aria-label="Collapse All Folders"></button>
+    </search>
+</header><ol class="directory-list plain" data-application-part="directory">
+    <li class="directory-item folder flexcol " data-folder-id="HGWNyiBQGkF3mF7i" data-uuid="Folder.HGWNyiBQGkF3mF7i" data-folder-depth="1" draggable="true" style="display: flex;">
+    
+        <header class="folder-header" style="background-color: #cd2c1e;" data-action="toggleFolder">
+            <i class="fa-solid fa-folder-open fa-fw" inert=""></i>
+            <span class="folder-name ellipsis">D&amp;D Legacy Content</span>
+    
+            <button type="button" class="create-button create-folder icon icon-plus fa-solid fa-folder" data-action="createFolder" data-tooltip="" aria-label="Create Folder"></button>
+    
+            <button type="button" class="create-button create-entry icon icon-plus fa-solid fa-book-atlas" data-action="createEntry" data-tooltip="" aria-label="Create Compendium"></button>
+        </header>
+    
+        <ol class="subdirectory plain" style="border-left-color: #cd2c1e;">        <li class="directory-item folder flexcol " data-folder-id="Yo4j5kBNuq1O8d6y" data-uuid="Folder.Yo4j5kBNuq1O8d6y" data-folder-depth="2" draggable="true" style="display: flex;">
+            
+                <header class="folder-header" style="background-color: #b72c1f;" data-action="toggleFolder">
+                    <i class="fa-solid fa-folder-open fa-fw" inert=""></i>
+                    <span class="folder-name ellipsis">Character Features</span>
+            
+                    <button type="button" class="create-button create-folder icon icon-plus fa-solid fa-folder" data-action="createFolder" data-tooltip="" aria-label="Create Folder"></button>
+            
+                    <button type="button" class="create-button create-entry icon icon-plus fa-solid fa-book-atlas" data-action="createEntry" data-tooltip="" aria-label="Create Compendium"></button>
+                </header>
+            
+                <ol class="subdirectory plain" style="border-left-color: #b72c1f;">        <li class="directory-item entry compendium item locked" data-pack="dnd5e.backgrounds" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Backgrounds (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Backgrounds (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.classes" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Classes (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Classes (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.subclasses" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Subclasses (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Subclasses (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.classfeatures" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Class &amp; Subclass Features (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Class &amp; Subclass Features (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.races" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Races (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Races (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                </ol>
+            </li>
+            <li class="directory-item folder flexcol " data-folder-id="bLOJAVi3G38Ulll9" data-uuid="Folder.bLOJAVi3G38Ulll9" data-folder-depth="2" draggable="true" style="display: flex;">
+            
+                <header class="folder-header" style="background-color: #941919;" data-action="toggleFolder">
+                    <i class="fa-solid fa-folder-open fa-fw" inert=""></i>
+                    <span class="folder-name ellipsis">Items &amp; Spells</span>
+            
+                    <button type="button" class="create-button create-folder icon icon-plus fa-solid fa-folder" data-action="createFolder" data-tooltip="" aria-label="Create Folder"></button>
+            
+                    <button type="button" class="create-button create-entry icon icon-plus fa-solid fa-book-atlas" data-action="createEntry" data-tooltip="" aria-label="Create Compendium"></button>
+                </header>
+            
+                <ol class="subdirectory plain" style="border-left-color: #941919;">        <li class="directory-item entry compendium item locked" data-pack="dnd5e.items" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Items (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Items (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.tradegoods" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Trade Goods (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Trade Goods (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.spells" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Spells (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Spells (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                </ol>
+            </li>
+            <li class="directory-item folder flexcol " data-folder-id="5REqQ5UKDPQ0Ohba" data-uuid="Folder.5REqQ5UKDPQ0Ohba" data-folder-depth="2" draggable="true" style="display: flex;">
+            
+                <header class="folder-header" style="background-color: #7d160c;" data-action="toggleFolder">
+                    <i class="fa-solid fa-folder-open fa-fw" inert=""></i>
+                    <span class="folder-name ellipsis">Monsters</span>
+            
+                    <button type="button" class="create-button create-folder icon icon-plus fa-solid fa-folder" data-action="createFolder" data-tooltip="" aria-label="Create Folder"></button>
+            
+                    <button type="button" class="create-button create-entry icon icon-plus fa-solid fa-book-atlas" data-action="createEntry" data-tooltip="" aria-label="Create Compendium"></button>
+                </header>
+            
+                <ol class="subdirectory plain" style="border-left-color: #7d160c;">        <li class="directory-item entry compendium actor locked" data-pack="dnd5e.monsters" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/actor-banner.webp" alt="Monsters (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-user" inert=""></i>
+                            <strong>Monsters (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                    <li class="directory-item entry compendium item locked" data-pack="dnd5e.monsterfeatures" draggable="true" style="display: flex;">
+                        <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Monster Features (SRD)" loading="lazy">
+                        <a class="entry-name compendium-name" data-action="activateEntry">
+                            <i class="fa-solid fa-suitcase" inert=""></i>
+                            <strong>Monster Features (SRD)</strong>
+                        </a>
+                        <ul class="status-icons plain flexrow">
+                            <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                        </ul>
+                        <footer class="compendium-footer">
+                            <i class="fa-solid fa-dice" inert=""></i>
+                            <span class="source">dnd5e</span>
+                        </footer>
+                    </li>
+                </ol>
+            </li>
+            <li class="directory-item entry compendium actor locked" data-pack="dnd5e.heroes" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/actor-banner.webp" alt="Starter Heroes" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-user" inert=""></i>
+                    <strong>Starter Heroes</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium journalentry locked" data-pack="dnd5e.rules" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/journalentry-banner.webp" alt="Rules (SRD)" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-book-open" inert=""></i>
+                    <strong>Rules (SRD)</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium rolltable locked" data-pack="dnd5e.tables" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/rolltable-banner.webp" alt="Tables (SRD)" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-table-list" inert=""></i>
+                    <strong>Tables (SRD)</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+        </ol>
+    </li>
+    <li class="directory-item folder flexcol " data-folder-id="ypImyscs4H39ft94" data-uuid="Folder.ypImyscs4H39ft94" data-folder-depth="1" draggable="true" style="display: flex;">
+    
+        <header class="folder-header" style="background-color: #cd2c1e;" data-action="toggleFolder">
+            <i class="fa-solid fa-folder-open fa-fw" inert=""></i>
+            <span class="folder-name ellipsis">D&amp;D Modern Content</span>
+    
+            <button type="button" class="create-button create-folder icon icon-plus fa-solid fa-folder" data-action="createFolder" data-tooltip="" aria-label="Create Folder"></button>
+    
+            <button type="button" class="create-button create-entry icon icon-plus fa-solid fa-book-atlas" data-action="createEntry" data-tooltip="" aria-label="Create Compendium"></button>
+        </header>
+    
+        <ol class="subdirectory plain" style="border-left-color: #cd2c1e;">        <li class="directory-item entry compendium journalentry locked" data-pack="dnd5e.content24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/journalentry-banner.webp" alt="Rules" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-book-open" inert=""></i>
+                    <strong>Rules</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium item locked" data-pack="dnd5e.classes24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Character Classes" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-suitcase" inert=""></i>
+                    <strong>Character Classes</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium item locked" data-pack="dnd5e.origins24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Character Origins" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-suitcase" inert=""></i>
+                    <strong>Character Origins</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium item locked" data-pack="dnd5e.feats24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Feats" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-suitcase" inert=""></i>
+                    <strong>Feats</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium item locked" data-pack="dnd5e.spells24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Spells" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-suitcase" inert=""></i>
+                    <strong>Spells</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium item locked" data-pack="dnd5e.equipment24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/item-banner.webp" alt="Equipment" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-suitcase" inert=""></i>
+                    <strong>Equipment</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium rolltable locked" data-pack="dnd5e.tables24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/rolltable-banner.webp" alt="Roll Tables" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-table-list" inert=""></i>
+                    <strong>Roll Tables</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+            <li class="directory-item entry compendium actor locked" data-pack="dnd5e.actors24" draggable="true" style="display: flex;">
+                <img class="compendium-banner" src="ui/banners/actor-banner.webp" alt="Actors" loading="lazy">
+                <a class="entry-name compendium-name" data-action="activateEntry">
+                    <i class="fa-solid fa-user" inert=""></i>
+                    <strong>Actors</strong>
+                </a>
+                <ul class="status-icons plain flexrow">
+                    <i class="fa-solid fa-lock" aria-label="Locked"></i>
+                </ul>
+                <footer class="compendium-footer">
+                    <i class="fa-solid fa-dice" inert=""></i>
+                    <span class="source">dnd5e</span>
+                </footer>
+            </li>
+        </ol>
+    </li>
+</ol><footer class="directory-footer action-buttons flexcol" data-application-part="footer"></footer></section><section id="settings" class="tab sidebar-tab settings-sidebar" data-tab="settings" data-group="primary"><section class="info flexcol">
+    <h1 class="title">Foundry Virtual Tabletop</h1>
+    <p class="subtitle version">Version 13 Stable</p>
+    <div class="build">
+        <span class="label">Build Version</span>
+        <span class="value">347            <a class="notification-pip active fa-solid fa-circle-exclamation" data-tooltip-text="An update to stable version 13.348 is now available!" data-action="notifyUpdate" data-update="core"></a>
+</span>
+    </div>
+    
+    <div class="modules">
+        <span class="label">Active Modules</span>
+        <span class="value">1</span>
+    </div>
+</section><section class="dnd5e2 sidebar-info">
+    <h4 class="divider">Game System</h4>
+    <div class="system-badge">
+      <img src="systems/dnd5e/ui/official/dnd-badge-32.webp" data-tooltip="Dungeons &amp; Dragons Fifth Edition" alt="Dungeons &amp; Dragons Fifth Edition">
+      <span class="system-info">5.1.4</span>
+    </div>
+  <ul class="unlist links">
+    <li>
+      <a href="https://github.com/foundryvtt/dnd5e/releases/latest" target="_blank">
+        Notes
+      </a>
+    </li>
+    <li>
+      <a href="https://github.com/foundryvtt/dnd5e/issues" target="_blank">Issues</a>
+    </li>
+    <li>
+      <a href="https://github.com/foundryvtt/dnd5e/wiki" target="_blank">Wiki</a>
+    </li>
+    <li>
+      <a href="https://discord.com/channels/170995199584108546/670336046164213761" target="_blank">
+        Discord
+      </a>
+    </li>
+  </ul></section><section class="settings flexcol">
+    <h4 class="divider">Game Settings</h4>
+    <button type="button" data-action="openApp" data-app="configure" style="">
+        <i class="fa-solid fa-gears" inert=""></i> Configure Settings
+    </button>
+    <button type="button" data-action="openApp" data-app="controls">
+        <i class="fa-solid fa-gamepad" inert=""></i> Configure Controls
+    </button>
+    <button type="button" data-action="openApp" data-app="modules">
+        <i class="fa-solid fa-cube" inert=""></i>
+        Manage Modules
+            </button>
+    <button type="button" data-action="openApp" data-app="world">
+        <i class="fa-solid fa-globe" inert=""></i> Edit World
+    </button>
+    <button type="button" data-action="openApp" data-app="players">
+        <i class="fa-solid fa-users" inert=""></i> User Management
+    </button>
+    <button type="button" data-action="openApp" data-app="tours">
+        <i class="fa-solid fa-person-hiking" inert=""></i> Tour Management
+    </button>
+</section><section class="documentation flexcol" data-help-docs="">
+    <h4 class="divider">Help and Documentation</h4>
+    <button type="button" data-action="openApp" data-app="support">
+        <i class="fa-solid fa-handshake-angle" inert=""></i> Support &amp; Issues
+        
+    </button>
+    <a class="button" href="https://foundryvtt.com/kb/" rel="nofollow" target="_blank">
+        <i class="fa-solid fa-book" inert=""></i> View Documentation
+    </a>
+    <a class="button" href="https://foundryvtt.wiki/" rel="nofollow noopener" target="_blank">
+        <i class="fa-solid fa-landmark" inert=""></i> Community Wiki Pages
+    </a>
+</section><section class="access flexcol">
+    <h4 class="divider">Game Access</h4>
+    <button type="button" data-action="openApp" data-app="invitations">
+        <i class="fa-solid fa-wifi" inert=""></i> Invitation Links
+    </button>
+    <button type="button" data-action="openApp" data-app="logout">
+        <i class="fa-solid fa-door-closed" inert=""></i> Log Out
+    </button>
+    <button type="button" data-action="openApp" data-app="setup">
+        <i class="fa-solid fa-house" inert=""></i> Return to Setup
+    </button>
+</section></section><template id="simulacrum" data-application-part="simulacrum"></template></div>

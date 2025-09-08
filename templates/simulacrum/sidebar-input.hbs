@@ -1,0 +1,23 @@
+{{!-- Simulacrum Sidebar Input Form Template - EXACT FoundryVTT Structure --}}
+<form class="chat-form" data-application-part="input">
+
+    {{!-- Jump to Bottom --}}
+    <button type="button" class="ui-control icon fa-solid fa-arrow-down jump-to-bottom" data-tooltip
+            aria-label="{{localize 'CHAT.JumpToBottom'}}" data-action="jumpToBottom"
+            {{#if isAtBottom}}hidden{{/if}}></button>
+
+<div id="chat-controls">
+    <div class="control-buttons">
+        <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip aria-label="Clear Chat Log" data-action="clearChat"></button>
+    </div>
+</div>
+
+{{!-- Process status banner shown while tools are running --}}
+{{#if processActive}}
+  <div class="process-status flexrow" style="gap: 0.5rem; align-items: center; margin: 0.25rem 0;">
+    <i class="fa-solid fa-circle-notch fa-spin"></i>
+    <span class="label">{{processLabel}}</span>
+  </div>
+{{/if}}
+
+<textarea id="chat-message" class="chat-input" name="message" autocomplete="off" placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat"></textarea></form>

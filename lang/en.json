@@ -1,0 +1,26 @@
+{
+  "SIMULACRUM": {
+    "Settings": {
+      "ApiKey": {
+        "Name": "AI Provider API Key",
+      "Hint": "Enter your API key (OpenAI-compatible APIs)."
+      }
+    },
+    "Chat": {
+      "CommandDescription": "Interact with the Simulacrum AI assistant.",
+      "NoApiKey": "Please configure your AI API key in the module settings."
+    },
+    "Panel": {
+      "Title": "Simulacrum AI Assistant"
+    },
+    "SidebarTab": {
+      "Title": "Simulacrum"
+    },
+    "AIName": "Simulacrum AI",
+    "Welcome": "Welcome",
+    "WelcomeMessage": "Hello! I'm your AI assistant for campaign document management. How can I help you today?",
+    "InputPlaceholder": "Ask me about your campaign documents...",
+    "SendMessage": "Send Message",
+    "ClearChat": "Clear Chat"
+  }
+}
