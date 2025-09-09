@@ -51,6 +51,8 @@ export class SettingsInterface extends FormApplication {
       model: game.settings.get('simulacrum', 'model'),
       maxTokens: game.settings.get('simulacrum', 'maxTokens') || 4096,
       temperature: game.settings.get('simulacrum', 'temperature') || 0.7,
+      contextLength: game.settings.get('simulacrum', 'contextLength') || 20,
+      customSystemPrompt: game.settings.get('simulacrum', 'customSystemPrompt') || '',
       testing: this.testing
     };
   }
@@ -175,6 +177,8 @@ export class SettingsInterface extends FormApplication {
       form.querySelector('input[name="model"]').value = 'gpt-3.5-turbo';
       form.querySelector('input[name="maxTokens"]').value = '4096';
       form.querySelector('input[name="temperature"]').value = '0.7';
+      form.querySelector('input[name="contextLength"]').value = '20';
+      form.querySelector('textarea[name="customSystemPrompt"]').value = '';
       
       ui.notifications.info('Settings reset to defaults');
       this._validateForm();
@@ -300,6 +304,12 @@ export class SettingsInterface extends FormApplication {
       if (formData.temperature) {
         await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
       }
+      if (formData.contextLength) {
+        await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
+      }
+      if (formData.customSystemPrompt !== undefined) {
+        await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
+      }
       
       ui.notifications.info('Simulacrum settings saved successfully');
       
@@ -358,6 +368,26 @@ export function registerAdvancedSettings() {
     config: true, // Show in basic config since this is important for compatibility
     type: Boolean,
     default: false,
+    restricted: true
+  });
+
+  game.settings.register('simulacrum', 'contextLength', {
+    name: 'Context Length',
+    hint: 'Maximum number of messages to include in conversation context.',
+    scope: 'world',
+    config: false, // Hidden from basic config, shown in advanced interface
+    type: Number,
+    default: 20,
+    restricted: true
+  });
+
+  game.settings.register('simulacrum', 'customSystemPrompt', {
+    name: 'Custom System Prompt',
+    hint: 'Additional instructions to append to the system prompt.',
+    scope: 'world',
+    config: false, // Hidden from basic config, shown in advanced interface
+    type: String,
+    default: '',
     restricted: true
   });
 }

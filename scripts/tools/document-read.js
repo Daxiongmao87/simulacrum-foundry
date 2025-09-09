@@ -11,7 +11,7 @@ import { createLogger } from '../utils/logger.js';
  */
 export class DocumentReadTool extends BaseTool {
   constructor() {
-    super('read_document', 'Read any document type with full content');
+    super('read_document', 'Read any document type with full content.');
     this.logger = createLogger('DocumentReadTool');
     this.schema = {
       type: 'object',

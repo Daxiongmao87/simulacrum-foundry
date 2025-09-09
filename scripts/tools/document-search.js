@@ -10,28 +10,28 @@ class DocumentSearchTool extends BaseTool {
    * Create a new Document Search Tool
    */
   constructor() {
-    super('search_documents', 'Search documents by content or metadata', {
+    super('search_documents', 'Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.', {
       type: 'object',
       properties: {
         query: { 
           type: 'string', 
           required: true,
-          description: 'Search query text'
+          description: 'Search text - can be document names, content, or keywords.'
         },
         documentTypes: { 
           type: 'array',
           items: { type: 'string' },
-          description: 'Document types to search (empty for all types)'
+          description: 'Limit search to specific document types (optional - searches all types if omitted)'
         },
         fields: { 
           type: 'array',
           items: { type: 'string' },
-          description: 'Fields to search in (empty for all fields)'
+          description: 'Specific document fields to search in (optional - searches all fields if omitted)'
         },
         maxResults: { 
           type: 'number', 
           default: 20,
-          description: 'Maximum number of results to return'
+          description: 'Maximum number of results to return (default: 20)'
         }
       },
       required: ['query']

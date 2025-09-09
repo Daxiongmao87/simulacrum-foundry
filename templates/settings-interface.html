@@ -59,6 +59,18 @@
       </div>
 
       <div class="form-group">
+        <label for="contextLength">Context Length</label>
+        <input type="number" name="contextLength" value="{{contextLength}}" min="5" max="100" step="1">
+        <p class="hint">Maximum number of messages to include in conversation context (5-100)</p>
+      </div>
+
+      <div class="form-group">
+        <label for="customSystemPrompt">Custom System Prompt</label>
+        <textarea name="customSystemPrompt" rows="4" placeholder="Enter additional instructions for the AI...">{{customSystemPrompt}}</textarea>
+        <p class="hint">Additional instructions that will be appended to the system prompt</p>
+      </div>
+
+      <div class="form-group">
         <button type="button" class="reset-defaults">Reset to Defaults</button>
         <p class="hint">Reset all settings to their default values</p>
       </div>

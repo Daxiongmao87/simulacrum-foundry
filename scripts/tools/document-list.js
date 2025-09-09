@@ -10,7 +10,7 @@ class DocumentListTool extends BaseTool {
    * Create a new Document List Tool
    */
   constructor() {
-    super('list_documents', 'List documents of any type available in current system', {
+    super('list_documents', 'List documents of any type available in current system.  Use this as a broad search.', {
       type: 'object',
       properties: {
         documentType: { 

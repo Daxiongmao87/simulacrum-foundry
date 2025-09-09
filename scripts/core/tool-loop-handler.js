@@ -147,10 +147,7 @@ export async function processToolCallLoop(
           timestamp: Date.now()
         });
         
-        // Update system message with success feedback
-        const successMessage = `Tool Execution Success: ${name}
-Result: ${JSON.stringify(exec?.result ?? null)}`;
-        conversationManager.updateSystemMessage(successMessage);
+        // Tool success will be handled via tool message response - don't pollute system prompt
         
         // Emit plan label after successful tool execution
         if (planLabel && typeof Hooks !== 'undefined' && Hooks?.callAll) {
@@ -165,8 +162,10 @@ Result: ${JSON.stringify(exec?.result ?? null)}`;
         // Post-tool verification pattern (like qwen-code)
         await performPostToolVerification(name, args, exec?.result, conversationManager);
 
-        // Add the tool's result to the conversation
-        conversationManager.addMessage('tool', JSON.stringify(exec?.result ?? null), null, call?.id);
+        // Add the tool's result to the conversation - use tool role for tool-compatible endpoints
+        if (currentToolSupport === true) {
+          conversationManager.addMessage('tool', JSON.stringify(exec?.result ?? null), null, call?.id);
+        }
       } catch (err) {
         
         const payload = {
@@ -185,14 +184,13 @@ Result: ${JSON.stringify(exec?.result ?? null)}`;
           timestamp: Date.now()
         });
         
-        // Update system message with error feedback
-        const errorMessage = `Tool Execution Error: ${name}
-Error: ${err?.message || 'Unknown error'}`;
-        conversationManager.updateSystemMessage(errorMessage);
+        // Tool error will be handled via tool message response - don't pollute system prompt
 
-        // Add the error result to the conversation
-        const errorResult = { error: err?.message || 'Unknown error' };
-        conversationManager.addMessage('tool', JSON.stringify(errorResult), null, call?.id);
+        // Add the error result to the conversation - use tool role for tool-compatible endpoints
+        if (currentToolSupport === true) {
+          const errorResult = { error: err?.message || 'Unknown error' };
+          conversationManager.addMessage('tool', JSON.stringify(errorResult), null, call?.id);
+        }
       }
     }
     
@@ -203,21 +201,28 @@ Error: ${err?.message || 'Unknown error'}`;
       final._parseError = false;
     }
     
-    // Continue the agentic loop by adding tool results as newest system message
-    // Instead of modifying the existing system prompt, add tool results as a separate system message
-    if (recentToolResults && recentToolResults.length > 0) {
+    // For legacy/fallback mode, add tool results as system message so AI notices them
+    // Tool-compatible endpoints already have tool messages above
+    if (currentToolSupport !== true && recentToolResults && recentToolResults.length > 0) {
       const latestResult = recentToolResults[recentToolResults.length - 1];
       const toolStatusMessage = latestResult.success 
         ? `Tool execution completed: ${latestResult.tool} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
         : `Tool execution failed: ${latestResult.tool} failed with error: ${latestResult.error}`;
       
-      // Add as newest system message so AI notices the tool results
+      // Add as newest system message so AI notices the tool results in legacy mode
       conversationManager.addMessage('system', toolStatusMessage);
     }
     
-    // Use the updated messages array directly
+    // Build followup messages with fresh system prompt (like main processMessage does)
+    const systemPrompt = getSystemPrompt();
+    const conversationMessages = conversationManager.getMessages();
+    const messagesWithSystemPrompt = [
+      { role: 'system', content: systemPrompt },
+      ...conversationMessages
+    ];
+    
     const followMessages = (currentToolSupport !== true) ? 
-      _sanitizeMessagesForFallback(conversationManager.messages) : conversationManager.messages;
+      _sanitizeMessagesForFallback(messagesWithSystemPrompt) : messagesWithSystemPrompt;
     const toolsToSend = (currentToolSupport === true) ? tools : null;
     
     let followRaw;
@@ -336,6 +341,20 @@ function normalizeAIResponse(rawResponse) {
   const choice = Array.isArray(choices) ? choices[0] : undefined;
   const msg = choice?.message ?? {};
   const content = typeof msg.content === 'string' ? msg.content : '';
+  
+  // Handle empty AI responses as recoverable error for AI correction
+  if (!content || content.trim().length === 0) {
+    return {
+      content: 'Empty response not allowed - please provide a meaningful response to the user.',
+      display: 'Empty response not allowed - please provide a meaningful response to the user.',
+      toolCalls: [],
+      model: rawResponse?.model,
+      usage: rawResponse?.usage,
+      raw: rawResponse,
+      _parseError: true // Flag to continue loop for AI correction
+    };
+  }
+  
   let toolCalls = msg.tool_calls || [];
   
   if ((!toolCalls || toolCalls.length === 0) && msg.function_call?.name) {

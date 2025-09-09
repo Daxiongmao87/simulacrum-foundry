@@ -142,8 +142,25 @@ export class DocumentAPI {
     }
 
     // Permission filter
-    const { PermissionManager } = await import('../utils/permissions.js');
-    const permitted = await PermissionManager.filterByPermission(game.user, docs, permission);
+    let permitted = docs;
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      permitted = await PermissionManager.filterByPermission(game.user, docs, permission);
+    } catch (error) {
+      // Fallback permission check when module fails to import
+      permitted = docs.filter(doc => {
+        // GMs can always access documents
+        if (game.user?.isGM) return true;
+        
+        // For non-GMs, check document permissions if available
+        if (typeof doc.canUserModify === 'function') {
+          return doc.canUserModify(game.user, permission);
+        }
+        
+        // If no permission method available, default to true for READ
+        return permission === 'READ';
+      });
+    }
 
     // Sort (simple key asc/desc on root keys)
     let sorted = permitted;
@@ -177,9 +194,16 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
-    const { PermissionManager } = await import('../utils/permissions.js');
-    if (!PermissionManager.canReadDocument(game.user, doc)) {
-      throw new Error('Permission denied');
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      if (!PermissionManager.canReadDocument(game.user, doc)) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      // Fallback permission check
+      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'READ')) {
+        throw new Error('Permission denied');
+      }
     }
 
     const obj = doc.toObject();
@@ -201,9 +225,16 @@ export class DocumentAPI {
     const documentClass = CONFIG[documentType]?.documentClass;
     if (!documentClass) throw new Error(`Unknown document type: ${documentType}`);
 
-    const { PermissionManager } = await import('../utils/permissions.js');
-    if (!PermissionManager.canCreateDocument(game.user, documentType, data)) {
-      throw new Error('Permission denied');
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      if (!PermissionManager.canCreateDocument(game.user, documentType, data)) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      // Fallback permission check - only GMs can create by default
+      if (!game.user?.isGM) {
+        throw new Error('Permission denied');
+      }
     }
 
     if (typeof documentClass.create === 'function') {
@@ -229,9 +260,16 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
-    const { PermissionManager } = await import('../utils/permissions.js');
-    if (!PermissionManager.canUpdateDocument(game.user, doc, updates)) {
-      throw new Error('Permission denied');
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      if (!PermissionManager.canUpdateDocument(game.user, doc, updates)) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      // Fallback permission check
+      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'UPDATE')) {
+        throw new Error('Permission denied');
+      }
     }
 
     await doc.update(updates);
@@ -256,9 +294,16 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
-    const { PermissionManager } = await import('../utils/permissions.js');
-    if (!PermissionManager.canDeleteDocument(game.user, doc)) {
-      throw new Error('Permission denied');
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      if (!PermissionManager.canDeleteDocument(game.user, doc)) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      // Fallback permission check
+      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'DELETE')) {
+        throw new Error('Permission denied');
+      }
     }
 
     await doc.delete();
@@ -282,8 +327,17 @@ export class DocumentAPI {
       const collection = this.#resolveCollection(t);
       if (!collection) continue;
       // Permission: READ
-      const { PermissionManager } = await import('../utils/permissions.js');
-      const readable = await PermissionManager.filterByPermission(game.user, collection.contents, 'READ');
+      let readable = collection.contents;
+      try {
+        const { PermissionManager } = await import('../utils/permissions.js');
+        readable = await PermissionManager.filterByPermission(game.user, collection.contents, 'READ');
+      } catch (error) {
+        // Fallback permission filtering
+        readable = collection.contents.filter(doc => 
+          game.user?.isGM || 
+          (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
+        );
+      }
       for (const doc of readable) {
         const obj = doc.toObject();
         const hay = fields.map(f => String(this.#get(obj, f) ?? '')).join(' ').toLowerCase();

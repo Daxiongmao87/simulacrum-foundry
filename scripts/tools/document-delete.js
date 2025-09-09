@@ -11,7 +11,7 @@ class DocumentDeleteTool extends BaseTool {
    * Create a new Document Delete Tool
    */
   constructor() {
-    super('delete_document', 'Delete documents of any type supported by current system', {
+    super('delete_document', 'Delete documents of any type supported by current system.', {
       type: 'object',
       properties: {
         documentType: { 

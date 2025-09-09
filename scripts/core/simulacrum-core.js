@@ -172,11 +172,18 @@ class SimulacrumCore {
         }
       } catch {}
       // Centralized system prompt (ephemeral; not persisted in conversation)
-      const systemPrompt = this.getSystemPrompt();
+      
+      // Get context length setting and limit conversation history
+      const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
+      const conversationMessages = this.conversationManager?.messages || [];
+      const limitedMessages = conversationMessages.length > contextLength 
+        ? conversationMessages.slice(-contextLength)
+        : conversationMessages;
+      
       // Use a non-persistent system message to steer tool usage
       const messages = [
         { role: 'system', content: this.getSystemPrompt() },
-        ...this.conversationManager.messages
+        ...limitedMessages
       ];
       
       // Get AI response - check legacy mode setting instead of probe
@@ -225,6 +232,20 @@ class SimulacrumCore {
         const choice = Array.isArray(__choices) ? __choices[0] : undefined;
         const msg = choice?.message ?? {};
         const content = typeof msg.content === 'string' ? msg.content : '';
+        
+        // Handle empty AI responses as recoverable error for AI correction
+        if (!content || content.trim().length === 0) {
+          return {
+            content: 'Empty response not allowed - please provide a meaningful response to the user.',
+            display: 'Empty response not allowed - please provide a meaningful response to the user.',
+            toolCalls: [],
+            model: raw?.model,
+            usage: raw?.usage,
+            raw,
+            _parseError: true // Flag to continue loop for AI correction
+          };
+        }
+        
         let toolCalls = msg.tool_calls || [];
         // Legacy providers may return a single function_call instead of tool_calls
         if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
@@ -284,7 +305,14 @@ class SimulacrumCore {
           normalized.display = parseResult.cleanedText;
         } else if (parseResult && parseResult.parseError) {
           // Handle JSON parsing errors in main flow
-          const errorMessage = `JSON Parsing Error: ${parseResult.parseError}\n\nThe JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:\n\`\`\`json\n{"tool_call": {"name": "tool_name", "arguments": {...}}}\n\`\`\`\n\nProblematic content: ${parseResult.content}`;
+          const errorMessage = [
+            game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
+            '',
+            game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
+            game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
+            '',
+            game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
+          ].join('\n');
           
           // Update system message with error feedback
           this.conversationManager.updateSystemMessage(errorMessage);
@@ -558,6 +586,21 @@ class SimulacrumCore {
   static _parseInlineToolCall(text) {
     if (!text || typeof text !== 'string') return null;
 
+    // Remove <think> tags and their content before parsing - this is internal reasoning only
+    let cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    if (!cleanText || !cleanText.trim()) return null;
+    
+    // Debug logging for think tag filtering
+    try {
+      if (isDiagnosticsEnabled() && text !== cleanText) {
+        createLogger('AIDiagnostics').info('think_tag_filtered', { 
+          originalLength: text.length,
+          cleanedLength: cleanText.length,
+          hadThinkTags: text.includes('<think>')
+        });
+      }
+    } catch {}
+
     const tryParse = (s) => {
       try {
         return JSON.parse(s);
@@ -567,10 +610,26 @@ class SimulacrumCore {
           let fixed = s
             // Fix parentheses notation like (x,y) to [x,y]
             .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
-            // Fix single quotes to double quotes
-            .replace(/'/g, '"')
+            // Fix single quotes to double quotes (be more careful about this)
+            .replace(/:\s*'([^']*)'(?=\s*[,\}])/g, ': "$1"')
             // Fix trailing commas
-            .replace(/,(\s*[}\]])/g, '$1');
+            .replace(/,(\s*[}\]])/g, '$1')
+            // Fix unescaped quotes within strings - this is a common issue
+            .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function(match, p1, p2) {
+              // If we have something like "text"text"more", fix it to "text\"text\"more"
+              return p1 + '\\"' + p2 + '\\"' + match.slice(p1.length + p2.length + 2);
+            })
+            // Fix D&D 5e specific damage.parts syntax issues
+            .replace(/"parts":\s*\[\s*\[\s*"([^"]+?)"\s*,\s*"([^"]+?)"\s*\]\s*,\s*\[\s*"([^"]+?)"\s*,\s*"([^"]+?)"\s*\]\s*\]/g, 
+                     '"parts": [["$1", "$2"], ["$3", "$4"]]')
+            // Fix properties array syntax
+            .replace(/"properties":\s*$(.*?)$/g, function(match, content) {
+              // Fix array syntax for properties
+              let fixedContent = content.replace(/"([^"]+)"(?:\s*,\s*|\s*)/g, '"$1", ');
+              // Remove trailing comma and spaces
+              fixedContent = fixedContent.replace(/,\s*$/, '');
+              return '"properties": [' + fixedContent + ']';
+            });
           
           const result = JSON.parse(fixed);
           try {
@@ -591,7 +650,7 @@ class SimulacrumCore {
     // Multiple regex patterns to catch different JSON block formats
     const patterns = [
       /```json\s*([\s\S]+?)\s*```/i,    // Standard ```json format
-      /```\s*([\s\S]+?)\s*```/,         // Generic ``` format
+      /```javascript\s*([\s\S]+?)\s*```/i, // Sometimes AIs use javascript instead of json
       /`{3,}\s*json\s*([\s\S]+?)\s*`{3,}/i, // Flexible backticks
     ];
 
@@ -599,7 +658,7 @@ class SimulacrumCore {
     let matchedPattern = null;
     
     for (const pattern of patterns) {
-      blockMatch = text.match(pattern);
+      blockMatch = cleanText.match(pattern);
       if (blockMatch && blockMatch[1]) {
         matchedPattern = pattern;
         break;
@@ -610,8 +669,10 @@ class SimulacrumCore {
       try {
         if (isDiagnosticsEnabled()) {
           createLogger('AIDiagnostics').warn('fallback.parse.no_block', { 
-            textLength: text.length, 
-            preview: text.substring(0, 100)
+            textLength: cleanText.length, 
+            preview: cleanText.substring(0, 200),
+            hasJsonKeyword: cleanText.includes('```json'),
+            hasToolCall: cleanText.includes('tool_call')
           });
         }
       } catch {}
@@ -619,6 +680,33 @@ class SimulacrumCore {
     }
 
     const jsonContent = blockMatch[1].trim();
+    
+    // Validate that content looks like JSON and contains tool-like structure
+    if (!jsonContent.startsWith('{') && !jsonContent.startsWith('[')) {
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').warn('fallback.parse.not_json', { 
+            content: jsonContent.substring(0, 100)
+          });
+        }
+      } catch {}
+      return null;
+    }
+    
+    // Additional check: must contain some variation of "tool" in the JSON structure
+    if (!jsonContent.includes('tool_call') && !jsonContent.includes('toolCall') && 
+        !jsonContent.includes('function_call') && !jsonContent.includes('functionCall') &&
+        !jsonContent.includes('"name"')) {
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').warn('fallback.parse.no_tool_structure', { 
+            content: jsonContent.substring(0, 100)
+          });
+        }
+      } catch {}
+      return null;
+    }
+    
     const obj = tryParse(jsonContent);
 
     // Handle case where tryParse returned a parse error
@@ -668,7 +756,7 @@ class SimulacrumCore {
       return null;
     }
 
-    const cleanedText = text.replace(blockMatch[0], '').trim();
+    const cleanedText = cleanText.replace(blockMatch[0], '').trim();
     
     try {
       if (isDiagnosticsEnabled()) {
@@ -714,37 +802,51 @@ class SimulacrumCore {
 static getSystemPrompt() {
     const documentTypesInfo = this.getDocumentTypesInfo();
     const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') || false;
+    const customSystemPrompt = game?.settings?.get('simulacrum', 'customSystemPrompt') || '';
+    
+    let basePrompt;
     
     if (legacyMode) {
-      let toolNames = [];
+      let toolSchemas = '';
       try {
         const schemas = toolRegistry.getToolSchemas();
-        toolNames = Array.isArray(schemas) ? schemas.map(s => s?.function?.name).filter(Boolean) : [];
+        if (Array.isArray(schemas) && schemas.length > 0) {
+          toolSchemas = `\n\nAvailable tool schemas:\n${JSON.stringify(schemas, null, 2)}`;
+        }
       } catch (_e) {}
-      const nameList = toolNames.length ? ` Available tools: ${toolNames.join(', ')}.` : '';
-      return [
-        'You are Simulacrum, an AI assistant for FoundryVTT.',
+      
+      basePrompt = [
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Intro'),
         documentTypesInfo,
-        'When you need to use a tool, respond with text AND a JSON block in this EXACT format:',
-        '```json',
-        '{"tool_call":{"name":"create_document","arguments":{"documentType":"Item","data":{"name":"Dagger","type":"weapon"}}}}',
-        '```',
-        'CRITICAL: Use valid JSON syntax only. No parentheses like (x,y), use arrays ["x","y"]. Use "documentType" not "document_type".',
-        'Take action immediately with reasonable defaults.',
-        nameList
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Instructions'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Format'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Warning'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Action'),
+        toolSchemas
+      ].join(' ');
+    } else {
+      basePrompt = [
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Intro'),
+        documentTypesInfo,
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Capabilities'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Autonomous'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Planning'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.MultiTool'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolLabels'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Verification'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Continuation')
       ].join(' ');
     }
-    return [
-      'You are Simulacrum, an AI assistant operating inside FoundryVTT.',
-      documentTypesInfo,
-      'You can manipulate campaign documents (create/read/update/delete/list/search) via tools.',
-      'Prefer acting autonomously with reasonable defaults; avoid unnecessary clarification questions.',
-      'When a user asks for an action, propose a brief plan and call suitable tools to complete it.',
-      'You can call multiple tools in sequence to accomplish complex tasks.',
-      'When calling a tool, include both process_label (what happens after tool finishes, e.g. "Verifying creation") and plan_label (next iteration action, e.g. "Showing document details") in the arguments.',
-      'I will automatically verify document creation and updates by reading them back - expect to see verification results in the conversation.',
-      'Continue the conversation naturally after tool execution - explain what you accomplished and offer next steps or ask clarifying questions for additional work.'
-    ].join(' ');
+    
+    // Append custom system prompt if provided
+    if (customSystemPrompt && customSystemPrompt.trim().length > 0) {
+      const customInstructions = game.i18n.format('SIMULACRUM.SystemPrompt.CustomInstructions', {
+        customPrompt: customSystemPrompt.trim()
+      });
+      return basePrompt + '\n\n' + customInstructions;
+    }
+    
+    return basePrompt;
   }
 }
 // Export the SimulacrumCore class

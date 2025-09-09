@@ -130,7 +130,9 @@ describe('SettingsInterface - getData', () => {
         .mockReturnValueOnce('https://api.openai.com/v1') // baseURL
         .mockReturnValueOnce('gpt-3.5-turbo') // model
         .mockReturnValueOnce(4096) // maxTokens
-        .mockReturnValueOnce(0.7); // temperature
+        .mockReturnValueOnce(0.7) // temperature
+        .mockReturnValueOnce(20) // contextLength
+        .mockReturnValueOnce(''); // customSystemPrompt
 
       const data = settingsInterface.getData();
 
@@ -140,6 +142,8 @@ describe('SettingsInterface - getData', () => {
         model: 'gpt-3.5-turbo',
         maxTokens: 4096,
         temperature: 0.7,
+        contextLength: 20,
+        customSystemPrompt: '',
         testing: false
       });
     });
@@ -248,7 +252,9 @@ describe('SettingsInterface - form interactions', () => {
         baseURL: { value: 'http://localhost:11434' },
         model: { value: 'llama2' },
         maxTokens: { value: '2048' },
-        temperature: { value: '0.5' }
+        temperature: { value: '0.5' },
+        contextLength: { value: '10' },
+        customSystemPrompt: { value: 'old prompt' }
       };
 
       mockForm.querySelector.mockImplementation(selector => {
@@ -269,6 +275,8 @@ describe('SettingsInterface - form interactions', () => {
       expect(mockElements.apiKey.value).toBe('');
       expect(mockElements.baseURL.value).toBe('https://api.openai.com/v1');
       expect(mockElements.model.value).toBe('gpt-3.5-turbo');
+      expect(mockElements.contextLength.value).toBe('20');
+      expect(mockElements.customSystemPrompt.value).toBe('');
       expect(mockUI.notifications.info).toHaveBeenCalledWith('Settings reset to defaults');
     });
   });

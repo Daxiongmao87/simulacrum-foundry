@@ -11,7 +11,7 @@ class DocumentSchemaTool extends BaseTool {
    * Create a new Document Schema Tool
    */
   constructor() {
-    super('get_document_schema', 'Get schema for any document type', {
+    super('get_document_schema', 'Get schema for any document type.  Important for creating rich documents.', {
       type: 'object',
       properties: {
         documentType: { 

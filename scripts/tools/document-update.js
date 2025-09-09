@@ -11,7 +11,7 @@ class DocumentUpdateTool extends BaseTool {
    * Create a new Document Update Tool
    */
   constructor() {
-    super('update_document', 'Update documents of any type supported by current system', {
+    super('update_document', 'Update documents of any type supported by current system.', {
       type: 'object',
       properties: {
         documentType: { 

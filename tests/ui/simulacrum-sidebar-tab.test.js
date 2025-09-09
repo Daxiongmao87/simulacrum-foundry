@@ -48,6 +48,10 @@ global.game = {
 
 global.CONFIG = { ui: {} };
 
+global.TextEditor = {
+  enrichHTML: jest.fn((content) => Promise.resolve(content))
+};
+
 global.console = { log: jest.fn(), error: jest.fn(), warn: jest.fn() };
 
 // Mock conversation commands module

@@ -5,6 +5,7 @@
 
 import { ConversationCommands } from './conversation-commands.js';
 import { createLogger } from '../utils/logger.js';
+import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
 
 // Simple, direct base class resolution for FoundryVTT v13
 const AbstractSidebarTab = globalThis.foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
@@ -346,7 +347,13 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    * @param {string} display - Optional display content for rich formatting
    */
   async addMessage(role, content, display = null) {
-    const enrichedContent = await TextEditor.enrichHTML(display || content, {
+    // Transform <think></think> tags to collapsible spoilers before enriching HTML
+    let processedContent = display || content;
+    if (hasThinkTags(processedContent)) {
+      processedContent = transformThinkTags(processedContent);
+    }
+    
+    const enrichedContent = await TextEditor.enrichHTML(processedContent, {
       secrets: game.user.isGM,
       documents: true,
       async: true
