@@ -56,13 +56,13 @@ class DocumentSearchTool extends BaseTool {
       const limitedResults = results;
 
       return {
-        content: `Found ${limitedResults.length} documents matching "${params.query}"`,
+        content: 'Found ' + limitedResults.length + ' documents matching "' + params.query + '"',
         display: this.formatSearchResults(limitedResults, params.query)
       };
     } catch (error) {
       return {
-        content: `Failed to search documents: ${error.message}`,
-        display: `❌ Search failed: ${error.message}`,
+        content: 'Failed to search documents: ' + error.message,
+        display: '❌ Search failed: ' + error.message,
         error: { message: error.message, type: 'SEARCH_FAILED' }
       };
     }
@@ -76,16 +76,16 @@ class DocumentSearchTool extends BaseTool {
    */
   formatSearchResults(results, query) {
     if (results.length === 0) {
-      return `No documents found matching "${query}"`;
+      return 'No documents found matching "' + query + '"';
     }
 
     const formattedResults = results.map(doc => {
       const name = doc.name || doc.title || doc._id || 'Untitled';
-      const type = doc.documentName || 'Unknown';
-      return `- **${name}** (${type})`;
+      const type = doc.type || 'Unknown';
+      return '- **' + name + '** (' + type + ')';
     });
 
-    return `**Search Results for "${query}"**\n${formattedResults.join('\n')}`;
+    return '**Search Results for "' + query + '"**\n' + formattedResults.join('\n');
   }
 }
 

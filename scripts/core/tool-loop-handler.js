@@ -203,14 +203,21 @@ Error: ${err?.message || 'Unknown error'}`;
       final._parseError = false;
     }
     
-    // Continue the agentic loop with updated system prompt
-    const outboundMessages = [
-      { role: 'system', content: getSystemPromptWithToolResults(getSystemPrompt) },
-      ...conversationManager.messages
-    ];
-    // Sanitize messages if tool calling is not supported
+    // Continue the agentic loop by adding tool results as newest system message
+    // Instead of modifying the existing system prompt, add tool results as a separate system message
+    if (recentToolResults && recentToolResults.length > 0) {
+      const latestResult = recentToolResults[recentToolResults.length - 1];
+      const toolStatusMessage = latestResult.success 
+        ? `Tool execution completed: ${latestResult.tool} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
+        : `Tool execution failed: ${latestResult.tool} failed with error: ${latestResult.error}`;
+      
+      // Add as newest system message so AI notices the tool results
+      conversationManager.addMessage('system', toolStatusMessage);
+    }
+    
+    // Use the updated messages array directly
     const followMessages = (currentToolSupport !== true) ? 
-      _sanitizeMessagesForFallback(outboundMessages) : outboundMessages;
+      _sanitizeMessagesForFallback(conversationManager.messages) : conversationManager.messages;
     const toolsToSend = (currentToolSupport === true) ? tools : null;
     
     let followRaw;
