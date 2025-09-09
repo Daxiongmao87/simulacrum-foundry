@@ -615,13 +615,47 @@ class SimulacrumCore {
             // Fix trailing commas
             .replace(/,(\s*[}\]])/g, '$1')
             // Fix unescaped quotes within strings - this is a common issue
-            .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function(match, p1, p2) {
-              // If we have something like "text"text"more", fix it to "text\"text\"more"
-              return p1 + '\\"' + p2 + '\\"' + match.slice(p1.length + p2.length + 2);
+            .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function(match) {
+              // Count quotes to see if we have an odd number (unescaped)
+              const quoteCount = (match.match(/"/g) || []).length;
+              if (quoteCount % 2 !== 0 && quoteCount > 2) {
+                // Try to fix by escaping internal quotes
+                try {
+                  // Try to parse as-is first
+                  JSON.parse('{' + match + '}');
+                  return match; // Already valid
+                } catch (e) {
+                  // Need to fix - escape internal quotes
+                  return match.replace(/^"(.*)"$/, function(inner) {
+                    // Replace internal unescaped quotes
+                    return '"' + inner.slice(1, -1).replace(/([^\\])"/g, '$1\\"') + '"';
+                  });
+                }
+              }
+              return match;
             })
-            // Fix D&D 5e specific damage.parts syntax issues
-            .replace(/"parts":\s*\[\s*\[\s*"([^"]+?)"\s*,\s*"([^"]+?)"\s*\]\s*,\s*\[\s*"([^"]+?)"\s*,\s*"([^"]+?)"\s*\]\s*\]/g, 
-                     '"parts": [["$1", "$2"], ["$3", "$4"]]')
+            // Fix D&D 5e specific damage.parts syntax issues - handle common patterns more carefully
+            .replace(/"parts":\s*\[\s*(\[[^\]]*?\])\s*,\s*(\[[^\]]*?\])\s*\]/g, function(match, part1, part2) {
+              try {
+                // Try to parse the parts as-is first
+                JSON.parse('{"parts": [' + part1 + ', ' + part2 + ']}');
+                return match; // Already valid
+              } catch (e) {
+                // Need to fix - try to escape internal quotes in each part
+                const fixPart = function(part) {
+                  return part.replace(/"/g, function(quote, index) {
+                    // Only escape quotes that are not at the beginning or end
+                    if (index === 0 || index === part.length - 1) return quote;
+                    // Check if already escaped
+                    if (index > 0 && part[index - 1] === '\\') return quote;
+                    return '\\"';
+                  });
+                };
+                const fixedPart1 = fixPart(part1);
+                const fixedPart2 = fixPart(part2);
+                return '"parts": [' + fixedPart1 + ', ' + fixedPart2 + ']';
+              }
+            })
             // Fix properties array syntax
             .replace(/"properties":\s*$(.*?)$/g, function(match, content) {
               // Fix array syntax for properties

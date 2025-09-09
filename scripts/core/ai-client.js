@@ -302,7 +302,25 @@ export class AIClient {
       throw new Error(`${response.status} - ${errorText}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    
+    // Normalize the response to extract content and tool_calls
+    const choice = data.choices?.[0];
+    const msg = choice?.message ?? {};
+    const content = typeof msg.content === 'string' ? msg.content : '';
+    const tool_calls = msg.tool_calls || [];
+    
+    // Return normalized response
+    return {
+      choices: [{
+        message: {
+          content,
+          tool_calls
+        }
+      }],
+      model: data.model,
+      usage: data.usage
+    };
   }
 
   /** removed provider-specific chat implementation to remain provider-agnostic **/
