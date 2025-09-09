@@ -256,7 +256,17 @@ export class DocumentAPI {
   static async updateDocument(documentType, id, updates) {
     const collection = this.#resolveCollection(documentType);
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
-    const doc = collection.get(id);
+    let doc = collection.get(id);
+
+    if (!doc) {
+      const results = collection.filter((d) => d.name === id);
+      if (results.length === 1) {
+        doc = results[0];
+      } else if (results.length > 1) {
+        throw new Error(`Multiple documents found with name "${id}" in ${documentType}. Please use an ID.`);
+      }
+    }
+
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 

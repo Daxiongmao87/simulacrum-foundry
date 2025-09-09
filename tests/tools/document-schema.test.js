@@ -55,11 +55,16 @@ global.CONFIG = {
 };
 
 global.game = {
+  documentTypes: {
+    Actor: ['base'],
+    Item: ['base'],
+    Scene: ['base']
+  },
   collections: {
     get: (type) => {
     const mockCollections = {
-        Actor: { size: 5 },
-        Item: { size: 20 },
+        Actor: { size: 3 },
+        Item: { size: 3 },
         Scene: { size: 3 }
       };
       return mockCollections[type] || null;
@@ -84,7 +89,7 @@ describe('DocumentSchemaTool - constructor', () => {
 
   it('should initialize with correct name and description', () => {
     expect(tool.name).toBe('get_document_schema');
-    expect(tool.description).toBe('Get schema for any document type');
+    expect(tool.description).toBe('Get schema for any document type.  Important for creating rich documents.');
     expect(tool.schema).toHaveProperty('type', 'object');
     expect(tool.schema.properties).toHaveProperty('documentType');
     });
@@ -113,9 +118,9 @@ describe('DocumentSchemaTool - execute', () => {
       
     expect(result.content).toContain('Available document types:');
     expect(result.display).toContain('**Available Document Types**');
-    expect(result.display).toContain('- Actor (5 in world');
-    expect(result.display).toContain('- Item (20 in world');
-    expect(result.display).toContain('- Scene (3 in world');
+    expect(result.display).toContain('- Actor');
+    expect(result.display).toContain('- Item');
+    expect(result.display).toContain('- Scene');
     });
 
   it('should handle invalid document type gracefully', async () => {
@@ -263,8 +268,8 @@ describe('DocumentSchemaTool - getAllDocumentTypes', () => {
     const types = tool.getAllDocumentTypes();
       
     expect(types).toEqual([
-        { name: 'Actor', collection: 5, compendiums: 1 },
-        { name: 'Item', collection: 20, compendiums: 2 },
+        { name: 'Actor', collection: 3, compendiums: 1 },
+        { name: 'Item', collection: 3, compendiums: 2 },
         { name: 'Scene', collection: 3, compendiums: 0 }
       ]);
     });

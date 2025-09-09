@@ -36,7 +36,7 @@ describe('DocumentUpdateTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
       expect(tool.name).toBe('update_document');
-      expect(tool.description).toBe('Update documents of any type supported by current system');
+      expect(tool.description).toBe('Update documents of any type supported by current system.');
       expect(tool.requiresConfirmation).toBe(true);
   });
 
@@ -138,7 +138,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('execute', () => {
       it('should successfully update documents for valid types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -160,7 +160,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle document without name', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -179,22 +179,52 @@ describe.each(createParameterizedSystemTests())(
         expect(result.content).toBe(`Updated ${testDocType}:test-456`);
         expect(result.display).toBe(`✅ Updated **test-456** (${testDocType})`);
       });
+
+      it('should successfully update a document by name if ID not found', async () => {
+        const documentTypes = Object.keys(systemConfig.documentTypes);
+        if (documentTypes.length === 0) return;
+        const testDocType = documentTypes[0];
+        const params = {
+          documentType: testDocType,
+          documentId: 'Unique Name',
+          updates: { name: 'Updated Name' },
+        };
+        DocumentAPI.updateDocument.mockResolvedValue({ id: 'some-id', name: 'Updated Name' });
+
+        const result = await tool.execute(params);
+
+        expect(DocumentAPI.updateDocument).toHaveBeenCalledWith(testDocType, 'Unique Name', { name: 'Updated Name' });
+        expect(result.content).toBe(`Updated ${testDocType}:Unique Name`);
+        expect(result.display).toBe(`✅ Updated **Updated Name** (${testDocType})`);
+      });
+
+      it('should return an error if multiple documents match the name', async () => {
+        const documentTypes = Object.keys(systemConfig.documentTypes);
+        if (documentTypes.length === 0) return;
+        const testDocType = documentTypes[0];
+        const params = {
+          documentType: testDocType,
+          documentId: 'Duplicate Name',
+          updates: { name: 'Updated Name' },
+        };
+        const errorMessage = `Multiple documents found with name "Duplicate Name" in ${testDocType}. Please use an ID.`;
+        DocumentAPI.updateDocument.mockRejectedValue(new Error(errorMessage));
+
+        await expect(tool.execute(params)).rejects.toThrow(errorMessage);
+      });
     });
 
     describe('Error Scenario Coverage', () => {
       it('should handle invalid document type errors', async () => {
-        const result = await tool.execute({
+        await expect(tool.execute({
           documentType: 'InvalidDocumentType',
           documentId: 'doc-123',
           updates: { name: 'Test' }
-        });
-
-        expect(result.error).toBeDefined();
-        expect(result.error.message).toContain('not available in current system');
+        })).rejects.toThrow('not available in current system');
       });
 
       it('should handle malformed update data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return; 
         
@@ -210,18 +240,16 @@ describe.each(createParameterizedSystemTests())(
         ];
 
         for (const badUpdates of malformedUpdates) {
-          const result = await tool.execute({
+          await expect(tool.execute({
             documentType: validType,
             documentId: 'test-id',
             updates: badUpdates
-          });
-
-          expect(result.error).toBeDefined();
+          })).rejects.toThrow();
         }
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -239,19 +267,16 @@ describe.each(createParameterizedSystemTests())(
         for (const error of apiErrors) {
           DocumentAPI.updateDocument.mockRejectedValueOnce(error);
           
-          const result = await tool.execute({
+          await expect(tool.execute({
             documentType: validType,
             documentId: 'test-doc',
             updates: { name: 'Test Update' }
-          });
-
-          expect(result.error).toBeDefined();
-          expect(result.error.message).toBe(error.message);
+          })).rejects.toThrow(error.message);
         }
       });
 
       it('should handle malformed document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -266,20 +291,18 @@ describe.each(createParameterizedSystemTests())(
         ];
 
         for (const badId of malformedIds) {
-          const result = await tool.execute({
+          await expect(tool.execute({
             documentType: validType,
             documentId: badId,
             updates: { name: 'Test' }
-          });
-
-          expect(result.error).toBeDefined();
+          })).rejects.toThrow();
         }
       });
     });
 
     describe('Performance Testing', () => {
       it('should complete document updates within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -300,7 +323,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch updates efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -326,23 +349,21 @@ describe.each(createParameterizedSystemTests())(
     });
 
     describe('Edge Case Testing', () => {
-      it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+      it('should handle systems with no document types', async () => {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => new DocumentUpdateTool()).not.toThrow();
           
           // Should reject any update attempt in empty system
-          return tool.execute({
+          await expect(tool.execute({
             documentType: 'AnyType',
             documentId: 'test',
             updates: { name: 'Test' }
-          }).then(result => {
-            expect(result.error).toBeDefined();
-          });
+          })).rejects.toThrow('not available in current system');
         }
       });
 
       it('should handle complex nested updates', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -377,7 +398,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle special characters in updates', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -472,15 +493,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           updates: { name: 'Test' }
         };
 
-        const result = await tool.execute(params);
-
-        expect(DocumentAPI.updateDocument).not.toHaveBeenCalled();
-        expect(result.content).toContain('Document type "InvalidType" not available in current system');
-        expect(result.display).toContain('❌ Update failed:');
-        expect(result.error).toEqual({
-          message: 'Document type "InvalidType" not available in current system',
-          type: 'UPDATE_FAILED'
-      });
+        await expect(tool.execute(params)).rejects.toThrow('not available in current system');
     });
 
     it('should handle DocumentAPI errors', async () => {
@@ -493,14 +506,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
         const apiError = new Error('Document not found');
         DocumentAPI.updateDocument.mockRejectedValue(apiError);
 
-        const result = await tool.execute(params);
-
-        expect(result.content).toBe('Failed to update Actor:actor-123: Document not found');
-        expect(result.display).toBe('❌ Update failed: Document not found');
-        expect(result.error).toEqual({
-          message: 'Document not found',
-          type: 'UPDATE_FAILED'
-      });
+        await expect(tool.execute(params)).rejects.toThrow('Document not found');
     });
   });
 
@@ -516,11 +522,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
         const validationError = new Error('Invalid field: invalidField');
         DocumentAPI.updateDocument.mockRejectedValue(validationError);
 
-        const result = await tool.execute(params);
-
-        expect(result.content).toContain('Failed to update Item:item-456');
-        expect(result.display).toContain('❌ Update failed:');
-        expect(result.error.type).toBe('UPDATE_FAILED');
+        await expect(tool.execute(params)).rejects.toThrow('Invalid field: invalidField');
     });
   });
 
@@ -587,8 +589,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
         };
 
         // Since validateParams should be called by parent, let's test validation indirectly
-        const result1 = await tool.execute(invalidParams1);
-        expect(result1.error).toBeDefined();
+        await expect(tool.execute(invalidParams1)).rejects.toThrow();
 
         // Test missing documentId  
         const invalidParams2 = {
@@ -596,8 +597,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           updates: { name: 'Test' }
         };
 
-        const result2 = await tool.execute(invalidParams2);
-        expect(result2.error).toBeDefined();
+        await expect(tool.execute(invalidParams2)).rejects.toThrow();
     });
   });
 
@@ -626,13 +626,11 @@ describe('DocumentUpdateTool - System-Agnostic Validation', () => {
       setupMockFoundryEnvironment(system);
       const tool = new DocumentUpdateTool();
       
-      const result = await tool.execute({
+      await expect(tool.execute({
         documentType: 'InvalidType',
         documentId: 'test',
         updates: { name: 'Test' }
-      });
-      
-      expect(result.error).toBeDefined();
+      })).rejects.toThrow('not available in current system');
       
       cleanupMockEnvironment();
     }

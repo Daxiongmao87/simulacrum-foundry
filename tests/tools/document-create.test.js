@@ -143,7 +143,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle malformed document data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return; // Skip for empty systems
         
@@ -167,7 +167,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -194,7 +194,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Performance Testing', () => {
       it('should complete document creation within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -214,7 +214,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch creation efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -240,7 +240,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Edge Case Testing', () => {
       it('should handle systems with no document types', async () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => new DocumentCreateTool()).not.toThrow();
           
           // Should reject any creation attempt in empty system
@@ -252,7 +252,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle special characters in document data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         

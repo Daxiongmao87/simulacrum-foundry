@@ -144,7 +144,7 @@ describe('FoundryVTT Lifecycle Integration', () => {
     it('should validate CONFIG availability before schema discovery', () => {
       const validateEnvironment = jest.fn(() => {
         if (!global.CONFIG) throw new Error('CONFIG not available');
-        if (!global.CONFIG.Document) throw new Error('Document types not loaded');
+        if (!global.game.documentTypes) throw new Error('Document types not loaded');
         return true;
       });
       
@@ -308,7 +308,7 @@ describe.each(createParameterizedSystemTests())(
       it('should handle document operations through API', async () => {
         // Test document type discovery using static methods
         const types = DocumentAPI.getAllDocumentTypes();
-        const expectedTypes = Object.keys(systemConfig.Document.documentTypes);
+        const expectedTypes = Object.keys(systemConfig.documentTypes);
         
         expectedTypes.forEach(docType => {
           expect(types).toContain(docType);
@@ -316,7 +316,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should validate system-agnostic operation', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length > 0) {
           const firstType = documentTypes[0];

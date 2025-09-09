@@ -43,6 +43,9 @@ describe('Tool Fallback Behavior', () => {
     messages: [],
     addMessage(role, content, toolCalls, toolCallId) {
       this.messages.push({ role, content, toolCalls, toolCallId });
+    },
+    getMessages() {
+      return this.messages;
     }
   });
 

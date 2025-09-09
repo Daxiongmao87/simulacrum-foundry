@@ -273,18 +273,19 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   });
 
   // Apply permission mock to all document types
-  const applyPermissionMock = (collection) => {
-    collection.contents.forEach(doc => {
-      doc.canUserModify = mockCanUserModify;
-      doc.testUserPermission = mockTestUserPermission;
-    });
-  };
-
-  // Setup permission mocks for all collections
   Object.keys(global.game.documentTypes || {}).forEach(documentType => {
     const collection = global.game.collections.get(documentType);
     if (collection) {
-      applyPermissionMock(collection);
+      collection.contents.forEach(doc => {
+        doc.canUserModify = mockCanUserModify;
+        doc.testUserPermission = mockTestUserPermission;
+      });
+      collection.get.mockImplementation((id) => {
+        const doc = createMockDocument(id, `Test ${documentType}`, documentType);
+        doc.canUserModify = mockCanUserModify;
+        doc.testUserPermission = mockTestUserPermission;
+        return doc;
+      });
     }
   });
 
@@ -312,7 +313,7 @@ export function cleanupMockEnvironment() {
 export function createParameterizedSystemTests() {
   return ALL_GAME_SYSTEMS.map(system => [
     system.name,
-    system.config
+    system
   ]);
 }
 
@@ -346,7 +347,7 @@ export function assertSystemAgnostic(testFunction, expectedBehavior) {
   ALL_GAME_SYSTEMS.forEach(system => {
     // Skip empty systems for some tests
     if (system.name === 'Edge Case System' && 
-        Object.keys(system.config.Document.documentTypes).length === 0) {
+        Object.keys(system.documentTypes).length === 0) {
       return;
     }
 

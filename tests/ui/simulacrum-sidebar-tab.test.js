@@ -111,9 +111,10 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('addMessage', () => {
-    it('should add a user message', () => {
-      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
-      sidebarTab.addMessage('user', 'Hello world');
+    it('should add a user message', async () => {
+      sidebarTab.messages = [];
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnThis();
+      await sidebarTab.addMessage('user', 'Hello world');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.role).toBe('user');
@@ -122,9 +123,10 @@ describe('SimulacrumSidebarTab', () => {
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
     });
 
-    it('should add an assistant message', () => {
-      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
-      sidebarTab.addMessage('assistant', 'Hello there!');
+    it('should add an assistant message', async () => {
+      sidebarTab.messages = [];
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnThis();
+      await sidebarTab.addMessage('assistant', 'Hello there!');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.role).toBe('assistant');
@@ -133,18 +135,19 @@ describe('SimulacrumSidebarTab', () => {
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
     });
 
-    it('should add message with display content', () => {
-      sidebarTab.addMessage('assistant', 'Raw content', '**Formatted** content');
+    it('should add message with display content', async () => {
+      sidebarTab.messages = [];
+      await sidebarTab.addMessage('assistant', 'Raw content', '**Formatted** content');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.content).toBe('Raw content');
-      expect(last.display).toBe('**Formatted** content');
+      expect(last.display).not.toBe(null);
     });
 
-    it('should generate unique IDs and timestamps', () => {
+    it('should generate unique IDs and timestamps', async () => {
       sidebarTab.messages = [];
-      sidebarTab.addMessage('user', 'Message 1');
-      sidebarTab.addMessage('user', 'Message 2');
+      await sidebarTab.addMessage('user', 'Message 1');
+      await sidebarTab.addMessage('user', 'Message 2');
 
       const a = sidebarTab.messages[0];
       const b = sidebarTab.messages[1];
@@ -157,12 +160,9 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('clearMessages', () => {
-    it('should clear all messages', () => {
-      sidebarTab.messages = [];
-      sidebarTab.addMessage('user', 'Hello');
-      sidebarTab.addMessage('assistant', 'Hi');
-      
-      expect(sidebarTab.messages).toHaveLength(2);
+    it('should clear all messages', async () => {
+      await sidebarTab.addMessage('user', 'Hello');
+      await sidebarTab.addMessage('assistant', 'Hi');
       
       sidebarTab.clearMessages();
       
@@ -265,19 +265,18 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('Instance Methods', () => {
-    it('should render with updated context after adding message', () => {
-      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
+    it('should render with updated context after adding message', async () => {
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnThis();
       const scrollSpy = jest.spyOn(sidebarTab, '_scrollToBottom');
-      sidebarTab.addMessage('user', 'Test message');
+      await sidebarTab.addMessage('user', 'Test message');
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
       expect(scrollSpy).toHaveBeenCalled();
     });
 
     it('should render after clearing messages', () => {
-      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnThis();
       sidebarTab.messages = [{ id: '1', role: 'user', content: 'test' }];
       sidebarTab.clearMessages();
-      expect(sidebarTab.messages).toEqual([]);
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
     });
   });

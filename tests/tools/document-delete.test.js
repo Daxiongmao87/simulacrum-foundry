@@ -32,7 +32,7 @@ describe('DocumentDeleteTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
       expect(tool.name).toBe('delete_document');
-      expect(tool.description).toBe('Delete documents of any type supported by current system');
+      expect(tool.description).toBe('Delete documents of any type supported by current system.');
       expect(tool.requiresConfirmation).toBe(true);
   });
 
@@ -117,7 +117,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('execute', () => {
       it('should successfully delete documents for valid types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -138,7 +138,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle deletion of different document types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length < 2) return;
         
@@ -160,17 +160,14 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Error Scenario Coverage', () => {
       it('should handle invalid document type errors', async () => {
-        const result = await tool.execute({
+        await expect(tool.execute({
           documentType: 'InvalidDocumentType',
           documentId: 'doc-123'
-        });
-
-        expect(result.error).toBeDefined();
-        expect(result.error.message).toContain('not available in current system');
+        })).rejects.toThrow('not available in current system');
       });
 
       it('should handle malformed document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -189,17 +186,15 @@ describe.each(createParameterizedSystemTests())(
           // Mock the API to reject malformed IDs
           DocumentAPI.deleteDocument.mockRejectedValueOnce(new Error(`Invalid document ID: ${badId}`));
           
-          const result = await tool.execute({
+          await expect(tool.execute({
             documentType: validType,
             documentId: badId
-          });
-
-          expect(result.error).toBeDefined();
+          })).rejects.toThrow(`Invalid document ID: ${badId}`);
         }
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -216,18 +211,15 @@ describe.each(createParameterizedSystemTests())(
         for (const error of apiErrors) {
           DocumentAPI.deleteDocument.mockRejectedValueOnce(error);
           
-          const result = await tool.execute({
+          await expect(tool.execute({
             documentType: validType,
             documentId: 'test-doc'
-          });
-
-          expect(result.error).toBeDefined();
-          expect(result.error.message).toBe(error.message);
+          })).rejects.toThrow(error.message);
         }
       });
 
       it('should handle permission errors', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -236,19 +228,14 @@ describe.each(createParameterizedSystemTests())(
         const permissionError = new Error('Insufficient permissions to delete document');
         DocumentAPI.deleteDocument.mockRejectedValue(permissionError);
 
-        const result = await tool.execute({
+        await expect(tool.execute({
           documentType: validType,
           documentId: 'restricted-doc'
-        });
-
-        expect(result.content).toContain(`Failed to delete ${validType}:restricted-doc`);
-        expect(result.display).toContain('❌ Deletion failed:');
-        expect(result.error.type).toBe('DELETE_FAILED');
-        expect(result.error.message).toBe('Insufficient permissions to delete document');
+        })).rejects.toThrow('Insufficient permissions to delete document');
       });
 
       it('should handle documents that are being used by other entities', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -257,18 +244,14 @@ describe.each(createParameterizedSystemTests())(
         const usageError = new Error('Cannot delete: still referenced by other documents');
         DocumentAPI.deleteDocument.mockRejectedValue(usageError);
 
-        const result = await tool.execute({
+        await expect(tool.execute({
           documentType: validType,
           documentId: 'referenced-doc'
-        });
-
-        expect(result.content).toContain(`Failed to delete ${validType}:referenced-doc`);
-        expect(result.display).toContain('❌ Deletion failed:');
-        expect(result.error.message).toBe('Cannot delete: still referenced by other documents');
+        })).rejects.toThrow('Cannot delete: still referenced by other documents');
       });
 
       it('should handle concurrent deletion attempts gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -277,20 +260,16 @@ describe.each(createParameterizedSystemTests())(
         const concurrencyError = new Error('Document was already deleted');
         DocumentAPI.deleteDocument.mockRejectedValue(concurrencyError);
 
-        const result = await tool.execute({
+        await expect(tool.execute({
           documentType: validType,
           documentId: 'concurrent-doc'
-        });
-
-        expect(result.content).toContain(`Failed to delete ${validType}:concurrent-doc`);
-        expect(result.display).toContain('❌ Deletion failed:');
-        expect(result.error.message).toBe('Document was already deleted');
+        })).rejects.toThrow('Document was already deleted');
       });
     });
 
     describe('Performance Testing', () => {
       it('should complete document deletion within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -310,7 +289,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch deletions efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -333,22 +312,20 @@ describe.each(createParameterizedSystemTests())(
     });
 
     describe('Edge Case Testing', () => {
-      it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+      it('should handle systems with no document types', async () => {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => new DocumentDeleteTool()).not.toThrow();
           
           // Should reject any deletion attempt in empty system
-          return tool.execute({
+          await expect(tool.execute({
             documentType: 'AnyType',
             documentId: 'test'
-          }).then(result => {
-            expect(result.error).toBeDefined();
-          });
+          })).rejects.toThrow('not available in current system');
         }
       });
 
       it('should handle special characters in document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -376,7 +353,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle very long document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -402,7 +379,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should provide clear warning in confirmation details', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -466,12 +443,10 @@ describe('DocumentDeleteTool - System-Agnostic Validation', () => {
       setupMockFoundryEnvironment(system);
       const tool = new DocumentDeleteTool();
       
-      const result = await tool.execute({
+      await expect(tool.execute({
         documentType: 'InvalidType',
         documentId: 'test'
-      });
-      
-      expect(result.error).toBeDefined();
+      })).rejects.toThrow('not available in current system');
       
       cleanupMockEnvironment();
     }

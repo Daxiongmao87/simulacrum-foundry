@@ -234,7 +234,7 @@ class SimulacrumCore {
         const content = typeof msg.content === 'string' ? msg.content : '';
         
         // Handle empty AI responses as recoverable error for AI correction
-        if (!content || content.trim().length === 0) {
+        if ((!content || content.trim().length === 0) && (!msg.tool_calls || msg.tool_calls.length === 0)) {
           return {
             content: 'Empty response not allowed - please provide a meaningful response to the user.',
             display: 'Empty response not allowed - please provide a meaningful response to the user.',

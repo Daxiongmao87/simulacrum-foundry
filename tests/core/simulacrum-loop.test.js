@@ -4,9 +4,10 @@ import { SimulacrumCore } from '../../scripts/core/simulacrum-core.js';
 import { toolRegistry } from '../../scripts/core/tool-registry.js';
 
 // Mock AI client module to control chat responses
+const mockChatFn = jest.fn();
 jest.mock('../../scripts/core/ai-client.js', () => ({
   AIClient: jest.fn().mockImplementation(() => ({
-    chat: jest.fn()
+    chat: mockChatFn
   }))
 }));
 
@@ -16,7 +17,11 @@ function setupGameAndHooks() {
       get: jest.fn()
     },
     user: { id: 'u1' },
-    world: { id: 'w1' }
+    world: { id: 'w1' },
+    i18n: {
+      localize: jest.fn(key => key),
+      format: jest.fn((key, data) => `${key} ${JSON.stringify(data)}`)
+    }
   };
   global.Hooks = {
     callAll: jest.fn(),
@@ -37,24 +42,32 @@ describe('Simulacrum tool-calling loop integration', () => {
   });
 
   it('executes tool then produces final assistant message', async () => {
-    // Arrange AI responses sequence: first with tool_calls, then final answer
-    await SimulacrumCore.onReady();
-    const mockChat = jest.spyOn(SimulacrumCore.aiClient, 'chat');
-    mockChat
-      // First call returns a tool call
+    // Arrange AI responses sequence
+    mockChatFn
+      // 1. Response for detectToolCallingSupport in onReady()
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: '', tool_calls: [
+          { id: 'probe_call', function: { name: 'list_documents', arguments: '{}' } }
+        ] } }]
+      })
+      // 2. First call in processMessage returns a tool call
       .mockResolvedValueOnce({
         choices: [{ message: { content: '', tool_calls: [
           { id: 'call_1', function: { name: 'list_documents', arguments: JSON.stringify({ process_label: 'Working...' }) } }
         ] } }]
       })
-      // Second call returns final content
+      // 3. Second call in processMessage (after tool execution) returns final content
       .mockResolvedValueOnce({
         choices: [{ message: { content: 'Done.' } }]
       });
 
+    // onReady will consume the first mock response for the tool support probe
+    await SimulacrumCore.onReady();
+
     // Spy on executeTool to avoid executing real tools
     const execSpy = jest.spyOn(toolRegistry, 'executeTool').mockResolvedValue({ result: { content: 'tool output' } });
 
+    // processMessage will consume the second and third mock responses
     const result = await SimulacrumCore.processMessage('List docs');
 
     expect(execSpy).toHaveBeenCalledWith('list_documents', expect.any(Object));

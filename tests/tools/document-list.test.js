@@ -27,7 +27,7 @@ describe('DocumentListTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
     expect(documentListTool.name).toBe('list_documents');
-    expect(documentListTool.description).toBe('List documents of any type available in current system');
+    expect(documentListTool.description).toBe('List documents of any type available in current system.  Use this as a broad search.');
     expect(documentListTool.schema).toEqual({
       type: 'object',
       properties: {
@@ -76,7 +76,7 @@ describe.each(createParameterizedSystemTests())(
     });
 
     it('should accept valid document types for the current system', async () => {
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       
       // Test each valid document type for this system
       for (const docType of documentTypes) {
@@ -91,7 +91,7 @@ describe.each(createParameterizedSystemTests())(
     });
 
     it('should handle systems with no document types', async () => {
-      if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+      if (Object.keys(systemConfig.documentTypes).length === 0) {
         const result = await documentListTool.execute({ documentType: 'AnyType' });
         
         expect(result.error).toBeDefined();
@@ -117,7 +117,7 @@ describe.each(createParameterizedSystemTests())(
     });
 
     it('should return success result for valid document types', async () => {
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       
       if (documentTypes.length === 0) {
         // Skip test for systems with no document types
@@ -134,7 +134,7 @@ describe.each(createParameterizedSystemTests())(
   });
 
   it('should handle documents with names', async () => {
-    const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+    const documentTypes = Object.keys(systemConfig.documentTypes);
     
     if (documentTypes.length === 0) {
       // Skip test for systems with no document types
@@ -151,11 +151,11 @@ describe.each(createParameterizedSystemTests())(
     const result = await documentListTool.execute({ documentType: testDocType });
     
     expect(result.content).toBe(`Found 2 ${testDocType} documents`);
-    expect(result.display).toBe(`**${testDocType}** (2): Hero, Villain`);
+    expect(result.display).toBe(`**${testDocType} Documents** (2 total):\nHero (actor1)\nVillain (actor2)`);
   });
 
   it('should handle documents without names (fallback to _id)', async () => {
-    const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+    const documentTypes = Object.keys(systemConfig.documentTypes);
     
     if (documentTypes.length === 0) {
       // Skip test for systems with no document types
@@ -172,38 +172,43 @@ describe.each(createParameterizedSystemTests())(
     const result = await documentListTool.execute({ documentType: testDocType });
     
     expect(result.content).toBe(`Found 2 ${testDocType} documents`);
-    expect(result.display).toBe(`**${testDocType}** (2): actor1, actor2`);
+    expect(result.display).toBe(`**${testDocType} Documents** (2 total):\nUnnamed (actor1)\nUnnamed (actor2)`);
   });
 
   it('should handle mixed document types when no specific type is provided', async () => {
-    const mockDocuments = [
-      { name: 'Hero', _id: 'actor1', documentName: 'Actor' },
-      { name: 'Sword', _id: 'item1', documentName: 'Item' },
-      { name: 'Dungeon', _id: 'scene1', documentName: 'Scene' },
-      { _id: 'unknown1' } // Missing documentName
-    ];
-    DocumentAPI.listDocuments.mockResolvedValue(mockDocuments);
-    
+    DocumentAPI.getAllDocumentTypes.mockReturnValue(['Actor', 'Item', 'Scene']);
+    game.collections.get.mockImplementation((type) => {
+      if (type === 'Actor') {
+        return { contents: [{ name: 'Hero', _id: 'actor1' }] };
+      }
+      if (type === 'Item') {
+        return { contents: [{ name: 'Sword', _id: 'item1' }] };
+      }
+      if (type === 'Scene') {
+        return { contents: [{ name: 'Dungeon', _id: 'scene1' }] };
+      }
+      return { contents: [] };
+    });
+
     const result = await documentListTool.execute({});
     
-    expect(result.content).toBe('Found 4 total documents');
-    expect(result.display).toContain('**Actor** (1): Hero');
-    expect(result.display).toContain('**Item** (1): Sword');
-    expect(result.display).toContain('**Scene** (1): Dungeon');
-    expect(result.display).toContain('**Unknown** (1): unknown1');
+    expect(result.content).toBe('Available document types: Actor, Item, Scene');
+    expect(result.display).toContain('Actor (1 documents): Hero');
+    expect(result.display).toContain('Item (1 documents): Sword');
+    expect(result.display).toContain('Scene (1 documents): Dungeon');
   });
 
   it('should handle empty document list without specific type', async () => {
-    DocumentAPI.listDocuments.mockResolvedValue([]);
+    DocumentAPI.getAllDocumentTypes.mockReturnValue([]);
     
     const result = await documentListTool.execute({});
     
-    expect(result.content).toBe('Found 0 total documents');
-    expect(result.display).toBe('No  documents found');
+    expect(result.content).toBe('No document types available');
+    expect(result.display).toBe('No document types available in current system');
   });
 
   it('should handle API errors', async () => {
-    const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+    const documentTypes = Object.keys(systemConfig.documentTypes);
     
     if (documentTypes.length === 0) {
       // Skip test for systems with no document types
@@ -252,7 +257,7 @@ describe('DocumentListTool - formatDocumentList', () => {
       { name: 'Villain', _id: 'actor2' }
     ];
     const result = documentListTool.formatDocumentList(documents, 'Actor');
-    expect(result).toBe('**Actor** (2): Hero, Villain');
+    expect(result).toBe('**Actor Documents** (2 total):\nHero (actor1)\nVillain (actor2)');
   });
 
   it('should format mixed document types', () => {
@@ -260,9 +265,9 @@ describe('DocumentListTool - formatDocumentList', () => {
       { name: 'Hero', _id: 'actor1', documentName: 'Actor' },
       { name: 'Sword', _id: 'item1', documentName: 'Item' }
     ];
-    const result = documentListTool.formatDocumentList(documents);
-    expect(result).toContain('**Actor** (1): Hero');
-    expect(result).toContain('**Item** (1): Sword');
+    const result = documentListTool.formatDocumentList(documents, 'All');
+    expect(result).toContain('Hero (actor1)');
+    expect(result).toContain('Sword (item1)');
   });
 });
 

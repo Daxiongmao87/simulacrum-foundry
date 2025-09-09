@@ -31,7 +31,7 @@ describe('DocumentReadTool - constructor', () => {
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       expect(documentReadTool.name).toBe('read_document');
-      expect(documentReadTool.description).toBe('Read any document type with full content');
+      expect(documentReadTool.description).toBe('Read any document type with full content.');
       expect(documentReadTool.schema).toEqual({
         type: 'object',
         properties: {
@@ -72,7 +72,7 @@ describe('DocumentReadTool - Utility Methods', () => {
   describe('execute', () => {
     it('should have correct properties for read operations', () => {
       expect(documentReadTool.name).toBe('read_document');
-      expect(documentReadTool.description).toBe('Read any document type with full content');
+      expect(documentReadTool.description).toBe('Read any document type with full content.');
       expect(documentReadTool.requiresConfirmation).toBe(false); // Reading doesn't require confirmation
     });
 
@@ -110,7 +110,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('execute', () => {
       it('should return document content for valid document types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -131,7 +131,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should return error for non-existent document', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -162,7 +162,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle malformed document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -187,7 +187,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -216,7 +216,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Performance Testing', () => {
       it('should complete document reading within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -238,7 +238,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch document reading efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -269,7 +269,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Edge Case Testing', () => {
       it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => new DocumentReadTool()).not.toThrow();
           
           return documentReadTool.execute({
@@ -282,7 +282,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle documents with special characters and unicode', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -307,7 +307,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle deeply nested document structures', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         
@@ -340,7 +340,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle circular reference prevention', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         if (documentTypes.length === 0) return;
         

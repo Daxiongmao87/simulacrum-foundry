@@ -24,7 +24,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Document Type Discovery', () => {
       test('should correctly identify valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         // Test that all system document types are valid
         documentTypes.forEach(docType => {
@@ -39,13 +39,13 @@ describe.each(createParameterizedSystemTests())(
 
       test('should return all registered document types', () => {
         const types = DocumentAPI.getAllDocumentTypes();
-        const expectedTypes = Object.keys(systemConfig.Document.documentTypes);
+        const expectedTypes = Object.keys(systemConfig.documentTypes);
         
         expect(types.sort()).toEqual(expectedTypes.sort());
       });
 
       test('should handle empty document type configuration', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           const types = DocumentAPI.getAllDocumentTypes();
           expect(types).toEqual([]);
         }
@@ -54,7 +54,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Schema Introspection', () => {
       test('should return schema for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         documentTypes.forEach(docType => {
           // Skip if no document class configured
@@ -76,7 +76,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       test('should correctly identify embedded document relationships', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         documentTypes.forEach(docType => {
           const documentClass = systemConfig[docType]?.documentClass;
@@ -102,7 +102,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       test('should handle document types with no embedded documents', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         documentTypes.forEach(docType => {
           const documentClass = systemConfig[docType]?.documentClass;

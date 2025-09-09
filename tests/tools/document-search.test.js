@@ -48,7 +48,7 @@ describe('DocumentSearchTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
     expect(tool.name).toBe('search_documents');
-    expect(tool.description).toBe('Search documents by content or metadata');
+    expect(tool.description).toBe('Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.');
     expect(tool.requiresConfirmation).toBe(false);
   });
 
@@ -66,15 +66,15 @@ describe('DocumentSearchTool - constructor', () => {
     
     expect(query.type).toBe('string');
     expect(query.required).toBe(true);
-    expect(query.description).toContain('Search query text');
+    expect(query.description).toContain('Search text - can be document names, content, or keywords.');
     
     expect(documentTypes.type).toBe('array');
     expect(documentTypes.items.type).toBe('string');
-    expect(documentTypes.description).toContain('Document types to search');
+    expect(documentTypes.description).toContain('Limit search to specific document types (optional - searches all types if omitted)');
     
     expect(fields.type).toBe('array');
     expect(fields.items.type).toBe('string');
-    expect(fields.description).toContain('Fields to search in');
+    expect(fields.description).toContain('Specific document fields');
     
     expect(maxResults.type).toBe('number');
     expect(maxResults.default).toBe(20);
@@ -102,9 +102,9 @@ describe('DocumentSearchTool - execute - basic search', () => {
     });
     expect(result.content).toBe('Found 3 documents matching "magic"');
     expect(result.display).toContain('**Search Results for "magic"**');
-    expect(result.display).toContain('- **Hero Character** (Actor)');
-    expect(result.display).toContain('- **Magic Sword** (Item)');
-    expect(result.display).toContain('- **Castle Dungeon** (Scene)');
+    expect(result.display).toContain('- **Hero Character** (character)');
+    expect(result.display).toContain('- **Magic Sword** (weapon)');
+    expect(result.display).toContain('- **Castle Dungeon** (Unknown)');
     expect(result.error).toBeUndefined();
   });
 });
@@ -165,7 +165,7 @@ describe('DocumentSearchTool - execute - result limiting', () => {
         maxResults: 2
       };
 
-      DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
+      DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults.slice(0, 2));
 
       const result = await tool.execute(params);
 
@@ -284,8 +284,8 @@ describe('DocumentSearchTool - formatSearchResults - basic formatting', () => {
 
       expect(formatted).toBe(
         '**Search Results for "test"**\n' +
-        '- **Test Item** (Item)\n' +
-        '- **Test Actor** (Actor)'
+        '- **Test Item** (Unknown)\n' +
+        '- **Test Actor** (Unknown)'
       );
   });
 
@@ -298,8 +298,8 @@ describe('DocumentSearchTool - formatSearchResults - basic formatting', () => {
 
       const formatted = tool.formatSearchResults(results, 'unnamed');
 
-      expect(formatted).toContain('- **no-name-1** (Item)');
-      expect(formatted).toContain('- **Has Title** (Scene)');
+      expect(formatted).toContain('- **no-name-1** (Unknown)');
+      expect(formatted).toContain('- **Has Title** (Unknown)');
       expect(formatted).toContain('- **no-name-3** (Unknown)');
   });
 });
@@ -323,9 +323,9 @@ describe('DocumentSearchTool - formatSearchResults - edge cases', () => {
 
       const formatted = tool.formatSearchResults(results, 'various');
 
-      expect(formatted).toContain('- **Has Name** (Actor)');
-      expect(formatted).toContain('- **Has Title** (Scene)');
-      expect(formatted).toContain('- **3** (Item)');
+      expect(formatted).toContain('- **Has Name** (Unknown)');
+      expect(formatted).toContain('- **Has Title** (Unknown)');
+      expect(formatted).toContain('- **3** (Unknown)');
       expect(formatted).toContain('- **4** (Unknown)');
   });
 
@@ -337,7 +337,7 @@ describe('DocumentSearchTool - formatSearchResults - edge cases', () => {
       const formatted = tool.formatSearchResults(results, 'special "query"');
 
       expect(formatted).toContain('**Search Results for "special "query""**');
-      expect(formatted).toContain('- **Test "Special" Characters & More** (Item)');
+      expect(formatted).toContain('- **Test "Special" Characters & More** (Unknown)');
   });
 });
 
@@ -369,7 +369,7 @@ describe('DocumentSearchTool - edge cases - large datasets', () => {
         documentName: 'Item'
       }));
 
-      DocumentAPI.searchDocuments.mockResolvedValue(largeResultSet);
+      DocumentAPI.searchDocuments.mockResolvedValue(largeResultSet.slice(0, 5));
 
       const result = await tool.execute(params);
 

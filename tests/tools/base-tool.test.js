@@ -68,7 +68,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('validation', () => {
       it('should return true for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         documentTypes.forEach(docType => {
           expect(baseTool.isValidDocumentType(docType))
@@ -107,7 +107,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('parameter validation', () => {
       it('should not throw for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         
         documentTypes.forEach(docType => {
           expect(() => {
@@ -129,7 +129,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => {
             baseTool.validateParams({ documentType: 'AnyType' });
           }).toThrow();

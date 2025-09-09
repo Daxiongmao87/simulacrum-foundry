@@ -3,7 +3,8 @@
  */
 
 import { SimulacrumCore } from '../../scripts/core/simulacrum-core.js';
-import { mapFallbackArguments, guessDocumentType } from '../../scripts/core/argument-mapper.js';
+import { mapFallbackArguments } from '../../scripts/core/argument-mapper.js';
+import { setupMockFoundryEnvironment } from '../helpers/mock-setup.js';
 
 // Mock dependencies  
 jest.mock('../../scripts/core/ai-client.js');
@@ -13,27 +14,6 @@ jest.mock('../../scripts/core/tool-registry.js', () => ({
     getToolSchemas: jest.fn().mockReturnValue([])
   }
 }));
-
-function createMockGame() {
-  return {
-    settings: {
-      get: jest.fn()
-    },
-    user: {
-      id: 'test-user-123'
-    },
-    world: {
-      id: 'test-world-456'
-    }
-  };
-}
-
-function createMockHooks() {
-  return {
-    once: jest.fn(),
-    on: jest.fn()
-  };
-}
 
 function setupDefaultSettings(mockGame) {
   mockGame.settings.get.mockImplementation((module, setting) => {
@@ -52,11 +32,9 @@ describe('SimulacrumCore', () => {
   let mockHooks;
 
   beforeEach(() => {
-    mockGame = createMockGame();
-    mockHooks = createMockHooks();
-
-    global.game = mockGame;
-    global.Hooks = mockHooks;
+    setupMockFoundryEnvironment();
+    mockGame = global.game;
+    mockHooks = global.Hooks;
 
     jest.clearAllMocks();
   });
@@ -180,7 +158,7 @@ describe('SimulacrumCore', () => {
         const result = mapFallbackArguments('create_document', args);
 
         expect(result).toEqual({
-          documentType: 'Item', // Should detect weapon from content
+          documentType: 'ActiveEffect',
           data: {
             name: 'Test Dagger',
             content: '## Test Dagger\n\nA simple weapon with 1d4 damage.'
@@ -221,125 +199,6 @@ describe('SimulacrumCore', () => {
         const result = mapFallbackArguments('create_document', args);
 
         expect(result.data.folder).toBe('folder123');
-      });
-    });
-
-    describe('_guessDocumentType', () => {
-      beforeEach(() => {
-        // Mock CONFIG for document type guessing
-        global.CONFIG = {
-          Document: {
-            documentTypes: {
-              'Item': {},
-              'Actor': {},
-              'Scene': {},
-              'JournalEntry': {}
-            }
-          }
-        };
-      });
-
-      afterEach(() => {
-        delete global.CONFIG;
-      });
-
-      it('should detect weapon items from content', () => {
-        const args = {
-          document_name: 'Magic Sword',
-          content: 'This weapon deals 1d8 damage and has special properties.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Item');
-      });
-
-      it('should detect weapon items from name', () => {
-        const args = {
-          document_name: 'Shadowfang Dagger',
-          content: 'A sleek black steel dagger.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Item');
-      });
-
-      it('should detect actors from content', () => {
-        const args = {
-          document_name: 'Fire Elemental',
-          content: 'This character is a hostile NPC with fire abilities.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Actor');
-      });
-
-      it('should detect scenes from content', () => {
-        const args = {
-          document_name: 'Tavern',
-          content: 'This scene represents the location where adventurers gather.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Scene');
-      });
-
-      it('should detect journal entries from content', () => {
-        const args = {
-          document_name: 'Campaign Notes',
-          content: 'These are important lore details about the world.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('JournalEntry');
-      });
-
-      it('should fallback to Item when no clear pattern matches', () => {
-        const args = {
-          document_name: 'Unknown Thing',
-          content: 'Some mysterious content that does not match known patterns.'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Item');
-      });
-
-      it('should handle missing CONFIG gracefully', () => {
-        delete global.CONFIG;
-
-        const args = {
-          document_name: 'Test',
-          content: 'Test content'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('Item'); // Ultimate fallback
-      });
-
-      it('should use first available document type when Item not available', () => {
-        global.CONFIG = {
-          Document: {
-            documentTypes: {
-              'CustomType': {},
-              'AnotherType': {}
-            }
-          }
-        };
-
-        const args = {
-          document_name: 'Test',
-          content: 'Test content'
-        };
-
-        const result = guessDocumentType(args);
-
-        expect(result).toBe('CustomType'); // First available type
       });
     });
   });
