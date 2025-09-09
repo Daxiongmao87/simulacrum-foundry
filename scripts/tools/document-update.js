@@ -3,6 +3,7 @@
  */
 
 import { BaseTool } from './base-tool.js';
+import { SimulacrumError } from '../utils/errors.js';
 import { DocumentAPI } from '../core/document-api.js';
 
 class DocumentUpdateTool extends BaseTool {
@@ -57,7 +58,7 @@ class DocumentUpdateTool extends BaseTool {
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
-        throw new Error(`Document type "${params.documentType}" not available in current system`);
+        throw new SimulacrumError(`Document type "${params.documentType}" not available in current system`);
       }
 
       const document = await DocumentAPI.updateDocument(
@@ -71,11 +72,7 @@ class DocumentUpdateTool extends BaseTool {
         display: `✅ Updated **${document.name || document.id}** (${params.documentType})`
       };
     } catch (error) {
-      return {
-        content: `Failed to update ${params.documentType}:${params.documentId}: ${error.message}`,
-        display: `❌ Update failed: ${error.message}`,
-        error: { message: error.message, type: 'UPDATE_FAILED' }
-      };
+      throw new SimulacrumError(`Failed to update ${params.documentType}:${params.documentId}: ${error.message}`, 'UPDATE_FAILED');
     }
   }
 }

@@ -3,6 +3,7 @@
  */
 
 import { BaseTool } from './base-tool.js';
+import { SimulacrumError } from '../utils/errors.js';
 import { DocumentAPI } from '../core/document-api.js';
 
 class DocumentDeleteTool extends BaseTool {
@@ -52,7 +53,7 @@ class DocumentDeleteTool extends BaseTool {
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
-        throw new Error(`Document type "${params.documentType}" not available in current system`);
+        throw new SimulacrumError(`Document type "${params.documentType}" not available in current system`);
       }
 
       await DocumentAPI.deleteDocument(
@@ -65,11 +66,7 @@ class DocumentDeleteTool extends BaseTool {
         display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`
       };
     } catch (error) {
-      return {
-        content: `Failed to delete ${params.documentType}:${params.documentId}: ${error.message}`,
-        display: `❌ Deletion failed: ${error.message}`,
-        error: { message: error.message, type: 'DELETE_FAILED' }
-      };
+      throw new SimulacrumError(`Failed to delete ${params.documentType}:${params.documentId}: ${error.message}`, 'DELETE_FAILED');
     }
   }
 }

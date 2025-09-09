@@ -6,6 +6,9 @@
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
 
+// Track recent tool execution results for system prompt updates
+let recentToolResults = [];
+
 /**
  * Sanitize messages for fallback when tool calling is not supported
  * Filters out tool roles and ensures only valid roles are sent
@@ -21,6 +24,28 @@ function _sanitizeMessagesForFallback(messages) {
   } catch {
     return [];
   }
+}
+
+/**
+ * Generate system prompt with recent tool execution results
+ * @param {Function} getSystemPrompt - Function to get base system prompt
+ * @returns {string} System prompt with tool results
+ */
+function getSystemPromptWithToolResults(getSystemPrompt) {
+  const basePrompt = getSystemPrompt();
+  
+  if (recentToolResults && recentToolResults.length > 0) {
+    const latestResult = recentToolResults[recentToolResults.length - 1];
+    const toolStatus = latestResult.success 
+      ? `Recent tool execution: Tool "${latestResult.tool}" executed successfully. Result: ${JSON.stringify(latestResult.result)}`
+      : `Recent tool execution: Tool "${latestResult.tool}" failed with error: ${latestResult.error}`;
+      
+    return `${basePrompt}
+
+${toolStatus}`;
+  }
+  
+  return basePrompt;
 }
 
 /**
@@ -42,6 +67,9 @@ export async function processToolCallLoop(
   const REPEAT_LIMIT = 3;
   let guardTriggered = false;
   let currentToolSupport = toolCallingSupported; // Track current tool support state
+  
+  // Clear previous tool results for new loop
+  recentToolResults = [];
   
   while ((Array.isArray(final.toolCalls) && final.toolCalls.length || final._parseError) && safeguard-- > 0) {
     for (const call of final.toolCalls) {
@@ -111,8 +139,17 @@ export async function processToolCallLoop(
           meta: { executionId: exec?.executionId, duration: exec?.duration }
         };
         
+        // Track successful tool execution result
+        recentToolResults.push({
+          tool: name,
+          success: true,
+          result: exec?.result ?? null,
+          timestamp: Date.now()
+        });
+        
         // Update system message with success feedback
-        const successMessage = `Tool Execution Success: ${name}\nResult: ${JSON.stringify(exec?.result ?? null)}`;
+        const successMessage = `Tool Execution Success: ${name}
+Result: ${JSON.stringify(exec?.result ?? null)}`;
         conversationManager.updateSystemMessage(successMessage);
         
         // Emit plan label after successful tool execution
@@ -140,8 +177,17 @@ export async function processToolCallLoop(
           error: { message: err?.message, type: err?.constructor?.name || 'ToolError', details: err?.details }
         };
         
+        // Track failed tool execution result
+        recentToolResults.push({
+          tool: name,
+          success: false,
+          error: err?.message || 'Unknown error',
+          timestamp: Date.now()
+        });
+        
         // Update system message with error feedback
-        const errorMessage = `Tool Execution Error: ${name}\nError: ${err?.message || 'Unknown error'}`;
+        const errorMessage = `Tool Execution Error: ${name}
+Error: ${err?.message || 'Unknown error'}`;
         conversationManager.updateSystemMessage(errorMessage);
 
         // Add the error result to the conversation
@@ -157,9 +203,9 @@ export async function processToolCallLoop(
       final._parseError = false;
     }
     
-    // Continue the agentic loop
+    // Continue the agentic loop with updated system prompt
     const outboundMessages = [
-      { role: 'system', content: getSystemPrompt() },
+      { role: 'system', content: getSystemPromptWithToolResults(getSystemPrompt) },
       ...conversationManager.messages
     ];
     // Sanitize messages if tool calling is not supported
@@ -218,7 +264,14 @@ export async function processToolCallLoop(
         } else if (parsed && parsed.parseError) {
           // Handle JSON parsing errors by creating error feedback for the AI
           console.log('[Simulacrum:ToolLoop] JSON parsing error detected, providing feedback to AI');
-          const errorMessage = `JSON Parsing Error: ${parsed.parseError}\n\nThe JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:\n\`\`\`json\n{"tool_call": {"name": "tool_name", "arguments": {...}}}\n\`\`\`\n\nProblematic content: ${parsed.content}`;
+          const errorMessage = `JSON Parsing Error: ${parsed.parseError}
+
+The JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:
+\`\`\`json
+{"tool_call": {"name": "tool_name", "arguments": {...}}}
+\`\`\`
+
+Problematic content: ${parsed.content}`;
           
           // Update system message with error feedback
           conversationManager.updateSystemMessage(errorMessage);
