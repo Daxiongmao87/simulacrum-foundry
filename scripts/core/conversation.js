@@ -42,6 +42,19 @@ class ConversationManager {
   }
 
   /**
+   * Updates the system message (first message) with additional content.
+   * @param {string} additionalContent - Content to append to the system message.
+   */
+  updateSystemMessage(additionalContent) {
+    if (this.messages.length > 0 && this.messages[0].role === 'system') {
+      const oldTokens = this._estimateTokens(this.messages[0]);
+      this.messages[0].content += '\n\n' + additionalContent;
+      const newTokens = this._estimateTokens(this.messages[0]);
+      this.sessionTokens += (newTokens - oldTokens);
+    }
+  }
+
+  /**
    * Compresses the conversation history if it exceeds the maximum token limit.
    * This is a simplified version for MVP, a real implementation would use a more sophisticated algorithm.
    */

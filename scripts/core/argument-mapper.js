@@ -15,7 +15,7 @@ export function mapFallbackArguments(toolName, originalArgs) {
   if (toolName === 'create_document') {
     // Pattern 1: {document_name, content} → {documentType, data}
     if ('document_name' in originalArgs && 'content' in originalArgs) {
-      const documentType = guessDocumentType(originalArgs);
+      const documentType = getDefaultDocumentType();
       return {
         documentType,
         data: {
@@ -56,42 +56,13 @@ export function mapFallbackArguments(toolName, originalArgs) {
 }
 
 /**
- * Intelligently guess document type based on content and context
+ * Get the first available manipulable document type as fallback
  */
-export function guessDocumentType(args) {
-  const content = String(args.content || args.description || '').toLowerCase();
-  const name = String(args.document_name || args.name || '').toLowerCase();
+export function getDefaultDocumentType() {
+  const availableTypes = Object.keys(game?.documentTypes || {}).filter(type => {
+    const collection = game?.collections?.get(type);
+    return collection !== undefined;
+  });
   
-  // Try to determine document type from content patterns
-  const patterns = [
-    { keywords: ['damage:', 'weapon', 'sword', 'dagger'], type: 'Item' },
-    { keywords: ['spell', 'magic'], type: 'Item' },
-    { keywords: ['character', 'npc'], type: 'Actor' },
-    { keywords: ['scene', 'location'], type: 'Scene' },
-    { keywords: ['journal', 'lore', 'note'], type: 'JournalEntry' }
-  ];
-  
-  for (const pattern of patterns) {
-    if (pattern.keywords.some(keyword => 
-      content.includes(keyword) || name.includes(keyword)
-    )) {
-      return pattern.type;
-    }
-  }
-  
-  // Default fallback - try to use a common document type
-  try {
-    const availableTypes = Object.keys(CONFIG?.Document?.documentTypes || {});
-    const preferredTypes = ['Item', 'Actor', 'JournalEntry'];
-    
-    for (const preferred of preferredTypes) {
-      if (availableTypes.includes(preferred)) {
-        return preferred;
-      }
-    }
-    
-    return availableTypes[0] || 'Item'; // Fallback to first available or Item
-  } catch (_e) {
-    return 'Item'; // Ultimate fallback
-  }
+  return availableTypes[0] || null;
 }

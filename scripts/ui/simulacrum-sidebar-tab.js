@@ -96,12 +96,9 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     
     this.messages = [];
     this.logger = createLogger('SimulacrumSidebarTab');
-
-    // Defer syncing UI from SimulacrumCore conversation until first render
     this._syncedFromCore = false;
 
-    // Seed a welcome message immediately for UI expectations; will be
-    // replaced by conversation sync on first render if history exists.
+    // Seed a welcome message until conversation history loads
     try {
       const welcome = {
         id: foundry.utils.randomID(),
@@ -113,7 +110,19 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
         user: null
       };
       this.messages.push(welcome);
-    } catch (_e) { /* ignore if not ready */ }
+    } catch (_e) { /* ignore */ }
+
+    // Set up hook to load conversation history AFTER SimulacrumCore is ready
+    try {
+      Hooks.once('ready', () => {
+        // Delay slightly to ensure SimulacrumCore.onReady() has completed
+        setTimeout(() => {
+          this._loadConversationHistoryOnInit();
+        }, 100);
+      });
+    } catch (_err) {
+      // Hooks may be unavailable in certain test contexts
+    }
 
     // Active process labels reported by core while tools execute
     this._activeProcesses = new Map(); // callId -> { label, toolName }
@@ -136,36 +145,29 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   }
 
   /**
+   * Load conversation history when SimulacrumCore is ready
+   */
+  async _loadConversationHistoryOnInit() {
+    try {
+      await this._syncFromCoreConversation();
+      this._syncedFromCore = true;
+      // If history was loaded, replace welcome message and re-render
+      if (this.messages.length > 1 || 
+          (this.messages.length === 1 && !this.messages[0].content?.includes('Welcome'))) {
+        this.render({ parts: ['log'] });
+      }
+    } catch (_e) {
+      // If sync fails, keep welcome message (already added in constructor)
+    }
+  }
+
+  /**
    * Prepare data for rendering
    * @returns {Object} Template data
    */
   async _prepareContext() {
     const context = await super._prepareContext();
-    // One-time synchronization: project core conversation into the UI log
-    if (!this._syncedFromCore) {
-      try {
-        await this._syncFromCoreConversation();
-      } catch (_e) {
-        // If import fails early in boot, keep existing messages
-      } finally {
-        // Ensure there is at least a welcome message if no history exists
-        if (this.messages.length === 0) {
-          try {
-            const welcome = {
-              id: foundry.utils.randomID(),
-              role: 'assistant',
-              content: game.i18n?.localize('SIMULACRUM.WelcomeMessage') ?? 'Welcome to Simulacrum!',
-              display: null,
-              timestamp: Date.now(),
-              timestampLabel: game.i18n?.localize('SIMULACRUM.Welcome') ?? 'Welcome',
-              user: null
-            };
-            this.messages.push(welcome);
-          } catch (_ee) { /* ignore */ }
-        }
-        this._syncedFromCore = true;
-      }
-    }
+    // Conversation history is loaded via 'ready' hook
     
     // Create welcome message if no messages exist
     const welcomeMessage = this.messages.length === 0 ? {
@@ -226,9 +228,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     // Clear input immediately
     input.value = '';
 
-    // Check if it's a conversation command first
     try {
-      // Import SimulacrumCore dynamically to avoid circular dependencies
       const { SimulacrumCore } = await import('../core/simulacrum-core.js');
       
       if (SimulacrumCore.conversationManager) {
@@ -238,25 +238,31 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
         );
         
         if (commandResult.isCommand) {
-          // Display command result
-          this.addMessage('assistant', commandResult.message, commandResult.message);
+          await this.addMessage('assistant', commandResult.message, commandResult.message);
           return;
         }
       }
 
       // Add user message to chat log
-      this.addMessage('user', message);
+      await this.addMessage('user', message);
 
-      // Process message with AI
-      await SimulacrumCore.processMessage(message, game.user);
+      // Define the callback to update the UI with each assistant message
+      const onAssistantMessage = async (response) => {
+        if (response.content) {
+          await this.addMessage('assistant', response.content);
+        }
+        // Optionally, you could add a message here about tool calls starting
+        // For now, we'll just display the text content as it arrives.
+      };
 
-      // Re-sync from core conversation to reflect the agentic history (user/assistant only)
-      await this._syncFromCoreConversation?.();
-      this.render({ parts: ['log'] });
-      if (this.#isAtBottom) this._scrollToBottom();
+      // Process message with AI, providing our callback
+      await SimulacrumCore.processMessage(message, game.user, { onAssistantMessage });
+
+      // No final sync or render is needed, the callback handles it incrementally.
+
     } catch (error) {
       this.logger.error('Error processing message', error);
-      this.addMessage('assistant', `Error: ${error.message}`, `❌ ${error.message}`);
+      await this.addMessage('assistant', `Error: ${error.message}`, `❌ ${error.message}`);
     }
   }
 
@@ -272,7 +278,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       await SimulacrumCore.clearConversation?.();
     } catch (_e) { /* ignore */ }
     this.clearMessages();
-    this.addMessage('assistant', 'Chat cleared. How can I help you?');
+    await this.addMessage('assistant', game.i18n.localize('SIMULACRUM.WelcomeMessage'));
   }
 
   /**
@@ -339,12 +345,18 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    * @param {string} content - Message content
    * @param {string} display - Optional display content for rich formatting
    */
-  addMessage(role, content, display = null) {
+  async addMessage(role, content, display = null) {
+    const enrichedContent = await TextEditor.enrichHTML(display || content, {
+      secrets: game.user.isGM,
+      documents: true,
+      async: true
+    });
+
     const message = {
       id: foundry.utils.randomID(),
       role,
       content,
-      display: display || content,
+      display: enrichedContent,
       timestamp: Date.now(),
       user: role === 'user' ? game.user : null
     };

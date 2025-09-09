@@ -94,7 +94,12 @@ describe('DocumentSearchTool - execute - basic search', () => {
 
     const result = await tool.execute(params);
 
-    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith('magic', undefined, undefined);
+    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+      query: 'magic',
+      types: undefined,
+      fields: undefined,
+      maxResults: undefined
+    });
     expect(result.content).toBe('Found 3 documents matching "magic"');
     expect(result.display).toContain('**Search Results for "magic"**');
     expect(result.display).toContain('- **Hero Character** (Actor)');
@@ -120,7 +125,12 @@ describe('DocumentSearchTool - execute - filtered search', () => {
 
     const result = await tool.execute(params);
 
-    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith('sword', ['Item', 'Actor'], undefined);
+    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+      query: 'sword',
+      types: ['Item', 'Actor'],
+      fields: undefined,
+      maxResults: undefined
+    });
     expect(result.content).toBe('Found 2 documents matching "sword"');
   });
 
@@ -136,11 +146,12 @@ describe('DocumentSearchTool - execute - filtered search', () => {
 
     const result = await tool.execute(params);
 
-    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith(
-      'hero', 
-      ['Actor'], 
-      ['name', 'system.biography']
-    );
+    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+      query: 'hero',
+      types: ['Actor'],
+      fields: ['name', 'system.biography'],
+      maxResults: undefined
+    });
     expect(result.content).toBe('Found 1 documents matching "hero"');
   });
 });
@@ -194,11 +205,12 @@ describe('DocumentSearchTool - execute - advanced queries', () => {
 
     const result = await tool.execute(params);
 
-    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith(
-      'magic sword +3',
-      ['Item'],
-      ['name', 'system.description']
-    );
+    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+      query: 'magic sword +3',
+      types: ['Item'],
+      fields: ['name', 'system.description'],
+      maxResults: 10
+    });
     expect(result.content).toBe('Found 1 documents matching "magic sword +3"');
   });
 
@@ -211,7 +223,12 @@ describe('DocumentSearchTool - execute - advanced queries', () => {
 
       const result = await tool.execute(params);
 
-      expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith('', undefined, undefined);
+      expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+        query: '',
+        types: undefined,
+        fields: undefined,
+        maxResults: undefined
+      });
       expect(result.content).toBe('Found 0 documents matching ""');
     });
 });

@@ -20,9 +20,12 @@ export function setupMockFoundryEnvironment(systemName = 'D&D 5e') {
   const mockGame = createMockGame();
   const mockUI = createMockUI();
   
+  // Setup game.documentTypes from system config (real FoundryVTT pattern)
+  mockGame.documentTypes = systemConfig.documentTypes || {};
+  
   // Setup global mocks
   global.game = mockGame;
-  global.CONFIG = systemConfig;
+  global.CONFIG = systemConfig.config || {};
   global.ui = mockUI;
   global.foundry = createMockFoundry();
 
@@ -278,7 +281,7 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   };
 
   // Setup permission mocks for all collections
-  Object.keys(global.CONFIG.Document.documentTypes).forEach(documentType => {
+  Object.keys(global.game.documentTypes || {}).forEach(documentType => {
     const collection = global.game.collections.get(documentType);
     if (collection) {
       applyPermissionMock(collection);

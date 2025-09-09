@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from './base-tool.js';
-// import { ValidationError } from '../utils/errors.js'; // Unused
+import { SimulacrumError } from '../utils/errors.js';
 
 /**
  * Validation schema for document creation parameters
@@ -79,14 +79,7 @@ export class DocumentCreateTool extends BaseTool {
 
       // Check if document type is valid
       if (!this.isValidDocumentType(documentType)) {
-        return {
-          content: `Failed to create ${documentType}: Document type "${documentType}" not available in current system`,
-          display: `❌ Creation failed: Document type "${documentType}" not available in current system`,
-          error: { 
-            message: `Document type "${documentType}" not available in current system`, 
-            type: 'CREATION_FAILED' 
-          }
-        };
+        throw new SimulacrumError(`Document type "${documentType}" not available in current system`);
       }
 
       // Validate parameters
@@ -97,14 +90,7 @@ export class DocumentCreateTool extends BaseTool {
       const document = await DocumentAPI.createDocument(documentType, data);
 
       if (!document) {
-        return {
-          content: `Failed to create ${documentType}: Creation failed`,
-          display: '❌ Creation failed: Creation failed',
-          error: { 
-            message: 'Creation failed', 
-            type: 'CREATION_FAILED' 
-          }
-        };
+        throw new SimulacrumError('Document creation failed');
       }
 
       return {
@@ -113,14 +99,8 @@ export class DocumentCreateTool extends BaseTool {
       };
 
     } catch (error) {
-      return {
-        content: `Failed to create ${parameters.documentType}: ${error.message}`,
-        display: `❌ Creation failed: ${error.message}`,
-        error: { 
-          message: error.message, 
-          type: 'CREATION_FAILED' 
-        }
-      };
+      // Re-throw the error so the tool registry can handle it properly
+      throw error;
     }
   }
 

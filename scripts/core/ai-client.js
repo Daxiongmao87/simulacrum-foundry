@@ -242,24 +242,47 @@ export class AIClient {
     let response;
     const __inJest = (typeof process !== 'undefined') && process?.env && process.env.JEST_WORKER_ID;
     const __retryEnabled = !__inJest;
-    const __delays = [250, 500, 1000];
-    let __attempt = 0;
-    while (true) {
-      response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
-        },
-        body: JSON.stringify(body)
-      });
-      if (response.ok) break;
-      const status = response.status;
-      const __should = __retryEnabled && (status === 429 || status >= 500) && __attempt < __delays.length;
-      if (!__should) break;
-      const delay = __delays[__attempt++];
-      try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('retry', { attempt: __attempt, status, delay }); } catch {}
-      await new Promise(r => setTimeout(r, delay));
+    const MAX_RETRIES = 5;
+    const INITIAL_DELAY_MS = 250;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        response = await fetch(`${this.baseURL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (response.ok) {
+          break; // Success, exit the loop
+        }
+
+        const status = response.status;
+        const shouldRetry = __retryEnabled && (status === 429 || status >= 500);
+
+        if (shouldRetry && attempt < MAX_RETRIES) {
+          const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
+          try {
+            if (isDiagnosticsEnabled()) {
+              createLogger('AIDiagnostics').info('Retrying API request', { attempt: attempt + 1, status, delay });
+            }
+          } catch {}
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          // Don't retry or max retries reached, so break the loop to handle the error
+          break;
+        }
+      } catch (error) {
+        // Network or other fetch errors
+        if (attempt >= MAX_RETRIES) {
+          throw new Error(`Failed to fetch after ${MAX_RETRIES + 1} attempts: ${error.message}`);
+        }
+        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
 
     if (!response.ok) {

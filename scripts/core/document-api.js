@@ -8,22 +8,35 @@
  */
 export class DocumentAPI {
   /**
-   * Checks if a given string is a valid FoundryVTT document type in the current system.
+   * Checks if a given string is a valid FoundryVTT document type that users can manipulate.
    * @param {string} documentType The name of the document type (e.g., discovered at runtime).
-   * @returns {boolean} True if the document type is valid, false otherwise.
+   * @returns {boolean} True if the document type is valid and has a manipulable collection, false otherwise.
    */
   static isValidDocumentType(documentType) {
-    const types = CONFIG?.Document?.documentTypes || {};
-    return Object.keys(types).includes(documentType);
+    // Check if document type exists in game.documentTypes
+    const availableTypes = game?.documentTypes?.[documentType];
+    if (!Array.isArray(availableTypes) || availableTypes.length === 0) {
+      return false;
+    }
+    
+    // Check if there's a corresponding collection users can interact with
+    const collection = game?.collections?.get(documentType);
+    return collection !== undefined;
   }
 
   /**
-   * Returns an array of all registered FoundryVTT document types in the current system.
-   * @returns {string[]} An array of document type names.
+   * Returns an array of FoundryVTT document types that users can manipulate.
+   * Filters to only document types that have corresponding collections.
+   * @returns {string[]} An array of manipulable document type names.
    */
   static getAllDocumentTypes() {
-    const types = CONFIG?.Document?.documentTypes || {};
-    return Object.keys(types);
+    const allTypes = Object.keys(game?.documentTypes || {});
+    
+    // Filter to only types that have collections (are user-manipulable)
+    return allTypes.filter(type => {
+      const collection = game?.collections?.get(type);
+      return collection !== undefined;
+    });
   }
 
   /**

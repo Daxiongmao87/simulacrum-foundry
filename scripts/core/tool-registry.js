@@ -277,8 +277,12 @@ export class ToolRegistry {
    * @returns {Promise<object>}
    */
   async executeTool(name, context = {}) {
+    console.log(`[Simulacrum:ToolExecution] Starting execution of tool '${name}'`);
+    console.log(`[Simulacrum:ToolExecution] Context:`, context);
+    
     const tool = this.getTool(name);
     if (!tool) {
+      console.error(`[Simulacrum:ToolExecution] Tool '${name}' not found`);
       throw new NotFoundError(`Tool '${name}' not found`, 'tool', name);
     }
 
@@ -286,7 +290,10 @@ export class ToolRegistry {
     const executionId = this._generateExecutionId();
 
     try {
+      console.log(`[Simulacrum:ToolExecution] Validating permissions for '${name}'`);
       this._validatePermissions(name, context);
+      
+      console.log(`[Simulacrum:ToolExecution] Validating dependencies for '${name}'`);
       this._validateDependencies(name);
       
       // Update execution stats
@@ -296,11 +303,15 @@ export class ToolRegistry {
       // Emit pre-execution hook
       this._emitHook('tool:beforeExecute', { name, context, executionId });
 
+      console.log(`[Simulacrum:ToolExecution] Executing tool '${name}' with ID ${executionId}`);
       // Execute tool
       const result = await tool.execute(context);
 
       // Update success stats
       registration.successCount++;
+      
+      console.log(`[Simulacrum:ToolExecution] Tool '${name}' executed successfully`);
+      console.log(`[Simulacrum:ToolExecution] Result:`, result);
 
       // Emit post-execution hook
       this._emitHook('tool:afterExecute', { name, context, executionId, result });
@@ -315,6 +326,9 @@ export class ToolRegistry {
     } catch (error) {
       // Update failure stats
       registration.failureCount++;
+      
+      console.error(`[Simulacrum:ToolExecution] Tool '${name}' execution failed:`, error.message);
+      console.error(`[Simulacrum:ToolExecution] Error details:`, error);
 
       // Emit error hook
       this._emitHook('tool:executeError', { name, context, executionId, error });

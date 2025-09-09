@@ -350,4 +350,14 @@ export function registerAdvancedSettings() {
     default: 0.7,
     restricted: true
   });
+
+  game.settings.register('simulacrum', 'legacyMode', {
+    name: 'Legacy Mode',
+    hint: 'Enable if your AI provider doesn\'t support OpenAI-style tool calling. Uses JSON block parsing instead.',
+    scope: 'world',
+    config: true, // Show in basic config since this is important for compatibility
+    type: Boolean,
+    default: false,
+    restricted: true
+  });
 }

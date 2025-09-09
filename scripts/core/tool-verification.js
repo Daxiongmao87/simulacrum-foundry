@@ -4,7 +4,8 @@
  */
 
 import { toolRegistry } from './tool-registry.js';
-import { isDiagnosticsEnabled, createLogger } from '../utils/dev.js';
+import { isDiagnosticsEnabled } from '../utils/dev.js';
+import { createLogger } from '../utils/logger.js';
 
 /**
  * Perform post-tool verification like qwen-code (auto-read after create/update)

@@ -65,6 +65,39 @@ global.foundry = {
   utils: {
     mergeObject: (target, source) => Object.assign({}, target, source),
     duplicate: obj => JSON.parse(JSON.stringify(obj))
+  },
+  applications: {
+    api: {
+      HandlebarsApplicationMixin: (BaseClass) => class extends BaseClass {
+        static DEFAULT_OPTIONS = {};
+        static PARTS = {};
+        
+        render(force = false, options = {}) {
+          return Promise.resolve();
+        }
+        
+        _prepareContext(options) {
+          return {};
+        }
+        
+        _onRender(context, options) {
+          // Mock implementation
+        }
+      }
+    },
+    sidebar: {
+      AbstractSidebarTab: class MockAbstractSidebarTab {
+        static DEFAULT_OPTIONS = {};
+        
+        constructor(options = {}) {
+          this.options = options;
+        }
+        
+        render(force = false, options = {}) {
+          return Promise.resolve();
+        }
+      }
+    }
   }
 };
 

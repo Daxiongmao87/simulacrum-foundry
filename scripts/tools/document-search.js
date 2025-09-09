@@ -45,15 +45,15 @@ class DocumentSearchTool extends BaseTool {
    */
   async execute(params) {
     try {
-      const results = await DocumentAPI.searchDocuments(
-        params.query,
-        params.documentTypes,
-        params.fields
-      );
+      const results = await DocumentAPI.searchDocuments({
+        query: params.query,
+        types: params.documentTypes,
+        fields: params.fields,
+        maxResults: params.maxResults
+      });
 
-      // Limit results if maxResults specified
-      const limitedResults = params.maxResults ? 
-        results.slice(0, params.maxResults) : results;
+      // Results are already limited by maxResults in the API
+      const limitedResults = results;
 
       return {
         content: `Found ${limitedResults.length} documents matching "${params.query}"`,

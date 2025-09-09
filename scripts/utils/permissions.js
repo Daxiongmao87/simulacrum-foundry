@@ -18,9 +18,13 @@ export class PermissionManager {
    * @returns {boolean} True if the user can list, false otherwise.
    */
   static canListDocuments(user, documentType) {
-    // Validate document type exists in current system
-    if (documentType && !global.CONFIG?.Document?.documentTypes?.[documentType]) {
-      return false;
+    // Validate document type exists in current system and has a manipulable collection
+    if (documentType) {
+      const availableTypes = game?.documentTypes?.[documentType];
+      const hasCollection = game?.collections?.get(documentType) !== undefined;
+      if (!Array.isArray(availableTypes) || availableTypes.length === 0 || !hasCollection) {
+        return false;
+      }
     }
 
     // GMs can always list documents.
@@ -31,7 +35,7 @@ export class PermissionManager {
     // based on specific module requirements or FoundryVTT system settings.
     // Players and observers can generally see document lists
     // Prefer Foundry constants if available
-    const ROLES = (global.CONST && global.CONST.USER_ROLES) || {};
+    const ROLES = (globalThis.CONST && globalThis.CONST.USER_ROLES) || {};
     if (typeof user.hasRole === 'function') {
       if (typeof ROLES.PLAYER !== 'undefined') {
         // Try numeric roles (Foundry runtime) or fallback to string labels (tests/mocks)

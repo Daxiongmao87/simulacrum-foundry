@@ -26,7 +26,15 @@ export class BaseTool {
    * @returns {boolean} True if valid, false otherwise
    */
   isValidDocumentType(documentType) {
-    return !!(global.CONFIG?.Document?.documentTypes?.[documentType]);
+    // Check if document type exists in game.documentTypes
+    const availableTypes = game?.documentTypes?.[documentType];
+    if (!Array.isArray(availableTypes) || availableTypes.length === 0) {
+      return false;
+    }
+    
+    // Check if there's a corresponding collection users can interact with
+    const collection = game?.collections?.get(documentType);
+    return collection !== undefined;
   }
 
   /**

@@ -4,8 +4,24 @@
  */
 
 import { toolRegistry } from './tool-registry.js';
-import { isDiagnosticsEnabled, createLogger } from '../utils/dev.js';
 import { performPostToolVerification } from './tool-verification.js';
+
+/**
+ * Sanitize messages for fallback when tool calling is not supported
+ * Filters out tool roles and ensures only valid roles are sent
+ */
+function _sanitizeMessagesForFallback(messages) {
+  try {
+    return (messages || []).filter(m => {
+      const r = m && m.role;
+      if (r !== 'system' && r !== 'user' && r !== 'assistant') return false;
+      const c = typeof m.content === 'string' ? m.content.trim() : '';
+      return c.length > 0;
+    }).map(m => ({ role: m.role, content: String(m.content) }));
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Process tool call loop for continuation after fallback tool execution
@@ -15,7 +31,9 @@ export async function processToolCallLoop(
   tools, 
   conversationManager,
   aiClient,
-  getSystemPrompt
+  getSystemPrompt,
+  toolCallingSupported = true,
+  onAssistantMessage = null
 ) {
   let final = normalized;
   let safeguard = 8; // backup guard to prevent runaway
@@ -23,8 +41,9 @@ export async function processToolCallLoop(
   let repeatCount = 0;
   const REPEAT_LIMIT = 3;
   let guardTriggered = false;
+  let currentToolSupport = toolCallingSupported; // Track current tool support state
   
-  while (Array.isArray(final.toolCalls) && final.toolCalls.length && safeguard-- > 0) {
+  while ((Array.isArray(final.toolCalls) && final.toolCalls.length || final._parseError) && safeguard-- > 0) {
     for (const call of final.toolCalls) {
       const name = call?.function?.name || call?.name;
       let args = {};
@@ -91,7 +110,10 @@ export async function processToolCallLoop(
           result: exec?.result ?? null,
           meta: { executionId: exec?.executionId, duration: exec?.duration }
         };
-        conversationManager.addMessage('tool', JSON.stringify(payload), null, call?.id);
+        
+        // Update system message with success feedback
+        const successMessage = `Tool Execution Success: ${name}\nResult: ${JSON.stringify(exec?.result ?? null)}`;
+        conversationManager.updateSystemMessage(successMessage);
         
         // Emit plan label after successful tool execution
         if (planLabel && typeof Hooks !== 'undefined' && Hooks?.callAll) {
@@ -105,7 +127,11 @@ export async function processToolCallLoop(
         
         // Post-tool verification pattern (like qwen-code)
         await performPostToolVerification(name, args, exec?.result, conversationManager);
+
+        // Add the tool's result to the conversation
+        conversationManager.addMessage('tool', JSON.stringify(exec?.result ?? null), null, call?.id);
       } catch (err) {
+        
         const payload = {
           ok: false,
           tool: name,
@@ -113,22 +139,121 @@ export async function processToolCallLoop(
           args,
           error: { message: err?.message, type: err?.constructor?.name || 'ToolError', details: err?.details }
         };
-        conversationManager.addMessage('tool', JSON.stringify(payload), null, call?.id);
+        
+        // Update system message with error feedback
+        const errorMessage = `Tool Execution Error: ${name}\nError: ${err?.message || 'Unknown error'}`;
+        conversationManager.updateSystemMessage(errorMessage);
+
+        // Add the error result to the conversation
+        const errorResult = { error: err?.message || 'Unknown error' };
+        conversationManager.addMessage('tool', JSON.stringify(errorResult), null, call?.id);
       }
     }
     
     if (guardTriggered) break;
     
+    // Clear parse error flag after processing
+    if (final._parseError) {
+      final._parseError = false;
+    }
+    
     // Continue the agentic loop
-    const followRaw = await aiClient.chat([
+    const outboundMessages = [
       { role: 'system', content: getSystemPrompt() },
       ...conversationManager.messages
-    ], tools);
+    ];
+    // Sanitize messages if tool calling is not supported
+    const followMessages = (currentToolSupport !== true) ? 
+      _sanitizeMessagesForFallback(outboundMessages) : outboundMessages;
+    const toolsToSend = (currentToolSupport === true) ? tools : null;
+    
+    let followRaw;
+    try {
+      followRaw = await aiClient.chat(followMessages, toolsToSend);
+    } catch (err) {
+      console.error('[Simulacrum:ToolLoop] AI chat request failed after retries:', err);
+      const errorMessage = `I'm having trouble connecting to the AI service. Please try again later. (Error: ${err.message})`;
+      conversationManager.addMessage('assistant', errorMessage);
+      final = {
+        content: errorMessage,
+        display: errorMessage,
+        toolCalls: [],
+        model: normalized?.model,
+        usage: {},
+        raw: null
+      };
+      // Call the onAssistantMessage callback with the error message
+      if (onAssistantMessage && typeof onAssistantMessage === 'function') {
+        try {
+          onAssistantMessage(final);
+        } catch (e) {
+          // Ignore callback errors
+        }
+      }
+      break; // Exit the loop gracefully
+    }
     
     final = normalizeAIResponse(followRaw);
+    
+    // Handle fallback tool calls if no native tool_calls found
+    if ((!Array.isArray(final.toolCalls) || final.toolCalls.length === 0) && currentToolSupport !== true) {
+      console.log('[Simulacrum:ToolLoop] No native tool calls found, attempting fallback parsing');
+      try {
+        // Import the method dynamically to avoid circular dependency
+        const SimulacrumCore = await import('./simulacrum-core.js');
+        const parsed = SimulacrumCore.SimulacrumCore._parseInlineToolCall(final.content);
+        console.log('[Simulacrum:ToolLoop] Fallback parsing result:', parsed);
+        
+        if (parsed && parsed.name) {
+          console.log(`[Simulacrum:ToolLoop] Creating fallback tool call for '${parsed.name}'`);
+          final.toolCalls = [{
+            id: `fallback_${Date.now()}`,
+            function: {
+              name: parsed.name,
+              arguments: JSON.stringify(parsed.arguments || {})
+            }
+          }];
+          final.content = parsed.cleanedText;
+          final.display = parsed.cleanedText;
+        } else if (parsed && parsed.parseError) {
+          // Handle JSON parsing errors by creating error feedback for the AI
+          console.log('[Simulacrum:ToolLoop] JSON parsing error detected, providing feedback to AI');
+          const errorMessage = `JSON Parsing Error: ${parsed.parseError}\n\nThe JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:\n\`\`\`json\n{"tool_call": {"name": "tool_name", "arguments": {...}}}\n\`\`\`\n\nProblematic content: ${parsed.content}`;
+          
+          // Update system message with error feedback
+          conversationManager.updateSystemMessage(errorMessage);
+          
+          // Continue the loop to re-prompt the AI by setting a special parse error flag
+          final.toolCalls = [];
+          final.content = errorMessage;
+          final.display = errorMessage;
+          final._parseError = true; // Flag to continue loop despite no tool calls
+        } else {
+          console.log('[Simulacrum:ToolLoop] No valid tool call found in fallback parsing');
+        }
+      } catch (e) {
+        console.error('[Simulacrum:ToolLoop] Fallback parsing error:', e.message);
+      }
+    }
+    
     conversationManager.addMessage('assistant', final.content, final.toolCalls);
+    
+    // Call the callback if provided
+    if (onAssistantMessage && typeof onAssistantMessage === 'function') {
+      try {
+        // Do not pass the raw `final` object; it may contain tool calls.
+        // Only send the text content to the UI at this stage.
+        if (final.content) {
+          onAssistantMessage({ content: final.content, display: final.display });
+        }
+      } catch (e) {
+        // Ignore callback errors
+      }
+    }
   }
   
+  // After the loop, the `final` object contains the last AI response.
+  // This is the concluding message of the tool interaction sequence.
   return final;
 }
 

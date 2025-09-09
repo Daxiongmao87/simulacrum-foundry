@@ -10,20 +10,18 @@
 export const DND5E_SYSTEM = {
   name: 'D&D 5e',
   id: 'dnd5e',
+  // FoundryVTT stores document types in game.documentTypes, not CONFIG
+  documentTypes: {
+    ActiveEffect: ['base'],
+    Actor: ['character', 'npc', 'vehicle'],
+    ChatMessage: ['base'],
+    Item: ['weapon', 'equipment', 'consumable', 'tool', 'loot', 'class', 'spell', 'feat', 'background', 'race'],
+    JournalEntry: ['base'],
+    JournalEntryPage: ['text', 'image', 'pdf', 'video'],
+    RollTable: ['base'],
+    Scene: ['base']
+  },
   config: {
-    Document: {
-      documentTypes: {
-        ActiveEffect: 'ActiveEffect',
-        Actor: 'Actor',
-        ChatMessage: 'ChatMessage',
-        Item: 'Item',
-        JournalEntry: 'JournalEntry',
-        JournalEntryPage: 'JournalEntryPage',
-        RegionBehavior: 'RegionBehavior',
-        RollTable: 'RollTable',
-        Scene: 'Scene'
-      }
-    },
     ActiveEffect: {
       documentClass: class MockActiveEffect {
         static get documentName() { return 'ActiveEffect'; }
@@ -167,18 +165,15 @@ export const DND5E_SYSTEM = {
 export const PF2E_SYSTEM = {
   name: 'Pathfinder 2e',
   id: 'pf2e',
+  documentTypes: {
+    Actor: ['character', 'npc', 'hazard', 'loot'],
+    Item: ['weapon', 'armor', 'equipment', 'consumable', 'treasure', 'backpack', 'kit', 'action', 'ancestry', 'background', 'class', 'deity', 'feat', 'heritage', 'spell', 'spellcastingEntry', 'condition', 'effect'],
+    JournalEntry: ['base'],
+    RollTable: ['base'],
+    Scene: ['base'],
+    Macro: ['base']
+  },
   config: {
-    Document: {
-      documentTypes: {
-        Actor: 'Actor',
-        Item: 'Item', 
-        JournalEntry: 'JournalEntry',
-        RegionBehavior: 'RegionBehavior',
-        RollTable: 'RollTable',
-        Scene: 'Scene',
-        Macro: 'Macro'
-      }
-    },
     Actor: {
       documentClass: class MockPF2eActor {
         static get documentName() { return 'Actor'; }
@@ -306,14 +301,12 @@ export const PF2E_SYSTEM = {
 export const MINIMAL_SYSTEM = {
   name: 'Minimal Core',
   id: 'minimal',
+  documentTypes: {
+    Actor: ['base'],
+    Item: ['base'],
+    JournalEntry: ['base']
+  },
   config: {
-    Document: {
-      documentTypes: {
-        Actor: 'Actor',
-        Item: 'Item',
-        JournalEntry: 'JournalEntry'
-      }
-    },
     Actor: {
       documentClass: class MockMinimalActor {
         static get documentName() { return 'Actor'; }
@@ -360,11 +353,8 @@ export const MINIMAL_SYSTEM = {
 export const EDGE_CASE_SYSTEM = {
   name: 'Edge Case System',
   id: 'edge-case',
-  config: {
-    Document: {
-      documentTypes: {}
-    }
-  }
+  documentTypes: {},
+  config: {}
 };
 
 /**
@@ -381,13 +371,13 @@ export const ALL_GAME_SYSTEMS = [
  * Get system configuration by name
  */
 export function getSystemConfig(systemName) {
-  return ALL_GAME_SYSTEMS.find(system => system.name === systemName)?.config || null;
+  return ALL_GAME_SYSTEMS.find(system => system.name === systemName) || null;
 }
 
 /**
  * Get system document types by name
  */
 export function getSystemDocumentTypes(systemName) {
-  const config = getSystemConfig(systemName);
-  return config ? Object.keys(config.Document.documentTypes) : [];
+  const system = getSystemConfig(systemName);
+  return system ? Object.keys(system.documentTypes || {}) : [];
 }

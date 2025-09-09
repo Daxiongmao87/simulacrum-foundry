@@ -106,11 +106,13 @@ class DocumentSchemaTool extends BaseTool {
    * @returns {Array} All document types with info
    */
   getAllDocumentTypes() {
-    return Object.keys(CONFIG.Document.documentTypes).map(type => ({
-      name: type,
-      collection: game.collections.get(type)?.size || 0,
-      compendiums: game.packs.filter(p => p.documentName === type).length
-    }));
+    return Object.keys(game?.documentTypes || {})
+      .filter(type => game?.collections?.get(type) !== undefined)
+      .map(type => ({
+        name: type,
+        collection: game.collections.get(type)?.size || 0,
+        compendiums: game.packs.filter(p => p.documentName === type).length
+      }));
   }
 
   /**

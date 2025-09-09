@@ -14,8 +14,6 @@ import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { DocumentAPI } from './document-api.js';
 import { createLogger } from '../utils/logger.js';
 import { isDiagnosticsEnabled } from '../utils/dev.js';
-import { mapFallbackArguments } from './argument-mapper.js';
-import { performPostToolVerification } from './tool-verification.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 class SimulacrumCore {
   static logger = createLogger('Core');
@@ -104,7 +102,15 @@ class SimulacrumCore {
     // Probe whether the current endpoint/model supports function calling
     try {
       await this.detectToolCallingSupport();
-    } catch (_e) { /* ignore */ }
+    } catch (e) { 
+      // If detection fails, assume NO tool support (safer default)
+      this.toolCallingSupported = false;
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').warn('tool_detection_failed', { error: e.message });
+        }
+      } catch {}
+    }
     
     this.logger.info('Module initialized');
   }
@@ -142,7 +148,7 @@ class SimulacrumCore {
    * @param {Object} user - User who sent the message
    * @returns {Object} AI response
    */
-  static async processMessage(message) {
+  static async processMessage(message, user, options = {}) {
     try {
       // Check if AI client is initialized
       if (!this.aiClient) {
@@ -173,9 +179,30 @@ class SimulacrumCore {
         ...this.conversationManager.messages
       ];
       
-      // Get AI response
-      const sendTools = (this.toolCallingSupported === false) ? null : tools;
-      const outbound = (this.toolCallingSupported === false) ? this._sanitizeMessagesForFallback(messages) : messages;
+      // Get AI response - check legacy mode setting instead of probe
+      const legacyMode = game.settings.get('simulacrum', 'legacyMode');
+      const useNativeTools = !legacyMode;
+      const sendTools = useNativeTools ? tools : null;
+      const outbound = useNativeTools ? messages : this._sanitizeMessagesForFallback(messages);
+      
+      console.log('[Simulacrum:ProcessMessage] Chat request configuration:', {
+        toolCallingSupported: this.toolCallingSupported,
+        useNativeTools,
+        sendingTools: !!sendTools,
+        fallbackMode: this.toolCallingSupported === false,
+        toolCount: tools?.length || 0
+      });
+      
+      // Debug logging
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').info('chat_request', { 
+            toolCallingSupported: this.toolCallingSupported, 
+            sendingTools: !!sendTools,
+            fallbackMode: this.toolCallingSupported === false
+          });
+        }
+      } catch {}
       const raw = await this.aiClient.chat(outbound, sendTools);
       if (raw == null) {
         throw new Error('Empty AI response');
@@ -235,237 +262,67 @@ class SimulacrumCore {
       // Add assistant response (with inline tool_call stripped from display)
       const assistantVisibleContent = parsedInline?.cleanedText ?? normalized.content;
       this.conversationManager.addMessage('assistant', assistantVisibleContent, normalized.toolCalls);
+      if (options.onAssistantMessage) {
+        const messageForUI = { ...normalized, content: assistantVisibleContent, display: assistantVisibleContent };
+        options.onAssistantMessage(messageForUI);
+      }
 
-      // Fallback parse: if the assistant did not return tool_calls, attempt to
-      // detect a fenced or inline JSON tool_call block regardless of provider probe.
-      // This makes us resilient to routers/endpoints that claim tool support but
-      // sometimes respond without tool_calls.
+      // Handle fallback tool calls - if no native tool_calls, try to parse JSON blocks
       if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
-        const parsed = parsedInline || this._parseInlineToolCall(normalized.content);
-        if (parsed && parsed.name) {
-          const name = parsed.name;
-          const originalArgs = parsed.arguments || {};
+        const parseResult = parsedInline || this._parseInlineToolCall(normalized.content);
+        if (parseResult && parseResult.name) {
+          // Convert parsed fallback tool call to standard format for unified processing
+          normalized.toolCalls = [{
+            id: `fallback_${Date.now()}`,
+            function: {
+              name: parseResult.name,
+              arguments: JSON.stringify(parseResult.arguments || {})
+            }
+          }];
+          // Update display content to remove the JSON block
+          normalized.content = parseResult.cleanedText;
+          normalized.display = parseResult.cleanedText;
+        } else if (parseResult && parseResult.parseError) {
+          // Handle JSON parsing errors in main flow
+          const errorMessage = `JSON Parsing Error: ${parseResult.parseError}\n\nThe JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:\n\`\`\`json\n{"tool_call": {"name": "tool_name", "arguments": {...}}}\n\`\`\`\n\nProblematic content: ${parseResult.content}`;
           
-          // Apply argument compatibility mapping for better fallback success
-          const args = mapFallbackArguments(name, originalArgs);
+          // Update system message with error feedback
+          this.conversationManager.updateSystemMessage(errorMessage);
           
-          try {
-            const exec = await toolRegistry.executeTool(name, args);
-            const toolContent = exec?.result?.content ?? exec?.result?.display ?? JSON.stringify(exec?.result ?? exec);
-            this.conversationManager.addMessage('tool', toolContent, null, undefined);
-          } catch (err) {
-            const toolContent = `Tool '${name}' failed: ${err.message}`;
-            this.conversationManager.addMessage('tool', toolContent, null, undefined);
-          }
+          // Set up to continue processing with error feedback
+          normalized.content = errorMessage;
+          normalized.display = errorMessage;
+          normalized._parseError = true; // Flag to ensure tool loop processes this
+        }
+      }
+      // Use unified tool calling loop for both native and fallback modes
+      const final = await processToolCallLoop(
+        normalized, 
+        tools, 
+        this.conversationManager,
+        this.aiClient,
+        this.getSystemPrompt.bind(this),
+        useNativeTools,
+        options.onAssistantMessage
+      );
+      // This is the final response after all tool calls are complete.
+      // We need to update the UI with this final message.
+      if (final && final.content && options.onAssistantMessage) {
+        // Check if this final message is different from the last assistant message
+        const lastMessage = this.conversationManager.messages[this.conversationManager.messages.length - 1];
+        if (lastMessage.role !== 'assistant' || lastMessage.content !== final.content) {
+          this.conversationManager.addMessage('assistant', final.content);
+          options.onAssistantMessage(final);
+        }
+      }
 
-          // Continue the agentic loop - let the model continue naturally after tool execution
-          const continueMessages = [
-            { role: 'system', content: this.getSystemPrompt() },
-            ...this.conversationManager.messages
-          ];
-          
-          const followRaw = await this.aiClient.chat(continueMessages, this.toolCallingSupported ? tools : null);
-          const followNorm = (() => {
-            if (typeof followRaw?.content === 'string') {
-              return {
-                content: followRaw.content,
-                display: followRaw.display ?? followRaw.content,
-                toolCalls: followRaw.toolCalls ?? followRaw.tool_calls ?? [],
-                model: followRaw.model,
-                usage: followRaw.usage,
-                raw: followRaw
-              };
-            }
-            const __choices = followRaw && followRaw.choices;
-            const choice = Array.isArray(__choices) ? __choices[0] : undefined;
-            const msg = choice?.message ?? {};
-            const content = typeof msg.content === 'string' ? msg.content : '';
-            let toolCalls = msg.tool_calls || [];
-            if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-              toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
-            }
-            return { content, display: content, toolCalls, model: followRaw?.model, usage: followRaw?.usage, raw: followRaw };
-          })();
-          
-          this.conversationManager.addMessage('assistant', followNorm.content, followNorm.toolCalls);
-          
-          // Continue the agentic loop if there are more tool calls
-          if (Array.isArray(followNorm.toolCalls) && followNorm.toolCalls.length > 0) {
-            // Recursively process the follow-up tool calls
-            return await processToolCallLoop(
-              followNorm, 
-              tools, 
-              this.conversationManager,
-              this.aiClient,
-              this.getSystemPrompt.bind(this)
-            );
-          }
-          
-          try { await this.saveConversationState(); } catch {}
-          return followNorm;
-        }
-      }
-      // Tool-calling loop: execute tools && iterate until model finishes
-      let final = normalized;
-      // Loop guard state (detect consecutive identical tool+args)
-      let safeguard = 8; // backup guard to prevent runaway
-      let lastSig = null;
-      let repeatCount = 0;
-      const REPEAT_LIMIT = 3;
-      let guardTriggered = false;
-      while (Array.isArray(final.toolCalls) && final.toolCalls.length && safeguard-- > 0) {
-        for (const call of final.toolCalls) {
-          const name = call?.function?.name || call?.name;
-          let args = {};
-          try {
-            const rawArgs = call?.function?.arguments ?? call?.arguments ?? '{}';
-            args = typeof rawArgs === 'string' ? JSON.parse(rawArgs ?? '{}') : (rawArgs ?? {});
-          } catch (e) {
-            args = {};
-          }
-          // Loop guard: check for repeated identical calls
-          try {
-            const sig = `${name}:${JSON.stringify(args)}`;
-            if (sig === lastSig) repeatCount += 1; else { lastSig = sig; repeatCount = 1; }
-            if (repeatCount >= REPEAT_LIMIT) {
-              guardTriggered = true;
-              const notice = `Loop guard: Detected ${repeatCount} consecutive calls to '${name}' with identical arguments. Adjust the plan or provide a final answer.`;
-              // Emit UI status and add assistant notice
-              try {
-                if (typeof Hooks !== 'undefined' && Hooks?.callAll) {
-                  Hooks.callAll('simulacrum:processStatus', {
-                    state: 'guard',
-                    label: 'Preventing loop: repeated tool call',
-                    toolName: name,
-                    callId: call?.id
-                  });
-                }
-              } catch (_e) { /* no-op */ }
-              this.conversationManager.addMessage('assistant', notice);
-              // Prepare return payload and break out
-              final = { content: notice, display: notice, toolCalls: [], model: normalized?.model, usage: normalized?.usage, raw: null };
-              break;
-            }
-          } catch (_e) { /* ignore */ }
-          if (guardTriggered) break;
-          // Optional UX: process label provided by the AI within tool args
-          let planLabel = null;
-          try {
-            const processLabel = args.process_label ?? args.processLabel ?? args._process_label;
-            planLabel = args.plan_label ?? args.planLabel ?? args._plan_label;
-            
-            if (processLabel && typeof Hooks !== 'undefined' && Hooks?.callAll) {
-              Hooks.callAll('simulacrum:processStatus', {
-                state: 'start',
-                label: processLabel,
-                toolName: name,
-                callId: call?.id
-              });
-            }
-          } catch (_e) {
-            /* no-op */
-          }
-          // Execute the requested tool via registry
-          let exec = null;
-          let toolError = null;
-          try {
-            try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('exec start', { name }); } catch {}
-            exec = await toolRegistry.executeTool(name, args);
-            const payload = {
-              ok: true,
-              tool: name,
-              call_id: call?.id,
-              args,
-              result: exec?.result ?? null,
-              meta: { executionId: exec?.executionId, duration: exec?.duration }
-            };
-            this.conversationManager.addMessage('tool', JSON.stringify(payload), null, call?.id);
-            try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('exec success', { name }); } catch {}
-          } catch (err) {
-            toolError = err;
-            const payload = {
-              ok: false,
-              tool: name,
-              call_id: call?.id,
-              args,
-              error: { message: err?.message, type: err?.constructor?.name || 'ToolError', details: err?.details }
-            };
-            this.conversationManager.addMessage('tool', JSON.stringify(payload), null, call?.id);
-            try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').warn('exec error', { name, error: err?.message }); } catch {}
-          } finally {
-            if (typeof Hooks !== 'undefined' && Hooks?.callAll) {
-              Hooks.callAll('simulacrum:processStatus', { state: 'end', callId: call?.id, toolName: name });
-              
-              // Emit plan label after tool completion to show what's next
-              if (planLabel) {
-                Hooks.callAll('simulacrum:processStatus', {
-                  state: 'plan',
-                  label: planLabel,
-                  toolName: name,
-                  callId: call?.id
-                });
-              }
-            }
-            
-            // Post-tool verification pattern (like qwen-code) - only for successful executions  
-            if (exec && !toolError) {
-              try {
-                await performPostToolVerification(name, args, exec?.result, this.conversationManager);
-              } catch (verifyErr) {
-                // Don't fail the whole operation if verification fails
-                try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').warn('verification error', { name, error: verifyErr?.message }); } catch {}
-              }
-            }
-          }
-        }
-        if (guardTriggered) break;
-        // Ask the model again with updated messages (tool outputs included)
-        const followRaw = await this.aiClient.chat([
-          { role: 'system', content: this.getSystemPrompt() },
-          ...this.conversationManager.messages
-        ], tools);
-        final = (() => {
-          if (typeof followRaw?.content === 'string') {
-            return {
-              content: followRaw.content,
-              display: followRaw.display ?? followRaw.content,
-              toolCalls: followRaw.toolCalls ?? followRaw.tool_calls ?? [],
-              model: followRaw.model,
-              usage: followRaw.usage,
-              raw: followRaw
-            };
-          }
-          const __fchoices = followRaw && followRaw.choices;
-          const choice = Array.isArray(__fchoices) ? __fchoices[0] : undefined;
-          const msg = choice?.message ?? {};
-          const content = typeof msg.content === 'string' ? msg.content : '';
-          let toolCalls = msg.tool_calls || [];
-          if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-            toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
-          }
-          if (!content && !toolCalls?.length && (Array.isArray(followRaw && followRaw.output) && (followRaw.output[0] && followRaw.output[0].content))) {
-            const parts = followRaw.output[0].content;
-            const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-            return { content: text || '', display: text || '', toolCalls: [], model: followRaw?.model, usage: followRaw?.usage, raw: followRaw };
-          }
-          return { content, display: content, toolCalls, model: followRaw?.model, usage: followRaw?.usage, raw: followRaw };
-        })();
-        // Diagnostics: log tool_calls for follow-up
-        try {
-          if (isDiagnosticsEnabled()) {
-            const diag = createLogger('AIDiagnostics');
-            const names = Array.isArray(final.toolCalls) ? final.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
-            diag.info('tool_calls', { count: names.length, names });
-          }
-        } catch {}
-        this.conversationManager.addMessage('assistant', final.content, final.toolCalls);
-      }
       // Persist updated conversation state after processing completes
       try {
         await this.saveConversationState();
       } catch (_e) {
         /* ignore persistence failures */
       }
+      
       return final;
     } catch (error) {
       this.logger.error('Error processing message', error);
@@ -645,10 +502,13 @@ class SimulacrumCore {
    * Not persisted into conversation history.
    */
   static async detectToolCallingSupport() {
+    console.log('[Simulacrum:Probe] Starting tool calling support detection');
+    
     try {
+
       const tools = toolRegistry.getToolSchemas();
       if (!Array.isArray(tools) || tools.length === 0) {
-        this.toolCallingSupported = null;
+        this.toolCallingSupported = false;
         return false;
       }
       const names = tools.map(t => t?.function?.name).filter(Boolean);
@@ -658,14 +518,32 @@ class SimulacrumCore {
         { role: 'system', content: 'Tool support probe.' },
         { role: 'user', content: prompt }
       ], tools);
+      
+      // Check for actual tool calls OR explicit "NO_TOOLS" response  
       const choice = res?.choices?.[0];
       const msg = choice?.message ?? {};
-      const hasTools = (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) || (msg.function_call && msg.function_call.name);
-      this.toolCallingSupported = !!hasTools;
-      try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('tool_support', { supported: this.toolCallingSupported }); } catch {}
+      const hasNativeTools = (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) || 
+                             (msg.function_call && msg.function_call.name);
+      const content = msg.content || '';
+      const saidNoTools = content.includes('NO_TOOLS');
+      
+      // Tool calling is supported ONLY if we get actual native tool calls
+      // Any other response (including attempts like "list_documents()") means no support
+      this.toolCallingSupported = hasNativeTools && !saidNoTools;
+      
+      try { 
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').info('tool_support', { 
+            supported: this.toolCallingSupported, 
+            hasNativeTools, 
+            saidNoTools, 
+            content: content.substring(0, 100) 
+          }); 
+        } 
+      } catch {}
       return this.toolCallingSupported;
     } catch (_e) {
-      this.toolCallingSupported = null;
+      this.toolCallingSupported = false;
       return false;
     }
   }
@@ -673,91 +551,192 @@ class SimulacrumCore {
 
 
   /**
-   * Parse inline tool_call JSON from assistant content.
-   * Accepts raw JSON, fenced code blocks, or inline JSON containing "tool_call".
+   * Parse a tool_call from a fenced JSON block in the assistant's content.
+   * This is a fallback for models that do not support native tool calling.
+   * The parser is strict: it requires a ```json ... ``` block.
    */
-    static _parseInlineToolCall(text) {
+  static _parseInlineToolCall(text) {
     if (!text || typeof text !== 'string') return null;
-    const tryParse = (s) => { try { return JSON.parse(s); } catch { return null; } };
-    // Normalize possible HTML entities and tags if a provider or UI layer leaked them in
-    const decode = (s) => s
-      .replace(/&quot;/g, '"')
-      .replace(/&#34;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&apos;/g, "'")
-      .replace(/&amp;/g, '&')
-      .replace(/<br\s*\/?>/gi, '\n');
-    const original = decode(String(text));
-    let obj = null;
-    let cleaned = original;
 
-    // 1) Fenced code block first (prefer explicit block)
-    const block = original.match(/```\s*json\s*([\s\S]*?)```/i) || original.match(/```\s*([\s\S]*?)```/i);
-    if (block && block[1]) {
-      obj = tryParse(block[1].trim());
-      if (obj) cleaned = original.replace(block[0], '').trim();
-    }
-    // 2) Direct parse of whole text as JSON (rare)
-    if (!obj) obj = tryParse(original.trim());
-    // 3) Inline JSON containing tool_call
-    if (!obj && original.includes('tool_call')) {
-      const start = original.indexOf('{');
-      const end = original.lastIndexOf('}');
-      if (start >= 0 && end > start) {
-        const slice = original.slice(start, end + 1);
-        obj = tryParse(slice);
-        if (obj) cleaned = (original.slice(0, start) + original.slice(end + 1)).trim();
+    const tryParse = (s) => {
+      try {
+        return JSON.parse(s);
+      } catch (e) {
+        // Try to fix common AI JSON mistakes
+        try {
+          let fixed = s
+            // Fix parentheses notation like (x,y) to [x,y]
+            .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
+            // Fix single quotes to double quotes
+            .replace(/'/g, '"')
+            // Fix trailing commas
+            .replace(/,(\s*[}\]])/g, '$1');
+          
+          const result = JSON.parse(fixed);
+          try {
+            const diag = createLogger('AIDiagnostics');
+            diag.info('fallback.parse.fixed', { original: s.substring(0, 100), fixed: fixed.substring(0, 100) });
+          } catch {}
+          return result;
+        } catch (e2) {
+          try {
+            const diag = createLogger('AIDiagnostics');
+            diag.warn('fallback.parse.error', { error: e.message, content: s.substring(0, 200) });
+          } catch {}
+          return { parseError: e.message, originalError: e2.message, content: s.substring(0, 200) };
+        }
+      }
+    };
+
+    // Multiple regex patterns to catch different JSON block formats
+    const patterns = [
+      /```json\s*([\s\S]+?)\s*```/i,    // Standard ```json format
+      /```\s*([\s\S]+?)\s*```/,         // Generic ``` format
+      /`{3,}\s*json\s*([\s\S]+?)\s*`{3,}/i, // Flexible backticks
+    ];
+
+    let blockMatch = null;
+    let matchedPattern = null;
+    
+    for (const pattern of patterns) {
+      blockMatch = text.match(pattern);
+      if (blockMatch && blockMatch[1]) {
+        matchedPattern = pattern;
+        break;
       }
     }
-    if (!obj) {
-      try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('fallback.parse.none'); } catch {}
+
+    if (!blockMatch || !blockMatch[1]) {
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').warn('fallback.parse.no_block', { 
+            textLength: text.length, 
+            preview: text.substring(0, 100)
+          });
+        }
+      } catch {}
       return null;
     }
-    const tc = obj.tool_call || obj.toolCall || obj.function_call || obj.functionCall || obj;
-    const name = tc?.name || tc?.function?.name;
-    const args = tc?.arguments || tc?.function?.arguments || {};
-    if (!name) return null;
-    let parsedArgs = args;
-    if (typeof parsedArgs === 'string') {
-      const p = tryParse(parsedArgs);
-      parsedArgs = p || {};
+
+    const jsonContent = blockMatch[1].trim();
+    const obj = tryParse(jsonContent);
+
+    // Handle case where tryParse returned a parse error
+    if (obj && obj.parseError) {
+      return obj; // Return the parse error object
     }
+    
+    if (!obj) {
+      return { parseError: 'JSON parsing failed', content: jsonContent.substring(0, 200) };
+    }
+
+    // Extract tool call - be more flexible with structure
+    const toolCall = obj.tool_call || obj.toolCall || obj.function_call || obj.functionCall || obj;
+    const name = toolCall?.name || toolCall?.function?.name;
+    let args = toolCall?.arguments || toolCall?.function?.arguments || toolCall?.args || {};
+
+    if (!name) {
+      try {
+        if (isDiagnosticsEnabled()) {
+          createLogger('AIDiagnostics').warn('fallback.parse.no_name', { 
+            objKeys: Object.keys(obj),
+            toolCallKeys: toolCall ? Object.keys(toolCall) : []
+          });
+        }
+      } catch {}
+      return null;
+    }
+    
+    // Ensure arguments are an object
+    if (typeof args === 'string') {
+      const parsedArgs = tryParse(args);
+      args = parsedArgs || {};
+    }
+
     // Validate tool name against registry
     try {
-      const info = typeof toolRegistry.getToolInfo === 'function' ? toolRegistry.getToolInfo(name) : null;
-      if (!info) return null;
-    } catch (_e) {
+      const toolInfo = toolRegistry.getToolInfo(name);
+      if (!toolInfo) {
+        try {
+          if (isDiagnosticsEnabled()) {
+            createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name });
+          }
+        } catch {}
+        return null;
+      }
+    } catch (e) {
       return null;
     }
-    try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').info('fallback.parse.found', { name }); } catch {}
-    return { name, arguments: parsedArgs, cleanedText: cleaned };
+
+    const cleanedText = text.replace(blockMatch[0], '').trim();
+    
+    try {
+      if (isDiagnosticsEnabled()) {
+        createLogger('AIDiagnostics').info('fallback.parse.success', { 
+          name, 
+          argsKeys: Object.keys(args),
+          pattern: matchedPattern.toString()
+        });
+      }
+    } catch {}
+
+    return { name, arguments: args, cleanedText };
   }
 
+  /**
+   * Get document types information for the system prompt
+   */
+  static getDocumentTypesInfo() {
+    try {
+      const documentTypes = Object.keys(game?.documentTypes || {}).filter(type => {
+        const collection = game?.collections?.get(type);
+        return collection !== undefined;
+      });
+
+      if (documentTypes.length === 0) {
+        return 'No document types available in current system.';
+      }
+
+      const typeDetails = documentTypes.map(type => {
+        const subtypes = game.documentTypes[type] || [];
+        if (subtypes.length > 0) {
+          return `${type}: [${subtypes.join(', ')}]`;
+        }
+        return type;
+      });
+
+      return `Available document types: ${typeDetails.join(', ')}.`;
+    } catch (error) {
+      return 'Document type information unavailable.';
+    }
+  }
 
 static getSystemPrompt() {
-    if (this.toolCallingSupported === false) {
+    const documentTypesInfo = this.getDocumentTypesInfo();
+    const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') || false;
+    
+    if (legacyMode) {
       let toolNames = [];
       try {
         const schemas = toolRegistry.getToolSchemas();
         toolNames = Array.isArray(schemas) ? schemas.map(s => s?.function?.name).filter(Boolean) : [];
       } catch (_e) {}
-      const nameList = toolNames.length ? ` Valid tool names: ${toolNames.join(', ')}.` : '';
+      const nameList = toolNames.length ? ` Available tools: ${toolNames.join(', ')}.` : '';
       return [
-        'You are Simulacrum inside FoundryVTT.',
-        'This endpoint does NOT support native tool calling. When an operation is needed,',
-        'respond naturally AND include exactly one fenced JSON block with the tool call:',
-        '```json {"tool_call":{"name":"<tool_name>","arguments":{...},"process_label":"<post-execution action>","plan_label":"<next iteration action>"}} ```',
-        'Use valid JSON inside the block. Do not include any other JSON structures.',
-        'Include both process_label (what happens after this tool finishes, e.g. "Verifying creation") and plan_label (next loop iteration, e.g. "Showing document details").',
-        'Prefer taking action with reasonable defaults rather than asking for more details.',
-        'When reasonable, propose a short plan and then call tools proactively to complete it.',
-        'After calling a tool, continue the conversation naturally. You can call multiple tools sequentially.',
-        'I will automatically verify document creation and updates by reading them back - expect to see verification results.',
+        'You are Simulacrum, an AI assistant for FoundryVTT.',
+        documentTypesInfo,
+        'When you need to use a tool, respond with text AND a JSON block in this EXACT format:',
+        '```json',
+        '{"tool_call":{"name":"create_document","arguments":{"documentType":"Item","data":{"name":"Dagger","type":"weapon"}}}}',
+        '```',
+        'CRITICAL: Use valid JSON syntax only. No parentheses like (x,y), use arrays ["x","y"]. Use "documentType" not "document_type".',
+        'Take action immediately with reasonable defaults.',
         nameList
       ].join(' ');
     }
     return [
       'You are Simulacrum, an AI assistant operating inside FoundryVTT.',
+      documentTypesInfo,
       'You can manipulate campaign documents (create/read/update/delete/list/search) via tools.',
       'Prefer acting autonomously with reasonable defaults; avoid unnecessary clarification questions.',
       'When a user asks for an action, propose a brief plan and call suitable tools to complete it.',
