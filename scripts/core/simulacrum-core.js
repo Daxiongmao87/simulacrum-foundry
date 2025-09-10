@@ -16,6 +16,7 @@ import { DocumentAPI } from './document-api.js';
 import { createLogger } from '../utils/logger.js';
 import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
+
 class SimulacrumCore {
   static logger = createLogger('Core');
   // Note: toolCallingSupported removed - now determined by legacyMode setting
@@ -149,12 +150,12 @@ class SimulacrumCore {
   }
 
   /**
-   * Process a user message
-   * @param {string} message - User message
-   * @param {Object} user - User who sent the message
-   * @returns {Object} AI response
+   * Generate AI response from messages (pure AI functionality)
+   * @param {Array} messages - Conversation messages
+   * @param {Object} options - Options including signal for cancellation
+   * @returns {Object} Normalized AI response
    */
-  static async processMessage(message, user, options = {}) {
+  static async generateResponse(messages, options = {}) {
     // Cancel any existing process
     if (this.currentAbortController) {
       this.currentAbortController.abort();
@@ -162,7 +163,7 @@ class SimulacrumCore {
     
     // Create new abort controller for this process
     this.currentAbortController = new AbortController();
-    const signal = this.currentAbortController.signal;
+    const signal = options.signal || this.currentAbortController.signal;
     
     try {
       // Signal process start
@@ -183,9 +184,6 @@ class SimulacrumCore {
         }
       }
       
-      // Add user message to conversation
-      this.conversationManager.addMessage('user', message);
-      
       // Get available tools
       const tools = toolRegistry.getToolSchemas();
       // Diagnostics: log tool schemas sent (names only)
@@ -196,17 +194,15 @@ class SimulacrumCore {
           diag.info('tools', { count: toolNames.length, names: toolNames });
         }
       } catch {}
-      // Centralized system prompt (ephemeral; not persisted in conversation)
       
       // Get context length setting and limit conversation history
       const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
-      const conversationMessages = this.conversationManager?.messages || [];
-      const limitedMessages = conversationMessages.length > contextLength 
-        ? conversationMessages.slice(-contextLength)
-        : conversationMessages;
+      const limitedMessages = messages.length > contextLength 
+        ? messages.slice(-contextLength)
+        : messages;
       
       // Use a non-persistent system message to steer tool usage
-      const messages = [
+      const messagesWithSystem = [
         { role: 'system', content: this.getSystemPrompt() },
         ...limitedMessages
       ];
@@ -215,9 +211,9 @@ class SimulacrumCore {
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');
       const useNativeTools = !legacyMode;
       const sendTools = useNativeTools ? tools : null;
-      const outbound = useNativeTools ? messages : this._sanitizeMessagesForFallback(messages);
+      const outbound = useNativeTools ? messagesWithSystem : this._sanitizeMessagesForFallback(messagesWithSystem);
       
-      console.log('[Simulacrum:ProcessMessage] Chat request configuration:', {
+      console.log('[Simulacrum:GenerateResponse] Chat request configuration:', {
         legacyMode,
         useNativeTools,
         sendingTools: !!sendTools,
@@ -234,6 +230,7 @@ class SimulacrumCore {
           });
         }
       } catch {}
+      
       // Check for cancellation before making request
       if (signal.aborted) {
         throw new Error('Process was cancelled');
@@ -243,166 +240,10 @@ class SimulacrumCore {
       if (raw == null) {
         throw new Error('Empty AI response');
       }
-      // Normalize response into a consistent shape
-      const normalized = (() => {
-        // If already normalized
-        if (typeof raw?.content === 'string') {
-          return {
-            content: raw.content,
-            display: raw.display ?? raw.content,
-            toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
-            model: raw.model,
-            usage: raw.usage,
-            raw
-          };
-        }
-        // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
-        const __choices = raw && raw.choices;
-        const choice = Array.isArray(__choices) ? __choices[0] : undefined;
-        const msg = choice?.message ?? {};
-        const content = typeof msg.content === 'string' ? msg.content : '';
-        
-        // Handle empty AI responses as recoverable error for AI correction
-        if (!content || content.trim().length === 0) {
-          return {
-            content: 'Empty response not allowed - please provide a meaningful response to the user.',
-            display: 'Empty response not allowed - please provide a meaningful response to the user.',
-            toolCalls: [],
-            model: raw?.model,
-            usage: raw?.usage,
-            raw,
-            _parseError: true // Flag to continue loop for AI correction
-          };
-        }
-        
-        let toolCalls = msg.tool_calls || [];
-        // Legacy providers may return a single function_call instead of tool_calls
-        if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-          toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
-        }
-        // Some providers (Responses API style) wrap assistant messages differently; try to extract text
-        if (!content && !toolCalls?.length && (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))) {
-          const parts = raw.output[0].content;
-          const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-          return { content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage, raw };
-        }
-        return {
-          content,
-          display: content,
-          toolCalls,
-          model: raw?.model,
-          usage: raw?.usage,
-          raw
-        };
-      })();
-      // Diagnostics: log tool_calls returned (names only)
-      try {
-        if (isDiagnosticsEnabled()) {
-          const diag = createLogger('AIDiagnostics');
-          const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
-          diag.info('tool_calls', { count: names.length, names });
-        }
-      } catch {}
-      // If no native tool_calls, attempt to detect and strip a fenced JSON tool_call
-      let parsedInline = null;
-      if (!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0) {
-        parsedInline = this._parseInlineToolCall(normalized.content);
-      }
-
-      // Add assistant response (with inline tool_call stripped from display)
-      // But skip adding/displaying if it's a parse error meant for AI correction only
-      const assistantVisibleContent = parsedInline?.cleanedText ?? normalized.content;
-      if (!normalized._parseError) {
-        this.conversationManager.addMessage('assistant', assistantVisibleContent, normalized.toolCalls);
-        if (options.onAssistantMessage) {
-          const messageForUI = { ...normalized, content: assistantVisibleContent, display: assistantVisibleContent };
-          options.onAssistantMessage(messageForUI);
-        }
-      }
-
-      // Handle fallback tool calls - if no native tool_calls, try to parse JSON blocks
-      if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
-        const parseResult = parsedInline || this._parseInlineToolCall(normalized.content);
-        if (parseResult && parseResult.name) {
-          // Convert parsed fallback tool call to standard format for unified processing
-          normalized.toolCalls = [{
-            id: `fallback_${Date.now()}`,
-            function: {
-              name: parseResult.name,
-              arguments: JSON.stringify(parseResult.arguments || {})
-            }
-          }];
-          // Update display content to remove the JSON block
-          normalized.content = parseResult.cleanedText;
-          normalized.display = parseResult.cleanedText;
-        } else if (parseResult && parseResult.parseError) {
-          // Handle JSON parsing errors in main flow
-          const errorMessage = [
-            game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
-            '',
-            game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
-            game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
-            '',
-            game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
-          ].join('\n');
-          
-          // Update system message with error feedback
-          this.conversationManager.updateSystemMessage(errorMessage);
-          
-          // Set up to continue processing with error feedback
-          normalized.content = errorMessage;
-          normalized.display = errorMessage;
-          normalized._parseError = true; // Flag to ensure tool loop processes this
-        }
-      }
-      // Mark that this response was already added to conversation
-      normalized._alreadyAddedToConversation = !normalized._parseError;
       
-      // Use unified tool calling loop for both native and fallback modes
-      const final = await processToolCallLoop(
-        normalized, 
-        tools, 
-        this.conversationManager,
-        this.aiClient,
-        this.getSystemPrompt.bind(this),
-        useNativeTools,
-        options.onAssistantMessage,
-        signal
-      );
-      // This is the final response after all tool calls are complete.
-      // We need to update the UI with this final message.
-      if (final && final.content && options.onAssistantMessage) {
-        // Check if this final message is different from the last assistant message
-        const lastMessage = this.conversationManager.messages[this.conversationManager.messages.length - 1];
-        if (lastMessage.role !== 'assistant' || lastMessage.content !== final.content) {
-          this.conversationManager.addMessage('assistant', final.content);
-          options.onAssistantMessage(final);
-        }
-      }
-
-      // Persist updated conversation state after processing completes
-      try {
-        await this.saveConversationState();
-      } catch (_e) {
-        /* ignore persistence failures */
-      }
+      // Normalize and return response
+      return this._normalizeAIResponse(raw);
       
-      return final;
-    } catch (error) {
-      // Handle cancellation specially
-      if (error.name === 'AbortError' || error.message === 'Process was cancelled') {
-        this.logger.info('Process cancelled by user');
-        return {
-          content: 'Process cancelled by user',
-          display: '🛑 Process cancelled'
-        };
-      }
-      
-      this.logger.error('Error processing message', error);
-      return {
-        content: `Error: ${error.message}`,
-        display: `❌ ${error.message}`
-      };
     } finally {
       // Signal process end
       try {
@@ -417,6 +258,119 @@ class SimulacrumCore {
         this.currentAbortController = null;
       }
     }
+  }
+
+  /**
+   * Normalize AI response into consistent format
+   * @private
+   */
+  static _normalizeAIResponse(raw) {
+    // If already normalized
+    if (typeof raw?.content === 'string') {
+      return {
+        content: raw.content,
+        display: raw.display ?? raw.content,
+        toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
+        model: raw.model,
+        usage: raw.usage,
+        raw
+      };
+    }
+    
+    // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
+    const __choices = raw && raw.choices;
+    const choice = Array.isArray(__choices) ? __choices[0] : undefined;
+    const msg = choice?.message ?? {};
+    const content = typeof msg.content === 'string' ? msg.content : '';
+    
+    // Handle empty AI responses as recoverable error for AI correction
+    if (!content || content.trim().length === 0) {
+      return {
+        content: 'Empty response not allowed - please provide a meaningful response to the user.',
+        display: 'Empty response not allowed - please provide a meaningful response to the user.',
+        toolCalls: [],
+        model: raw?.model,
+        usage: raw?.usage,
+        raw,
+        _parseError: true // Flag to continue loop for AI correction
+      };
+    }
+    
+    let toolCalls = msg.tool_calls || [];
+    // Legacy providers may return a single function_call instead of tool_calls
+    if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
+      toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
+    }
+    
+    // Some providers (Responses API style) wrap assistant messages differently; try to extract text
+    if (!content && !toolCalls?.length && (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))) {
+      const parts = raw.output[0].content;
+      const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
+      return { content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage, raw };
+    }
+    
+    const normalized = {
+      content,
+      display: content,
+      toolCalls,
+      model: raw?.model,
+      usage: raw?.usage,
+      raw
+    };
+
+    // Handle fallback tool calls - if no native tool_calls, try to parse JSON blocks
+    if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
+      const parseResult = this._parseInlineToolCall(normalized.content);
+      if (parseResult && parseResult.name) {
+        // Convert parsed fallback tool call to standard format for unified processing
+        normalized.toolCalls = [{
+          id: `fallback_${Date.now()}`,
+          function: {
+            name: parseResult.name,
+            arguments: JSON.stringify(parseResult.arguments || {})
+          }
+        }];
+        // Update display content to remove the JSON block
+        normalized.content = parseResult.cleanedText;
+        normalized.display = parseResult.cleanedText;
+      } else if (parseResult && parseResult.parseError) {
+        // Handle JSON parsing errors
+        const errorMessage = [
+          game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
+          '',
+          game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
+          game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
+          '',
+          game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
+        ].join('\n');
+        
+        normalized.content = errorMessage;
+        normalized.display = errorMessage;
+        normalized._parseError = true; // Flag to ensure loop processes this
+      }
+    }
+
+    // Diagnostics: log tool_calls returned (names only)
+    try {
+      if (isDiagnosticsEnabled()) {
+        const diag = createLogger('AIDiagnostics');
+        const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
+        diag.info('tool_calls', { count: names.length, names });
+      }
+    } catch {}
+    
+    return normalized;
+  }
+
+  /**
+   * Legacy compatibility method - use ChatHandler instead
+   * @deprecated
+   */
+  static async processMessage(message, user, options = {}) {
+    this.logger.warn('processMessage is deprecated - use ChatHandler instead');
+    const { ChatHandler } = await import('./chat-handler.js');
+    const chatHandler = new ChatHandler(this.conversationManager);
+    return await chatHandler.processUserMessage(message, user, options);
   }
   
   /**

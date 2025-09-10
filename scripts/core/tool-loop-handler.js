@@ -1,565 +1,263 @@
 /**
- * Tool calling loop handler for agentic behavior
- * Handles sequential tool execution and conversation flow
+ * Simplified tool execution handler - pure tool execution logic
+ * No conversation management - that's handled by ChatHandler
  */
 
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
 
-// Track recent tool execution results for system prompt updates
-let recentToolResults = [];
-
 /**
- * Sanitize messages for fallback when tool calling is not supported
- * Filters out tool roles and ensures only valid roles are sent
- */
-function _sanitizeMessagesForFallback(messages) {
-  try {
-    return (messages || []).filter(m => {
-      const r = m && m.role;
-      if (r !== 'system' && r !== 'user' && r !== 'assistant') return false;
-      const c = typeof m.content === 'string' ? m.content.trim() : '';
-      return c.length > 0;
-    }).map(m => ({ role: m.role, content: String(m.content) }));
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Generate system prompt with recent tool execution results
- * @param {Function} getSystemPrompt - Function to get base system prompt
- * @returns {string} System prompt with tool results
- */
-function getSystemPromptWithToolResults(getSystemPrompt) {
-  const basePrompt = getSystemPrompt();
-  
-  if (recentToolResults && recentToolResults.length > 0) {
-    const latestResult = recentToolResults[recentToolResults.length - 1];
-    const toolStatus = latestResult.success 
-      ? `Recent tool execution: Tool "${latestResult.tool}" executed successfully. Result: ${JSON.stringify(latestResult.result)}`
-      : `Recent tool execution: Tool "${latestResult.tool}" failed with error: ${latestResult.error}`;
-      
-    return `${basePrompt}
-
-${toolStatus}`;
-  }
-  
-  return basePrompt;
-}
-
-/**
- * Process tool call loop for continuation after fallback tool execution
+ * Execute tools from an AI response and continue autonomous loop
  */
 export async function processToolCallLoop(
-  normalized, 
-  tools, 
+  initialResponse, 
   conversationManager,
   aiClient,
   getSystemPrompt,
-  toolCallingSupported = true,
-  onAssistantMessage = null,
-  signal = null
+  signal = null,
+  onToolResult = null
 ) {
-  let final = normalized;
-  let lastSig = null;
-  let repeatCount = 0;
-  const REPEAT_LIMIT = 5;
-  let guardTriggered = false;
-  const currentToolSupport = toolCallingSupported; // Track current tool support state
-  
-  // Track correction attempts for failures
-  let correctionAttempts = 0;
-  const MAX_CORRECTION_ATTEMPTS = 3;
-  const failureHistory = [];
-  
-  // Track autonomous task completion
+  let currentResponse = initialResponse;
   let endTaskSignaled = false;
+  const REPEAT_LIMIT = 5;
+  let repeatCount = 0;
   
-  // Clear previous tool results for new loop
-  recentToolResults = [];
-  
-  while (!endTaskSignaled) {
+  while (!endTaskSignaled && repeatCount < REPEAT_LIMIT) {
+    repeatCount++;
+    
     // Check for cancellation
     if (signal?.aborted) {
       throw new Error('Process was cancelled');
     }
-    // If no tool calls and no parse error, continue with empty iteration
-    if ((!Array.isArray(final.toolCalls) || final.toolCalls.length === 0) && !final._parseError) {
-      // AI provided a response but no tools - continue autonomous loop
-      // Only add to conversation if not already added by SimulacrumCore
-      if (!final._alreadyAddedToConversation) {
-        conversationManager.addMessage('assistant', final.content, final.toolCalls);
-      }
-      
-      // Call the callback if provided
-      if (onAssistantMessage && typeof onAssistantMessage === 'function') {
-        try {
-          if (final.content) {
-            onAssistantMessage({ content: final.content, display: final.display });
-          }
-        } catch (e) {
-          // Ignore callback errors
-        }
-      }
-      
-      // Continue to next AI response
-      const systemPrompt = getSystemPrompt();
-      const conversationMessages = conversationManager.getMessages();
-      const messagesWithSystemPrompt = [
-        { role: 'system', content: systemPrompt },
-        ...conversationMessages
-      ];
-      
-      const followMessages = (currentToolSupport !== true) ? 
-        _sanitizeMessagesForFallback(messagesWithSystemPrompt) : messagesWithSystemPrompt;
-      const toolsToSend = (currentToolSupport === true) ? tools : null;
-      
-      let followRaw;
-      try {
-        // Check for cancellation before AI call
-        if (signal?.aborted) {
-          throw new Error('Process was cancelled');
-        }
-        followRaw = await aiClient.chat(followMessages, toolsToSend, { signal });
-      } catch (err) {
-        console.error('[Simulacrum:ToolLoop] AI chat request failed after retries:', err);
-        const errorMessage = `I'm having trouble connecting to the AI service. Please try again later. (Error: ${err.message})`;
-        conversationManager.addMessage('assistant', errorMessage);
-        final = {
-          content: errorMessage,
-          display: errorMessage,
-          toolCalls: [],
-          model: normalized?.model,
-          usage: {},
-          raw: null
-        };
-        break;
-      }
-      
-      final = normalizeAIResponse(followRaw);
-      continue; // Go back to start of while loop
+    
+    // Handle parse errors by getting AI correction
+    if (currentResponse._parseError) {
+      currentResponse = await getAICorrectionForError(currentResponse, conversationManager, aiClient, getSystemPrompt, signal);
+      continue;
     }
     
-    for (const call of final.toolCalls) {
-      const name = call?.function?.name || call?.name;
-      
-      // Check if this is the end_task tool
-      if (name === 'end_task') {
-        console.log('[Simulacrum:ToolLoop] AI signaled task completion with end_task tool');
-        endTaskSignaled = true;
-        break;
-      }
-      
-      let args = {};
-      try {
-        const rawArgs = call?.function?.arguments ?? call?.arguments ?? '{}';
-        args = typeof rawArgs === 'string' ? JSON.parse(rawArgs ?? '{}') : (rawArgs ?? {});
-      } catch (e) {
-        args = {};
-      }
-      
-      // Loop guard: check for repeated identical calls
-      try {
-        const sig = `${name}:${JSON.stringify(args)}`;
-        if (sig === lastSig) {
-          repeatCount += 1;
-        } else {
-          lastSig = sig;
-          repeatCount = 1;
-        }
-        if (repeatCount >= REPEAT_LIMIT) {
-          guardTriggered = true;
-          const notice = `Loop guard: Detected ${repeatCount} consecutive calls to '${name}' with identical arguments. Adjust the plan or provide a final answer.`;
-          conversationManager.addMessage('assistant', notice);
-          final = {
-            content: notice,
-            display: notice,
-            toolCalls: [],
-            model: normalized?.model,
-            usage: normalized?.usage,
-            raw: null
-          };
-          break;
-        }
-      } catch (_e) { /* ignore */ }
-      
-      if (guardTriggered) break;
-      
-      // Optional UX: process and plan labels for recursive tool calls
-      let planLabel = null;
-      try {
-        const processLabel = args.process_label ?? args.processLabel ?? args._process_label;
-        planLabel = args.plan_label ?? args.planLabel ?? args._plan_label;
-        
-        if (processLabel && typeof Hooks !== 'undefined' && Hooks?.callAll) {
-          Hooks.callAll('simulacrum:processStatus', {
-            state: 'start',
-            label: processLabel,
-            toolName: name,
-            callId: call?.id
-          });
-        }
-      } catch (_e) {
-        /* no-op */
-      }
-      
-      // Execute the tool call
-      try {
-        const exec = await toolRegistry.executeTool(name, args);
-        const payload = {
-          ok: true,
-          tool: name,
-          call_id: call?.id,
-          args,
-          result: exec?.result ?? null,
-          meta: { executionId: exec?.executionId, duration: exec?.duration }
-        };
-        
-        // Reset correction attempts on successful tool execution
-        correctionAttempts = 0;
-        failureHistory.length = 0;
-        
-        // Track successful tool execution result
-        recentToolResults.push({
-          tool: name,
-          success: true,
-          result: exec?.result ?? null,
-          timestamp: Date.now()
-        });
-        
-        // Tool success will be handled via tool message response - don't pollute system prompt
-        
-        // Emit plan label after successful tool execution
-        if (planLabel && typeof Hooks !== 'undefined' && Hooks?.callAll) {
-          Hooks.callAll('simulacrum:processStatus', {
-            state: 'plan',
-            label: planLabel,
-            toolName: name,
-            callId: call?.id
-          });
-        }
-        
-        // Post-tool verification pattern (like qwen-code)
-        await performPostToolVerification(name, args, exec?.result, conversationManager);
-
-        // Add the tool's result to the conversation - use tool role for tool-compatible endpoints
-        if (currentToolSupport === true) {
-          conversationManager.addMessage('tool', JSON.stringify(exec?.result ?? null), null, call?.id);
-        }
-      } catch (err) {
-        // Track this failure for correction attempts
-        correctionAttempts++;
-        failureHistory.push({
-          attempt: correctionAttempts,
-          tool: name,
-          error: err?.message || 'Unknown error',
-          type: err?.constructor?.name || 'ToolError',
-          args: args,
-          timestamp: Date.now()
-        });
-        
-        // Check if we've exceeded max correction attempts
-        if (correctionAttempts >= MAX_CORRECTION_ATTEMPTS) {
-          console.error(`[Simulacrum:AgenticCorrection] AI failed to self-correct after ${MAX_CORRECTION_ATTEMPTS} attempts:`);
-          failureHistory.forEach((failure, index) => {
-            console.error(`  Attempt ${failure.attempt}: Tool '${failure.tool}' failed with: ${failure.error} (${failure.type})`);
-            console.error(`    Args: ${JSON.stringify(failure.args)}`);
-          });
-          
-          // Exit the loop to prevent further attempts
-          guardTriggered = true;
-          const notice = `Maximum correction attempts (${MAX_CORRECTION_ATTEMPTS}) exceeded. AI unable to self-correct from errors.`;
-          conversationManager.addMessage('assistant', notice);
-          final = {
-            content: notice,
-            display: notice,
-            toolCalls: [],
-            model: normalized?.model,
-            usage: normalized?.usage,
-            raw: null
-          };
-          break;
-        }
-        
-        const payload = {
-          ok: false,
-          tool: name,
-          call_id: call?.id,
-          args,
-          error: { message: err?.message, type: err?.constructor?.name || 'ToolError', details: err?.details }
-        };
-        
-        // Track failed tool execution result
-        recentToolResults.push({
-          tool: name,
-          success: false,
-          error: err?.message || 'Unknown error',
-          timestamp: Date.now()
-        });
-        
-        // Add the error result to the conversation - use tool role for tool-compatible endpoints
-        if (currentToolSupport === true) {
-          const errorResult = { error: err?.message || 'Unknown error' };
-          conversationManager.addMessage('tool', JSON.stringify(errorResult), null, call?.id);
-        }
-      }
+    // If no tool calls, handle autonomous continuation
+    if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
+      return await handleAutonomousContinuation(currentResponse, conversationManager, aiClient, getSystemPrompt, signal, onToolResult);
     }
     
-    if (guardTriggered) break;
+    // Execute all tool calls
+    const toolResults = await executeToolCalls(currentResponse.toolCalls, onToolResult, signal);
     
-    // Handle parse errors (including empty responses) for correction tracking
-    if (final._parseError) {
-      // Check if this is an empty response error vs JSON parse error
-      if (final.content && final.content.includes('Empty response not allowed')) {
-        correctionAttempts++;
-        failureHistory.push({
-          attempt: correctionAttempts,
-          tool: 'AI_RESPONSE',
-          error: 'Empty response not allowed - please provide a meaningful response to the user',
-          type: 'EmptyResponseError',
-          args: { response: 'empty' },
-          timestamp: Date.now()
+    // Check if end_task was called
+    const endTaskResult = toolResults.find(result => result.toolName === 'end_task');
+    if (endTaskResult) {
+      endTaskSignaled = true;
+      if (onToolResult) {
+        onToolResult({
+          role: 'assistant',
+          content: endTaskResult.result.content,
+          display: endTaskResult.result.display
         });
-        
-        // Check if we've exceeded max correction attempts
-        if (correctionAttempts >= MAX_CORRECTION_ATTEMPTS) {
-          console.error(`[Simulacrum:AgenticCorrection] AI failed to self-correct after ${MAX_CORRECTION_ATTEMPTS} attempts:`);
-          failureHistory.forEach((failure, index) => {
-            console.error(`  Attempt ${failure.attempt}: ${failure.tool} failed with: ${failure.error} (${failure.type})`);
-            console.error(`    Args: ${JSON.stringify(failure.args)}`);
-          });
-          
-          guardTriggered = true;
-          const notice = `Maximum correction attempts (${MAX_CORRECTION_ATTEMPTS}) exceeded. AI unable to provide meaningful responses.`;
-          conversationManager.addMessage('assistant', notice);
-          final = {
-            content: notice,
-            display: notice,
-            toolCalls: [],
-            model: normalized?.model,
-            usage: normalized?.usage,
-            raw: null
-          };
-          break;
-        }
       }
-      
-      final._parseError = false;
-    }
-    
-    // For legacy/fallback mode, add tool results as system message so AI notices them
-    // Tool-compatible endpoints already have tool messages above
-    if (currentToolSupport !== true && recentToolResults && recentToolResults.length > 0) {
-      const latestResult = recentToolResults[recentToolResults.length - 1];
-      const toolStatusMessage = latestResult.success 
-        ? `Tool execution completed: ${latestResult.tool} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
-        : `Tool execution failed: ${latestResult.tool} failed with error: ${latestResult.error}`;
-      
-      // Add as newest system message so AI notices the tool results in legacy mode
-      conversationManager.addMessage('system', toolStatusMessage);
-    }
-    
-    // Build followup messages with fresh system prompt (like main processMessage does)
-    const systemPrompt = getSystemPrompt();
-    const conversationMessages = conversationManager.getMessages();
-    const messagesWithSystemPrompt = [
-      { role: 'system', content: systemPrompt },
-      ...conversationMessages
-    ];
-    
-    const followMessages = (currentToolSupport !== true) ? 
-      _sanitizeMessagesForFallback(messagesWithSystemPrompt) : messagesWithSystemPrompt;
-    const toolsToSend = (currentToolSupport === true) ? tools : null;
-    
-    let followRaw;
-    try {
-      // Check for cancellation before AI call
-      if (signal?.aborted) {
-        throw new Error('Process was cancelled');
-      }
-      followRaw = await aiClient.chat(followMessages, toolsToSend, { signal });
-    } catch (err) {
-      console.error('[Simulacrum:ToolLoop] AI chat request failed after retries:', err);
-      const errorMessage = `I'm having trouble connecting to the AI service. Please try again later. (Error: ${err.message})`;
-      conversationManager.addMessage('assistant', errorMessage);
-      final = {
-        content: errorMessage,
-        display: errorMessage,
+      return {
+        content: endTaskResult.result.content,
+        display: endTaskResult.result.display,
         toolCalls: [],
-        model: normalized?.model,
-        usage: {},
-        raw: null
+        endTask: true
       };
-      // Call the onAssistantMessage callback with the error message
-      if (onAssistantMessage && typeof onAssistantMessage === 'function') {
-        try {
-          onAssistantMessage(final);
-        } catch (e) {
-          // Ignore callback errors
-        }
-      }
-      break; // Exit the loop gracefully
     }
     
-    final = normalizeAIResponse(followRaw);
-    
-    // Handle fallback tool calls if no native tool_calls found
-    if ((!Array.isArray(final.toolCalls) || final.toolCalls.length === 0) && currentToolSupport !== true) {
-      console.log('[Simulacrum:ToolLoop] No native tool calls found, attempting fallback parsing');
-      try {
-        // Import the method dynamically to avoid circular dependency
-        const SimulacrumCore = await import('./simulacrum-core.js');
-        const parsed = SimulacrumCore.SimulacrumCore._parseInlineToolCall(final.content);
-        console.log('[Simulacrum:ToolLoop] Fallback parsing result:', parsed);
-        
-        if (parsed && parsed.name) {
-          console.log(`[Simulacrum:ToolLoop] Creating fallback tool call for '${parsed.name}'`);
-          final.toolCalls = [{
-            id: `fallback_${Date.now()}`,
-            function: {
-              name: parsed.name,
-              arguments: JSON.stringify(parsed.arguments || {})
-            }
-          }];
-          final.content = parsed.cleanedText;
-          final.display = parsed.cleanedText;
-        } else if (parsed && parsed.parseError) {
-          // Handle JSON parsing errors by creating error feedback for the AI
-          correctionAttempts++;
-          failureHistory.push({
-            attempt: correctionAttempts,
-            tool: 'JSON_PARSER',
-            error: `JSON Parsing Error: ${parsed.parseError}`,
-            type: 'ParseError',
-            args: { content: parsed.content },
-            timestamp: Date.now()
-          });
-          
-          // Check if we've exceeded max correction attempts
-          if (correctionAttempts >= MAX_CORRECTION_ATTEMPTS) {
-            console.error(`[Simulacrum:AgenticCorrection] AI failed to self-correct after ${MAX_CORRECTION_ATTEMPTS} attempts:`);
-            failureHistory.forEach((failure, index) => {
-              console.error(`  Attempt ${failure.attempt}: ${failure.tool} failed with: ${failure.error} (${failure.type})`);
-              console.error(`    Args: ${JSON.stringify(failure.args)}`);
-            });
-            
-            guardTriggered = true;
-            const notice = `Maximum correction attempts (${MAX_CORRECTION_ATTEMPTS}) exceeded. AI unable to self-correct from parsing errors.`;
-            conversationManager.addMessage('assistant', notice);
-            final = {
-              content: notice,
-              display: notice,
-              toolCalls: [],
-              model: normalized?.model,
-              usage: normalized?.usage,
-              raw: null
-            };
-            break;
-          }
-          
-          console.log('[Simulacrum:ToolLoop] JSON parsing error detected, providing feedback to AI');
-          const errorMessage = `JSON Parsing Error: ${parsed.parseError}
-
-The JSON in your previous response was malformed. Please provide a valid JSON tool call in the correct format:
-\`\`\`json
-{"tool_call": {"name": "tool_name", "arguments": {...}}}
-\`\`\`
-
-Problematic content: ${parsed.content}`;
-          
-          // Update system message with error feedback
-          conversationManager.updateSystemMessage(errorMessage);
-          
-          // Continue the loop to re-prompt the AI by setting a special parse error flag
-          final.toolCalls = [];
-          final.content = errorMessage;
-          final.display = errorMessage;
-          final._parseError = true; // Flag to continue loop despite no tool calls
-        } else {
-          console.log('[Simulacrum:ToolLoop] No valid tool call found in fallback parsing');
-        }
-      } catch (e) {
-        console.error('[Simulacrum:ToolLoop] Fallback parsing error:', e.message);
-      }
-    }
-    
-    // Don't add parse error messages to conversation - they're for AI correction only
-    if (!final._parseError) {
-      conversationManager.addMessage('assistant', final.content, final.toolCalls);
-      
-      // Call the callback if provided
-      if (onAssistantMessage && typeof onAssistantMessage === 'function') {
-        try {
-          // Do not pass the raw `final` object; it may contain tool calls.
-          // Only send the text content to the UI at this stage.
-          if (final.content) {
-            onAssistantMessage({ content: final.content, display: final.display });
-          }
-        } catch (e) {
-          // Ignore callback errors
-        }
-      }
+    // Get next AI response based on tool results
+    currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, signal);
+  }
+  
+  // If we hit the repeat limit, return the last response
+  if (repeatCount >= REPEAT_LIMIT) {
+    if (onToolResult) {
+      onToolResult({
+        role: 'assistant',
+        content: 'Tool execution limit reached. Stopping autonomous loop.',
+        display: '⚠️ Tool execution limit reached'
+      });
     }
   }
   
-  // After the loop, the `final` object contains the last AI response.
-  // This is the concluding message of the tool interaction sequence.
-  return final;
+  return currentResponse;
 }
 
 /**
- * Normalize AI response to consistent format
+ * Execute all tool calls and return results
  */
-function normalizeAIResponse(rawResponse) {
-  if (typeof rawResponse?.content === 'string') {
+async function executeToolCalls(toolCalls, onToolResult, signal) {
+  const results = [];
+  
+  for (const toolCall of toolCalls) {
+    if (signal?.aborted) {
+      throw new Error('Process was cancelled');
+    }
+    
+    const toolName = toolCall?.function?.name || toolCall?.name;
+    const toolArgs = toolCall?.function?.arguments || toolCall?.arguments;
+    
+    try {
+      // Parse arguments if they're a string
+      const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
+      
+      // Get tool instance
+      const tool = toolRegistry.getTool(toolName);
+      if (!tool) {
+        throw new Error(`Unknown tool: ${toolName}`);
+      }
+      
+      // Execute tool
+      const result = await tool.execute(parsedArgs);
+      
+      // Notify about tool result
+      if (onToolResult) {
+        onToolResult({
+          role: 'tool',
+          content: JSON.stringify(result),
+          toolCallId: toolCall.id,
+          toolName
+        });
+      }
+      
+      results.push({
+        toolCall,
+        toolName,
+        result,
+        success: true
+      });
+      
+      // Post-tool verification if needed
+      try {
+        await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
+      } catch (verificationError) {
+        console.warn(`Post-tool verification failed for ${toolName}:`, verificationError);
+      }
+      
+    } catch (error) {
+      console.error(`Tool execution failed for ${toolName}:`, error);
+      
+      const errorResult = {
+        error: error.message,
+        toolName,
+        arguments: toolArgs
+      };
+      
+      // Notify about tool error
+      if (onToolResult) {
+        onToolResult({
+          role: 'tool',
+          content: JSON.stringify(errorResult),
+          toolCallId: toolCall.id,
+          toolName
+        });
+      }
+      
+      results.push({
+        toolCall,
+        toolName,
+        result: errorResult,
+        success: false,
+        error
+      });
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * Get AI correction for parse errors
+ */
+async function getAICorrectionForError(errorResponse, conversationManager, aiClient, getSystemPrompt, signal) {
+  // Add error message to conversation for AI to see
+  conversationManager.updateSystemMessage(errorResponse.content);
+  
+  // Get corrected response from AI
+  const messages = [
+    { role: 'system', content: getSystemPrompt() },
+    ...conversationManager.getMessages()
+  ];
+  
+  const raw = await aiClient.chat(messages, null, { signal });
+  return normalizeAIResponse(raw);
+}
+
+/**
+ * Handle autonomous continuation when no tools are called
+ */
+async function handleAutonomousContinuation(response, conversationManager, aiClient, getSystemPrompt, signal, onToolResult) {
+  // For simple responses with no tools, just return
+  // In future, this could check for autonomous continuation logic
+  return response;
+}
+
+/**
+ * Get next AI response after tool execution
+ */
+async function getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, signal) {
+  // Build context with tool results
+  const messages = [
+    { role: 'system', content: getSystemPrompt() },
+    ...conversationManager.getMessages()
+  ];
+  
+  // Add tool results to conversation context
+  for (const toolResult of toolResults) {
+    messages.push({
+      role: 'tool',
+      content: JSON.stringify(toolResult.result),
+      tool_call_id: toolResult.toolCall.id
+    });
+  }
+  
+  // Get AI response
+  const tools = toolRegistry.getToolSchemas();
+  const raw = await aiClient.chat(messages, tools, { signal });
+  return normalizeAIResponse(raw);
+}
+
+/**
+ * Normalize AI response (simplified version)
+ */
+function normalizeAIResponse(raw) {
+  if (typeof raw?.content === 'string') {
     return {
-      content: rawResponse.content,
-      display: rawResponse.display ?? rawResponse.content,
-      toolCalls: rawResponse.toolCalls ?? rawResponse.tool_calls ?? [],
-      model: rawResponse.model,
-      usage: rawResponse.usage,
-      raw: rawResponse
+      content: raw.content,
+      display: raw.display ?? raw.content,
+      toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
+      model: raw.model,
+      usage: raw.usage,
+      raw
     };
   }
   
-  const choices = rawResponse?.choices;
-  const choice = Array.isArray(choices) ? choices[0] : undefined;
+  const choice = raw?.choices?.[0];
   const msg = choice?.message ?? {};
   const content = typeof msg.content === 'string' ? msg.content : '';
   
-  // Handle empty AI responses as recoverable error for AI correction
+  // Handle empty responses
   if (!content || content.trim().length === 0) {
     return {
       content: 'Empty response not allowed - please provide a meaningful response to the user.',
       display: 'Empty response not allowed - please provide a meaningful response to the user.',
       toolCalls: [],
-      model: rawResponse?.model,
-      usage: rawResponse?.usage,
-      raw: rawResponse,
-      _parseError: true // Flag to continue loop for AI correction
+      model: raw?.model,
+      usage: raw?.usage,
+      raw,
+      _parseError: true
     };
   }
   
   let toolCalls = msg.tool_calls || [];
-  
-  if ((!toolCalls || toolCalls.length === 0) && msg.function_call?.name) {
-    toolCalls = [{
-      id: msg.function_call.id,
-      function: {
-        name: msg.function_call.name,
-        arguments: msg.function_call.arguments
-      }
-    }];
+  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
+    toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
   }
   
   return {
     content,
     display: content,
     toolCalls,
-    model: rawResponse?.model,
-    usage: rawResponse?.usage,
-    raw: rawResponse
+    model: raw?.model,
+    usage: raw?.usage,
+    raw
   };
 }
-

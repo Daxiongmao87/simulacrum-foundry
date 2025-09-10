@@ -6,6 +6,7 @@
 import { ConversationCommands } from './conversation-commands.js';
 import { createLogger } from '../utils/logger.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
+import { ChatHandler } from '../core/chat-handler.js';
 
 // Simple, direct base class resolution for FoundryVTT v13
 const AbstractSidebarTab = globalThis.foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
@@ -99,6 +100,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     this.messages = [];
     this.logger = createLogger('SimulacrumSidebarTab');
     this._syncedFromCore = false;
+    this.chatHandler = null; // Will be initialized when SimulacrumCore is ready
 
     // Seed a welcome message until conversation history loads
     try {
@@ -155,6 +157,12 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    */
   async _loadConversationHistoryOnInit() {
     try {
+      // Initialize ChatHandler
+      const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+      if (SimulacrumCore?.conversationManager) {
+        this.chatHandler = new ChatHandler(SimulacrumCore.conversationManager);
+      }
+      
       await this._syncFromCoreConversation();
       this._syncedFromCore = true;
       // If history was loaded, replace welcome message and re-render
@@ -201,12 +209,19 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   }
 
   /**
-   * Sync UI messages from SimulacrumCore conversation (user/assistant only)
+   * Sync UI messages from conversation manager (user/assistant only)
    */
   async _syncFromCoreConversation() {
     try {
-      const { SimulacrumCore } = await import('../core/simulacrum-core.js');
-      const cm = SimulacrumCore?.conversationManager;
+      // Use ChatHandler if available, otherwise fallback to SimulacrumCore
+      let cm;
+      if (this.chatHandler) {
+        cm = this.chatHandler.conversationManager;
+      } else {
+        const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+        cm = SimulacrumCore?.conversationManager;
+      }
+      
       if (cm && Array.isArray(cm.messages)) {
         const projected = cm.messages
           .filter(m => m && (m.role === 'user' || m.role === 'assistant'))
@@ -245,12 +260,24 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     input.value = '';
 
     try {
-      const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+      // Ensure ChatHandler is initialized
+      if (!this.chatHandler) {
+        const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+        const { ChatHandler } = await import('../core/chat-handler.js');
+        if (SimulacrumCore?.conversationManager) {
+          this.chatHandler = new ChatHandler(SimulacrumCore.conversationManager);
+        }
+      }
       
-      if (SimulacrumCore.conversationManager) {
+      if (!this.chatHandler) {
+        throw new Error('ChatHandler not available');
+      }
+      
+      // Handle conversation commands
+      if (this.chatHandler.conversationManager) {
         const commandResult = await ConversationCommands.handleConversationCommand(
           message, 
-          SimulacrumCore.conversationManager
+          this.chatHandler.conversationManager
         );
         
         if (commandResult.isCommand) {
@@ -262,19 +289,22 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       // Add user message to chat log
       await this.addMessage('user', message);
 
-      // Define the callback to update the UI with each assistant message
+      // Define callbacks for ChatHandler
+      const onUserMessage = ({ content }) => {
+        // User message already added above
+      };
+      
       const onAssistantMessage = async (response) => {
         if (response.content) {
-          await this.addMessage('assistant', response.content);
+          await this.addMessage('assistant', response.content, response.display);
         }
-        // Optionally, you could add a message here about tool calls starting
-        // For now, we'll just display the text content as it arrives.
       };
 
-      // Process message with AI, providing our callback
-      await SimulacrumCore.processMessage(message, game.user, { onAssistantMessage });
-
-      // No final sync or render is needed, the callback handles it incrementally.
+      // Process message through ChatHandler
+      await this.chatHandler.processUserMessage(message, game.user, { 
+        onUserMessage, 
+        onAssistantMessage 
+      });
 
     } catch (error) {
       this.logger.error('Error processing message', error);
@@ -290,8 +320,13 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    */
   static async _onClearChat() {
     try {
-      const { SimulacrumCore } = await import('../core/simulacrum-core.js');
-      await SimulacrumCore.clearConversation?.();
+      if (this.chatHandler) {
+        await this.chatHandler.clearConversation();
+      } else {
+        // Fallback to SimulacrumCore for compatibility
+        const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+        await SimulacrumCore.clearConversation?.();
+      }
     } catch (_e) { /* ignore */ }
     this.clearMessages();
     await this.addMessage('assistant', game.i18n.localize('SIMULACRUM.WelcomeMessage'));
@@ -315,6 +350,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    */
   static async _onCancelProcess(event, target) {
     try {
+      // Cancel through SimulacrumCore (it handles the actual abort controller)
       const { SimulacrumCore } = await import('../core/simulacrum-core.js');
       SimulacrumCore.cancelCurrentProcess();
       // Note: this refers to the instance when called with .call(this, ...)
