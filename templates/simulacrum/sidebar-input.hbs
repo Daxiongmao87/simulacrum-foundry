@@ -8,16 +8,13 @@
 
 <div id="chat-controls">
     <div class="control-buttons">
-        <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip aria-label="Clear Chat Log" data-action="clearChat"></button>
+        {{#if processActive}}
+            <button type="button" class="ui-control icon fa-solid fa-stop" data-tooltip aria-label="Cancel Agent Process" data-action="cancelProcess"></button>
+        {{else}}
+            <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip aria-label="Clear Chat Log" data-action="clearChat"></button>
+        {{/if}}
     </div>
 </div>
 
-{{!-- Process status banner shown while tools are running --}}
-{{#if processActive}}
-  <div class="process-status flexrow" style="gap: 0.5rem; align-items: center; margin: 0.25rem 0;">
-    <i class="fa-solid fa-circle-notch fa-spin"></i>
-    <span class="label">{{processLabel}}</span>
-  </div>
-{{/if}}
 
-<textarea id="chat-message" class="chat-input" name="message" autocomplete="off" placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat"></textarea></form>
+<textarea id="chat-message" class="chat-input" name="message" autocomplete="off" placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat" {{#if processActive}}disabled{{/if}}></textarea></form>

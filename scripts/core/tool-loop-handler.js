@@ -58,7 +58,8 @@ export async function processToolCallLoop(
   aiClient,
   getSystemPrompt,
   toolCallingSupported = true,
-  onAssistantMessage = null
+  onAssistantMessage = null,
+  signal = null
 ) {
   let final = normalized;
   let lastSig = null;
@@ -79,10 +80,17 @@ export async function processToolCallLoop(
   recentToolResults = [];
   
   while (!endTaskSignaled) {
+    // Check for cancellation
+    if (signal?.aborted) {
+      throw new Error('Process was cancelled');
+    }
     // If no tool calls and no parse error, continue with empty iteration
     if ((!Array.isArray(final.toolCalls) || final.toolCalls.length === 0) && !final._parseError) {
       // AI provided a response but no tools - continue autonomous loop
-      conversationManager.addMessage('assistant', final.content, final.toolCalls);
+      // Only add to conversation if not already added by SimulacrumCore
+      if (!final._alreadyAddedToConversation) {
+        conversationManager.addMessage('assistant', final.content, final.toolCalls);
+      }
       
       // Call the callback if provided
       if (onAssistantMessage && typeof onAssistantMessage === 'function') {
@@ -109,7 +117,11 @@ export async function processToolCallLoop(
       
       let followRaw;
       try {
-        followRaw = await aiClient.chat(followMessages, toolsToSend);
+        // Check for cancellation before AI call
+        if (signal?.aborted) {
+          throw new Error('Process was cancelled');
+        }
+        followRaw = await aiClient.chat(followMessages, toolsToSend, { signal });
       } catch (err) {
         console.error('[Simulacrum:ToolLoop] AI chat request failed after retries:', err);
         const errorMessage = `I'm having trouble connecting to the AI service. Please try again later. (Error: ${err.message})`;
@@ -362,7 +374,11 @@ export async function processToolCallLoop(
     
     let followRaw;
     try {
-      followRaw = await aiClient.chat(followMessages, toolsToSend);
+      // Check for cancellation before AI call
+      if (signal?.aborted) {
+        throw new Error('Process was cancelled');
+      }
+      followRaw = await aiClient.chat(followMessages, toolsToSend, { signal });
     } catch (err) {
       console.error('[Simulacrum:ToolLoop] AI chat request failed after retries:', err);
       const errorMessage = `I'm having trouble connecting to the AI service. Please try again later. (Error: ${err.message})`;
@@ -468,18 +484,21 @@ Problematic content: ${parsed.content}`;
       }
     }
     
-    conversationManager.addMessage('assistant', final.content, final.toolCalls);
-    
-    // Call the callback if provided
-    if (onAssistantMessage && typeof onAssistantMessage === 'function') {
-      try {
-        // Do not pass the raw `final` object; it may contain tool calls.
-        // Only send the text content to the UI at this stage.
-        if (final.content) {
-          onAssistantMessage({ content: final.content, display: final.display });
+    // Don't add parse error messages to conversation - they're for AI correction only
+    if (!final._parseError) {
+      conversationManager.addMessage('assistant', final.content, final.toolCalls);
+      
+      // Call the callback if provided
+      if (onAssistantMessage && typeof onAssistantMessage === 'function') {
+        try {
+          // Do not pass the raw `final` object; it may contain tool calls.
+          // Only send the text content to the UI at this stage.
+          if (final.content) {
+            onAssistantMessage({ content: final.content, display: final.display });
+          }
+        } catch (e) {
+          // Ignore callback errors
         }
-      } catch (e) {
-        // Ignore callback errors
       }
     }
   }

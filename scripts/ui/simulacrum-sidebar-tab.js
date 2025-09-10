@@ -49,7 +49,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       actions: { 
         sendMessage: this._onSendMessage, 
         clearChat: this._onClearChat,
-        jumpToBottom: this._onJumpToBottom
+        jumpToBottom: this._onJumpToBottom,
+        cancelProcess: this._onCancelProcess
       }
     });
   })();
@@ -129,18 +130,22 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     this._activeProcesses = new Map(); // callId -> { label, toolName }
     try {
       Hooks.on('simulacrum:processStatus', (info) => {
+        console.log('[SimulacrumSidebarTab] Process status hook:', info);
         const { state, callId, label, toolName } = info || {};
         if (!callId) return;
         if (state === 'start') {
           const capped = String(label || '').slice(0, 120);
           this._activeProcesses.set(callId, { label: capped, toolName: String(toolName || '') });
+          console.log('[SimulacrumSidebarTab] Process started, active processes:', this._activeProcesses.size);
         } else if (state === 'end') {
           this._activeProcesses.delete(callId);
+          console.log('[SimulacrumSidebarTab] Process ended, active processes:', this._activeProcesses.size);
         }
-        this.render({ parts: ['input'] });
+        this.render({ parts: ['log', 'input'] });
       });
     } catch (_err) {
       // Hooks may be unavailable in certain test contexts
+      console.error('[SimulacrumSidebarTab] Hook registration failed:', _err);
     }
 
   }
@@ -179,14 +184,19 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       user: game.user
     } : null;
     
+    const processActive = this._activeProcesses.size > 0;
+    const processLabel = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
+    
+    console.log('[SimulacrumSidebarTab] _prepareContext - processActive:', processActive, 'activeProcesses:', this._activeProcesses.size);
+    
     return foundry.utils.mergeObject(context, {
       messages: this.messages,
       welcomeMessage: welcomeMessage,
       isGM: game.user.isGM,
       user: game.user,
       isAtBottom: this.#isAtBottom,
-      processActive: this._activeProcesses.size > 0,
-      processLabel: Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null
+      processActive: processActive,
+      processLabel: processLabel
     });
   }
 
@@ -225,6 +235,11 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     const message = input.value.trim();
     
     if (!message) return;
+    
+    // Check if input is disabled (means agent is processing)
+    if (input.disabled) {
+      return; // Don't submit while agent is working
+    }
 
     // Clear input immediately
     input.value = '';
@@ -290,6 +305,27 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    */
   static async _onJumpToBottom(event, target) {
     this.scrollBottom();
+  }
+
+  /**
+   * Handle cancel process action
+   * @param {Event} event - The originating event
+   * @param {HTMLElement} target - The target element
+   * @private
+   */
+  static async _onCancelProcess(event, target) {
+    try {
+      const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+      SimulacrumCore.cancelCurrentProcess();
+      // Note: this refers to the instance when called with .call(this, ...)
+      if (this && typeof this.addMessage === 'function') {
+        await this.addMessage('assistant', 'Process cancelled by user', '🛑 Process cancelled');
+      }
+    } catch (error) {
+      if (this && this.logger) {
+        this.logger.error('Error cancelling process', error);
+      }
+    }
   }
 
   /**
@@ -473,6 +509,15 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
 
         // Auto-focus on input
         input.focus();
+      }
+      
+      // Handle cancel button explicitly (backup for data-action)
+      const cancelButton = element.querySelector('[data-action="cancelProcess"]');
+      if (cancelButton) {
+        cancelButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          SimulacrumSidebarTab._onCancelProcess.call(this, event, cancelButton);
+        });
       }
     }
   }

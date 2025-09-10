@@ -34,8 +34,6 @@ function registerAPISettings() {
     onChange: async (_value) => {
       try {
         await SimulacrumCore.initializeAIClient();
-        SimulacrumCore.toolCallingSupported = null;
-        await SimulacrumCore.detectToolCallingSupport?.();
         createLogger('Module').info('AI client reinitialized after apiKey change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after apiKey change', e);
@@ -54,8 +52,6 @@ function registerAPISettings() {
     onChange: async (_value) => {
       try {
         await SimulacrumCore.initializeAIClient();
-        SimulacrumCore.toolCallingSupported = null;
-        await SimulacrumCore.detectToolCallingSupport?.();
         createLogger('Module').info('AI client reinitialized after baseURL change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after baseURL change', e);
@@ -74,8 +70,6 @@ function registerAPISettings() {
     onChange: async (_value) => {
       try {
         await SimulacrumCore.initializeAIClient();
-        SimulacrumCore.toolCallingSupported = null;
-        await SimulacrumCore.detectToolCallingSupport?.();
         createLogger('Module').info('AI client reinitialized after model change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after model change', e);

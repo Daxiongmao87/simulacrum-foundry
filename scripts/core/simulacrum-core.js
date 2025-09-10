@@ -18,7 +18,8 @@ import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 class SimulacrumCore {
   static logger = createLogger('Core');
-  static toolCallingSupported = null; // null=unknown, true/false after probe
+  // Note: toolCallingSupported removed - now determined by legacyMode setting
+  static currentAbortController = null; // Track current cancellation controller
 
   static _sanitizeMessagesForFallback(messages) {
     try {
@@ -100,18 +101,8 @@ class SimulacrumCore {
     // Register default tools so the model can call them
     this.registerDefaultTools();
 
-    // Probe whether the current endpoint/model supports function calling
-    try {
-      await this.detectToolCallingSupport();
-    } catch (e) { 
-      // If detection fails, assume NO tool support (safer default)
-      this.toolCallingSupported = false;
-      try {
-        if (isDiagnosticsEnabled()) {
-          createLogger('AIDiagnostics').warn('tool_detection_failed', { error: e.message });
-        }
-      } catch {}
-    }
+    // Tool calling support is now determined by user setting
+    this.toolCallingSupported = null; // Will be checked via settings in processMessage
     
     this.logger.info('Module initialized');
   }
@@ -144,13 +135,46 @@ class SimulacrumCore {
   }
   
   /**
+   * Cancel the current agent processing
+   */
+  static cancelCurrentProcess() {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+      this.logger.info('Agent process cancelled by user');
+      try {
+        Hooks.call('simulacrum:processCancelled');
+      } catch (_e) { /* ignore */ }
+    }
+  }
+
+  /**
    * Process a user message
    * @param {string} message - User message
    * @param {Object} user - User who sent the message
    * @returns {Object} AI response
    */
   static async processMessage(message, user, options = {}) {
+    // Cancel any existing process
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+    }
+    
+    // Create new abort controller for this process
+    this.currentAbortController = new AbortController();
+    const signal = this.currentAbortController.signal;
+    
     try {
+      // Signal process start
+      try {
+        Hooks.call('simulacrum:processStatus', {
+          state: 'start',
+          callId: 'main-process',
+          label: 'Processing message...',
+          toolName: 'ai-chat'
+        });
+      } catch (_e) { /* ignore */ }
+      
       // Check if AI client is initialized
       if (!this.aiClient) {
         await this.initializeAIClient();
@@ -187,17 +211,16 @@ class SimulacrumCore {
         ...limitedMessages
       ];
       
-      // Get AI response - check legacy mode setting instead of probe
+      // Get AI response - use legacy mode setting to determine tool support
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');
       const useNativeTools = !legacyMode;
       const sendTools = useNativeTools ? tools : null;
       const outbound = useNativeTools ? messages : this._sanitizeMessagesForFallback(messages);
       
       console.log('[Simulacrum:ProcessMessage] Chat request configuration:', {
-        toolCallingSupported: this.toolCallingSupported,
+        legacyMode,
         useNativeTools,
         sendingTools: !!sendTools,
-        fallbackMode: this.toolCallingSupported === false,
         toolCount: tools?.length || 0
       });
       
@@ -205,13 +228,18 @@ class SimulacrumCore {
       try {
         if (isDiagnosticsEnabled()) {
           createLogger('AIDiagnostics').info('chat_request', { 
-            toolCallingSupported: this.toolCallingSupported, 
-            sendingTools: !!sendTools,
-            fallbackMode: this.toolCallingSupported === false
+            legacyMode, 
+            useNativeTools,
+            sendingTools: !!sendTools
           });
         }
       } catch {}
-      const raw = await this.aiClient.chat(outbound, sendTools);
+      // Check for cancellation before making request
+      if (signal.aborted) {
+        throw new Error('Process was cancelled');
+      }
+      
+      const raw = await this.aiClient.chat(outbound, sendTools, { signal });
       if (raw == null) {
         throw new Error('Empty AI response');
       }
@@ -282,11 +310,14 @@ class SimulacrumCore {
       }
 
       // Add assistant response (with inline tool_call stripped from display)
+      // But skip adding/displaying if it's a parse error meant for AI correction only
       const assistantVisibleContent = parsedInline?.cleanedText ?? normalized.content;
-      this.conversationManager.addMessage('assistant', assistantVisibleContent, normalized.toolCalls);
-      if (options.onAssistantMessage) {
-        const messageForUI = { ...normalized, content: assistantVisibleContent, display: assistantVisibleContent };
-        options.onAssistantMessage(messageForUI);
+      if (!normalized._parseError) {
+        this.conversationManager.addMessage('assistant', assistantVisibleContent, normalized.toolCalls);
+        if (options.onAssistantMessage) {
+          const messageForUI = { ...normalized, content: assistantVisibleContent, display: assistantVisibleContent };
+          options.onAssistantMessage(messageForUI);
+        }
       }
 
       // Handle fallback tool calls - if no native tool_calls, try to parse JSON blocks
@@ -324,6 +355,9 @@ class SimulacrumCore {
           normalized._parseError = true; // Flag to ensure tool loop processes this
         }
       }
+      // Mark that this response was already added to conversation
+      normalized._alreadyAddedToConversation = !normalized._parseError;
+      
       // Use unified tool calling loop for both native and fallback modes
       const final = await processToolCallLoop(
         normalized, 
@@ -332,7 +366,8 @@ class SimulacrumCore {
         this.aiClient,
         this.getSystemPrompt.bind(this),
         useNativeTools,
-        options.onAssistantMessage
+        options.onAssistantMessage,
+        signal
       );
       // This is the final response after all tool calls are complete.
       // We need to update the UI with this final message.
@@ -354,11 +389,33 @@ class SimulacrumCore {
       
       return final;
     } catch (error) {
+      // Handle cancellation specially
+      if (error.name === 'AbortError' || error.message === 'Process was cancelled') {
+        this.logger.info('Process cancelled by user');
+        return {
+          content: 'Process cancelled by user',
+          display: '🛑 Process cancelled'
+        };
+      }
+      
       this.logger.error('Error processing message', error);
       return {
         content: `Error: ${error.message}`,
         display: `❌ ${error.message}`
       };
+    } finally {
+      // Signal process end
+      try {
+        Hooks.call('simulacrum:processStatus', {
+          state: 'end',
+          callId: 'main-process'
+        });
+      } catch (_e) { /* ignore */ }
+      
+      // Clean up abort controller
+      if (this.currentAbortController) {
+        this.currentAbortController = null;
+      }
     }
   }
   
@@ -531,52 +588,6 @@ class SimulacrumCore {
    * Build the ephemeral system prompt guiding tool usage.
    * Not persisted into conversation history.
    */
-  static async detectToolCallingSupport() {
-    console.log('[Simulacrum:Probe] Starting tool calling support detection');
-    
-    try {
-
-      const tools = toolRegistry.getToolSchemas();
-      if (!Array.isArray(tools) || tools.length === 0) {
-        this.toolCallingSupported = false;
-        return false;
-      }
-      const names = tools.map(t => t?.function?.name).filter(Boolean);
-      const candidate = names.includes('list_documents') ? 'list_documents' : names[0];
-      const prompt = `If tool calling is available, call ${candidate} with an empty object. Otherwise reply with: NO_TOOLS`;
-      const res = await this.aiClient.chat([
-        { role: 'system', content: 'Tool support probe.' },
-        { role: 'user', content: prompt }
-      ], tools);
-      
-      // Check for actual tool calls OR explicit "NO_TOOLS" response  
-      const choice = res?.choices?.[0];
-      const msg = choice?.message ?? {};
-      const hasNativeTools = (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) || 
-                             (msg.function_call && msg.function_call.name);
-      const content = msg.content || '';
-      const saidNoTools = content.includes('NO_TOOLS');
-      
-      // Tool calling is supported ONLY if we get actual native tool calls
-      // Any other response (including attempts like "list_documents()") means no support
-      this.toolCallingSupported = hasNativeTools && !saidNoTools;
-      
-      try { 
-        if (isDiagnosticsEnabled()) {
-          createLogger('AIDiagnostics').info('tool_support', { 
-            supported: this.toolCallingSupported, 
-            hasNativeTools, 
-            saidNoTools, 
-            content: content.substring(0, 100) 
-          }); 
-        } 
-      } catch {}
-      return this.toolCallingSupported;
-    } catch (_e) {
-      this.toolCallingSupported = false;
-      return false;
-    }
-  }
 
 
 

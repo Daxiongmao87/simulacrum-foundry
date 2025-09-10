@@ -275,3 +275,20 @@
 .dark .simulacrum-thoughts .think-content {
   background: rgba(255, 255, 255, 0.01);
 }
+
+/* ---------------------------------------- */
+/*  Process Status Spinner Fix             */
+/* ---------------------------------------- */
+
+/* Fix spinner rotation center point by ensuring square dimensions */
+.simulacrum-process-spinner {
+  width: 12px !important;
+  height: 12px !important;
+  font-size: 12px !important;
+  line-height: 12px !important;
+  display: inline-block !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  /* Ensure the icon rotates around its center */
+  transform-origin: center center !important;
+}
