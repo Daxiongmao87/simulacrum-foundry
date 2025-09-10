@@ -4,6 +4,9 @@ reference/
 # Development guidance files (local only)
 CLAUDE.md
 
+# Specification documents (development-only)
+spec/
+
 # Build outputs
 dist/
 

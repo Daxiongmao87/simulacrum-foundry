@@ -9,7 +9,7 @@
 
 import { SimulacrumCore } from './core/simulacrum-core.js';
 import { registerSimulacrumSidebarTab } from './ui/simulacrum-sidebar-tab.js';
-import { registerAdvancedSettings } from './ui/settings-interface.js';
+import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
 
 const MODULE_ID = 'simulacrum';
@@ -84,6 +84,7 @@ Hooks.once('init', async () => {
   // Register module settings (no redundant enable toggle)
   registerAPISettings();
   registerAdvancedSettings();
+  registerSettingsEnhancements();
 
   // Register sidebar tab
   registerSimulacrumSidebarTab();

@@ -11,7 +11,6 @@ import { DocumentDeleteTool } from '../tools/document-delete.js';
 import { DocumentListTool } from '../tools/document-list.js';
 import { DocumentSearchTool } from '../tools/document-search.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
-import { EndTaskTool } from '../tools/end-task.js';
 import { DocumentAPI } from './document-api.js';
 import { createLogger } from '../utils/logger.js';
 import { isDiagnosticsEnabled } from '../utils/dev.js';
@@ -506,8 +505,7 @@ class SimulacrumCore {
         new DocumentDeleteTool(),
         new DocumentListTool(),
         new DocumentSearchTool(),
-        new DocumentSchemaTool(),
-        new EndTaskTool()
+        new DocumentSchemaTool()
       ];
       for (const t of tools) {
         if (typeof t.setDocumentAPI === 'function') {
@@ -823,6 +821,7 @@ static getSystemPrompt() {
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Format'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Warning'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Action'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.DocumentSchema'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.EndTask'),
         toolSchemas
       ].join(' ');
@@ -832,6 +831,7 @@ static getSystemPrompt() {
         documentTypesInfo,
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Capabilities'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Autonomous'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.DocumentSchema'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Planning'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.MultiTool'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolLabels'),

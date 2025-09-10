@@ -337,6 +337,55 @@ export class SettingsInterface extends FormApplication {
 }
 
 /**
+ * Helper function that converts an input field for a setting into a textarea.
+ */
+function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, repositionCallback) {
+  const fullSettingId = `${moduleId}.${settingKey}`;
+  
+  // Use the data-setting-id attribute to find the setting div
+  const settingDiv = html.find(`[data-setting-id="${fullSettingId}"]`);
+  if (!settingDiv.length) {
+    return;
+  }
+  
+  // Get the original stored value from settings
+  let storedValue = game.settings.get(moduleId, settingKey) || "";
+  
+  // Handle newlines - convert "\n" sequences to actual newlines
+  storedValue = storedValue.replace(/\\n/g, "\n");
+  
+  // Find the original input
+  const inputEl = settingDiv.find(`input[name="${fullSettingId}"]`);
+  if (!inputEl.length) {
+    return;
+  }
+
+  // Create the textarea with proper attributes for code display
+  const textarea = $(`
+    <textarea name="${fullSettingId}"
+              id="${fullSettingId}"
+              style="font-family: monospace; white-space: pre; overflow-x: auto; ${textareaStyle}"
+              wrap="off">${storedValue}</textarea>
+  `);
+  
+  // Replace the input with our textarea
+  inputEl.replaceWith(textarea);
+  
+  // When the textarea changes, properly escape newlines before saving
+  textarea.on("change", async (ev) => {
+    const rawValue = ev.target.value;
+    // Convert actual newlines to "\n" sequence before saving
+    const escaped = rawValue.replace(/\n/g, "\\n");
+    await game.settings.set(moduleId, settingKey, escaped);
+  });
+
+  // Run the reposition callback if provided
+  if (typeof repositionCallback === "function") {
+    repositionCallback(settingDiv);
+  }
+}
+
+/**
  * Register additional settings not in basic config
  * Called during module initialization
  */
@@ -375,7 +424,7 @@ export function registerAdvancedSettings() {
     name: 'Context Length',
     hint: 'Maximum number of messages to include in conversation context.',
     scope: 'world',
-    config: false, // Hidden from basic config, shown in advanced interface
+    config: true,
     type: Number,
     default: 20,
     restricted: true
@@ -385,9 +434,63 @@ export function registerAdvancedSettings() {
     name: 'Custom System Prompt',
     hint: 'Additional instructions to append to the system prompt.',
     scope: 'world',
-    config: false, // Hidden from basic config, shown in advanced interface
+    config: true,
     type: String,
     default: '',
     restricted: true
+  });
+}
+
+/**
+ * Register settings UI enhancements
+ */
+export function registerSettingsEnhancements() {
+  // Handle settings UI rendering to convert text inputs to textareas
+  Hooks.on("renderSettingsConfig", (app, html, data) => {
+    // Wait a short moment to ensure DOM is fully rendered
+    setTimeout(() => {
+      try {
+        // Convert the customSystemPrompt setting field to textarea
+        convertSettingToTextarea(
+          html,
+          "simulacrum",
+          "customSystemPrompt",
+          "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;",
+          (settingDiv) => {
+            // Reposition the form-fields div so that it appears after the <p class="notes"> element
+            const notesEl = settingDiv.find("p.notes");
+            const formFieldsEl = settingDiv.find("div.form-fields");
+            if (notesEl.length && formFieldsEl.length) {
+              notesEl.after(formFieldsEl);
+            }
+          }
+        );
+        
+        // Add a click handler for tab switching to ensure textareas are converted
+        html.find('a.item[data-tab="simulacrum"]').on('click', () => {
+          setTimeout(() => {
+            const promptInput = html.find('div[data-setting-id="simulacrum.customSystemPrompt"] input');
+            if (promptInput.length) {
+              // Run conversion again if input is still there
+              convertSettingToTextarea(
+                html,
+                "simulacrum",
+                "customSystemPrompt",
+                "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;",
+                (settingDiv) => {
+                  const notesEl = settingDiv.find("p.notes");
+                  const formFieldsEl = settingDiv.find("div.form-fields");
+                  if (notesEl.length && formFieldsEl.length) {
+                    notesEl.after(formFieldsEl);
+                  }
+                }
+              );
+            }
+          }, 100);
+        });
+      } catch (error) {
+        console.error("Simulacrum | Error in settings render:", error);
+      }
+    }, 100);
   });
 }

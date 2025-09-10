@@ -80,9 +80,10 @@ class DocumentSearchTool extends BaseTool {
     }
 
     const formattedResults = results.map(doc => {
-      const name = doc.name || doc.title || doc._id || 'Untitled';
+      const name = doc.name || doc.title || 'Untitled';
+      const id = doc._id || 'Unknown ID';
       const type = doc.type || 'Unknown';
-      return '- **' + name + '** (' + type + ')';
+      return '- **' + name + '** (ID: ' + id + ', Type: ' + type + ')';
     });
 
     return '**Search Results for "' + query + '"**\n' + formattedResults.join('\n');

@@ -99,15 +99,39 @@ class ChatHandler {
       const { processToolCallLoop } = await import('./tool-loop-handler.js');
       const { SimulacrumCore } = await import('./simulacrum-core.js');
       
+      // Get tools and determine tool support mode
+      const { toolRegistry } = await import('./tool-registry.js');
+      const tools = toolRegistry.getToolSchemas();
+      
+      // Check legacy mode setting to determine tool support
+      const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
+      const currentToolSupport = !legacyMode;
+      
       // Execute tools and get final response
       const finalResponse = await processToolCallLoop(
         { toolCalls, content: '' },
+        tools,
         this.conversationManager,
         SimulacrumCore.aiClient,
         SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
+        currentToolSupport,
         options.signal,
         (toolResult) => this.handleToolResult(toolResult, options)
       );
+
+      // Handle tool limit reached error
+      if (finalResponse._toolLimitReachedError) {
+        this.conversationManager.updateSystemMessage(finalResponse.content);
+        const aiSummaryResponse = await this.handleAutonomousFlow(finalResponse, options);
+        // Add the AI's summary to conversation and UI
+        this.addMessageToConversation('assistant', aiSummaryResponse.content);
+        this.addMessageToUI({
+          role: 'assistant',
+          content: aiSummaryResponse.content,
+          display: aiSummaryResponse.display || aiSummaryResponse.content
+        }, options);
+        return aiSummaryResponse;
+      }
 
       // Add final response if different from last message
       if (finalResponse && finalResponse.content) {
