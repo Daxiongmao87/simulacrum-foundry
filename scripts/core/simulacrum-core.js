@@ -11,6 +11,7 @@ import { DocumentDeleteTool } from '../tools/document-delete.js';
 import { DocumentListTool } from '../tools/document-list.js';
 import { DocumentSearchTool } from '../tools/document-search.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
+import { EndTaskTool } from '../tools/end-task.js';
 import { DocumentAPI } from './document-api.js';
 import { createLogger } from '../utils/logger.js';
 import { isDiagnosticsEnabled } from '../utils/dev.js';
@@ -494,7 +495,8 @@ class SimulacrumCore {
         new DocumentDeleteTool(),
         new DocumentListTool(),
         new DocumentSearchTool(),
-        new DocumentSchemaTool()
+        new DocumentSchemaTool(),
+        new EndTaskTool()
       ];
       for (const t of tools) {
         if (typeof t.setDocumentAPI === 'function') {
@@ -587,7 +589,7 @@ class SimulacrumCore {
     if (!text || typeof text !== 'string') return null;
 
     // Remove <think> tags and their content before parsing - this is internal reasoning only
-    let cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     if (!cleanText || !cleanText.trim()) return null;
     
     // Debug logging for think tag filtering
@@ -607,7 +609,7 @@ class SimulacrumCore {
       } catch (e) {
         // Try to fix common AI JSON mistakes
         try {
-          let fixed = s
+          const fixed = s
             // Fix parentheses notation like (x,y) to [x,y]
             .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
             // Fix single quotes to double quotes (be more careful about this)
@@ -856,6 +858,7 @@ static getSystemPrompt() {
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Format'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Warning'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Action'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.EndTask'),
         toolSchemas
       ].join(' ');
     } else {
@@ -868,7 +871,8 @@ static getSystemPrompt() {
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.MultiTool'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolLabels'),
         game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Verification'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Continuation')
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Continuation'),
+        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.EndTask')
       ].join(' ');
     }
     

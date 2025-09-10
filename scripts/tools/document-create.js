@@ -79,7 +79,11 @@ export class DocumentCreateTool extends BaseTool {
 
       // Check if document type is valid
       if (!this.isValidDocumentType(documentType)) {
-        throw new SimulacrumError(`Document type "${documentType}" not available in current system`);
+        return {
+          content: `Document type "${documentType}" not available in current system`,
+          display: `❌ Unknown document type: ${documentType}`,
+          error: { message: `Document type "${documentType}" not available in current system`, type: 'UNKNOWN_DOCUMENT_TYPE' }
+        };
       }
 
       // Validate parameters
@@ -90,7 +94,11 @@ export class DocumentCreateTool extends BaseTool {
       const document = await DocumentAPI.createDocument(documentType, data);
 
       if (!document) {
-        throw new SimulacrumError('Document creation failed');
+        return {
+          content: `Document creation failed`,
+          display: `❌ Failed to create ${documentType} document`,
+          error: { message: 'Document creation failed', type: 'CREATE_FAILED' }
+        };
       }
 
       return {
@@ -99,8 +107,11 @@ export class DocumentCreateTool extends BaseTool {
       };
 
     } catch (error) {
-      // Re-throw the error so the tool registry can handle it properly
-      throw error;
+      return {
+        content: `Failed to create ${parameters.documentType} document: ${error.message}`,
+        display: `❌ Failed to create ${parameters.documentType}: ${error.message}`,
+        error: { message: error.message, type: 'CREATE_FAILED' }
+      };
     }
   }
 

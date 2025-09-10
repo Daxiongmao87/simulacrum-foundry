@@ -53,7 +53,11 @@ class DocumentDeleteTool extends BaseTool {
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
-        throw new SimulacrumError(`Document type "${params.documentType}" not available in current system`);
+        return {
+          content: `Document type "${params.documentType}" not available in current system`,
+          display: `❌ Unknown document type: ${params.documentType}`,
+          error: { message: `Document type "${params.documentType}" not available in current system`, type: 'UNKNOWN_DOCUMENT_TYPE' }
+        };
       }
 
       await DocumentAPI.deleteDocument(
@@ -66,7 +70,11 @@ class DocumentDeleteTool extends BaseTool {
         display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`
       };
     } catch (error) {
-      throw new SimulacrumError(`Failed to delete ${params.documentType}:${params.documentId}: ${error.message}`, 'DELETE_FAILED');
+      return {
+        content: `Failed to delete ${params.documentType}:${params.documentId}: ${error.message}`,
+        display: `❌ Failed to delete **${params.documentId}** (${params.documentType}): ${error.message}`,
+        error: { message: error.message, type: 'DELETE_FAILED' }
+      };
     }
   }
 }

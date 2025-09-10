@@ -327,8 +327,7 @@ export class ToolRegistry {
       // Update failure stats
       registration.failureCount++;
       
-      console.error(`[Simulacrum:ToolExecution] Tool '${name}' execution failed:`, error.message);
-      console.error(`[Simulacrum:ToolExecution] Error details:`, error);
+      // Tool execution errors should be handled by the agentic loop, not logged to console
 
       // Emit error hook
       this._emitHook('tool:executeError', { name, context, executionId, error });
