@@ -5,6 +5,7 @@
 
 import { BaseTool } from './base-tool.js';
 import { SimulacrumError } from '../utils/errors.js';
+import { ValidationErrorHandler } from '../utils/validation-errors.js';
 
 /**
  * Validation schema for document creation parameters
@@ -107,11 +108,11 @@ export class DocumentCreateTool extends BaseTool {
       };
 
     } catch (error) {
-      return {
-        content: `Failed to create ${parameters.documentType} document: ${error.message}`,
-        display: `❌ Failed to create ${parameters.documentType}: ${error.message}`,
-        error: { message: error.message, type: 'CREATE_FAILED' }
-      };
+      return ValidationErrorHandler.createToolErrorResponse(
+        error,
+        'create',
+        parameters.documentType
+      );
     }
   }
 

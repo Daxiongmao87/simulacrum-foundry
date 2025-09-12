@@ -186,6 +186,7 @@ export class AIClient {
     this.baseURL = config.baseURL;
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
+    this.contextLength = config.contextLength || 4096;
     this.providers = new Map();
     this.defaultProvider = null;
 
@@ -219,6 +220,14 @@ export class AIClient {
   }
 
   /**
+   * Get context length - uses configured contextLength
+   * @returns {number} Context length
+   */
+  getContextLength() {
+    return this.contextLength;
+  }
+
+  /**
    * Chat with AI using OpenAI or Ollama API
    * @param {Array} messages - Array of message objects
    * @param {Array} tools - Optional tools for function calling
@@ -228,10 +237,36 @@ export class AIClient {
     if (!this.baseURL) {
       throw new SimulacrumError('No baseURL configured for AI client');
     }
+
+    // Dynamically calculate max_tokens
+    const contextLength = this.getContextLength();
+    const estimatedPromptTokens = messages.reduce((acc, message) => {
+      const content = message.content || '';
+      const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+      return acc + Math.ceil((content.length + toolCalls.length) / 4);
+    }, 0);
+    
+    const estimatedToolTokens = tools ? Math.ceil(JSON.stringify(tools).length / 4) : 0;
+    const totalEstimatedPromptTokens = estimatedPromptTokens + estimatedToolTokens;
+
+    const buffer = 200; // Safety buffer
+    let dynamicMaxTokens = contextLength - totalEstimatedPromptTokens - buffer;
+
+    if (dynamicMaxTokens < 1) {
+      if (isDiagnosticsEnabled()) {
+        createLogger('AIDiagnostics').warn('Prompt is very close to the context limit. Setting max_tokens to a small value.');
+      }
+      dynamicMaxTokens = 100;
+    }
+
+    const maxTokens = dynamicMaxTokens;
+
+    console.log(`[Token Estimation] Context: ${contextLength}, Prompt: ${totalEstimatedPromptTokens}, Max Tokens: ${maxTokens}`);
+
     const body = {
       model: this.model,
       messages: messages,
-      max_tokens: this.maxTokens
+      max_tokens: maxTokens
     };
 
     if (tools) {
@@ -323,7 +358,21 @@ export class AIClient {
     };
   }
 
-  /** removed provider-specific chat implementation to remain provider-agnostic **/
+  /**
+   * Chat with system message automatically prepended
+   * @param {Array} conversationMessages - Array of conversation message objects
+   * @param {Function} getSystemPrompt - Function that returns system prompt
+   * @param {Array} tools - Optional tools for function calling
+   * @param {Object} options - Additional options (e.g., signal)
+   * @returns {Promise<Object>} AI response
+   */
+  async chatWithSystem(conversationMessages, getSystemPrompt, tools = null, options = {}) {
+    const messages = [
+      { role: 'system', content: getSystemPrompt() },
+      ...conversationMessages
+    ];
+    return this.chat(messages, tools, options);
+  }
 
   /**
    * Validate connection to AI provider

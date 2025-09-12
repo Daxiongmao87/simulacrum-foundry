@@ -12,14 +12,16 @@ class ConversationManager {
    * @param {string} userId - The ID of the FoundryVTT user initiating the conversation.
    * @param {string} worldId - The ID of the FoundryVTT world the conversation is taking place in.
    * @param {number} [maxTokens=32000] - The maximum token limit for the conversation history.
+   * @param {Function} [onStateChange=null] - Callback function to trigger when conversation state changes.
    */
-  constructor(userId, worldId, maxTokens = 32000, tokenizer = null) {
+  constructor(userId, worldId, maxTokens = 32000, tokenizer = null, onStateChange = null) {
     this.userId = userId;
     this.worldId = worldId;
     this.messages = [];
     this.sessionTokens = 0;
     this.maxTokens = maxTokens;
     this.tokenizer = tokenizer || defaultTokenizer; // Pluggable adapter
+    this.onStateChange = onStateChange; // Auto-save callback
   }
 
   /**
@@ -39,6 +41,9 @@ class ConversationManager {
     }
     this.messages.push(message);
     this.sessionTokens += this._estimateTokens(message);
+    
+    // Trigger auto-save if callback is provided
+    this._triggerStateChange();
   }
 
   /**
@@ -51,6 +56,9 @@ class ConversationManager {
       this.messages[0].content += '\n\n' + additionalContent;
       const newTokens = this._estimateTokens(this.messages[0]);
       this.sessionTokens += (newTokens - oldTokens);
+      
+      // Trigger auto-save if callback is provided
+      this._triggerStateChange();
     }
   }
 
@@ -70,6 +78,9 @@ class ConversationManager {
       this.messages = [systemMessage];
       this.sessionTokens = this._estimateTokens(systemMessage);
     }
+    
+    // Trigger auto-save if callback is provided
+    this._triggerStateChange();
   }
 
   /**
@@ -78,6 +89,9 @@ class ConversationManager {
   clear() {
     this.messages = [];
     this.sessionTokens = 0;
+    
+    // Trigger auto-save if callback is provided
+    this._triggerStateChange();
   }
 
   /**
@@ -130,6 +144,24 @@ class ConversationManager {
         }
       }
     };
+  }
+
+  /**
+   * Trigger the state change callback for auto-save
+   * @private
+   */
+  _triggerStateChange() {
+    if (typeof this.onStateChange === 'function') {
+      try {
+        this.onStateChange();
+      } catch (error) {
+        // Silently handle callback failures to avoid breaking conversation flow
+        // Error details are logged for debugging if needed
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[ConversationManager] State change callback failed:', error);
+        }
+      }
+    }
   }
 
 }

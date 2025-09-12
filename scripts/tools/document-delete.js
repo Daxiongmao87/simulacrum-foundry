@@ -5,6 +5,7 @@
 import { BaseTool } from './base-tool.js';
 import { SimulacrumError } from '../utils/errors.js';
 import { DocumentAPI } from '../core/document-api.js';
+import { ValidationErrorHandler } from '../utils/validation-errors.js';
 
 class DocumentDeleteTool extends BaseTool {
   /**
@@ -70,11 +71,12 @@ class DocumentDeleteTool extends BaseTool {
         display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`
       };
     } catch (error) {
-      return {
-        content: `Failed to delete ${params.documentType}:${params.documentId}: ${error.message}`,
-        display: `❌ Failed to delete **${params.documentId}** (${params.documentType}): ${error.message}`,
-        error: { message: error.message, type: 'DELETE_FAILED' }
-      };
+      return ValidationErrorHandler.createToolErrorResponse(
+        error,
+        'delete',
+        params.documentType,
+        params.documentId
+      );
     }
   }
 }

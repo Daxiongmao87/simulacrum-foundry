@@ -238,8 +238,31 @@ export class DocumentAPI {
     }
 
     if (typeof documentClass.create === 'function') {
-      const created = await documentClass.create(data, { folder });
-      return created?.toObject ? created.toObject() : created;
+      try {
+        // Step 1: Use FoundryVTT's official validation for creation data
+        try {
+          // For creation, validate the complete data structure
+          documentClass.validate(data, {
+            strict: true,        // Throw DataModelValidationError on failure
+            fields: true,        // Validate individual fields
+            joint: true          // Perform joint validation for complete document
+          });
+        } catch (validationError) {
+          // Re-throw the original FoundryVTT validation error for proper handling
+          throw validationError;
+        }
+        
+        // Step 2: Proceed with creation only after validation passes
+        const created = await documentClass.create(data, { folder });
+        return created?.toObject ? created.toObject() : created;
+      } catch (createError) {
+        // Re-throw validation errors to be handled by the calling tool
+        if (createError.name === 'DataModelValidationError') {
+          throw createError;
+        }
+        // Handle other creation errors
+        throw new Error(`Document creation failed: ${createError.message}`);
+      }
     }
     // Mock-friendly fallback: synthesize created object
     const id = data._id || data.id || `${documentType.toLowerCase()}_${Date.now()}`;
@@ -272,7 +295,32 @@ export class DocumentAPI {
       }
     }
 
-    await doc.update(updates);
+    try {
+      // Step 1: Use FoundryVTT's official validation with proper options
+      try {
+        doc.validate({
+          changes: updates,    // Validate only the changes, not the full document
+          strict: true,        // Throw DataModelValidationError on failure
+          fields: true,        // Validate individual fields
+          joint: false         // Skip joint validation for partial updates
+        });
+      } catch (validationError) {
+        // Re-throw the original FoundryVTT validation error for proper handling
+        throw validationError;
+      }
+      
+      // Step 2: Proceed with update only after validation passes
+      const updateResult = await doc.update(updates);
+      
+    } catch (updateError) {
+      // Re-throw validation errors to be handled by the calling tool
+      if (updateError.name === 'DataModelValidationError') {
+        throw updateError;
+      }
+      // Handle other update errors
+      throw new Error(`Document update failed: ${updateError.message}`);
+    }
+    
     const obj = doc.toObject();
     // Apply shallow updates for return since mock update may be no-op
     const merged = foundry && foundry.utils && typeof foundry.utils.mergeObject === 'function'
@@ -306,7 +354,18 @@ export class DocumentAPI {
       }
     }
 
-    await doc.delete();
+    try {
+      // Note: For deletion, FoundryVTT handles validation internally during doc.delete()
+      // This includes checking for relationship constraints, embedded documents, etc.
+      await doc.delete();
+    } catch (deleteError) {
+      // Re-throw validation errors to be handled by the calling tool
+      if (deleteError.name === 'DataModelValidationError') {
+        throw deleteError;
+      }
+      // Handle other deletion errors
+      throw new Error(`Document deletion failed: ${deleteError.message}`);
+    }
     return true;
   }
 

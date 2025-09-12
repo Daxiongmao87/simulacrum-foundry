@@ -342,8 +342,11 @@ export class SettingsInterface extends FormApplication {
 function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, repositionCallback) {
   const fullSettingId = `${moduleId}.${settingKey}`;
   
+  // Ensure html is a jQuery object for consistent API usage
+  const $html = html instanceof jQuery ? html : $(html);
+  
   // Use the data-setting-id attribute to find the setting div
-  const settingDiv = html.find(`[data-setting-id="${fullSettingId}"]`);
+  const settingDiv = $html.find(`[data-setting-id="${fullSettingId}"]`);
   if (!settingDiv.length) {
     return;
   }

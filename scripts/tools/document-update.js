@@ -4,6 +4,7 @@
 
 import { BaseTool } from './base-tool.js';
 import { DocumentAPI } from '../core/document-api.js';
+import { ValidationErrorHandler } from '../utils/validation-errors.js';
 
 class DocumentUpdateTool extends BaseTool {
   /**
@@ -54,6 +55,7 @@ class DocumentUpdateTool extends BaseTool {
    * @returns {Object} Tool result
    */
   async execute(params) {
+    console.log('[DocumentUpdateTool] Starting execute with params:', JSON.stringify(params, null, 2));
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
@@ -64,22 +66,26 @@ class DocumentUpdateTool extends BaseTool {
         };
       }
 
+      console.log('[DocumentUpdateTool] About to call DocumentAPI.updateDocument()');
       const document = await DocumentAPI.updateDocument(
         params.documentType,
         params.documentId,
         params.updates
       );
+      console.log('[DocumentUpdateTool] DocumentAPI.updateDocument() succeeded, got document:', document);
 
       return {
         content: `Updated ${params.documentType}:${params.documentId}`,
         display: `✅ Updated **${document.name || document.id}** (${params.documentType})`
       };
     } catch (error) {
-      return {
-        content: `Failed to update ${params.documentType}:${params.documentId}: ${error.message}`,
-        display: `❌ Failed to update **${params.documentId}** (${params.documentType}): ${error.message}`,
-        error: { message: error.message, type: 'UPDATE_FAILED' }
-      };
+      console.log('[DocumentUpdateTool] Caught error in execute():', error.name, error.message);
+      return ValidationErrorHandler.createToolErrorResponse(
+        error,
+        'update',
+        params.documentType,
+        params.documentId
+      );
     }
   }
 }

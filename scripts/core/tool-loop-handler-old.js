@@ -60,7 +60,7 @@ export async function processToolCallLoop(
   signal = null,
   onToolResult = null
 ) {
-  let currentResponse = initialResponse;
+  const currentResponse = initialResponse;
   let endTaskSignaled = false;
   let guardTriggered = false;
   const REPEAT_LIMIT = 5;
