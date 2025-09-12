@@ -104,20 +104,7 @@ export class NotFoundError extends SimulacrumError {
  * @param {string} fallbackCode - Fallback error code
  * @returns {SimulacrumError}
  */
-export function wrapError(error, fallbackCode = 'UNKNOWN_ERROR') {
-  if (error instanceof SimulacrumError) {
-    return error;
-  }
-  
-  const wrapped = new SimulacrumError(
-    error.message || 'An unknown error occurred',
-    fallbackCode,
-    { originalError: error.message }
-  );
-  
-  wrapped.stack = error.stack;
-  return wrapped;
-}
+// wrapError removed (unused)
 
 /**
  * Creates an error recovery object
@@ -125,14 +112,7 @@ export function wrapError(error, fallbackCode = 'UNKNOWN_ERROR') {
  * @param {object} context - Context information about the recovery attempt
  * @returns {object}
  */
-export function createRecoveryContext(error, context = {}) {
-  return {
-    error,
-    context,
-    retriable: error.code === 'NETWORK_ERROR' || error.code === 'DOCUMENT_ERROR',
-    timestamp: new Date().toISOString()
-  };
-}
+// createRecoveryContext removed (unused)
 
 /**
  * API error for external API failures
@@ -177,8 +157,6 @@ export default {
   NetworkError,
   NotFoundError,
   APIError,
-  wrapError,
-  createRecoveryContext,
   ERROR_CODES,
   ERROR_TYPES
 };

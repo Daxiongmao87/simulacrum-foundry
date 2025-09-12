@@ -14,25 +14,12 @@ import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { DocumentAPI } from './document-api.js';
 import { createLogger } from '../utils/logger.js';
 import { isDiagnosticsEnabled } from '../utils/dev.js';
+import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 
 class SimulacrumCore {
   static logger = createLogger('Core');
-  // Note: toolCallingSupported removed - now determined by legacyMode setting
   static currentAbortController = null; // Track current cancellation controller
-
-  static _sanitizeMessagesForFallback(messages) {
-    try {
-      return (messages || []).filter(m => {
-        const r = m && m.role;
-        if (r !== 'system' && r !== 'user' && r !== 'assistant') return false;
-        const c = typeof m.content === 'string' ? m.content.trim() : '';
-        return c.length > 0;
-      }).map(m => ({ role: m.role, content: String(m.content) }));
-    } catch {
-      return [];
-    }
-  }
   /**
    * Initialize the Simulacrum Core
    */
@@ -47,6 +34,19 @@ class SimulacrumCore {
     this.registerHooks();
   }
   
+  /**
+   * Legacy compatibility method - use ChatHandler in implementation
+   */
+  static async processMessage(message, user, options = {}) {
+    try {
+      const { ChatHandler } = await import('./chat-handler.js');
+      const chatHandler = new ChatHandler(this.conversationManager);
+      return await chatHandler.processUserMessage(message, user, options);
+    } catch (e) {
+      this.logger.error('processMessage failed', e);
+      throw e;
+    }
+  }
   /**
    * Register FoundryVTT hooks
    */
@@ -64,19 +64,6 @@ class SimulacrumCore {
         /* no-op */
       }
     });
-    
-    // Handle document changes
-    Hooks.on('createDocument', (document, options, userId) => {
-      this.notifyDocumentChange('create', document, userId);
-    });
-    
-    Hooks.on('updateDocument', (document, changes, options, userId) => {
-      this.notifyDocumentChange('update', document, userId, changes);
-    });
-    
-    Hooks.on('deleteDocument', (document, options, userId) => {
-      this.notifyDocumentChange('delete', document, userId);
-    });
   }
   
   /**
@@ -86,23 +73,32 @@ class SimulacrumCore {
     // Initialize AI client
     await this.initializeAIClient();
     
-    // Initialize conversation manager
+    // Initialize conversation manager with auto-save callback
     this.conversationManager = new ConversationManager(
       game.user.id,
-      game.world.id
+      game.world.id,
+      32000,
+      null,
+      () => this.saveConversationState() // Auto-save callback
     );
     // Attempt to load any previously saved conversation state
     try {
-      await this.loadConversationState();
-    } catch (_e) {
-      // Ignore load errors in MVP; start with empty state
+      const loaded = await this.loadConversationState();
+      if (loaded) {
+        if (isDiagnosticsEnabled()) this.logger.debug('Loaded conversation history');
+      } else {
+        if (isDiagnosticsEnabled()) this.logger.debug('No saved conversation history found, starting fresh');
+      }
+    } catch (error) {
+      this.logger.warn('Failed to load conversation history:', error);
+      // Start with empty state on load failure
     }
     
     // Register default tools so the model can call them
     this.registerDefaultTools();
 
-    // Tool calling support is now determined by user setting
-    this.toolCallingSupported = null; // Will be checked via settings in processMessage
+    // Set up periodic auto-save for extra reliability
+    this._setupPeriodicSave();
     
     this.logger.info('Module initialized');
   }
@@ -115,6 +111,7 @@ class SimulacrumCore {
       const apiKey = game.settings.get('simulacrum', 'apiKey');
       const baseURL = game.settings.get('simulacrum', 'baseURL');
       const model = game.settings.get('simulacrum', 'model');
+      const contextLength = game.settings.get('simulacrum', 'contextLength');
       
       // Do not enforce API key at this layer. Some endpoints may not require it.
       
@@ -122,7 +119,8 @@ class SimulacrumCore {
       this.aiClient = new AIClient({
         apiKey,
         baseURL,
-        model
+        model,
+        contextLength
       });
       
       // Validate connection
@@ -165,16 +163,6 @@ class SimulacrumCore {
     const signal = options.signal || this.currentAbortController.signal;
     
     try {
-      // Signal process start
-      try {
-        Hooks.call('simulacrum:processStatus', {
-          state: 'start',
-          callId: 'main-process',
-          label: 'Processing message...',
-          toolName: 'ai-chat'
-        });
-      } catch (_e) { /* ignore */ }
-      
       // Check if AI client is initialized
       if (!this.aiClient) {
         await this.initializeAIClient();
@@ -200,19 +188,12 @@ class SimulacrumCore {
         ? messages.slice(-contextLength)
         : messages;
       
-      // Use a non-persistent system message to steer tool usage
-      const messagesWithSystem = [
-        { role: 'system', content: this.getSystemPrompt() },
-        ...limitedMessages
-      ];
-      
       // Get AI response - use legacy mode setting to determine tool support
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');
       const useNativeTools = !legacyMode;
       const sendTools = useNativeTools ? tools : null;
-      const outbound = useNativeTools ? messagesWithSystem : this._sanitizeMessagesForFallback(messagesWithSystem);
       
-      console.log('[Simulacrum:GenerateResponse] Chat request configuration:', {
+      if (isDiagnosticsEnabled()) this.logger.debug('Chat request configuration:', {
         legacyMode,
         useNativeTools,
         sendingTools: !!sendTools,
@@ -235,7 +216,9 @@ class SimulacrumCore {
         throw new Error('Process was cancelled');
       }
       
-      const raw = await this.aiClient.chat(outbound, sendTools, { signal });
+      const raw = useNativeTools 
+        ? await this.aiClient.chatWithSystem(limitedMessages, this.getSystemPrompt.bind(this), sendTools, { signal })
+        : await this.aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: this.getSystemPrompt() }, ...limitedMessages]), sendTools, { signal });
       if (raw == null) {
         throw new Error('Empty AI response');
       }
@@ -244,14 +227,6 @@ class SimulacrumCore {
       return this._normalizeAIResponse(raw);
       
     } finally {
-      // Signal process end
-      try {
-        Hooks.call('simulacrum:processStatus', {
-          state: 'end',
-          callId: 'main-process'
-        });
-      } catch (_e) { /* ignore */ }
-      
       // Clean up abort controller
       if (this.currentAbortController) {
         this.currentAbortController = null;
@@ -263,114 +238,9 @@ class SimulacrumCore {
    * Normalize AI response into consistent format
    * @private
    */
-  static _normalizeAIResponse(raw) {
-    // If already normalized
-    if (typeof raw?.content === 'string') {
-      return {
-        content: raw.content,
-        display: raw.display ?? raw.content,
-        toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
-        model: raw.model,
-        usage: raw.usage,
-        raw
-      };
-    }
-    
-    // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
-    const __choices = raw && raw.choices;
-    const choice = Array.isArray(__choices) ? __choices[0] : undefined;
-    const msg = choice?.message ?? {};
-    const content = typeof msg.content === 'string' ? msg.content : '';
-    
-    // Handle empty AI responses as recoverable error for AI correction
-    if (!content || content.trim().length === 0) {
-      return {
-        content: 'Empty response not allowed - please provide a meaningful response to the user.',
-        display: 'Empty response not allowed - please provide a meaningful response to the user.',
-        toolCalls: [],
-        model: raw?.model,
-        usage: raw?.usage,
-        raw,
-        _parseError: true // Flag to continue loop for AI correction
-      };
-    }
-    
-    let toolCalls = msg.tool_calls || [];
-    // Legacy providers may return a single function_call instead of tool_calls
-    if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-      toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
-    }
-    
-    // Some providers (Responses API style) wrap assistant messages differently; try to extract text
-    if (!content && !toolCalls?.length && (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))) {
-      const parts = raw.output[0].content;
-      const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-      return { content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage, raw };
-    }
-    
-    const normalized = {
-      content,
-      display: content,
-      toolCalls,
-      model: raw?.model,
-      usage: raw?.usage,
-      raw
-    };
+  static _normalizeAIResponse(raw) { return normalizeAIResponse(raw); }
 
-    // Handle fallback tool calls - if no native tool_calls, try to parse JSON blocks
-    if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
-      const parseResult = this._parseInlineToolCall(normalized.content);
-      if (parseResult && parseResult.name) {
-        // Convert parsed fallback tool call to standard format for unified processing
-        normalized.toolCalls = [{
-          id: `fallback_${Date.now()}`,
-          function: {
-            name: parseResult.name,
-            arguments: JSON.stringify(parseResult.arguments || {})
-          }
-        }];
-        // Update display content to remove the JSON block
-        normalized.content = parseResult.cleanedText;
-        normalized.display = parseResult.cleanedText;
-      } else if (parseResult && parseResult.parseError) {
-        // Handle JSON parsing errors
-        const errorMessage = [
-          game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
-          '',
-          game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
-          game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
-          '',
-          game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
-        ].join('\n');
-        
-        normalized.content = errorMessage;
-        normalized.display = errorMessage;
-        normalized._parseError = true; // Flag to ensure loop processes this
-      }
-    }
-
-    // Diagnostics: log tool_calls returned (names only)
-    try {
-      if (isDiagnosticsEnabled()) {
-        const diag = createLogger('AIDiagnostics');
-        const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
-        diag.info('tool_calls', { count: names.length, names });
-      }
-    } catch {}
-    
-    return normalized;
-  }
-
-  /**
-   * Legacy compatibility method - use ChatHandler instead
-   * @deprecated
-   */
-  static async processMessage(message, user, options = {}) {
-    this.logger.warn('processMessage is deprecated - use ChatHandler instead');
-    const { ChatHandler } = await import('./chat-handler.js');
-    const chatHandler = new ChatHandler(this.conversationManager);
-    return await chatHandler.processUserMessage(message, user, options);
-  }
+  
   
   /**
    * Build a unique settings key for conversation persistence
@@ -433,8 +303,45 @@ class SimulacrumCore {
   /**
    * Save conversation state to user flag or settings
    */
+  /**
+   * Set up periodic auto-save for extra reliability
+   * @private
+   */
+  static _setupPeriodicSave() {
+    // Clear any existing interval
+    if (this._saveInterval) {
+      clearInterval(this._saveInterval);
+    }
+    
+    // Auto-save every 30 seconds if conversation has changed
+    this._saveInterval = setInterval(async () => {
+      if (this.conversationManager && this.conversationManager.messages.length > 0) {
+        try {
+          await this.saveConversationState();
+        } catch (error) {
+          this.logger.warn('Periodic save failed:', error);
+        }
+      }
+    }, 30000); // 30 seconds
+    
+    // Also save before page unload
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        try {
+          // Use synchronous save if possible for beforeunload
+          this.saveConversationState();
+        } catch (error) {
+          this.logger.warn('beforeunload save failed:', error);
+        }
+      });
+    }
+  }
+
   static async saveConversationState() {
-    if (!this.conversationManager) return false;
+    if (!this.conversationManager) {
+      this.logger.warn('Cannot save: conversationManager not initialized');
+      return false;
+    }
     const key = this.getPersistenceKey();
     const state = {
       messages: this.conversationManager.messages,
@@ -445,20 +352,24 @@ class SimulacrumCore {
     try {
       if (game?.user && typeof game.user.setFlag === 'function') {
         await game.user.setFlag('simulacrum', game.world.id, state);
+        if (isDiagnosticsEnabled()) this.logger.debug('Conversation state saved to user flags');
         return true;
       }
-    } catch (_e) {
+    } catch (error) {
+      this.logger.warn('Failed to save to user flags:', error);
       // fall back below
     }
     // Fallback to module settings when set() exists
     try {
       if (game?.settings && typeof game.settings.set === 'function') {
         await game.settings.set('simulacrum', key, state);
+        if (isDiagnosticsEnabled()) this.logger.debug('Conversation state saved to module settings');
         return true;
       }
-    } catch (_e) {
-      // ignore
+    } catch (error) {
+      this.logger.warn('Failed to save to module settings:', error);
     }
+    this.logger.warn('Failed to save conversation state - no storage method available');
     return false;
   }
   /**
@@ -549,6 +460,9 @@ class SimulacrumCore {
    * The parser is strict: it requires a ```json ... ``` block.
    */
   static _parseInlineToolCall(text) {
+    // Delegate to shared utility
+    return parseInlineToolCall(text);
+  }
     if (!text || typeof text !== 'string') return null;
 
     // Remove <think> tags and their content before parsing - this is internal reasoning only
@@ -809,10 +723,19 @@ static getSystemPrompt() {
       let toolSchemas = '';
       try {
         const schemas = toolRegistry.getToolSchemas();
-        if (Array.isArray(schemas) && schemas.length > 0) {
+        // Assertion: schemas must be present and well-formed in legacy mode
+        const hasSchemas = Array.isArray(schemas) && schemas.length > 0;
+        const allWellFormed = hasSchemas && schemas.every(s => s && s.type === 'function' && s.function && s.function.name && s.function.parameters && s.function.parameters.type === 'object');
+        if (!hasSchemas || !allWellFormed) {
+          // Log a clear warning for maintainers and guide the model conservatively
+          this.logger.warn('Legacy mode active but tool schemas are missing or malformed; tool calls may fail.');
+          toolSchemas = '\n\nWARNING: Tool schemas are unavailable. Do NOT attempt tool calls.';
+        } else {
           toolSchemas = `\n\nAvailable tool schemas:\n${JSON.stringify(schemas, null, 2)}`;
         }
-      } catch (_e) {}
+      } catch (e) {
+        this.logger.error('Failed to retrieve tool schemas for legacy mode', e);
+      }
       
       basePrompt = [
         game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Intro'),

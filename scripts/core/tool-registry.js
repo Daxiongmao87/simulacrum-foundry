@@ -15,8 +15,7 @@ export class ToolRegistry {
     this.tools = new Map();
     this.categories = new Map();
     this.dependencies = new Map();
-    this.executionQueue = [];
-    this.hooks = new Map();
+    // Removed internal executionQueue and hooks (unused)
     this.permissions = new Map();
     this.logger = createLogger('ToolRegistry');
   }
@@ -105,7 +104,7 @@ export class ToolRegistry {
     this._registerDependencies(tool.name, dependencies);
     this._registerPermissions(tool.name, permissions);
     this._registerToolHooks(tool);
-    this._emitHook('tool:registered', { tool, registration });
+    // Hook emission removed (internal hooks deprecated)
   }
 
   /**
@@ -140,8 +139,7 @@ export class ToolRegistry {
     // Remove tool
     this.tools.delete(name);
     
-    // Emit unregistration hook
-    this._emitHook('tool:unregistered', { name });
+    // Hook emission removed (internal hooks deprecated)
 
     return true;
   }
@@ -277,12 +275,12 @@ export class ToolRegistry {
    * @returns {Promise<object>}
    */
   async executeTool(name, context = {}) {
-    console.log(`[Simulacrum:ToolExecution] Starting execution of tool '${name}'`);
-    console.log(`[Simulacrum:ToolExecution] Context:`, context);
+    this.logger.debug(`[ToolExecution] Starting execution of tool '${name}'`);
+    this.logger.debug(`[ToolExecution] Context:`, context);
     
     const tool = this.getTool(name);
     if (!tool) {
-      console.error(`[Simulacrum:ToolExecution] Tool '${name}' not found`);
+      this.logger.error(`[ToolExecution] Tool '${name}' not found`);
       throw new NotFoundError(`Tool '${name}' not found`, 'tool', name);
     }
 
@@ -290,31 +288,29 @@ export class ToolRegistry {
     const executionId = this._generateExecutionId();
 
     try {
-      console.log(`[Simulacrum:ToolExecution] Validating permissions for '${name}'`);
+      this.logger.debug(`[ToolExecution] Validating permissions for '${name}'`);
       this._validatePermissions(name, context);
       
-      console.log(`[Simulacrum:ToolExecution] Validating dependencies for '${name}'`);
+      this.logger.debug(`[ToolExecution] Validating dependencies for '${name}'`);
       this._validateDependencies(name);
       
       // Update execution stats
       registration.executionCount++;
       registration.lastExecution = new Date();
 
-      // Emit pre-execution hook
-      this._emitHook('tool:beforeExecute', { name, context, executionId });
+      // Pre-execution hook removed (internal hooks deprecated)
 
-      console.log(`[Simulacrum:ToolExecution] Executing tool '${name}' with ID ${executionId}`);
+      this.logger.debug(`[ToolExecution] Executing tool '${name}' with ID ${executionId}`);
       // Execute tool
       const result = await tool.execute(context);
 
       // Update success stats
       registration.successCount++;
       
-      console.log(`[Simulacrum:ToolExecution] Tool '${name}' executed successfully`);
-      console.log(`[Simulacrum:ToolExecution] Result:`, result);
+      this.logger.debug(`[ToolExecution] Tool '${name}' executed successfully`);
+      this.logger.debug(`[ToolExecution] Result:`, result);
 
-      // Emit post-execution hook
-      this._emitHook('tool:afterExecute', { name, context, executionId, result });
+      // Post-execution hook removed (internal hooks deprecated)
 
       return {
         success: true,
@@ -329,8 +325,7 @@ export class ToolRegistry {
       
       // Tool execution errors should be handled by the agentic loop, not logged to console
 
-      // Emit error hook
-      this._emitHook('tool:executeError', { name, context, executionId, error });
+      // Error hook removed (internal hooks deprecated)
 
       throw new ToolError(`${tool.name} execution failed: ${error.message}`, name, {
         executionId,
@@ -400,7 +395,7 @@ export class ToolRegistry {
     tool.enabled = enabled;
     tool.updated = new Date();
 
-    this._emitHook('tool:enabledChanged', { name, enabled });
+    // Enabled-changed hook removed (internal hooks deprecated)
     return true;
   }
 
@@ -521,16 +516,7 @@ export class ToolRegistry {
     }
   }
 
-  _emitHook(hook, data) {
-    const hooks = this.hooks.get(hook) || [];
-    hooks.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        this.logger.warn(`Hook ${hook} callback failed:`, error);
-      }
-    });
-  }
+  // _emitHook removed
 
   _getDependentTools(toolName) {
     return this.dependencies.get(toolName) || [];
@@ -572,33 +558,7 @@ export class ToolRegistry {
     this.logger.debug('Rollback sequence implemented for:', executed);
   }
 
-  /**
-   * Register a hook callback
-   * @param {string} hook - Hook name
-   * @param {function} callback - Callback function
-   */
-  addHook(hook, callback) {
-    if (!this.hooks.has(hook)) {
-      this.hooks.set(hook, []);
-    }
-    
-    this.hooks.get(hook).push(callback);
-  }
-
-  /**
-   * Remove a hook callback
-   * @param {string} hook - Hook name
-   * @param {function} callback - Callback function to remove
-   */
-  removeHook(hook, callback) {
-    if (this.hooks.has(hook)) {
-      const callbacks = this.hooks.get(hook);
-      const index = callbacks.indexOf(callback);
-      if (index > -1) {
-        callbacks.splice(index, 1);
-      }
-    }
-  }
+  // addHook/removeHook removed
 }
 
 // Export singleton instance

@@ -6,23 +6,16 @@
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
 import { SimulacrumCore } from './simulacrum-core.js';
+import { createLogger } from '../utils/logger.js';
+import { isDiagnosticsEnabled } from '../utils/dev.js';
+import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
+import { appendEmptyContentCorrection } from './correction.js';
 
 /**
  * Sanitize messages for fallback when tool calling is not supported
  * Filters out tool roles and ensures only valid roles are sent
  */
-function _sanitizeMessagesForFallback(messages) {
-  try {
-    return (messages || []).filter(m => {
-      const r = m && m.role;
-      if (r !== 'system' && r !== 'user' && r !== 'assistant') return false;
-      const c = typeof m.content === 'string' ? m.content.trim() : '';
-      return c.length > 0;
-    }).map(m => ({ role: m.role, content: String(m.content) }));
-  } catch {
-    return [];
-  }
-}
+const logger = createLogger('ToolLoop');
 
 /**
  * Execute tools from an AI response and continue autonomous loop
@@ -37,101 +30,125 @@ export async function processToolCallLoop(
   signal = null,
   onToolResult = null
 ) {
-  let currentResponse = initialResponse;
-  const REPEAT_LIMIT = 5;
-  let repeatCount = 0;
-  
-  while (repeatCount < REPEAT_LIMIT) {
-    console.log(`[ToolLoop] --- Start of loop iteration ${repeatCount + 1} (Retry Count: ${repeatCount}) ---`);
+  const callId = `tool-loop-${foundry.utils.randomID()}`;
+  try {
+    // Signal start of the entire tool loop process
+    Hooks.call('simulacrum:processStatus', {
+      state: 'start',
+      callId,
+      label: 'Thinking...',
+      toolName: 'agentic-loop'
+    });
+
+    let currentResponse = initialResponse;
+    const REPEAT_LIMIT = 5;
+    let repeatCount = 0;
+    let iterationCount = 0;
     
-    // Check for cancellation
-    if (signal?.aborted) {
-      console.log('[ToolLoop] Process cancelled.');
-      throw new Error('Process was cancelled');
+    while (repeatCount < REPEAT_LIMIT) {
+      iterationCount++;
+      if (isDiagnosticsEnabled()) logger.debug(`Start of loop iteration ${iterationCount} (retries: ${repeatCount})`);
+      
+      // Check for cancellation
+      if (signal?.aborted) {
+        if (isDiagnosticsEnabled()) logger.info('Process cancelled');
+        throw new Error('Process was cancelled');
+      }
+      
+      // --- Display AI's natural language content if present and not a parse error ---
+      // This ensures conversational output is shown to the user.
+      if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
+        onToolResult({
+          role: 'assistant',
+          content: currentResponse.content,
+          display: true // Signal to the UI that this content should be displayed
+        });
+      }
+
+      // Handle parse errors by getting AI correction
+      if (currentResponse._parseError) {
+        if (isDiagnosticsEnabled()) logger.info('AI response had a parse error; requesting correction');
+        repeatCount++; // Increment retry count for parse errors
+        // Shared correction routine
+        appendEmptyContentCorrection(conversationManager, currentResponse);
+        // Request corrected response
+        const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+        const toolsToSend = currentToolSupport === true ? tools : null;
+        const raw = currentToolSupport !== true
+          ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...conversationMessages]), toolsToSend, { signal })
+          : await aiClient.chatWithSystem(conversationMessages, getSystemPrompt, toolsToSend, { signal });
+        currentResponse = SimulacrumCore._normalizeAIResponse(raw);
+        continue;
+      }
+      
+      // If no tool calls, terminate the loop - this is the intended behavior
+      if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
+        if (isDiagnosticsEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
+        break; // Exit the loop - this is how the loop should terminate
+      }
+      
+      // Execute all tool calls
+      if (isDiagnosticsEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
+      const toolResults = await executeToolCalls(currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal);
+      
+      
+      // --- Check for tool execution failures and increment retry count ---
+      const hasFailedTool = toolResults.some(result => !result.success);
+      if (hasFailedTool) {
+        if (isDiagnosticsEnabled()) logger.info('One or more tool calls failed; incrementing retry count');
+        repeatCount++; // Increment retry count for tool failures
+      }
+
+      // For legacy mode, add tool results as system message so AI notices them
+      if (currentToolSupport !== true && toolResults.length > 0) {
+        const latestResult = toolResults[toolResults.length - 1];
+        const toolStatusMessage = latestResult.success 
+          ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
+          : `Tool execution failed: ${latestResult.toolName} failed with error: ${latestResult.result.error}`;
+        
+        conversationManager.addMessage('system', toolStatusMessage);
+      }
+
+      // Get next AI response based on tool results
+      if (isDiagnosticsEnabled()) logger.debug('Getting next AI response after tool execution');
+      currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
     }
     
-    // --- Display AI's natural language content if present and not a parse error ---
-    // This ensures conversational output is shown to the user.
+    // If we hit the repeat limit, return the last response
+    if (repeatCount >= REPEAT_LIMIT) {
+      if (isDiagnosticsEnabled()) logger.info('Repeat limit reached; terminating loop');
+      const finalErrorMessage = {
+        content: '', // This content is for internal AI context, but should not be displayed to the user if the caller defaults to displaying returned content.
+        display: null,
+        _toolLimitReachedError: true,
+        toolCalls: [],
+        endTask: true
+      };
+      // Do NOT call onToolResult here; this is an internal error for the AI to process.
+      // Add this internal error message to the conversation for the AI to process for its final summary.
+      const aiInstructionContent = 'Tool execution limit reached. Please provide a final, summarizing response to the user, explaining that the task is ending due to excessive tool failures.';
+      if (currentToolSupport === true) {
+        conversationManager.addMessage('tool', aiInstructionContent, null, 'tool_limit_error');
+      } else {
+        conversationManager.addMessage('system', aiInstructionContent);
+      }
+      return finalErrorMessage;
+    }
+    
+    // If the loop exits gracefully (e.g., endTaskSignaled is true, or a final conversational response)
+    // Ensure the last AI response's content is displayed if it hasn't been already.
     if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
       onToolResult({
         role: 'assistant',
         content: currentResponse.content,
-        display: true // Signal to the UI that this content should be displayed
+        display: true
       });
     }
-
-    // Handle parse errors by getting AI correction
-    if (currentResponse._parseError) {
-      console.log('[ToolLoop] AI response had a parse error, getting correction. Incrementing retry count.');
-      repeatCount++; // Increment retry count for parse errors
-      currentResponse = await getAICorrectionForError(currentResponse, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
-      continue;
-    }
-    
-    // If no tool calls, terminate the loop - this is the intended behavior
-    if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
-      console.log('[ToolLoop] No tool calls in current AI response. Terminating loop as intended.');
-      break; // Exit the loop - this is how the loop should terminate
-    }
-    
-    // Execute all tool calls
-    console.log(`[ToolLoop] Executing ${currentResponse.toolCalls.length} tool calls.`);
-    const toolResults = await executeToolCalls(currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal);
-    
-    
-    // --- Check for tool execution failures and increment retry count ---
-    const hasFailedTool = toolResults.some(result => !result.success);
-    if (hasFailedTool) {
-      console.log('[ToolLoop] One or more tool calls failed. Incrementing retry count.');
-      repeatCount++; // Increment retry count for tool failures
-    }
-
-    // For legacy mode, add tool results as system message so AI notices them
-    if (currentToolSupport !== true && toolResults.length > 0) {
-      const latestResult = toolResults[toolResults.length - 1];
-      const toolStatusMessage = latestResult.success 
-        ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
-        : `Tool execution failed: ${latestResult.toolName} failed with error: ${latestResult.result.error}`;
-      
-      conversationManager.addMessage('system', toolStatusMessage);
-    }
-
-    // Get next AI response based on tool results
-    console.log('[ToolLoop] Getting next AI response after tool execution.');
-    currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
+    return currentResponse;
+  } finally {
+    // Ensure the process status is always marked as ended
+    Hooks.call('simulacrum:processStatus', { state: 'end', callId });
   }
-  
-  // If we hit the repeat limit, return the last response
-  if (repeatCount >= REPEAT_LIMIT) {
-    console.log('[ToolLoop] Repeat limit reached. Terminating loop.');
-    const finalErrorMessage = {
-      content: '', // This content is for internal AI context, but should not be displayed to the user if the caller defaults to displaying returned content.
-      display: null,
-      _toolLimitReachedError: true,
-      toolCalls: [],
-      endTask: true
-    };
-    // Do NOT call onToolResult here; this is an internal error for the AI to process.
-    // Add this internal error message to the conversation for the AI to process for its final summary.
-    const aiInstructionContent = 'Tool execution limit reached. Please provide a final, summarizing response to the user, explaining that the task is ending due to excessive tool failures.';
-    if (currentToolSupport === true) {
-      conversationManager.addMessage('tool', aiInstructionContent, null, 'tool_limit_error');
-    } else {
-      conversationManager.addMessage('system', aiInstructionContent);
-    }
-    return finalErrorMessage;
-  }
-  
-  // If the loop exits gracefully (e.g., endTaskSignaled is true, or a final conversational response)
-  // Ensure the last AI response's content is displayed if it hasn't been already.
-  if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
-    onToolResult({
-      role: 'assistant',
-      content: currentResponse.content,
-      display: true
-    });
-  }
-  return currentResponse;
 }
 
 /**
@@ -177,22 +194,25 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
         });
       }
       
+      // Check if the result indicates an error (even if no exception was thrown)
+      const isSuccess = !result.error;
+      
       results.push({
         toolCall,
         toolName,
         result,
-        success: true
+        success: isSuccess
       });
       
       // Post-tool verification if needed
       try {
         await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
       } catch (verificationError) {
-        console.warn(`Post-tool verification failed for ${toolName}:`, verificationError);
+        logger.warn(`Post-tool verification failed for ${toolName}:`, verificationError);
       }
       
     } catch (error) {
-      console.error(`Tool execution failed for ${toolName}:`, error);
+      logger.error(`Tool execution failed for ${toolName}:`, error);
       
       const errorResult = {
         error: error.message,
@@ -229,38 +249,9 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
   return results;
 }
 
-/**
- * Get AI correction for parse errors
- */
-async function getAICorrectionForError(errorResponse, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal) {
-  // Add error message to conversation for AI to see
-  conversationManager.updateSystemMessage(errorResponse.content);
-  
-  // Get corrected response from AI
-  const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-  const messages = [
-    { role: 'system', content: getSystemPrompt() },
-    ...conversationMessages
-  ];
-  
-  // Sanitize messages for legacy mode or use as-is for native mode
-  const finalMessages = currentToolSupport !== true 
-    ? _sanitizeMessagesForFallback(messages) 
-    : messages;
-  const toolsToSend = currentToolSupport === true ? tools : null;
-  
-  const raw = await aiClient.chat(finalMessages, toolsToSend, { signal });
-  return normalizeAIResponse(raw);
-}
+// Consolidated correction flow uses appendEmptyContentCorrection in-loop
 
-/**
- * Handle autonomous continuation when no tools are called
- */
-async function handleAutonomousContinuation(response, conversationManager, aiClient, getSystemPrompt, signal, onToolResult) {
-  // For simple responses with no tools, just return
-  // In future, this could check for autonomous continuation logic
-  return response;
-}
+// Note: removed unused handleAutonomousContinuation function
 
 /**
  * Get next AI response after tool execution
@@ -268,15 +259,14 @@ async function handleAutonomousContinuation(response, conversationManager, aiCli
 async function getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal) {
   // Build context with tool results
   const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-  const messages = [
-    { role: 'system', content: getSystemPrompt() },
-    ...conversationMessages
-  ];
+  
+  // For native mode, build messages without system (will be added by chatWithSystem)
+  const messagesToSend = [...conversationMessages];
   
   // Add tool results to conversation context for native mode only
   if (currentToolSupport === true) {
     for (const toolResult of toolResults) {
-      messages.push({
+      messagesToSend.push({
         role: 'tool',
         content: JSON.stringify(toolResult.result),
         tool_call_id: toolResult.toolCall.id
@@ -284,26 +274,22 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
     }
   }
   
-  // Sanitize messages for legacy mode or use as-is for native mode
-  const finalMessages = currentToolSupport !== true 
-    ? _sanitizeMessagesForFallback(messages) 
-    : messages;
   const toolsToSend = currentToolSupport === true ? tools : null;
   
-  const raw = await aiClient.chat(finalMessages, toolsToSend, { signal });
-  const normalized = normalizeAIResponse(raw);
+  const raw = currentToolSupport !== true 
+    ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...messagesToSend]), toolsToSend, { signal })
+    : await aiClient.chatWithSystem(messagesToSend, getSystemPrompt, toolsToSend, { signal });
+  const normalized = SimulacrumCore._normalizeAIResponse(raw);
   
   // Handle fallback tool calls if no native tool_calls found and in legacy mode
   if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0) && currentToolSupport !== true) {
-    console.log('[ToolLoop] No native tool calls found, attempting fallback parsing');
+    if (isDiagnosticsEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
     try {
-      // Import the method dynamically to avoid circular dependency
-      const SimulacrumCore = await import('./simulacrum-core.js');
-      const parsed = SimulacrumCore.SimulacrumCore._parseInlineToolCall?.(normalized.content);
-      console.log('[ToolLoop] Fallback parsing result:', parsed);
+      const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
+      if (isDiagnosticsEnabled()) logger.debug('Fallback parsing result:', parsed);
       
       if (parsed && parsed.name) {
-        console.log(`[ToolLoop] Creating fallback tool call for '${parsed.name}'`);
+        if (isDiagnosticsEnabled()) logger.debug(`Creating fallback tool call for '${parsed.name}'`);
         normalized.toolCalls = [{
           id: 'fallback_' + Date.now(),
           function: {
@@ -313,7 +299,7 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
         }];
       }
     } catch (error) {
-      console.warn('[ToolLoop] Fallback tool parsing failed:', error);
+      logger.warn('Fallback tool parsing failed:', error);
     }
   }
   
@@ -323,75 +309,4 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
 /**
  * Normalize AI response (simplified version)
  */
-function normalizeAIResponse(raw) {
-  if (typeof raw?.content === 'string') {
-    return {
-      content: raw.content,
-      display: raw.display ?? raw.content,
-      toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
-      model: raw.model,
-      usage: raw.usage,
-      raw
-    };
-  }
-  
-  const choice = raw?.choices?.[0];
-  const msg = choice?.message ?? {};
-  const content = typeof msg.content === 'string' ? msg.content : '';
-  
-  // Handle empty responses
-  if (!content || content.trim().length === 0) {
-    return {
-      content: 'Empty response not allowed - please provide a meaningful response to the user or make another tool call.',
-      display: null, // Set display to null when it's a parse error for AI correction
-      toolCalls: [],
-      model: raw?.model,
-      usage: raw?.usage,
-      raw,
-      _parseError: true
-    };
-  }
-  
-  let toolCalls = msg.tool_calls || [];
-  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-    toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
-  }
-
-  let finalContent = content;
-  let finalDisplay = content;
-
-  // Check for inline tool calls if no native toolCalls were found
-  if ((!toolCalls || toolCalls.length === 0) && content) {
-    const parseResult = SimulacrumCore._parseInlineToolCall(content);
-    if (parseResult && parseResult.name) {
-      // Add the parsed inline tool call to the toolCalls array
-      toolCalls.push({
-        id: `inline_${Date.now()}`,
-        function: {
-          name: parseResult.name,
-          arguments: JSON.stringify(parseResult.arguments || {})
-        }
-      });
-
-      // Format the tool call for display
-      const formattedToolCall = `\
-\
-{\"tool_call\":{\"name\":\"${parseResult.name}\",\"arguments\":${JSON.stringify(parseResult.arguments || {})}}}\
-\
-`;
-
-      // Combine cleaned text and formatted tool call for display
-      finalContent = parseResult.cleanedText;
-      finalDisplay = `${parseResult.cleanedText.trim()}\n\n${formattedToolCall}`;
-    }
-  }
-  
-  return {
-    content: finalContent,
-    display: finalDisplay,
-    toolCalls,
-    model: raw?.model,
-    usage: raw?.usage,
-    raw
-  };
-}
+// Removed local normalizeAIResponse; using SimulacrumCore._normalizeAIResponse instead

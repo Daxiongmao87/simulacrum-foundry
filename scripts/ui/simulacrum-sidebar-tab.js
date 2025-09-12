@@ -5,6 +5,7 @@
 
 import { ConversationCommands } from './conversation-commands.js';
 import { createLogger } from '../utils/logger.js';
+import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
 import { ChatHandler } from '../core/chat-handler.js';
 
@@ -92,6 +93,13 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   #isAtBottom = true;
 
   /**
+   * Track if a scroll is needed after render
+   * @type {boolean}
+   * @private
+   */
+  #needsScroll = false;
+
+  /**
    * Initialize the sidebar tab
    */
   constructor() {
@@ -132,24 +140,38 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     this._activeProcesses = new Map(); // callId -> { label, toolName }
     try {
       Hooks.on('simulacrum:processStatus', (info) => {
-        console.log('[SimulacrumSidebarTab] Process status hook:', info);
+        if (isDiagnosticsEnabled()) this.logger.debug('Process status hook', info);
         const { state, callId, label, toolName } = info || {};
         if (!callId) return;
         if (state === 'start') {
           const capped = String(label || '').slice(0, 120);
           this._activeProcesses.set(callId, { label: capped, toolName: String(toolName || '') });
-          console.log('[SimulacrumSidebarTab] Process started, active processes:', this._activeProcesses.size);
+          if (isDiagnosticsEnabled()) this.logger.debug('Process started, active processes:', this._activeProcesses.size);
         } else if (state === 'end') {
           this._activeProcesses.delete(callId);
-          console.log('[SimulacrumSidebarTab] Process ended, active processes:', this._activeProcesses.size);
+          if (isDiagnosticsEnabled()) this.logger.debug('Process ended, active processes:', this._activeProcesses.size);
         }
         this.render({ parts: ['log', 'input'] });
       });
     } catch (_err) {
       // Hooks may be unavailable in certain test contexts
-      console.error('[SimulacrumSidebarTab] Hook registration failed:', _err);
+      this.logger.error('Hook registration failed:', _err);
     }
 
+  }
+
+  /**
+   * Handle actions after a part is rendered
+   * @param {string} partId - The ID of the rendered part
+   * @param {HTMLElement} element - The HTML element of the part
+   * @param {object} options - Rendering options
+   */
+  _onRender(partId, element, options) {
+    super._onRender?.(partId, element, options);
+    if (partId === 'log' && this.#needsScroll) {
+      this.scrollBottom();
+      this.#needsScroll = false;
+    }
   }
 
   /**
@@ -195,7 +217,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     const processActive = this._activeProcesses.size > 0;
     const processLabel = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
     
-    console.log('[SimulacrumSidebarTab] _prepareContext - processActive:', processActive, 'activeProcesses:', this._activeProcesses.size);
+    if (isDiagnosticsEnabled()) this.logger.debug('_prepareContext processActive:', processActive, 'active:', this._activeProcesses.size);
     
     return foundry.utils.mergeObject(context, {
       messages: this.messages,
@@ -425,7 +447,9 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       processedContent = transformThinkTags(processedContent);
     }
     
-    const enrichedContent = await TextEditor.enrichHTML(processedContent, {
+    // Use the modern namespaced TextEditor API for FoundryVTT v13+
+    const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+    const enrichedContent = await TextEditorImpl.enrichHTML(processedContent, {
       secrets: game.user.isGM,
       documents: true,
       async: true
@@ -442,13 +466,13 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
 
     this.messages.push(message);
 
+    // If we are already at the bottom, flag that we need to scroll after the render
+    if (this.#isAtBottom) {
+      this.#needsScroll = true;
+    }
+
     // Re-render only the log part for efficiency
     this.render({ parts: ['log'] });
-
-    // Scroll to bottom if we were already at the bottom
-    if (this.#isAtBottom) {
-      this._scrollToBottom();
-    }
   }
 
   /**
@@ -464,7 +488,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    * @private
    */
   _scrollToBottom() {
-    // Schedule scroll for next tick to ensure DOM is updated
+    // This method is deprecated. Scrolling is now handled by _onRender.
+    // Kept for compatibility in case of external calls, but redirects to the new method.
     setTimeout(() => {
       this.scrollBottom();
     }, 10);
@@ -479,7 +504,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
 
     // Handle form submission to prevent URL redirect
     const form = html.querySelector('.chat-form');
-    if (form) {
+    if (form && !form.dataset.simulacrumBound) {
+      form.dataset.simulacrumBound = '1';
       form.addEventListener('submit', (event) => {
         event.preventDefault();
         const input = form.querySelector('textarea[name="message"]');
@@ -489,7 +515,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
 
     // Handle Enter key in message input
     const input = html.querySelector('textarea[name="message"]');
-    if (input) {
+    if (input && !input.dataset.simulacrumBound) {
+      input.dataset.simulacrumBound = '1';
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
           event.preventDefault();
@@ -515,7 +542,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     // Handle scroll events for the log part
     if (partId === 'log') {
       const scrollContainer = element.querySelector('.chat-scroll');
-      if (scrollContainer) {
+      if (scrollContainer && !scrollContainer.dataset.simulacrumBound) {
+        scrollContainer.dataset.simulacrumBound = '1';
         scrollContainer.addEventListener('scroll', this.#onScrollLog.bind(this));
       }
     }
@@ -524,7 +552,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     if (partId === 'input') {
       // Handle form submission to prevent URL redirect
       const form = element.querySelector('.chat-form');
-      if (form) {
+      if (form && !form.dataset.simulacrumBound) {
+        form.dataset.simulacrumBound = '1';
         form.addEventListener('submit', (event) => {
           event.preventDefault();
           const input = form.querySelector('textarea[name=\"message\"]');
@@ -534,7 +563,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
 
       // Handle Enter key in message input
       const input = element.querySelector('textarea[name="message"]');
-      if (input) {
+      if (input && !input.dataset.simulacrumBound) {
+        input.dataset.simulacrumBound = '1';
         input.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
@@ -549,7 +579,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       
       // Handle cancel button explicitly (backup for data-action)
       const cancelButton = element.querySelector('[data-action="cancelProcess"]');
-      if (cancelButton) {
+      if (cancelButton && !cancelButton.dataset.simulacrumBound) {
+        cancelButton.dataset.simulacrumBound = '1';
         cancelButton.addEventListener('click', (event) => {
           event.preventDefault();
           SimulacrumSidebarTab._onCancelProcess.call(this, event, cancelButton);

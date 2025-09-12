@@ -25,15 +25,23 @@ class ChatHandler {
         options.onUserMessage({ role: 'user', content: message, user });
       }
 
-      // Get AI response through SimulacrumCore
-      const { SimulacrumCore } = await import('./simulacrum-core.js');
-      const aiResponse = await SimulacrumCore.generateResponse(
-        this.conversationManager.getMessages(),
-        { signal: options.signal }
-      );
+      // Delegate orchestration to ConversationEngine
+      const { ConversationEngine } = await import('./conversation-engine.js');
+      const engine = new ConversationEngine(this.conversationManager);
 
-      // Handle the AI response
-      return await this.handleAIResponse(aiResponse, options);
+      const finalResponse = await engine.processTurn({
+        signal: options.signal,
+        onAssistantMessage: (msg) => {
+          // Mirror previous behavior: add to conversation and UI when appropriate
+          if (msg?.role === 'assistant' && msg?.content) {
+            this.addMessageToConversation('assistant', msg.content);
+            this.addMessageToUI({ role: 'assistant', content: msg.content, display: msg.display || msg.content }, options);
+          }
+        },
+        onToolResult: (toolResult) => this.handleToolResult(toolResult, options)
+      });
+
+      return finalResponse;
 
     } catch (error) {
       this.logger.error('Error processing user message', error);
@@ -71,9 +79,9 @@ class ChatHandler {
       display: aiResponse.display || aiResponse.content
     }, options);
 
-    // Execute tools if present
+    // Execute tools if present; pass full response so parseError is preserved
     if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
-      return await this.handleToolExecution(aiResponse.toolCalls, options);
+      return await this.handleToolExecution(aiResponse, options);
     }
 
     // No tools - check if we should continue autonomous loop
@@ -84,9 +92,10 @@ class ChatHandler {
    * Handle parse errors by continuing AI flow for correction
    */
   async handleParseError(parseErrorResponse, options = {}) {
-    // Update system message with error feedback for AI
-    this.conversationManager.updateSystemMessage(parseErrorResponse.content);
-    
+    // Append assistant failed turn + system correction to conversation
+    const { appendEmptyContentCorrection } = await import('./correction.js');
+    appendEmptyContentCorrection(this.conversationManager, parseErrorResponse);
+
     // Continue the autonomous flow to get corrected response
     return await this.handleAutonomousFlow(parseErrorResponse, options);
   }
@@ -94,7 +103,7 @@ class ChatHandler {
   /**
    * Execute tools and continue conversation flow
    */
-  async handleToolExecution(toolCalls, options = {}) {
+  async handleToolExecution(aiResponse, options = {}) {
     try {
       const { processToolCallLoop } = await import('./tool-loop-handler.js');
       const { SimulacrumCore } = await import('./simulacrum-core.js');
@@ -109,7 +118,7 @@ class ChatHandler {
       
       // Execute tools and get final response
       const finalResponse = await processToolCallLoop(
-        { toolCalls, content: '' },
+        aiResponse,
         tools,
         this.conversationManager,
         SimulacrumCore.aiClient,
@@ -162,9 +171,61 @@ class ChatHandler {
    * Handle autonomous flow continuation (when no tools but should continue)
    */
   async handleAutonomousFlow(response, options = {}) {
-    // For now, just return the response - autonomous flow logic can be added here
+    // Check for parse errors that need retry
+    if (response._parseError) {
+      return await this.retryAIResponse(options);
+    }
+    
+    // For other autonomous cases, just return the response
     // This is where we would check for end_task or continue the conversation
     return response;
+  }
+
+  /**
+   * Retry AI response generation for parse errors
+   */
+  async retryAIResponse(options = {}) {
+    const maxRetries = 3;
+    const currentRetries = (options._retryCount || 0) + 1;
+    
+    if (currentRetries > maxRetries) {
+      const errorMessage = {
+        role: 'assistant',
+        content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
+        display: '❌ Unable to generate a proper response after multiple attempts.'
+      };
+      this.addMessageToConversation('assistant', errorMessage.content);
+      this.addMessageToUI(errorMessage, options);
+      return errorMessage;
+    }
+    
+    try {
+      const { SimulacrumCore } = await import('./simulacrum-core.js');
+      
+      // Get corrected AI response
+      const aiResponse = await SimulacrumCore.generateResponse(
+        this.conversationManager.getMessages(),
+        { signal: options.signal }
+      );
+      
+      // Recursively handle the new response with retry tracking
+      return await this.handleAIResponse(aiResponse, { 
+        ...options, 
+        _retryCount: currentRetries 
+      });
+      
+    } catch (error) {
+      this.logger.error('Error during AI response retry', error);
+      
+      const errorMessage = {
+        role: 'assistant',
+        content: `Retry failed: ${error.message}`,
+        display: `❌ Retry failed: ${error.message}`
+      };
+      this.addMessageToConversation('assistant', errorMessage.content);
+      this.addMessageToUI(errorMessage, options);
+      return errorMessage;
+    }
   }
 
   /**
