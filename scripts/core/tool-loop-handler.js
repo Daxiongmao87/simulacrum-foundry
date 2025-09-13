@@ -67,7 +67,15 @@ export async function processToolCallLoop(
 
       // Handle parse errors by getting AI correction
       if (currentResponse._parseError) {
-        if (isDiagnosticsEnabled()) logger.info('AI response had a parse error; requesting correction');
+        if (isDiagnosticsEnabled()) {
+          logger.info(`AI response parse error (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
+            content: currentResponse.content || '(empty)',
+            contentLength: (currentResponse.content || '').length,
+            toolCallsCount: (currentResponse.toolCalls || []).length,
+            rawResponsePreview: JSON.stringify(currentResponse.raw || {}).substring(0, 200) + '...',
+            parseErrorReason: currentResponse._parseError === true ? 'Empty content detected' : currentResponse._parseError
+          });
+        }
         repeatCount++; // Increment retry count for parse errors
         // Shared correction routine
         appendEmptyContentCorrection(conversationManager, currentResponse);
@@ -95,7 +103,18 @@ export async function processToolCallLoop(
       // --- Check for tool execution failures and increment retry count ---
       const hasFailedTool = toolResults.some(result => !result.success);
       if (hasFailedTool) {
-        if (isDiagnosticsEnabled()) logger.info('One or more tool calls failed; incrementing retry count');
+        if (isDiagnosticsEnabled()) {
+          const failedTools = toolResults.filter(result => !result.success);
+          logger.info(`Tool execution failures (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
+            failedToolCount: failedTools.length,
+            totalToolCount: toolResults.length,
+            failureDetails: failedTools.map(tool => ({
+              toolName: tool.toolName,
+              error: tool.error?.message || tool.result?.error || 'Unknown error',
+              arguments: tool.toolCall?.function?.arguments || tool.toolCall?.arguments
+            }))
+          });
+        }
         repeatCount++; // Increment retry count for tool failures
       }
 
@@ -116,7 +135,22 @@ export async function processToolCallLoop(
     
     // If we hit the repeat limit, return the last response
     if (repeatCount >= REPEAT_LIMIT) {
-      if (isDiagnosticsEnabled()) logger.info('Repeat limit reached; terminating loop');
+      if (isDiagnosticsEnabled()) {
+        const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+        logger.error(`Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
+          totalIterations: iterationCount,
+          retryCount: repeatCount,
+          lastResponseContent: currentResponse.content || '(empty)',
+          lastResponseToolCalls: (currentResponse.toolCalls || []).length,
+          conversationLength: conversationMessages.length,
+          recentConversation: conversationMessages.slice(-3).map(msg => ({
+            role: msg.role,
+            contentLength: (msg.content || '').length,
+            hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0),
+            toolCallId: msg.tool_call_id || null
+          }))
+        });
+      }
       const finalErrorMessage = {
         content: '', // This content is for internal AI context, but should not be displayed to the user if the caller defaults to displaying returned content.
         display: null,

@@ -33,6 +33,23 @@ export function normalizeAIResponse(raw) {
   // If already normalized, check for empty content
   if (typeof raw?.content === 'string') {
     if (!raw.content || raw.content.trim().length === 0) {
+      if (isDiagnosticsEnabled()) {
+        const logger = createLogger('AIDiagnostics');
+        logger.warn('Empty content detected in already-normalized response:', {
+          rawContentValue: raw.content,
+          rawContentType: typeof raw.content,
+          rawContentLength: (raw.content || '').length,
+          trimmedLength: (raw.content || '').trim().length,
+          hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0),
+          model: raw.model,
+          usage: raw.usage,
+          responseKeys: Object.keys(raw || {})
+        });
+      }
+      if (isDiagnosticsEnabled()) {
+        const logger = createLogger('AIDiagnostics');
+        logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0) });
+      }
       return {
         content: 'Empty response not allowed - please provide a meaningful response to the user.',
         display: 'Empty response not allowed - please provide a meaningful response to the user.',
@@ -60,6 +77,30 @@ export function normalizeAIResponse(raw) {
   const content = typeof msg.content === 'string' ? msg.content : '';
 
   if (!content || content.trim().length === 0) {
+    if (isDiagnosticsEnabled()) {
+      const logger = createLogger('AIDiagnostics');
+      logger.warn('Empty content detected in OpenAI-style response:', {
+        rawResponseStructure: {
+          hasChoices: !!(raw.choices && raw.choices.length > 0),
+          choicesCount: (raw.choices || []).length,
+          firstChoiceKeys: raw.choices?.[0] ? Object.keys(raw.choices[0]) : [],
+          messageKeys: raw.choices?.[0]?.message ? Object.keys(raw.choices[0].message) : [],
+          contentValue: raw.choices?.[0]?.message?.content,
+          contentType: typeof raw.choices?.[0]?.message?.content,
+          hasToolCalls: !!(raw.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0)
+        },
+        extractedContent: content,
+        extractedContentLength: content.length,
+        trimmedLength: content.trim().length,
+        model: raw?.model,
+        usage: raw?.usage
+      });
+    }
+    if (isDiagnosticsEnabled()) {
+      const logger = createLogger('AIDiagnostics');
+      const has = !!(raw?.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0);
+      logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: has });
+    }
     return {
       content: 'Empty response not allowed - please provide a meaningful response to the user.',
       display: 'Empty response not allowed - please provide a meaningful response to the user.',

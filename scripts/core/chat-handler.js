@@ -92,6 +92,16 @@ class ChatHandler {
    * Handle parse errors by continuing AI flow for correction
    */
   async handleParseError(parseErrorResponse, options = {}) {
+    if (isDiagnosticsEnabled()) {
+      const { createLogger } = await import('../utils/logger.js');
+      const logger = createLogger('ChatHandler');
+      logger.warn('ChatHandler handling parse error:', {
+        parseErrorType: parseErrorResponse._parseError,
+        content: parseErrorResponse.content || '(empty)',
+        hasToolCalls: !!(parseErrorResponse.toolCalls && parseErrorResponse.toolCalls.length > 0),
+        retryCount: options._retryCount || 0
+      });
+    }
     // Append assistant failed turn + system correction to conversation
     const { appendEmptyContentCorrection } = await import('./correction.js');
     appendEmptyContentCorrection(this.conversationManager, parseErrorResponse);
@@ -189,6 +199,22 @@ class ChatHandler {
     const currentRetries = (options._retryCount || 0) + 1;
     
     if (currentRetries > maxRetries) {
+      try {
+        const { isDiagnosticsEnabled } = await import('../utils/dev.js');
+        const { createLogger } = await import('../utils/logger.js');
+        if (isDiagnosticsEnabled()) {
+          const conversationMessages = this.conversationManager.getMessages();
+          createLogger('AIDiagnostics').error('assistant.empty_response.exhausted', {
+            maxRetries,
+            retryCount: currentRetries,
+            conversationLength: conversationMessages.length,
+            recentMessages: conversationMessages.slice(-5).map(msg => ({
+              role: msg.role,
+              hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0)
+            }))
+          });
+        }
+      } catch {}
       const errorMessage = {
         role: 'assistant',
         content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
@@ -201,6 +227,18 @@ class ChatHandler {
     
     try {
       const { SimulacrumCore } = await import('./simulacrum-core.js');
+      try {
+        const { isDiagnosticsEnabled } = await import('../utils/dev.js');
+        const { createLogger } = await import('../utils/logger.js');
+        if (isDiagnosticsEnabled()) {
+          const last = this.conversationManager.messages[this.conversationManager.messages.length - 1];
+          createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
+            attempt: currentRetries,
+            lastRole: last?.role,
+            hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0
+          });
+        }
+      } catch {}
       
       // Get corrected AI response
       const aiResponse = await SimulacrumCore.generateResponse(
