@@ -71,7 +71,7 @@ describe('AIClient - chat OpenAI', () => {
           }),
         })
       );
-      expect(response).toEqual(mockResponse);
+      expect(response.choices[0].message.content).toBe('Hello');
   });
 
 });
@@ -136,7 +136,7 @@ describe('AIClient - chat Ollama', () => {
   });
 
   test('should send correct request and return response', async () => {
-      const mockResponse = { message: { content: 'Hello' } };
+      const mockResponse = { choices: [{ message: { content: 'Hello' } }] };
       fetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockResponse),
@@ -160,9 +160,93 @@ describe('AIClient - chat Ollama', () => {
           }),
         })
       );
-      expect(response).toEqual(mockResponse);
+      expect(response.choices[0].message.content).toBe('Hello');
   });
 
+});
+
+describe('AIClient - chat Gemini', () => {
+  beforeEach(() => {
+    setupAIClientTests();
+    mockConfig.baseURL = 'https://generativelanguage.googleapis.com/v1beta';
+    mockConfig.provider = 'gemini';
+    mockConfig.model = 'gemini-pro';
+  });
+
+  test('should send Gemini request with system prompt and tools', async () => {
+    const mockResponse = {
+      model: 'models/gemini-pro',
+      candidates: [
+        {
+          content: {
+            parts: [{ text: 'Hello from Gemini' }]
+          }
+        }
+      ]
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse)
+    });
+
+    const client = new AIClient(mockConfig);
+    const messages = [{ role: 'user', content: 'Hi' }];
+    const tools = [{ type: 'function', function: { name: 'lookup', description: 'Lookup data', parameters: { type: 'object', properties: {} } } }];
+
+    const response = await client.chatWithSystem(messages, () => 'Be helpful', tools, { provider: 'gemini' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(options.headers['x-goog-api-key']).toBe('test-api-key');
+
+    const parsedBody = JSON.parse(options.body);
+    expect(parsedBody.systemInstruction.parts[0].text).toBe('Be helpful');
+    expect(parsedBody.contents[0].role).toBe('user');
+    expect(parsedBody.tools[0].functionDeclarations[0].name).toBe('lookup');
+
+    expect(response).toEqual(mockResponse);
+  });
+
+  test('should sanitize tool schemas for Gemini', () => {
+    const client = new AIClient(mockConfig);
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'outer_tool',
+          description: 'Test tool',
+          parameters: {
+            type: 'object',
+            properties: {
+              requiredField: { type: 'string', required: true },
+              nested: {
+                type: 'object',
+                properties: {
+                  innerRequired: { type: 'number', required: true },
+                  innerOptional: { type: 'string' }
+                }
+              }
+            },
+            required: ['nested']
+          }
+        }
+      }
+    ];
+
+    const declarations = client._mapToolsForGemini(tools);
+
+    expect(declarations).toHaveLength(1);
+    const parameters = declarations[0].parameters;
+
+    expect(parameters.required).toEqual(expect.arrayContaining(['nested', 'requiredField']));
+    expect(parameters.properties.requiredField.required).toBeUndefined();
+    expect(parameters.properties.nested.required).toEqual(expect.arrayContaining(['innerRequired']));
+    expect(parameters.properties.nested.properties.innerRequired.required).toBeUndefined();
+  });
 });
 
 describe('AIClient - chat Ollama tools', () => {
@@ -568,14 +652,30 @@ describe('AIClient - provider system', () => {
     expect(response.provider).toBe('test');
   });
 
-  test('should throw error when provider not found for sendMessage', async () => {
+  test('falls back to chat when provider not found for sendMessage', async () => {
+    setupAIClientTests();
+    mockConfig.baseURL = 'https://api.openai.com/v1';
+    const mockResponse = { choices: [{ message: { content: 'Fallback reply' } }] };
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse)
+    });
+
+    const client = new AIClient(mockConfig);
+    const response = await client.sendMessage('Hello', { provider: 'nonexistent' });
+
+    expect(response.content).toBe('Fallback reply');
+    expect(response.provider).toBe('nonexistent');
+  });
+
+  test('should error when no baseURL configured for fallback sendMessage', async () => {
     const client = new AIClient();
-    await expect(client.sendMessage('Hello', {provider: 'nonexistent'}))
-      .rejects.toThrow("Provider 'nonexistent' not found");
+    await expect(client.sendMessage('Hello', { provider: 'missing' }))
+      .rejects.toThrow('No baseURL configured for AI client');
   });
 
   test('should throw error when provider not available for sendMessage', async () => {
-    const client = new AIClient();
+    const client = new AIClient({ baseURL: 'https://api.openai.com/v1', model: 'test-model' });
     // Create a mock provider that extends AIProvider but is not available
     const mockProvider = new (class extends AIProvider { 
       isAvailable() { return false; } 
@@ -613,14 +713,30 @@ describe('AIClient - provider system', () => {
     expect(response.provider).toBe('gen');
   });
 
-  test('should throw error when provider not found for generateResponse', async () => {
+  test('falls back to chat when provider not found for generateResponse', async () => {
+    setupAIClientTests();
+    mockConfig.baseURL = 'https://api.openai.com/v1';
+    const mockResponse = { choices: [{ message: { content: 'Generated' } }] };
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse)
+    });
+
+    const client = new AIClient(mockConfig);
+    const result = await client.generateResponse([{ role: 'user', content: 'Hi' }], { provider: 'missing' });
+
+    expect(result.content).toBe('Generated');
+    expect(result.provider).toBe('missing');
+  });
+
+  test('should error when no baseURL configured for fallback generateResponse', async () => {
     const client = new AIClient();
-    await expect(client.generateResponse([], {provider: 'nonexistent'}))
-      .rejects.toThrow("Provider 'nonexistent' not found");
+    await expect(client.generateResponse([{ role: 'user', content: 'Hi' }], { provider: 'missing' }))
+      .rejects.toThrow('No baseURL configured for AI client');
   });
 
   test('should throw error when provider not available for generateResponse', async () => {
-    const client = new AIClient();
+    const client = new AIClient({ baseURL: 'https://api.openai.com/v1', model: 'test-model' });
     const mockProvider = new (class extends AIProvider { 
       isAvailable() { return false; } 
       async sendMessage() { return {}; }

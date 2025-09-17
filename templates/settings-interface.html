@@ -7,16 +7,14 @@
   <section class="sheet-body">
     <!-- General Settings Tab -->
     <div class="tab" data-tab="general">
-            <div class="form-group">
-        <label for="apiProvider">Provider</label>
-        <select name="apiProvider">
-          <option value="openai" {{#if (eq apiProvider 'openai')}}selected{{/if}}>OpenAI</option>
-          <option value="ollama" {{#if (eq apiProvider 'ollama')}}selected{{/if}}>Ollama (local)</option>
-          <option value="custom" {{#if (eq apiProvider 'custom')}}selected{{/if}}>Custom</option>
+      <div class="form-group">
+        <label for="provider">Provider</label>
+        <select name="provider" id="provider">
+          <option value="openai" {{#if providerIsOpenAI}}selected{{/if}}>OpenAI-compatible</option>
+          <option value="gemini" {{#if providerIsGemini}}selected{{/if}}>Gemini-compatible</option>
         </select>
-        <p class="hint">Select a provider to preset Base URL. You can still override manually.</p>
+        <p class="hint">Choose the API compatibility mode for your AI endpoint.</p>
       </div>
-      
 
       <div class="form-group">
         <label for="apiKey">API Key</label>
@@ -26,8 +24,8 @@
 
       <div class="form-group">
         <label for="baseURL">Base URL</label>
-        <input type="url" name="baseURL" value="{{baseURL}}" placeholder="https://api.openai.com/v1">
-        <p class="hint">Must end with /v1 (OpenAI-compatible)</p>
+        <input type="url" name="baseURL" value="{{baseURL}}" placeholder="{{baseURLPlaceholder}}">
+        <p class="hint">OpenAI-compatible example: `https://api.openai.com/v1` · Gemini-compatible example: `https://generativelanguage.googleapis.com/v1beta`</p>
       </div>
 
       <div class="form-group">

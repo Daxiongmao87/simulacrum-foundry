@@ -3,9 +3,9 @@
  * Handles different AI providers with a common interface
  */
 
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
-import { isDiagnosticsEnabled } from '../utils/dev.js';
-import { createLogger } from '../utils/logger.js';
+import { normalizeAIResponse } from '../utils/ai-normalization.js';
 
 /**
  * AI Provider interface - Abstract base class for AI service providers
@@ -187,13 +187,10 @@ export class AIClient {
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
     this.contextLength = config.contextLength || 4096;
+    this.temperature = config.temperature;
+    this.provider = config.provider || 'openai';
     this.providers = new Map();
     this.defaultProvider = null;
-
-    // Provider-agnostic; enforce versioned base URL universally
-    if (typeof this.baseURL === 'string' && !this.baseURL.endsWith('/v1')) {
-      throw new SimulacrumError('Base URL must end with /v1');
-    }
   }
   
   /**
@@ -233,45 +230,61 @@ export class AIClient {
    * @param {Array} tools - Optional tools for function calling
    * @returns {Promise<Object>} AI response
    */
-  async chat(messages, tools = null) {
+  async chat(messages, tools = null, options = {}) {
     if (!this.baseURL) {
       throw new SimulacrumError('No baseURL configured for AI client');
     }
 
-    // Dynamically calculate max_tokens
+    const provider = options.provider || this.provider || 'openai';
+    if (provider === 'gemini') {
+      return this._chatGemini(messages, tools, options);
+    }
+
+    // OpenAI-style providers
     const contextLength = this.getContextLength();
     const estimatedPromptTokens = messages.reduce((acc, message) => {
       const content = message.content || '';
       const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
       return acc + Math.ceil((content.length + toolCalls.length) / 4);
     }, 0);
-    
+
     const estimatedToolTokens = tools ? Math.ceil(JSON.stringify(tools).length / 4) : 0;
     const totalEstimatedPromptTokens = estimatedPromptTokens + estimatedToolTokens;
 
-    const buffer = 200; // Safety buffer
+    const buffer = 200;
     let dynamicMaxTokens = contextLength - totalEstimatedPromptTokens - buffer;
 
     if (dynamicMaxTokens < 1) {
-      if (isDiagnosticsEnabled()) {
+      if (isDebugEnabled()) {
         createLogger('AIDiagnostics').warn('Prompt is very close to the context limit. Setting max_tokens to a small value.');
       }
       dynamicMaxTokens = 100;
     }
 
-    const maxTokens = dynamicMaxTokens;
+    const configuredMax = typeof this.maxTokens === 'number' ? this.maxTokens : dynamicMaxTokens;
+    const maxTokens = Math.min(dynamicMaxTokens, configuredMax);
 
-    console.log(`[Token Estimation] Context: ${contextLength}, Prompt: ${totalEstimatedPromptTokens}, Max Tokens: ${maxTokens}`);
+    if (isDebugEnabled()) {
+      createLogger('AIDiagnostics').info('Chat request context:', {
+        contextLength,
+        promptTokens: totalEstimatedPromptTokens,
+        maxTokens,
+        messagesCount: messages.length,
+        hasTools: !!tools,
+        toolCount: tools ? tools.length : 0
+      });
+    }
 
     const body = {
       model: this.model,
-      messages: messages,
-      max_tokens: maxTokens
+      messages,
+      max_tokens: maxTokens,
+      temperature: typeof this.temperature === 'number' ? this.temperature : undefined
     };
 
     if (tools) {
       body.tools = tools;
-      body.tool_choice = "auto";
+      body.tool_choice = 'auto';
     }
 
     let response;
@@ -279,20 +292,22 @@ export class AIClient {
     const __retryEnabled = !__inJest;
     const MAX_RETRIES = 5;
     const INITIAL_DELAY_MS = 250;
+    const signal = options.signal;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        response = await fetch(`${this.baseURL}/chat/completions`, {
+        response = await fetch(`${this.baseURL.replace(/\/$/, '')}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
           },
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          signal
         });
 
         if (response.ok) {
-          break; // Success, exit the loop
+          break;
         }
 
         const status = response.status;
@@ -301,17 +316,15 @@ export class AIClient {
         if (shouldRetry && attempt < MAX_RETRIES) {
           const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
           try {
-            if (isDiagnosticsEnabled()) {
+            if (isDebugEnabled()) {
               createLogger('AIDiagnostics').info('Retrying API request', { attempt: attempt + 1, status, delay });
             }
           } catch {}
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
-          // Don't retry or max retries reached, so break the loop to handle the error
           break;
         }
       } catch (error) {
-        // Network or other fetch errors
         if (attempt >= MAX_RETRIES) {
           throw new Error(`Failed to fetch after ${MAX_RETRIES + 1} attempts: ${error.message}`);
         }
@@ -323,11 +336,9 @@ export class AIClient {
     if (!response.ok) {
       let errorText;
       try {
-        // Try JSON first (for structured error responses)
         const errorData = await response.json();
         errorText = errorData.message || JSON.stringify(errorData);
       } catch {
-        // Fall back to text response
         try {
           errorText = await response.text();
         } catch {
@@ -338,14 +349,34 @@ export class AIClient {
     }
 
     const data = await response.json();
-    
-    // Normalize the response to extract content and tool_calls
+
+    if (isDebugEnabled()) {
+      const logger = createLogger('AIDiagnostics');
+      const choice = data.choices?.[0];
+      const msg = choice?.message ?? {};
+      logger.info('Raw AI API response received:', {
+        model: data.model,
+        usage: data.usage,
+        choicesCount: (data.choices || []).length,
+        messageContent: {
+          value: msg.content,
+          type: typeof msg.content,
+          length: (msg.content || '').length,
+          isEmpty: !msg.content || msg.content.trim().length === 0
+        },
+        toolCalls: {
+          count: (msg.tool_calls || []).length,
+          names: (msg.tool_calls || []).map(tc => tc?.function?.name).filter(Boolean)
+        },
+        finishReason: choice?.finish_reason
+      });
+    }
+
     const choice = data.choices?.[0];
     const msg = choice?.message ?? {};
     const content = typeof msg.content === 'string' ? msg.content : '';
     const tool_calls = msg.tool_calls || [];
-    
-    // Return normalized response
+
     return {
       choices: [{
         message: {
@@ -358,6 +389,201 @@ export class AIClient {
     };
   }
 
+  _getGeminiEndpoint(action = 'generateContent') {
+    const base = (this.baseURL || '').replace(/\/$/, '');
+    const model = encodeURIComponent(this.model || 'gemini-1.5-pro-latest');
+    const suffix = action.startsWith(':') ? action : `:${action}`;
+    return `${base}/models/${model}${suffix}`;
+  }
+
+  _mapGeminiRole(role) {
+    switch (role) {
+      case 'assistant':
+      case 'model':
+        return 'model';
+      case 'tool':
+        return 'user';
+      case 'system':
+        return null;
+      default:
+        return 'user';
+    }
+  }
+
+  _buildGeminiContents(messages) {
+    const contents = [];
+    for (const message of messages || []) {
+      if (!message) continue;
+      const role = this._mapGeminiRole(message.role);
+      if (!role) continue;
+
+      let text = '';
+      if (typeof message.content === 'string') {
+        text = message.content;
+      } else if (Array.isArray(message.content)) {
+        text = message.content
+          .map(part => (typeof part === 'string' ? part : part?.text || ''))
+          .filter(Boolean)
+          .join('\n');
+      } else if (message.content != null) {
+        text = JSON.stringify(message.content);
+      }
+
+      if (!text && message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+        text = message.tool_calls
+          .map(call => {
+            const fn = call?.function || {};
+            return `Requested tool ${fn.name || 'unknown'} with args ${fn.arguments || '{}'}`;
+          })
+          .join('\n');
+      }
+
+      if (!text && message.role === 'tool') {
+        const toolLabel = message.tool_call_id ? ` (${message.tool_call_id})` : '';
+        text = `Tool response${toolLabel}: ${String(message.content ?? '')}`;
+      }
+
+      if (!text) continue;
+      contents.push({ role, parts: [{ text }] });
+    }
+    return contents;
+  }
+
+  _sanitizeGeminiParameters(schema) {
+    if (!schema || typeof schema !== 'object') {
+      return { type: 'object' };
+    }
+
+    const base = { ...schema };
+    base.type = base.type || 'object';
+
+    const properties = base.properties && typeof base.properties === 'object'
+      ? base.properties
+      : {};
+
+    const sanitizedProperties = {};
+    const requiredSet = new Set(Array.isArray(base.required) ? base.required : []);
+
+    for (const [key, value] of Object.entries(properties)) {
+      if (!value || typeof value !== 'object') {
+        sanitizedProperties[key] = value;
+        continue;
+      }
+
+      const propertySchema = { ...value };
+      if (propertySchema.required === true) {
+        requiredSet.add(key);
+      }
+      delete propertySchema.required;
+
+      if (propertySchema.type === 'object' || propertySchema.properties) {
+        sanitizedProperties[key] = this._sanitizeGeminiParameters(propertySchema);
+      } else {
+        if (propertySchema.items && typeof propertySchema.items === 'object') {
+          const itemsSchema = propertySchema.items;
+          if (itemsSchema.type === 'object' || itemsSchema.properties) {
+            propertySchema.items = this._sanitizeGeminiParameters(itemsSchema);
+          } else {
+            propertySchema.items = { ...itemsSchema };
+          }
+        }
+        sanitizedProperties[key] = propertySchema;
+      }
+    }
+
+    base.properties = sanitizedProperties;
+
+    if (requiredSet.size > 0) {
+      base.required = Array.from(requiredSet);
+    } else {
+      delete base.required;
+    }
+
+    return base;
+  }
+
+  _mapToolsForGemini(tools) {
+    return (tools || [])
+      .map(tool => tool?.function)
+      .filter(Boolean)
+      .map(fn => ({
+        name: fn.name,
+        description: fn.description || '',
+        parameters: this._sanitizeGeminiParameters(fn.parameters && typeof fn.parameters === 'object' ? fn.parameters : { type: 'object' })
+      }))
+      .filter(decl => decl.name);
+  }
+
+  async _chatGemini(messages, tools, options) {
+    const signal = options.signal;
+    const systemPrompt = options.systemPrompt;
+    const contents = this._buildGeminiContents(messages);
+
+    if (!contents.length) {
+      contents.push({ role: 'user', parts: [{ text: '' }] });
+    }
+
+    const body = {
+      contents
+    };
+
+    const generationConfig = {};
+    if (typeof this.maxTokens === 'number') {
+      generationConfig.maxOutputTokens = this.maxTokens;
+    }
+    if (typeof this.temperature === 'number') {
+      generationConfig.temperature = this.temperature;
+    }
+    if (Object.keys(generationConfig).length) {
+      body.generationConfig = generationConfig;
+    }
+
+    if (systemPrompt) {
+      body.systemInstruction = {
+        role: 'system',
+        parts: [{ text: systemPrompt }]
+      };
+    }
+
+    const functionDeclarations = this._mapToolsForGemini(tools);
+    if (functionDeclarations.length) {
+      body.tools = [{ functionDeclarations }];
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['x-goog-api-key'] = this.apiKey;
+    }
+
+    const response = await fetch(this._getGeminiEndpoint('generateContent'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal
+    });
+
+    if (!response.ok) {
+      let errorText;
+      try {
+        const errorData = await response.json();
+        errorText = errorData.error?.message || JSON.stringify(errorData);
+      } catch {
+        try {
+          errorText = await response.text();
+        } catch {
+          errorText = 'API error';
+        }
+      }
+      throw new Error(`${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (!data.model && this.model) {
+      data.model = this.model;
+    }
+    return data;
+  }
+
   /**
    * Chat with system message automatically prepended
    * @param {Array} conversationMessages - Array of conversation message objects
@@ -367,8 +593,15 @@ export class AIClient {
    * @returns {Promise<Object>} AI response
    */
   async chatWithSystem(conversationMessages, getSystemPrompt, tools = null, options = {}) {
+    const systemPrompt = getSystemPrompt();
+    const provider = options.provider || this.provider || 'openai';
+    if (provider === 'gemini') {
+      const forwardedOptions = { ...options, systemPrompt };
+      return this.chat(conversationMessages, tools, forwardedOptions);
+    }
+
     const messages = [
-      { role: 'system', content: getSystemPrompt() },
+      { role: 'system', content: systemPrompt },
       ...conversationMessages
     ];
     return this.chat(messages, tools, options);
@@ -455,26 +688,38 @@ export class AIClient {
    * @returns {Promise<Object>} AI response
    */
   async sendMessage(message, options = {}) {
-    const providerName = options.provider || this.defaultProvider;
-    const provider = this.providers.get(providerName);
+    const providerName = options.provider || this.defaultProvider || this.provider || 'openai';
+    const provider = providerName ? this.providers.get(providerName) : null;
 
-    if (!provider) {
-      throw new APIError(`Provider '${providerName}' not found`);
+    if (provider) {
+      if (!provider.isAvailable()) {
+        throw new APIError(`Provider '${providerName}' is not available`);
+      }
+      try {
+        const response = await provider.sendMessage(message, options.context || []);
+        return {
+          ...response,
+          provider: providerName
+        };
+      } catch (error) {
+        throw new APIError(`AI request failed: ${error.message}`);
+      }
     }
 
-    if (!provider.isAvailable()) {
-      throw new APIError(`Provider '${providerName}' is not available`);
-    }
-
-    try {
-      const response = await provider.sendMessage(message, options.context || []);
-      return {
-        ...response,
-        provider: providerName
-      };
-    } catch (error) {
-      throw new APIError(`AI request failed: ${error.message}`);
-    }
+    const contextMessages = Array.isArray(options.context) ? options.context : [];
+    const baseMessages = [
+      ...contextMessages,
+      { role: 'user', content: message }
+    ];
+    const raw = await this.chat(baseMessages, options.tools || null, { provider: providerName, signal: options.signal });
+    const normalized = normalizeAIResponse(raw);
+    return {
+      content: normalized.content,
+      usage: normalized.usage || raw.usage,
+      model: normalized.model || raw.model,
+      provider: providerName,
+      raw
+    };
   }
 
   /**
@@ -484,26 +729,34 @@ export class AIClient {
    * @returns {Promise<Object>} AI response
    */
   async generateResponse(messages, options = {}) {
-    const providerName = options.provider || this.defaultProvider;
-    const provider = this.providers.get(providerName);
+    const providerName = options.provider || this.defaultProvider || this.provider || 'openai';
+    const provider = providerName ? this.providers.get(providerName) : null;
 
-    if (!provider) {
-      throw new APIError(`Provider '${providerName}' not found`);
+    if (provider) {
+      if (!provider.isAvailable()) {
+        throw new APIError(`Provider '${providerName}' is not available`);
+      }
+      try {
+        const response = await provider.generateResponse(messages);
+        return {
+          ...response,
+          provider: providerName
+        };
+      } catch (error) {
+        throw new APIError(`AI request failed: ${error.message}`);
+      }
     }
 
-    if (!provider.isAvailable()) {
-      throw new APIError(`Provider '${providerName}' is not available`);
-    }
-
-    try {
-      const response = await provider.generateResponse(messages);
-      return {
-        ...response,
-        provider: providerName
-      };
-    } catch (error) {
-      throw new APIError(`AI request failed: ${error.message}`);
-    }
+    const raw = await this.chat(messages, options.tools || null, { provider: providerName, signal: options.signal, systemPrompt: options.systemPrompt });
+    const normalized = normalizeAIResponse(raw);
+    return {
+      content: normalized.content,
+      usage: normalized.usage || raw.usage,
+      model: normalized.model || raw.model,
+      provider: providerName,
+      raw,
+      toolCalls: normalized.toolCalls
+    };
   }
 
   /**

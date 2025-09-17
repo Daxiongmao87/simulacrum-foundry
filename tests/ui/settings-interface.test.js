@@ -23,6 +23,7 @@ function setupMockUI() {
 function setupMockFormData() {
   return new Map([
     ['enabled', true],
+    ['provider', 'openai'],
     ['apiKey', 'sk-test123'],
     ['baseURL', 'https://api.openai.com/v1'],
     ['model', 'gpt-3.5-turbo'],
@@ -41,6 +42,7 @@ function setupTestEnvironment() {
   global.Dialog = {
     confirm: jest.fn()
   };
+  global.fetch = jest.fn();
 
   // Mock FormApplication
   global.FormApplication = class {
@@ -86,7 +88,7 @@ describe('SettingsInterface - basic tests', () => {
 
     mockFormData = new Map([
       ['enabled', true],
-      ['apiProvider', 'openai'],
+      ['provider', 'openai'],
       ['apiKey', 'sk-test123'],
       ['baseURL', 'https://api.openai.com/v1'],
       ['model', 'gpt-3.5-turbo'],
@@ -125,27 +127,53 @@ describe('SettingsInterface - getData', () => {
   describe('data retrieval', () => {
     it('should return current settings data', () => {
       // Setup mock settings
-      mockGame.settings.get
-        .mockReturnValueOnce('sk-test123') // apiKey
-        .mockReturnValueOnce('https://api.openai.com/v1') // baseURL
-        .mockReturnValueOnce('gpt-3.5-turbo') // model
-        .mockReturnValueOnce(4096) // maxTokens
-        .mockReturnValueOnce(0.7) // temperature
-        .mockReturnValueOnce(20) // contextLength
-        .mockReturnValueOnce(''); // customSystemPrompt
+      mockGame.settings.get.mockImplementation((_module, key) => ({
+        provider: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: 'sk-test123',
+        model: 'gpt-3.5-turbo',
+        maxTokens: 4096,
+        temperature: 0.7,
+        contextLength: 20,
+        customSystemPrompt: ''
+      })[key]);
 
       const data = settingsInterface.getData();
 
       expect(data).toEqual({
         apiKey: 'sk-test123',
         baseURL: 'https://api.openai.com/v1',
+        baseURLPlaceholder: 'https://api.openai.com/v1',
         model: 'gpt-3.5-turbo',
         maxTokens: 4096,
         temperature: 0.7,
         contextLength: 20,
         customSystemPrompt: '',
+        provider: 'openai',
+        providerIsOpenAI: true,
+        providerIsGemini: false,
         testing: false
       });
+    });
+
+    it('should derive Gemini placeholder when provider is gemini', () => {
+      mockGame.settings.get.mockImplementation((_module, key) => ({
+        provider: 'gemini',
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'test-key',
+        model: 'gemini-pro',
+        maxTokens: 4096,
+        temperature: 0.7,
+        contextLength: 20,
+        customSystemPrompt: ''
+      })[key]);
+
+      const data = settingsInterface.getData();
+
+      expect(data.baseURLPlaceholder).toBe('https://generativelanguage.googleapis.com/v1beta');
+      expect(data.provider).toBe('gemini');
+      expect(data.providerIsGemini).toBe(true);
+      expect(data.providerIsOpenAI).toBe(false);
     });
   });
 });
@@ -179,7 +207,7 @@ describe('SettingsInterface - validation methods', () => {
       expect(mockInput.classList.add).toHaveBeenCalledWith('valid');
     });
 
-    it('should invalidate short OpenAI API key', () => {
+    it('should mark short keys as valid without erroring', () => {
       const mockInput = {
         value: 'sk-short',
         classList: { add: jest.fn(), remove: jest.fn() },
@@ -191,7 +219,8 @@ describe('SettingsInterface - validation methods', () => {
       const event = { target: mockInput };
       settingsInterface._validateApiKey(event);
 
-      expect(mockInput.classList.add).toHaveBeenCalledWith('invalid');
+      expect(mockInput.classList.add).toHaveBeenCalledWith('valid');
+      expect(mockInput.classList.add).not.toHaveBeenCalledWith('invalid');
     });
   });
 
@@ -247,9 +276,9 @@ describe('SettingsInterface - form interactions', () => {
       };
 
       const mockElements = {
-        apiProvider: { value: 'ollama' },
+        provider: { value: 'gemini' },
         apiKey: { value: 'old-key' },
-        baseURL: { value: 'http://localhost:11434' },
+        baseURL: { value: 'https://example.com/custom', placeholder: 'https://example.com/custom' },
         model: { value: 'llama2' },
         maxTokens: { value: '2048' },
         temperature: { value: '0.5' },
@@ -271,13 +300,58 @@ describe('SettingsInterface - form interactions', () => {
 
       await settingsInterface._onResetDefaults(event);
 
-      // provider removed; no assertion
       expect(mockElements.apiKey.value).toBe('');
       expect(mockElements.baseURL.value).toBe('https://api.openai.com/v1');
+      expect(mockElements.baseURL.placeholder).toBe('https://api.openai.com/v1');
       expect(mockElements.model.value).toBe('gpt-3.5-turbo');
       expect(mockElements.contextLength.value).toBe('20');
       expect(mockElements.customSystemPrompt.value).toBe('');
+      expect(mockElements.provider.value).toBe('openai');
       expect(mockUI.notifications.info).toHaveBeenCalledWith('Settings reset to defaults');
+    });
+  });
+
+  describe('_onProviderChange', () => {
+    it('should update base URL placeholder and current provider', () => {
+      const baseInput = { placeholder: '', value: '', dispatchEvent: jest.fn() };
+      const mockForm = {
+        querySelector: jest.fn((selector) => {
+          if (selector === 'input[name="baseURL"]') return baseInput;
+          return null;
+        })
+      };
+
+      const event = {
+        preventDefault: jest.fn(),
+        target: {
+          value: 'gemini',
+          form: mockForm
+        }
+      };
+
+      settingsInterface.form = mockForm;
+      settingsInterface._validateForm = jest.fn();
+
+      settingsInterface._onProviderChange(event);
+
+      expect(settingsInterface.currentProvider).toBe('gemini');
+      expect(baseInput.placeholder).toBe('https://generativelanguage.googleapis.com/v1beta');
+      expect(settingsInterface._validateForm).toHaveBeenCalled();
+    });
+
+    it('should default to openai when no provider provided', () => {
+      const baseInput = { placeholder: '', value: '', dispatchEvent: jest.fn() };
+      const mockForm = {
+        querySelector: jest.fn(() => baseInput)
+      };
+
+      settingsInterface.form = mockForm;
+      settingsInterface._validateForm = jest.fn();
+
+      settingsInterface._onProviderChange({ target: { value: '', form: mockForm } });
+
+      expect(settingsInterface.currentProvider).toBe('openai');
+      expect(baseInput.placeholder).toBe('https://api.openai.com/v1');
     });
   });
 
@@ -287,7 +361,7 @@ describe('SettingsInterface - form interactions', () => {
       global.SimulacrumCore = { initializeAIClient: jest.fn() };
 
       const formData = {
-        apiProvider: 'openai',
+        provider: 'openai',
         apiKey: 'sk-test123',
         baseURL: 'https://api.openai.com/v1',
         model: 'gpt-3.5-turbo',
@@ -297,7 +371,7 @@ describe('SettingsInterface - form interactions', () => {
 
       await settingsInterface._updateObject({}, formData);
 
-      // provider removed
+      expect(mockGame.settings.set).toHaveBeenCalledWith('simulacrum', 'provider', 'openai');
       expect(mockGame.settings.set).toHaveBeenCalledWith('simulacrum', 'maxTokens', 4096);
       expect(mockGame.settings.set).toHaveBeenCalledWith('simulacrum', 'temperature', 0.7);
       expect(mockUI.notifications.info).toHaveBeenCalledWith('Simulacrum settings saved successfully');
@@ -307,7 +381,7 @@ describe('SettingsInterface - form interactions', () => {
       const error = new Error('Save failed');
       mockGame.settings.set.mockRejectedValue(error);
 
-      const formData = { enabled: true, apiKey: '', baseURL: 'https://api.openai.com/v1', model: 'gpt-3.5-turbo' };
+      const formData = { enabled: true, provider: 'openai', apiKey: '', baseURL: 'https://api.openai.com/v1', model: 'gpt-3.5-turbo' };
 
       await expect(settingsInterface._updateObject({}, formData)).rejects.toThrow('Save failed');
       expect(mockUI.notifications.error).toHaveBeenCalledWith('Failed to save settings: Save failed');
@@ -342,18 +416,14 @@ describe('SettingsInterface - API connection testing', () => {
   });
 
   describe('_testApiConnection', () => {
-    it('should test API connection successfully', async () => {
-      // Mock the method directly for testing
-      settingsInterface._testApiConnection = async (_unusedConfig) => {
-        return {
-          success: true,
-          model: 'gpt-3.5-turbo',
-          content: 'Hello, this is a test response'
-        };
-      };
+    it('should test OpenAI-compatible endpoint successfully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [{ id: 'test-model' }] })
+      });
 
       const config = {
-        apiProvider: 'openai',
+        provider: 'openai',
         apiKey: 'sk-test123',
         baseURL: 'https://api.openai.com/v1',
         model: 'gpt-3.5-turbo'
@@ -361,24 +431,88 @@ describe('SettingsInterface - API connection testing', () => {
 
       const result = await settingsInterface._testApiConnection(config);
 
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer sk-test123'
+          })
+        })
+      );
+
       expect(result).toEqual({
         success: true,
-        model: 'gpt-3.5-turbo',
-        content: 'Hello, this is a test response'
+        model: 'test-model',
+        content: 'Endpoint reachable'
       });
     });
 
-    it('should handle API connection failure', async () => {
-      // Mock the method to simulate failure
-      settingsInterface._testApiConnection = async (_unusedConfig) => {
-        return {
-          success: false,
-          error: 'API connection failed'
-        };
-      };
+    it('should test Gemini endpoint successfully', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ name: 'models/gemini-pro' }] })
+      });
 
       const config = {
-        apiProvider: 'openai',
+        provider: 'gemini',
+        apiKey: 'test-key',
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+        model: 'gemini-pro'
+      };
+
+      const result = await settingsInterface._testApiConnection(config);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1beta/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'x-goog-api-key': 'test-key'
+          })
+        })
+      );
+
+      expect(result).toEqual({
+        success: true,
+        model: 'models/gemini-pro',
+        content: 'Endpoint reachable'
+      });
+    });
+
+    it('should prioritize explicit provider selection over URL inference', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ models: [] })
+      });
+
+      const config = {
+        provider: 'gemini',
+        apiKey: 'test-key',
+        baseURL: 'https://api.openai.com/v1',
+        model: 'gemini-pro'
+      };
+
+      await settingsInterface._testApiConnection(config);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/models',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'x-goog-api-key': 'test-key' })
+        })
+      );
+    });
+
+    it('should handle API connection failure', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: { message: 'API connection failed' } })
+      });
+
+      const config = {
+        provider: 'openai',
         apiKey: 'invalid-key',
         baseURL: 'https://api.openai.com/v1',
         model: 'gpt-3.5-turbo'
@@ -421,6 +555,9 @@ describe('SettingsInterface - API connection testing', () => {
       expect(mockUI.notifications.info).toHaveBeenCalledWith('✅ Connection successful! Model: gpt-3.5-turbo');
       expect(mockButton.disabled).toBe(false);
       expect(mockButton.textContent).toBe('Test Connection');
+      expect(settingsInterface._testApiConnection).toHaveBeenCalledWith(expect.objectContaining({
+        provider: 'openai'
+      }));
     });
 
     it('should handle connection test failure', async () => {
@@ -448,9 +585,12 @@ describe('SettingsInterface - API connection testing', () => {
       await settingsInterface._onTestConnection(event);
 
       expect(mockUI.notifications.error).toHaveBeenCalledWith('❌ Connection failed: Invalid API key');
+      expect(settingsInterface._testApiConnection).toHaveBeenCalledWith(expect.objectContaining({
+        provider: 'openai'
+      }));
     });
 
-    it('should require API key for OpenAI provider', async () => {
+    it('should require a valid base URL', async () => {
       const mockButton = {
         form: {
           querySelector: jest.fn()
@@ -459,8 +599,9 @@ describe('SettingsInterface - API connection testing', () => {
 
     const mockFormData = new Map([
       ['apiKey', ''],
-      ['baseURL', 'not-versioned'],
-      ['model', 'gpt-3.5-turbo']
+      ['baseURL', 'not-a-url'],
+      ['model', 'gpt-3.5-turbo'],
+      ['provider', 'openai']
     ]);
       
       global.FormData = jest.fn(() => mockFormData);
@@ -472,7 +613,7 @@ describe('SettingsInterface - API connection testing', () => {
 
       await settingsInterface._onTestConnection(event);
 
-    expect(mockUI.notifications.error).toHaveBeenCalledWith('Base URL must end with /v1');
+    expect(mockUI.notifications.error).toHaveBeenCalledWith('Base URL must be a valid URL');
     });
   });
 });

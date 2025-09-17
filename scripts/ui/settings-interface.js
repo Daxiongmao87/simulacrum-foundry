@@ -45,14 +45,22 @@ export class SettingsInterface extends FormApplication {
    * @returns {Object} Current settings values
    */
   getData() {
+    const provider = game.settings.get('simulacrum', 'provider') || 'openai';
+    this.currentProvider = provider;
+    const baseURL = game.settings.get('simulacrum', 'baseURL');
+    const baseURLPlaceholder = this._getPlaceholderForProvider(provider);
     return {
       apiKey: game.settings.get('simulacrum', 'apiKey'),
-      baseURL: game.settings.get('simulacrum', 'baseURL'),
+      baseURL,
+      baseURLPlaceholder,
       model: game.settings.get('simulacrum', 'model'),
       maxTokens: game.settings.get('simulacrum', 'maxTokens') || 4096,
       temperature: game.settings.get('simulacrum', 'temperature') || 0.7,
       contextLength: game.settings.get('simulacrum', 'contextLength') || 20,
       customSystemPrompt: game.settings.get('simulacrum', 'customSystemPrompt') || '',
+      provider,
+      providerIsOpenAI: provider === 'openai',
+      providerIsGemini: provider === 'gemini',
       testing: this.testing
     };
   }
@@ -64,11 +72,15 @@ export class SettingsInterface extends FormApplication {
   activateListeners(html) {
     super.activateListeners(html);
 
-    // Provider selection presets baseURL; manual override still allowed
-    const providerSelect = html.find('select[name="apiProvider"]');
-    providerSelect.on('change', this._onProviderChange.bind(this));
-    const inferred = this._inferProvider(game.settings.get('simulacrum', 'baseURL'));
-    if (providerSelect.length) { providerSelect.val(inferred); }
+    const providerSelect = html.find('select[name="provider"]');
+    if (providerSelect.length) {
+      providerSelect.on('change', this._onProviderChange.bind(this));
+    }
+
+    const baseInput = html.find('input[name="baseURL"]');
+    if (baseInput.length && !baseInput.attr('placeholder')) {
+      baseInput.attr('placeholder', this._getPlaceholderForProvider(this.currentProvider || 'openai'));
+    }
     
     // API connection test button
     html.find('.test-connection').click(this._onTestConnection.bind(this));
@@ -82,31 +94,37 @@ export class SettingsInterface extends FormApplication {
   }
 
   /**
+   * Resolve the default base URL placeholder for a provider
+   * @param {string} provider - Provider identifier
+   * @returns {string} Placeholder URL
+   * @private
+   */
+  _getPlaceholderForProvider(provider) {
+    return provider === 'gemini'
+      ? 'https://generativelanguage.googleapis.com/v1beta'
+      : 'https://api.openai.com/v1';
+  }
+
+  /**
    * Handle provider selection change
    * @param {Event} event - The change event
    * @private
    */
-  // No provider change handler
   _onProviderChange(event) {
-    const select = event.currentTarget;
-    const value = select.value;
-    const form = select.form;
-    const baseInput = form?.querySelector('input[name="baseURL"]');
-    if (!baseInput) return;
-    if (value === 'openai') baseInput.value = 'https://api.openai.com/v1';
-    else if (value === 'ollama') baseInput.value = 'http://localhost:11434/v1';
-    // custom: leave as-is
-    // Re-validate after preset
-    this._validateBaseURL({ target: baseInput });
-  }
+    const select = event?.target || null;
+    const provider = select?.value || this.currentProvider || 'openai';
+    this.currentProvider = provider;
 
-  _inferProvider(baseURL) {
-    const url = String(baseURL || '').toLowerCase();
-    if (url.includes('openai.com')) return 'openai';
-    if (url.includes('ollama') || url.includes('localhost') || url.includes('127.0.0.1')) return 'ollama';
-    return 'custom';
-  }
+    const form = select?.form || this.form || null;
+    const baseInput = form?.querySelector ? form.querySelector('input[name="baseURL"]') : null;
+    if (baseInput) {
+      baseInput.placeholder = this._getPlaceholderForProvider(provider);
+    }
 
+    if (typeof this._validateForm === 'function') {
+      this._validateForm();
+    }
+  }
 
   /**
    * Test API connection with current settings
@@ -119,17 +137,23 @@ export class SettingsInterface extends FormApplication {
     const button = event.currentTarget;
     const form = button.form;
     const formData = new FormData(form);
-    
+
     // Get form values
     const config = {
+      provider: formData.get('provider') || this.currentProvider || 'openai',
       apiKey: formData.get('apiKey'),
       baseURL: formData.get('baseURL'),
       model: formData.get('model')
     };
 
-    // Enforce versioned baseURL universally before testing
-    if (typeof config.baseURL !== 'string' || !config.baseURL.endsWith('/v1')) {
-      ui.notifications.error('Base URL must end with /v1');
+    if (typeof config.baseURL !== 'string' || !config.baseURL.trim()) {
+      ui.notifications.error('Base URL is required');
+      return;
+    }
+    try {
+      new URL(config.baseURL);
+    } catch (_err) {
+      ui.notifications.error('Base URL must be a valid URL');
       return;
     }
 
@@ -172,8 +196,18 @@ export class SettingsInterface extends FormApplication {
     if (confirmed) {
       // Reset form to default values
       const form = event.target.form;
+      this.currentProvider = 'openai';
+      const providerSelect = form.querySelector('select[name="provider"]');
+      if (providerSelect) {
+        providerSelect.value = 'openai';
+      }
+      const baseInput = form.querySelector('input[name="baseURL"]');
+      if (baseInput) {
+        const defaultPlaceholder = this._getPlaceholderForProvider('openai');
+        baseInput.value = defaultPlaceholder;
+        baseInput.placeholder = defaultPlaceholder;
+      }
       form.querySelector('input[name="apiKey"]').value = '';
-      form.querySelector('input[name="baseURL"]').value = 'https://api.openai.com/v1';
       form.querySelector('input[name="model"]').value = 'gpt-3.5-turbo';
       form.querySelector('input[name="maxTokens"]').value = '4096';
       form.querySelector('input[name="temperature"]').value = '0.7';
@@ -197,12 +231,7 @@ export class SettingsInterface extends FormApplication {
     input.classList.remove('valid', 'invalid');
     
     if (value) {
-      // OpenAI keys typically start with 'sk-'
-      if (value.startsWith('sk-') && value.length > 20) {
-        input.classList.add('valid');
-      } else {
-        input.classList.add('invalid');
-      }
+      input.classList.add('valid');
     }
   }
 
@@ -221,11 +250,7 @@ export class SettingsInterface extends FormApplication {
     if (value) {
       try {
         new URL(value);
-        if (!value.endsWith('/v1')) {
-          input.classList.add('invalid');
-        } else {
-          input.classList.add('valid');
-        }
+        input.classList.add('valid');
       } catch {
         input.classList.add('invalid');
       }
@@ -253,23 +278,40 @@ export class SettingsInterface extends FormApplication {
    */
   async _testApiConnection(config) {
     try {
-      // Create temporary AI client for testing
-      const { AIClient } = await import('../core/ai-client.js');
-      const testClient = new AIClient({
-        apiKey: config.apiKey,
-        baseURL: config.baseURL,
-        model: config.model
-      });
-      
-      // Send a simple test message
-      const testMessage = 'Hello, this is a connection test.';
-      const response = await testClient.sendMessage(testMessage);
-      
-      return {
-        success: true,
-        model: response.model,
-        content: response.content
-      };
+      const provider = config.provider || this._inferProviderFromURL(config.baseURL);
+      const endpoint = this._resolveHealthEndpoint(config.baseURL, provider);
+      const headers = { 'Content-Type': 'application/json' };
+      if (provider === 'gemini') {
+        if (config.apiKey) headers['x-goog-api-key'] = config.apiKey;
+      } else if (config.apiKey) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      }
+
+      const response = await fetch(endpoint, { method: 'GET', headers });
+      if (!response.ok) {
+        let message;
+        try {
+          const body = await response.json();
+          message = body.error?.message || JSON.stringify(body);
+        } catch (_e) {
+          message = await response.text();
+        }
+        return { success: false, error: message || 'Unknown error' };
+      }
+
+      let model = config.model;
+      try {
+        const body = await response.json();
+        if (Array.isArray(body?.data) && body.data[0]?.id) {
+          model = body.data[0].id;
+        } else if (Array.isArray(body?.models) && body.models[0]?.name) {
+          model = body.models[0].name;
+        }
+      } catch (_e) {
+        // ignore JSON failures; we only needed a 200
+      }
+
+      return { success: true, model, content: 'Endpoint reachable' };
     } catch (error) {
       return {
         success: false,
@@ -277,6 +319,21 @@ export class SettingsInterface extends FormApplication {
       };
     }
   }
+
+_inferProviderFromURL(url) {
+  if (!url) return 'openai';
+  const lower = String(url).toLowerCase();
+  if (lower.includes('generativelanguage.googleapis.com')) return 'gemini';
+  return 'openai';
+}
+
+_resolveHealthEndpoint(baseURL, provider) {
+  const base = String(baseURL || '').replace(/\/$/, '');
+  if (provider === 'gemini') {
+    return `${base}/models`;
+  }
+  return `${base}/models`;
+}
 
   /**
    * Handle form submission
@@ -286,13 +343,17 @@ export class SettingsInterface extends FormApplication {
    */
   async _updateObject(event, formData) {
     try {
-      // Enforce versioned baseURL universally
-      if (typeof formData.baseURL !== 'string' || !formData.baseURL.endsWith('/v1')) {
-        throw new Error('Base URL must end with /v1');
+      const provider = formData.provider || this.currentProvider || 'openai';
+      if (formData.baseURL) {
+        try {
+          new URL(formData.baseURL);
+        } catch (_err) {
+          throw new Error('Base URL must be a valid URL');
+        }
       }
 
       // Update all settings (no redundant module enable toggle)
-      // Provider-agnostic: ignore any provider field
+      await game.settings.set('simulacrum', 'provider', provider);
       await game.settings.set('simulacrum', 'apiKey', formData.apiKey);
       await game.settings.set('simulacrum', 'baseURL', formData.baseURL);
       await game.settings.set('simulacrum', 'model', formData.model);
