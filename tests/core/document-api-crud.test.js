@@ -44,15 +44,102 @@ describe('DocumentAPI CRUD/Search', () => {
     expect(created).toHaveProperty('name', 'New Actor');
   });
 
+  test('createDocument succeeds when document class lacks validate helper', async () => {
+    const actorClass = CONFIG.Actor.documentClass;
+    const originalCreate = actorClass.create;
+
+    actorClass.create = jest.fn().mockResolvedValue({
+      toObject: () => ({ _id: 'actor-created', name: 'Created Actor' })
+    });
+
+    const created = await DocumentAPI.createDocument('Actor', { name: 'Created Actor' });
+
+    expect(actorClass.create).toHaveBeenCalledWith({ name: 'Created Actor' }, { folder: undefined });
+    expect(created).toHaveProperty('_id', 'actor-created');
+    expect(created).toHaveProperty('name', 'Created Actor');
+
+    actorClass.create = originalCreate;
+  });
+
   test('updateDocument applies updates and requires owner permission', async () => {
     const updated = await DocumentAPI.updateDocument('Actor', 'actor2', { name: 'Updated Name' });
     expect(updated).toHaveProperty('_id', 'actor2');
     expect(updated).toHaveProperty('name', 'Updated Name');
   });
 
+  test('updateDocument closes rendered sheet and restores it afterwards', async () => {
+    const collection = game.collections.get('Actor');
+    const doc = collection.get('actor2');
+    doc.sheet = {
+      rendered: true,
+      close: jest.fn().mockResolvedValue(undefined),
+      render: jest.fn().mockResolvedValue(undefined)
+    };
+    doc.update = jest.fn().mockResolvedValue({});
+    collection.get = jest.fn(() => doc);
+
+    await DocumentAPI.updateDocument('Actor', 'actor2', { name: 'Updated Again' });
+
+    expect(doc.sheet.close).toHaveBeenCalledTimes(1);
+    expect(doc.sheet.render).toHaveBeenCalledWith(true);
+  });
+
+  test('updateDocument reopens sheet even when update fails', async () => {
+    const collection = game.collections.get('Actor');
+    const doc = collection.get('actor2');
+    doc.sheet = {
+      rendered: true,
+      close: jest.fn().mockResolvedValue(undefined),
+      render: jest.fn().mockResolvedValue(undefined)
+    };
+    doc.update = jest.fn().mockRejectedValue(new Error('Update failed'));
+    collection.get = jest.fn(() => doc);
+
+    await expect(DocumentAPI.updateDocument('Actor', 'actor2', { name: 'Broken' }))
+      .rejects.toThrow('Document update failed: Update failed');
+
+    expect(doc.sheet.close).toHaveBeenCalledTimes(1);
+    expect(doc.sheet.render).toHaveBeenCalledWith(true);
+  });
+
+  test('updateDocument does not close sheet when not rendered', async () => {
+    const collection = game.collections.get('Actor');
+    const doc = collection.get('actor2');
+    doc.sheet = {
+      rendered: false,
+      close: jest.fn(),
+      render: jest.fn()
+    };
+    doc.update = jest.fn().mockResolvedValue({});
+    collection.get = jest.fn(() => doc);
+
+    await DocumentAPI.updateDocument('Actor', 'actor2', { name: 'No Close' });
+
+    expect(doc.sheet.close).not.toHaveBeenCalled();
+    expect(doc.sheet.render).not.toHaveBeenCalled();
+  });
+
   test('deleteDocument deletes and returns true', async () => {
     const ok = await DocumentAPI.deleteDocument('Actor', 'actor3');
     expect(ok).toBe(true);
+  });
+
+  test('deleteDocument closes rendered sheet before deletion', async () => {
+    const collection = game.collections.get('Actor');
+    const doc = collection.get('actor3');
+    doc.sheet = {
+      rendered: true,
+      close: jest.fn().mockResolvedValue(undefined),
+      render: jest.fn()
+    };
+    doc.delete = jest.fn().mockResolvedValue({});
+    collection.get = jest.fn(() => doc);
+
+    const result = await DocumentAPI.deleteDocument('Actor', 'actor3');
+
+    expect(result).toBe(true);
+    expect(doc.sheet.close).toHaveBeenCalledTimes(1);
+    expect(doc.sheet.render).not.toHaveBeenCalled();
   });
 
   test('searchDocuments matches on fields with maxResults', async () => {

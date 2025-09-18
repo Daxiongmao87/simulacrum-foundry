@@ -31,7 +31,7 @@ describe('DocumentReadTool - constructor', () => {
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       expect(documentReadTool.name).toBe('read_document');
-      expect(documentReadTool.description).toBe('Read any document type with full content');
+      expect(documentReadTool.description).toBe('Read any document type with full content.');
       expect(documentReadTool.schema).toEqual({
         type: 'object',
         properties: {
@@ -72,23 +72,47 @@ describe('DocumentReadTool - Utility Methods', () => {
   describe('execute', () => {
     it('should have correct properties for read operations', () => {
       expect(documentReadTool.name).toBe('read_document');
-      expect(documentReadTool.description).toBe('Read any document type with full content');
+      expect(documentReadTool.description).toBe('Read any document type with full content.');
       expect(documentReadTool.requiresConfirmation).toBe(false); // Reading doesn't require confirmation
     });
 
     it('should execute document reading successfully', async () => {
       DocumentAPI.getDocument.mockResolvedValue({ 
         name: 'Test Actor',
-        toObject: () => ({ name: 'Test Actor', type: 'character' })
+        type: 'character',
+        system: { abilities: {} }
       });
-      
+
       const result = await documentReadTool.execute({ 
         documentType: 'Actor', 
         documentId: 'test-id' 
       });
       
-      expect(result.content).toBe('Read Actor: Test Actor');
+      const [header, jsonText] = result.content.split(/\n\n/);
+      const parsed = JSON.parse(jsonText);
+      expect(header).toBe('Read Actor: Test Actor');
+      expect(parsed.name).toBe('Test Actor');
+      expect(parsed.type).toBe('character');
       expect(result.display).toBe('**Test Actor** (Actor)');
+    });
+
+    it('should include journal pages in JSON payload', async () => {
+      DocumentAPI.getDocument.mockResolvedValue({ 
+        name: 'World of Venoure',
+        pages: [{ id: 'page1', text: { content: '<p>Continents</p>' } }]
+      });
+
+      const result = await documentReadTool.execute({
+        documentType: 'JournalEntry',
+        documentId: 'journal-id'
+      });
+
+      const [header, jsonText] = result.content.split(/\n\n/);
+      const parsed = JSON.parse(jsonText);
+      expect(header).toBe('Read JournalEntry: World of Venoure');
+      expect(parsed.pages).toBeDefined();
+      expect(parsed.pages[0].text.content).toContain('Continents');
+      expect(result.display).toBe('**World of Venoure** (JournalEntry)');
     });
   });
 });
@@ -110,7 +134,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('execute', () => {
       it('should return document content for valid document types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -131,7 +155,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should return error for non-existent document', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -162,7 +186,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle malformed document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -187,7 +211,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -216,7 +240,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Performance Testing', () => {
       it('should complete document reading within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -238,7 +262,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch document reading efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -269,7 +293,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Edge Case Testing', () => {
       it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(game.documentTypes || {}).length === 0) {
           expect(() => new DocumentReadTool()).not.toThrow();
           
           return documentReadTool.execute({
@@ -282,7 +306,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle documents with special characters and unicode', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -307,7 +331,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle deeply nested document structures', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -340,7 +364,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle circular reference prevention', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         

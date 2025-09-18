@@ -82,9 +82,17 @@ export class DocumentReadTool extends BaseTool {
         };
       }
 
+      const documentData = typeof document?.toObject === 'function'
+        ? document.toObject()
+        : document;
+
+      const documentName = documentData?.name || documentId;
+      const jsonPayload = JSON.stringify(documentData, null, 2);
+      const content = `Read ${documentType}: ${documentName}\n\n${jsonPayload}`;
+
       return {
-        content: `Read ${documentType}: ${document.name}`,
-        display: `**${document.name}** (${documentType})`
+        content,
+        display: `**${documentName}** (${documentType})`
       };
 
     } catch (error) {

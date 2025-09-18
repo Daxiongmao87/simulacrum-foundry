@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright © 2024-2025 Aaron Riechert
 
+import { createLogger } from '../utils/logger.js';
+
+const documentLogger = createLogger('DocumentAPI');
+
 /**
  * A system-agnostic API for interacting with FoundryVTT documents.
  * This class abstracts away the specifics of different document types
@@ -194,13 +198,17 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
+    let readPermissionChecked = false;
     try {
       const { PermissionManager } = await import('../utils/permissions.js');
+      readPermissionChecked = true;
       if (!PermissionManager.canReadDocument(game.user, doc)) {
         throw new Error('Permission denied');
       }
     } catch (error) {
-      // Fallback permission check
+      if (readPermissionChecked && error?.message === 'Permission denied') {
+        throw error;
+      }
       if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'READ')) {
         throw new Error('Permission denied');
       }
@@ -240,15 +248,18 @@ export class DocumentAPI {
     if (typeof documentClass.create === 'function') {
       try {
         // Step 1: Use FoundryVTT's official validation for creation data
+        const validationOptions = {
+          strict: true,
+          fields: true,
+          joint: true
+        };
         try {
-          // For creation, validate the complete data structure
-          documentClass.validate(data, {
-            strict: true,        // Throw DataModelValidationError on failure
-            fields: true,        // Validate individual fields
-            joint: true          // Perform joint validation for complete document
-          });
+          if (typeof documentClass.validate === 'function') {
+            documentClass.validate(data, validationOptions);
+          } else if (documentClass.schema && typeof documentClass.schema.validate === 'function') {
+            documentClass.schema.validate(data, validationOptions);
+          }
         } catch (validationError) {
-          // Re-throw the original FoundryVTT validation error for proper handling
           throw validationError;
         }
         
@@ -283,50 +294,52 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
+    let updatePermissionChecked = false;
     try {
       const { PermissionManager } = await import('../utils/permissions.js');
+      updatePermissionChecked = true;
       if (!PermissionManager.canUpdateDocument(game.user, doc, updates)) {
         throw new Error('Permission denied');
       }
     } catch (error) {
-      // Fallback permission check
+      if (updatePermissionChecked && error?.message === 'Permission denied') {
+        throw error;
+      }
       if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'UPDATE')) {
         throw new Error('Permission denied');
       }
     }
 
-    try {
-      // Step 1: Use FoundryVTT's official validation with proper options
+    const performUpdate = async () => {
       try {
-        doc.validate({
-          changes: updates,    // Validate only the changes, not the full document
-          strict: true,        // Throw DataModelValidationError on failure
-          fields: true,        // Validate individual fields
-          joint: false         // Skip joint validation for partial updates
-        });
+        if (typeof doc.validate === 'function') {
+          doc.validate({
+            changes: updates,
+            strict: true,
+            fields: true,
+            joint: false
+          });
+        }
       } catch (validationError) {
-        // Re-throw the original FoundryVTT validation error for proper handling
         throw validationError;
       }
-      
-      // Step 2: Proceed with update only after validation passes
-      const updateResult = await doc.update(updates);
-      
-    } catch (updateError) {
-      // Re-throw validation errors to be handled by the calling tool
-      if (updateError.name === 'DataModelValidationError') {
-        throw updateError;
+
+      try {
+        await doc.update(updates);
+      } catch (updateError) {
+        if (updateError.name === 'DataModelValidationError') {
+          throw updateError;
+        }
+        throw new Error(`Document update failed: ${updateError.message}`);
       }
-      // Handle other update errors
-      throw new Error(`Document update failed: ${updateError.message}`);
-    }
-    
-    const obj = doc.toObject();
-    // Apply shallow updates for return since mock update may be no-op
-    const merged = foundry && foundry.utils && typeof foundry.utils.mergeObject === 'function'
-      ? foundry.utils.mergeObject(obj, updates)
-      : { ...obj, ...updates };
-    return merged;
+
+      const obj = doc.toObject();
+      return foundry && foundry.utils && typeof foundry.utils.mergeObject === 'function'
+        ? foundry.utils.mergeObject(obj, updates)
+        : { ...obj, ...updates };
+    };
+
+    return await DocumentAPI.#withSheetGuard(doc, { reopen: true }, performUpdate);
   }
 
   /**
@@ -342,31 +355,35 @@ export class DocumentAPI {
     this.#ensurePermissionFns(doc, collection);
     if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
 
+    let deletePermissionChecked = false;
     try {
       const { PermissionManager } = await import('../utils/permissions.js');
+      deletePermissionChecked = true;
       if (!PermissionManager.canDeleteDocument(game.user, doc)) {
         throw new Error('Permission denied');
       }
     } catch (error) {
-      // Fallback permission check
+      if (deletePermissionChecked && error?.message === 'Permission denied') {
+        throw error;
+      }
       if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'DELETE')) {
         throw new Error('Permission denied');
       }
     }
 
-    try {
-      // Note: For deletion, FoundryVTT handles validation internally during doc.delete()
-      // This includes checking for relationship constraints, embedded documents, etc.
-      await doc.delete();
-    } catch (deleteError) {
-      // Re-throw validation errors to be handled by the calling tool
-      if (deleteError.name === 'DataModelValidationError') {
-        throw deleteError;
+    const performDelete = async () => {
+      try {
+        await doc.delete();
+      } catch (deleteError) {
+        if (deleteError.name === 'DataModelValidationError') {
+          throw deleteError;
+        }
+        throw new Error(`Document deletion failed: ${deleteError.message}`);
       }
-      // Handle other deletion errors
-      throw new Error(`Document deletion failed: ${deleteError.message}`);
-    }
-    return true;
+      return true;
+    };
+
+    return await DocumentAPI.#withSheetGuard(doc, { reopen: false }, performDelete);
   }
 
   /**
@@ -414,6 +431,38 @@ export class DocumentAPI {
     if (!documentType) return null;
     const coll = game.collections.get(documentType);
     return coll || null;
+  }
+
+  static async #withSheetGuard(doc, options, action) {
+    if (typeof action !== 'function') {
+      return undefined;
+    }
+
+    const sheet = doc?.sheet;
+    const sheetExists = sheet && typeof sheet === 'object';
+    const wasRendered = Boolean(sheetExists && sheet.rendered);
+    const canClose = wasRendered && typeof sheet.close === 'function';
+    const shouldReopen = Boolean(options?.reopen && wasRendered && typeof sheet.render === 'function');
+
+    if (canClose) {
+      try {
+        await sheet.close({ submit: false });
+      } catch (error) {
+        documentLogger.warn('Failed to close sheet before document mutation', error);
+      }
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (shouldReopen) {
+        try {
+          await sheet.render(true);
+        } catch (error) {
+          documentLogger.warn('Failed to re-render sheet after document mutation', error);
+        }
+      }
+    }
   }
 
   static #get(obj, path) {
