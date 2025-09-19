@@ -125,9 +125,13 @@ function createMockDocument(id, name, documentType) {
     },
     toObject: jest.fn(() => ({ _id: id, name, type: documentType.toLowerCase() })),
     toJSON: jest.fn(() => ({ _id: id, name, type: documentType.toLowerCase() })),
+    testUserPermission: jest.fn().mockReturnValue(true),
     canUserModify: jest.fn().mockReturnValue(true),
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
+    deleteEmbeddedDocuments: jest.fn().mockResolvedValue([]),
+    createEmbeddedDocuments: jest.fn().mockResolvedValue([]),
+    updateEmbeddedDocuments: jest.fn().mockResolvedValue([]),
     clone: jest.fn(),
     getFlag: jest.fn(),
     setFlag: jest.fn()
@@ -346,7 +350,7 @@ export function assertSystemAgnostic(testFunction, expectedBehavior) {
   ALL_GAME_SYSTEMS.forEach(system => {
     // Skip empty systems for some tests
     if (system.name === 'Edge Case System' && 
-        Object.keys(system.config.Document.documentTypes).length === 0) {
+        Object.keys(system.documentTypes || {}).length === 0) {
       return;
     }
 

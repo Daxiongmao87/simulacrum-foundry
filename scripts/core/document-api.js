@@ -221,6 +221,38 @@ export class DocumentAPI {
   }
 
   /**
+   * Retrieve a live Foundry document instance with read permissions validated.
+   * @param {string} documentType
+   * @param {string} id
+   * @returns {Promise<foundry.abstract.Document>} Document instance
+   */
+  static async getDocumentInstance(documentType, id) {
+    const collection = this.#resolveCollection(documentType);
+    if (!collection) throw new Error(`Unknown document type: ${documentType}`);
+    const doc = collection.get(id);
+    this.#ensurePermissionFns(doc, collection);
+    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+
+    let readPermissionChecked = false;
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      readPermissionChecked = true;
+      if (!PermissionManager.canReadDocument(game.user, doc)) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      if (readPermissionChecked && error?.message === 'Permission denied') {
+        throw error;
+      }
+      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'READ')) {
+        throw new Error('Permission denied');
+      }
+    }
+
+    return doc;
+  }
+
+  /**
    * Create a new document of type, after permission check.
    * @param {string} documentType
    * @param {object} data
@@ -340,6 +372,78 @@ export class DocumentAPI {
     };
 
     return await DocumentAPI.#withSheetGuard(doc, { reopen: true }, performUpdate);
+  }
+
+  /**
+   * Apply embedded document operations such as create/update/delete for collections like pages or items.
+   * @param {string} documentType
+   * @param {string} id
+   * @param {Array<object>} operations
+   */
+  static async applyEmbeddedOperations(documentType, id, operations = []) {
+    if (!Array.isArray(operations) || operations.length === 0) return;
+
+    const collection = this.#resolveCollection(documentType);
+    if (!collection) throw new Error(`Unknown document type: ${documentType}`);
+    const doc = collection.get(id);
+    this.#ensurePermissionFns(doc, collection);
+    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+
+    let updatePermissionChecked = false;
+    try {
+      const { PermissionManager } = await import('../utils/permissions.js');
+      updatePermissionChecked = true;
+      if (!PermissionManager.canUpdateDocument(game.user, doc, {})) {
+        throw new Error('Permission denied');
+      }
+    } catch (error) {
+      if (updatePermissionChecked && error?.message === 'Permission denied') {
+        throw error;
+      }
+      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'UPDATE')) {
+        throw new Error('Permission denied');
+      }
+    }
+
+    const grouped = new Map();
+    for (const operation of operations) {
+      const { embeddedName, action } = operation || {};
+      if (!embeddedName || !action) {
+        throw new Error('Embedded operation missing embeddedName or action');
+      }
+      const key = `${embeddedName}:${action}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(operation);
+    }
+
+    await DocumentAPI.#withSheetGuard(doc, { reopen: true }, async () => {
+      for (const [key, ops] of grouped.entries()) {
+        const [embeddedName, action] = key.split(':');
+        if (action === 'delete') {
+          const ids = ops.map(op => op.targetId).filter(Boolean);
+          if (!ids.length) {
+            throw new Error(`Embedded delete for ${embeddedName} requires target ids`);
+          }
+          await doc.deleteEmbeddedDocuments(embeddedName, ids, { render: false });
+        } else if (action === 'insert') {
+          const payloads = ops.map(op => op.data).filter(Boolean);
+          if (!payloads.length) {
+            throw new Error(`Embedded insert for ${embeddedName} requires data payloads`);
+          }
+          await doc.createEmbeddedDocuments(embeddedName, payloads, { render: false });
+        } else if (action === 'replace') {
+          const payloads = ops.map(op => op.data).filter(Boolean);
+          if (!payloads.length) {
+            throw new Error(`Embedded replace for ${embeddedName} requires data payloads`);
+          }
+          await doc.updateEmbeddedDocuments(embeddedName, payloads, { render: false });
+        } else {
+          throw new Error(`Unsupported embedded operation action: ${action}`);
+        }
+      }
+    });
   }
 
   /**

@@ -24,7 +24,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Document Type Discovery', () => {
       test('should correctly identify valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         // Test that all system document types are valid
         documentTypes.forEach(docType => {
@@ -39,13 +39,13 @@ describe.each(createParameterizedSystemTests())(
 
       test('should return all registered document types', () => {
         const types = DocumentAPI.getAllDocumentTypes();
-        const expectedTypes = Object.keys(systemConfig.Document.documentTypes);
+        const expectedTypes = Object.keys(game.documentTypes || {});
         
         expect(types.sort()).toEqual(expectedTypes.sort());
       });
 
       test('should handle empty document type configuration', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(game.documentTypes || {}).length === 0) {
           const types = DocumentAPI.getAllDocumentTypes();
           expect(types).toEqual([]);
         }
@@ -54,11 +54,11 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Schema Introspection', () => {
       test('should return schema for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         documentTypes.forEach(docType => {
           // Skip if no document class configured
-          if (!systemConfig[docType]?.documentClass) return;
+          if (!CONFIG[docType]?.documentClass) return;
           
           const schema = DocumentAPI.getDocumentSchema(docType);
           expect(schema).toBeDefined();
@@ -76,10 +76,10 @@ describe.each(createParameterizedSystemTests())(
       });
 
       test('should correctly identify embedded document relationships', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         documentTypes.forEach(docType => {
-          const documentClass = systemConfig[docType]?.documentClass;
+          const documentClass = CONFIG[docType]?.documentClass;
           if (!documentClass) return;
           
           const schema = DocumentAPI.getDocumentSchema(docType);
@@ -102,10 +102,10 @@ describe.each(createParameterizedSystemTests())(
       });
 
       test('should handle document types with no embedded documents', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         documentTypes.forEach(docType => {
-          const documentClass = systemConfig[docType]?.documentClass;
+          const documentClass = CONFIG[docType]?.documentClass;
           if (!documentClass) return;
           
           const schema = DocumentAPI.getDocumentSchema(docType);
@@ -152,5 +152,53 @@ describe('DocumentAPI - System-Agnostic Tests', () => {
         invalidSchemaIsNull: true
       }
     );
+  });
+});
+
+// Embedded operations specific tests
+describe('DocumentAPI embedded operations', () => {
+  beforeEach(() => {
+    setupMockFoundryEnvironment('D&D 5e');
+  });
+
+  afterEach(() => {
+    cleanupMockEnvironment();
+  });
+
+  test('applyEmbeddedOperations delegates to Foundry embedded APIs', async () => {
+    const doc = {
+      id: 'journal-1',
+      _id: 'journal-1',
+      sheet: null,
+      pages: {
+        contents: [
+          { id: 'page-1', sort: 0 },
+          { id: 'page-2', sort: 1 }
+        ],
+        documentClass: { documentName: 'JournalEntryPage' }
+      },
+      testUserPermission: jest.fn().mockReturnValue(true),
+      canUserModify: jest.fn().mockReturnValue(true),
+      deleteEmbeddedDocuments: jest.fn().mockResolvedValue([]),
+      createEmbeddedDocuments: jest.fn().mockResolvedValue([]),
+      updateEmbeddedDocuments: jest.fn().mockResolvedValue([])
+    };
+
+    const collection = {
+      get: jest.fn(() => doc),
+      contents: [doc]
+    };
+
+    game.collections.get = jest.fn(() => collection);
+
+    await DocumentAPI.applyEmbeddedOperations('JournalEntry', 'journal-1', [
+      { action: 'delete', embeddedName: 'JournalEntryPage', targetId: 'page-2' },
+      { action: 'insert', embeddedName: 'JournalEntryPage', data: { _id: 'page-3', name: 'New Page' } },
+      { action: 'replace', embeddedName: 'JournalEntryPage', data: { _id: 'page-3', name: 'Updated Page' } }
+    ]);
+
+    expect(doc.deleteEmbeddedDocuments).toHaveBeenCalledWith('JournalEntryPage', ['page-2'], { render: false });
+    expect(doc.createEmbeddedDocuments).toHaveBeenCalledWith('JournalEntryPage', [expect.objectContaining({ _id: 'page-3', name: 'New Page' })], { render: false });
+    expect(doc.updateEmbeddedDocuments).toHaveBeenCalledWith('JournalEntryPage', [expect.objectContaining({ _id: 'page-3', name: 'Updated Page' })], { render: false });
   });
 });

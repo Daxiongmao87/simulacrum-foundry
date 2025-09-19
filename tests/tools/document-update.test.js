@@ -27,6 +27,9 @@ describe('DocumentUpdateTool - constructor', () => {
     setupMockFoundryEnvironment('D&D 5e');
     tool = new DocumentUpdateTool();
     jest.clearAllMocks();
+    DocumentAPI.getDocument = jest.fn();
+    DocumentAPI.getDocumentInstance = jest.fn();
+    DocumentAPI.applyEmbeddedOperations = jest.fn();
     DocumentAPI.updateDocument = jest.fn();
   });
 
@@ -36,7 +39,7 @@ describe('DocumentUpdateTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
       expect(tool.name).toBe('update_document');
-      expect(tool.description).toBe('Update documents of any type supported by current system');
+      expect(tool.description).toBe('Update documents of any type supported by current system.');
       expect(tool.requiresConfirmation).toBe(true);
   });
 
@@ -45,11 +48,12 @@ describe('DocumentUpdateTool - constructor', () => {
       expect(tool.schema.properties).toHaveProperty('documentType');
       expect(tool.schema.properties).toHaveProperty('documentId');
       expect(tool.schema.properties).toHaveProperty('updates');
-      expect(tool.schema.required).toEqual(['documentType', 'documentId', 'updates']);
+      expect(tool.schema.properties).toHaveProperty('operations');
+      expect(tool.schema.required).toEqual(['documentType', 'documentId']);
   });
 
   it('should define required parameters correctly', () => {
-      const { documentType, documentId, updates } = tool.schema.properties;
+      const { documentType, documentId, updates, operations } = tool.schema.properties;
       
       expect(documentType.type).toBe('string');
       expect(documentType.required).toBe(true);
@@ -60,8 +64,12 @@ describe('DocumentUpdateTool - constructor', () => {
       expect(documentId.description).toContain('ID of document to update');
       
       expect(updates.type).toBe('object');
-      expect(updates.required).toBe(true);
+      expect(updates.required).toBe(false);
       expect(updates.description).toContain('Document updates');
+      
+      expect(operations.type).toBe('array');
+      expect(operations.required).toBe(false);
+      expect(operations.description).toContain('Structured array mutations');
   });
 });
 
@@ -86,11 +94,12 @@ describe('DocumentUpdateTool - Utility Methods', () => {
         };
 
         const details = await tool.getConfirmationDetails(params);
+        const expectedPayload = { updates: params.updates, operations: [] };
 
         expect(details).toEqual({
           type: 'update',
           title: 'Update Actor Document',
-          details: `Updating Actor:actor-123 with updates: ${JSON.stringify(params.updates, null, 2)}`
+          details: `Updating Actor:actor-123 with payload: ${JSON.stringify(expectedPayload, null, 2)}`
       });
     });
 
@@ -109,8 +118,9 @@ describe('DocumentUpdateTool - Utility Methods', () => {
 
         expect(details.type).toBe('update');
         expect(details.title).toBe('Update Item Document');
-        expect(details.details).toContain('item-456');
+        expect(details.details).toContain('payload');
         expect(details.details).toContain('Magic Sword');
+        expect(details.details).toContain('operations');
     });
   });
 });
@@ -129,6 +139,9 @@ describe.each(createParameterizedSystemTests())(
       setupMockFoundryEnvironment(systemName);
       tool = new DocumentUpdateTool();
       jest.clearAllMocks();
+      DocumentAPI.getDocument = jest.fn();
+      DocumentAPI.getDocumentInstance = jest.fn();
+      DocumentAPI.applyEmbeddedOperations = jest.fn();
       DocumentAPI.updateDocument = jest.fn();
     });
 
@@ -138,7 +151,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('execute', () => {
       it('should successfully update documents for valid types', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -149,18 +162,23 @@ describe.each(createParameterizedSystemTests())(
           updates: { name: 'Updated Name' }
         };
 
-        DocumentAPI.updateDocument.mockResolvedValue(mockDocument);
+        const latestDoc = { _id: 'test-123', name: 'Updated Name' };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
 
         const result = await tool.execute(params);
 
         expect(DocumentAPI.updateDocument).toHaveBeenCalledWith(testDocType, 'test-123', { name: 'Updated Name' });
-        expect(result.content).toBe(`Updated ${testDocType}:test-123`);
-        expect(result.display).toBe('✅ Updated **Test Document** (' + testDocType + ')');
+        expect(DocumentAPI.applyEmbeddedOperations).not.toHaveBeenCalled();
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${testDocType}:test-123`);
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
+        expect(result.display).toBe(`✅ Updated **Updated Name** (${testDocType})`);
         expect(result.error).toBeUndefined();
       });
 
       it('should handle document without name', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -171,13 +189,200 @@ describe.each(createParameterizedSystemTests())(
           updates: { width: 4000, height: 3000 }
         };
 
-        const documentWithoutName = { id: 'test-456' };
-        DocumentAPI.updateDocument.mockResolvedValue(documentWithoutName);
+        const finalDoc = { _id: 'test-456', width: 4000, height: 3000 };
+        DocumentAPI.getDocument.mockResolvedValueOnce(finalDoc).mockResolvedValueOnce(finalDoc);
 
         const result = await tool.execute(params);
 
-        expect(result.content).toBe(`Updated ${testDocType}:test-456`);
+        expect(DocumentAPI.updateDocument).toHaveBeenCalledWith(testDocType, 'test-456', { width: 4000, height: 3000 });
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${testDocType}:test-456`);
+        expect(payload.document).toEqual(finalDoc);
+        expect(result.document).toEqual(finalDoc);
         expect(result.display).toBe(`✅ Updated **test-456** (${testDocType})`);
+      });
+
+      it('should reject delete operations missing index', async () => {
+        const documentTypes = Object.keys(game.documentTypes || {});
+
+        if (documentTypes.length === 0) return;
+
+        const validType = documentTypes[0];
+        const result = await tool.execute({
+          documentType: validType,
+          documentId: 'op-missing-index',
+          updates: {},
+          operations: [
+            { action: 'delete', path: 'system.bonds' }
+          ]
+        });
+
+        expect(DocumentAPI.updateDocument).not.toHaveBeenCalled();
+        expect(result.error).toBeDefined();
+        expect(result.error.message).toContain('index');
+      });
+
+      it('should compute array payload for delete operations', async () => {
+        const documentTypes = Object.keys(game.documentTypes || {});
+
+        if (documentTypes.length === 0) return;
+
+        const validType = documentTypes[0];
+        const startingDoc = {
+          _id: 'op-delete',
+          system: {
+            bonds: ['Bond A', 'Bond B', 'Bond C'],
+            description: 'Old description'
+          }
+        };
+        const finalDoc = {
+          _id: 'op-delete',
+          system: {
+            bonds: ['Bond A', 'Bond C'],
+            description: 'Updated'
+          },
+          name: 'Updated Doc'
+        };
+
+        DocumentAPI.getDocument.mockResolvedValueOnce(startingDoc).mockResolvedValueOnce(finalDoc);
+        DocumentAPI.getDocumentInstance.mockResolvedValueOnce({});
+
+        const result = await tool.execute({
+          documentType: validType,
+          documentId: 'op-delete',
+          updates: { 'system.description': 'Updated' },
+          operations: [
+            { action: 'delete', path: 'system.bonds', index: 1 }
+          ]
+        });
+
+        expect(DocumentAPI.getDocument).toHaveBeenNthCalledWith(1, validType, 'op-delete', { includeEmbedded: true });
+        expect(DocumentAPI.getDocument).toHaveBeenNthCalledWith(2, validType, 'op-delete', { includeEmbedded: true });
+        expect(DocumentAPI.applyEmbeddedOperations).not.toHaveBeenCalled();
+        expect(DocumentAPI.updateDocument).toHaveBeenCalledWith(validType, 'op-delete', {
+          'system.bonds': ['Bond A', 'Bond C'],
+          'system.description': 'Updated'
+        });
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${validType}:op-delete`);
+        expect(payload.document).toEqual(finalDoc);
+        expect(result.document).toEqual(finalDoc);
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should apply embedded delete operations', async () => {
+        const documentTypes = Object.keys(game.documentTypes || {});
+
+        if (documentTypes.length === 0) return;
+
+        const validType = documentTypes[0];
+        const startingDoc = {
+          _id: 'journal-1',
+          name: 'World of Venoure',
+          pages: [
+            { _id: 'page-1', name: 'Intro' },
+            { _id: 'page-2', name: 'Continents Duplicate' }
+          ]
+        };
+        const finalDoc = {
+          _id: 'journal-1',
+          name: 'World of Venoure',
+          pages: [
+            { _id: 'page-1', name: 'Intro' }
+          ]
+        };
+
+        const embeddedCollection = {
+          contents: [
+            { id: 'page-1', sort: 0 },
+            { id: 'page-2', sort: 1 }
+          ],
+          documentClass: { documentName: 'JournalEntryPage' }
+        };
+
+        DocumentAPI.getDocument
+          .mockResolvedValueOnce(startingDoc)
+          .mockResolvedValueOnce(finalDoc);
+        DocumentAPI.getDocumentInstance.mockResolvedValue({ pages: embeddedCollection });
+        DocumentAPI.applyEmbeddedOperations.mockResolvedValue();
+
+        const result = await tool.execute({
+          documentType: validType,
+          documentId: 'journal-1',
+          operations: [
+            { action: 'delete', path: 'pages', id: 'page-2' }
+          ]
+        });
+
+        expect(DocumentAPI.applyEmbeddedOperations).toHaveBeenCalledWith(validType, 'journal-1', [
+          expect.objectContaining({
+            action: 'delete',
+            embeddedName: 'JournalEntryPage',
+            targetId: 'page-2'
+          })
+        ]);
+        expect(DocumentAPI.updateDocument).not.toHaveBeenCalled();
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${validType}:journal-1`);
+        expect(payload.document).toEqual(finalDoc);
+        expect(result.document).toEqual(finalDoc);
+      });
+
+      it('should convert embedded updates into replace operations', async () => {
+        const documentTypes = Object.keys(game.documentTypes || {});
+
+        if (documentTypes.length === 0) return;
+
+        const validType = documentTypes[0];
+        const startingDoc = {
+          _id: 'journal-2',
+          name: 'World of Venoure',
+          pages: [
+            { _id: 'page-1', name: 'Intro', text: { content: '<p>Old</p>' } }
+          ]
+        };
+        const finalDoc = {
+          _id: 'journal-2',
+          name: 'World of Venoure',
+          pages: [
+            { _id: 'page-1', name: 'Intro', text: { content: '<p>Updated</p>' } }
+          ]
+        };
+
+        const embeddedCollection = {
+          contents: [
+            { id: 'page-1', sort: 0 }
+          ],
+          documentClass: { documentName: 'JournalEntryPage' }
+        };
+
+        DocumentAPI.getDocument
+          .mockResolvedValueOnce(startingDoc)
+          .mockResolvedValueOnce(finalDoc);
+        DocumentAPI.getDocumentInstance.mockResolvedValue({ pages: embeddedCollection });
+        DocumentAPI.applyEmbeddedOperations.mockResolvedValue();
+
+        const result = await tool.execute({
+          documentType: validType,
+          documentId: 'journal-2',
+          updates: { 'pages.0.text.content': '<p>Updated</p>' }
+        });
+
+        expect(DocumentAPI.applyEmbeddedOperations).toHaveBeenCalledWith(validType, 'journal-2', [
+          expect.objectContaining({
+            action: 'replace',
+            embeddedName: 'JournalEntryPage',
+            data: expect.objectContaining({
+              _id: 'page-1',
+              text: expect.objectContaining({ content: '<p>Updated</p>' })
+            })
+          })
+        ]);
+        expect(DocumentAPI.updateDocument).not.toHaveBeenCalled();
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${validType}:journal-2`);
+        expect(payload.document).toEqual(finalDoc);
+        expect(result.document).toEqual(finalDoc);
       });
     });
 
@@ -194,7 +399,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle malformed update data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return; 
         
@@ -221,7 +426,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -251,7 +456,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle malformed document IDs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -279,7 +484,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Performance Testing', () => {
       it('should complete document updates within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -300,7 +505,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch updates efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -327,7 +532,7 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Edge Case Testing', () => {
       it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(game.documentTypes || {}).length === 0) {
           expect(() => new DocumentUpdateTool()).not.toThrow();
           
           // Should reject any update attempt in empty system
@@ -342,7 +547,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle complex nested updates', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -360,8 +565,9 @@ describe.each(createParameterizedSystemTests())(
           }
         };
 
-        DocumentAPI.updateDocument.mockResolvedValueOnce({ id: 'complex-test', name: 'Complex Update Test' });
-        
+        const latestDoc = { _id: 'complex-test', name: 'Complex Update Test', system: { attributes: { hp: { value: 50, max: 100 } } } };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
+
         const result = await tool.execute({
           documentType: validType,
           documentId: 'complex-test',
@@ -373,11 +579,15 @@ describe.each(createParameterizedSystemTests())(
           'complex-test', 
           complexUpdates
         );
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${validType}:complex-test`);
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
         expect(result.error).toBeUndefined();
       });
 
       it('should handle special characters in updates', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(game.documentTypes || {});
         
         if (documentTypes.length === 0) return;
         
@@ -389,8 +599,9 @@ describe.each(createParameterizedSystemTests())(
           unicode: '∑øł∂ƒ®öñ†∫∆'
         };
 
-        DocumentAPI.updateDocument.mockResolvedValueOnce({ id: 'special-chars', name: specialCharUpdates.name });
-        
+        const latestDoc = { _id: 'special-chars', ...specialCharUpdates };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
+
         const result = await tool.execute({
           documentType: validType,
           documentId: 'special-chars',
@@ -402,6 +613,10 @@ describe.each(createParameterizedSystemTests())(
           'special-chars', 
           specialCharUpdates
         );
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe(`Updated ${validType}:special-chars`);
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
         expect(result.error).toBeUndefined();
       });
     });
@@ -420,6 +635,9 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
     setupMockFoundryEnvironment('D&D 5e');
     tool = new DocumentUpdateTool();
     jest.clearAllMocks();
+    DocumentAPI.getDocument = jest.fn();
+    DocumentAPI.getDocumentInstance = jest.fn();
+    DocumentAPI.applyEmbeddedOperations = jest.fn();
     DocumentAPI.updateDocument = jest.fn();
   });
 
@@ -436,13 +654,17 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           updates: { name: 'Updated Name' }
         };
 
-        DocumentAPI.updateDocument.mockResolvedValue(mockDocument);
+        const latestDoc = { _id: 'actor-123', name: 'Updated Name' };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
 
         const result = await tool.execute(params);
 
         expect(DocumentAPI.updateDocument).toHaveBeenCalledWith('Actor', 'actor-123', { name: 'Updated Name' });
-        expect(result.content).toBe('Updated Actor:actor-123');
-        expect(result.display).toBe('✅ Updated **Test Document** (Actor)');
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe('Updated Actor:actor-123');
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
+        expect(result.display).toBe('✅ Updated **Updated Name** (Actor)');
         expect(result.error).toBeUndefined();
     });
 
@@ -453,12 +675,16 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           updates: { width: 4000, height: 3000 }
         };
 
-        const documentWithoutName = { id: 'scene-456' };
-        DocumentAPI.updateDocument.mockResolvedValue(documentWithoutName);
+        const documentWithoutName = { _id: 'scene-456', width: 4000, height: 3000 };
+        DocumentAPI.getDocument.mockResolvedValueOnce(documentWithoutName).mockResolvedValueOnce(documentWithoutName);
 
         const result = await tool.execute(params);
 
-        expect(result.content).toBe('Updated Scene:scene-456');
+        expect(DocumentAPI.updateDocument).toHaveBeenCalledWith('Scene', 'scene-456', { width: 4000, height: 3000 });
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe('Updated Scene:scene-456');
+        expect(payload.document).toEqual(documentWithoutName);
+        expect(result.document).toEqual(documentWithoutName);
         expect(result.display).toBe('✅ Updated **scene-456** (Scene)');
     });
   });
@@ -476,10 +702,10 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
 
         expect(DocumentAPI.updateDocument).not.toHaveBeenCalled();
         expect(result.content).toContain('Document type "InvalidType" not available in current system');
-        expect(result.display).toContain('❌ Update failed:');
+        expect(result.display).toContain('❌ Unknown document type:');
         expect(result.error).toEqual({
           message: 'Document type "InvalidType" not available in current system',
-          type: 'UPDATE_FAILED'
+          type: 'UNKNOWN_DOCUMENT_TYPE'
       });
     });
 
@@ -496,7 +722,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
         const result = await tool.execute(params);
 
         expect(result.content).toBe('Failed to update Actor:actor-123: Document not found');
-        expect(result.display).toBe('❌ Update failed: Document not found');
+        expect(result.display).toBe('❌ Failed to update Actor:actor-123: Document not found');
         expect(result.error).toEqual({
           message: 'Document not found',
           type: 'UPDATE_FAILED'
@@ -519,7 +745,7 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
         const result = await tool.execute(params);
 
         expect(result.content).toContain('Failed to update Item:item-456');
-        expect(result.display).toContain('❌ Update failed:');
+        expect(result.display).toContain('❌ Failed to update Item:item-456');
         expect(result.error.type).toBe('UPDATE_FAILED');
     });
   });
@@ -537,11 +763,12 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           }
         };
 
-        DocumentAPI.updateDocument.mockResolvedValue({
-          ...mockDocument,
-          id: 'actor-789',
-          name: 'Hero'
-      });
+        const latestDoc = {
+          _id: 'actor-789',
+          name: 'Hero',
+          system: { attributes: { hp: { value: 50 } }, details: { biography: 'A brave adventurer' } }
+        };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
 
         const result = await tool.execute(params);
 
@@ -554,7 +781,10 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
             'system.details.biography': 'A brave adventurer'
           })
         );
-        expect(result.content).toBe('Updated Actor:actor-789');
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe('Updated Actor:actor-789');
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
         expect(result.display).toBe('✅ Updated **Hero** (Actor)');
     });
 
@@ -565,15 +795,16 @@ describe('DocumentUpdateTool - Legacy Compatibility', () => {
           updates: { 'system.quantity': 5 }
         };
 
-        DocumentAPI.updateDocument.mockResolvedValue({
-          id: 'item-999',
-          name: 'Existing Item'
-      });
+        const latestDoc = { _id: 'item-999', name: 'Existing Item', system: { quantity: 5 } };
+        DocumentAPI.getDocument.mockResolvedValueOnce(latestDoc).mockResolvedValueOnce(latestDoc);
 
         const result = await tool.execute(params);
 
         expect(DocumentAPI.updateDocument).toHaveBeenCalledWith('Item', 'item-999', { 'system.quantity': 5 });
-        expect(result.content).toBe('Updated Item:item-999');
+        const payload = JSON.parse(result.content);
+        expect(payload.message).toBe('Updated Item:item-999');
+        expect(payload.document).toEqual(latestDoc);
+        expect(result.document).toEqual(latestDoc);
     });
   });
 
