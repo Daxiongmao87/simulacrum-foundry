@@ -421,6 +421,38 @@ export class DocumentAPI {
     await DocumentAPI.#withSheetGuard(doc, { reopen: true }, async () => {
       for (const [key, ops] of grouped.entries()) {
         const [embeddedName, action] = key.split(':');
+
+        // Validate embedded documents for insert/replace operations using strict validation
+        // to ensure embedded documents receive same validation coverage as standard documents
+        if (action === 'insert' || action === 'replace') {
+          const collection = doc[embeddedName]; // Access embedded collection as property
+          const embeddedDocumentClass = collection?.documentClass; // Get document class for validation
+
+          // Skip validation if embedded collection or document class unavailable (fallback to FoundryVTT)
+          if (embeddedDocumentClass) {
+            const validationOptions = {
+              strict: true,
+              fields: true,
+              joint: true
+            };
+
+            const payloads = ops.map(op => op.data).filter(Boolean);
+
+            // Validate each payload (fail-fast on first error)
+            for (const payload of payloads) {
+              try {
+                if (typeof embeddedDocumentClass.validate === 'function') {
+                  embeddedDocumentClass.validate(payload, validationOptions);
+                } else if (embeddedDocumentClass.schema && typeof embeddedDocumentClass.schema.validate === 'function') {
+                  embeddedDocumentClass.schema.validate(payload, validationOptions);
+                }
+              } catch (validationError) {
+                throw validationError;
+              }
+            }
+          }
+        }
+
         if (action === 'delete') {
           const ids = ops.map(op => op.targetId).filter(Boolean);
           if (!ids.length) {
