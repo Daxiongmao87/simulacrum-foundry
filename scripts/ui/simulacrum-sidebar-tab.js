@@ -205,7 +205,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       if (this.messages.length > 1 ||
           (this.messages.length === 1 && !this.messages[0].content?.includes('Welcome'))) {
         this.#needsScroll = true;
-        this.render({ parts: ['log'] });
+        await this.render({ parts: ['log'] });
       }
     } catch (_e) {
       // If sync fails, keep welcome message (already added in constructor)
@@ -463,6 +463,38 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     }
     if (!(scroll instanceof HTMLElement)) {
       return false;
+    }
+
+    // Wait for content to be rendered before scrolling
+    // Use requestAnimationFrame to wait for the next paint cycle
+    if (scroll.scrollHeight === 0) {
+      // Wait for the next frame or up to a reasonable timeout
+      await new Promise(resolve => {
+        let attempts = 0;
+        const maxAttempts = 50; // 50 * 100ms = 5 seconds max wait
+        
+        const checkRender = () => {
+          attempts++;
+          
+          // If content has been rendered or we've waited long enough, proceed
+          if (scroll.scrollHeight > 0 || attempts >= maxAttempts) {
+            resolve();
+          } else {
+            // Use requestAnimationFrame for better timing with browser rendering
+            requestAnimationFrame(() => {
+              if (scroll.scrollHeight > 0) {
+                resolve();
+              } else {
+                // Fallback to setTimeout if still not rendered
+                setTimeout(checkRender, 50);
+              }
+            });
+          }
+        };
+        
+        // Start checking
+        checkRender();
+      });
     }
 
     if (waitImages) {
