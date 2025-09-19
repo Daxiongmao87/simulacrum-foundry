@@ -83,8 +83,8 @@ describe('DocumentSchemaTool - constructor', () => {
   beforeEach(setupDocumentSchemaTests);
 
   it('should initialize with correct name and description', () => {
-    expect(tool.name).toBe('get_document_schema');
-    expect(tool.description).toBe('Get schema for any document type');
+    expect(tool.name).toBe('inspect_document_schema');
+    expect(tool.description).toBe('Inspect schema for any document type.  Important for creating rich documents.');
     expect(tool.schema).toHaveProperty('type', 'object');
     expect(tool.schema.properties).toHaveProperty('documentType');
     });
@@ -302,7 +302,7 @@ describe('DocumentSchemaTool - formatSchema', () => {
     expect(formatted).toContain('**TestType Schema**');
     expect(formatted).toContain('Fields: name, type');
     expect(formatted).toContain('System Fields: health, mana');
-    expect(formatted).toContain('Embedded: items');
+    expect(formatted).toContain('Embedded Documents: items (use inspect_document_schema to view their schemas)');
     expect(formatted).toContain('Relationships: items');
     });
 
@@ -322,7 +322,7 @@ describe('DocumentSchemaTool - formatSchema', () => {
       
     const formatted = tool.formatSchema('EmptyType', schema);
       
-    expect(formatted).toContain('Embedded: None');
+    expect(formatted).toContain('Embedded Documents: None');
     expect(formatted).toContain('Relationships: None');
     });
 });

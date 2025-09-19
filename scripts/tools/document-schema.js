@@ -11,7 +11,7 @@ class DocumentSchemaTool extends BaseTool {
    * Create a new Document Schema Tool
    */
   constructor() {
-    super('get_document_schema', 'Get schema for any document type.  Important for creating rich documents.', {
+    super('inspect_document_schema', 'Inspect schema for any document type.  Important for creating rich documents.', {
       type: 'object',
       properties: {
         documentType: { 
@@ -141,7 +141,7 @@ class DocumentSchemaTool extends BaseTool {
 ` +
            `System Fields: ${schema.systemFields.join(', ')}
 ` +
-           `Embedded: ${schema.embedded.join(', ') || 'None'}
+           `Embedded Documents: ${schema.embedded.length > 0 ? schema.embedded.join(', ') + ' (use inspect_document_schema to view their schemas)' : 'None'}
 ` +
            `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}`;
   }
