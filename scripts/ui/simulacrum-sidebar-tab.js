@@ -3,11 +3,11 @@
  * Replaces the panel interface with a proper FoundryVTT v13 sidebar integration
  */
 
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { ConversationCommands } from './conversation-commands.js';
-import { createLogger } from '../utils/logger.js';
-import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
 import { ChatHandler } from '../core/chat-handler.js';
+import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 
 // Simple, direct base class resolution for FoundryVTT v13
 const AbstractSidebarTab = globalThis.foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
@@ -26,7 +26,8 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     return {
       log: {
         template: 'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
-        templates: ['modules/simulacrum/templates/simulacrum/message.hbs']
+        templates: ['modules/simulacrum/templates/simulacrum/message.hbs'],
+        scrollable: ['']
       },
       input: {
         template: 'modules/simulacrum/templates/simulacrum/sidebar-input.hbs'
@@ -140,17 +141,18 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     this._activeProcesses = new Map(); // callId -> { label, toolName }
     try {
       Hooks.on('simulacrum:processStatus', (info) => {
-        if (isDiagnosticsEnabled()) this.logger.debug('Process status hook', info);
+        if (isDebugEnabled()) this.logger.debug('Process status hook', info);
         const { state, callId, label, toolName } = info || {};
         if (!callId) return;
         if (state === 'start') {
           const capped = String(label || '').slice(0, 120);
           this._activeProcesses.set(callId, { label: capped, toolName: String(toolName || '') });
-          if (isDiagnosticsEnabled()) this.logger.debug('Process started, active processes:', this._activeProcesses.size);
+          if (isDebugEnabled()) this.logger.debug('Process started, active processes:', this._activeProcesses.size);
         } else if (state === 'end') {
           this._activeProcesses.delete(callId);
-          if (isDiagnosticsEnabled()) this.logger.debug('Process ended, active processes:', this._activeProcesses.size);
+          if (isDebugEnabled()) this.logger.debug('Process ended, active processes:', this._activeProcesses.size);
         }
+        this.#needsScroll = true;
         this.render({ parts: ['log', 'input'] });
       });
     } catch (_err) {
@@ -161,16 +163,28 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   }
 
   /**
-   * Handle actions after a part is rendered
-   * @param {string} partId - The ID of the rendered part
-   * @param {HTMLElement} element - The HTML element of the part
-   * @param {object} options - Rendering options
+   * Apply post-render behaviors to keep the chat viewport aligned.
+   * @param {ApplicationRenderContext} context
+   * @param {ApplicationRenderOptions} [options]
    */
-  _onRender(partId, element, options) {
-    super._onRender?.(partId, element, options);
-    if (partId === 'log' && this.#needsScroll) {
-      this.scrollBottom();
-      this.#needsScroll = false;
+  async _postRender(context, options) {
+    const parent = Object.getPrototypeOf(SimulacrumSidebarTab.prototype);
+    const parentPostRender = parent?._postRender;
+    if (typeof parentPostRender === 'function') {
+      await parentPostRender.call(this, context, options);
+    }
+    if (!this.#needsScroll) return;
+
+    const waitImages = Boolean(options?.isFirstRender);
+    try {
+      const scrolled = await this.scrollBottom({ waitImages });
+      if (scrolled) {
+        this.#needsScroll = false;
+      }
+    } catch (err) {
+      if (this.logger?.warn) {
+        this.logger.warn('Failed to maintain chat scroll position', err);
+      }
     }
   }
 
@@ -188,8 +202,9 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       await this._syncFromCoreConversation();
       this._syncedFromCore = true;
       // If history was loaded, replace welcome message and re-render
-      if (this.messages.length > 1 || 
+      if (this.messages.length > 1 ||
           (this.messages.length === 1 && !this.messages[0].content?.includes('Welcome'))) {
+        this.#needsScroll = true;
         this.render({ parts: ['log'] });
       }
     } catch (_e) {
@@ -217,7 +232,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     const processActive = this._activeProcesses.size > 0;
     const processLabel = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
     
-    if (isDiagnosticsEnabled()) this.logger.debug('_prepareContext processActive:', processActive, 'active:', this._activeProcesses.size);
+    if (isDebugEnabled()) this.logger.debug('_prepareContext processActive:', processActive, 'active:', this._activeProcesses.size);
     
     return foundry.utils.mergeObject(context, {
       messages: this.messages,
@@ -245,16 +260,47 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       }
       
       if (cm && Array.isArray(cm.messages)) {
-        const projected = cm.messages
-          .filter(m => m && (m.role === 'user' || m.role === 'assistant'))
-          .map(m => ({
+        const filtered = cm.messages.filter(m => m && (m.role === 'user' || m.role === 'assistant'));
+        const projected = [];
+
+        // Process each historical message through the same pipeline as new messages
+        for (const m of filtered) {
+          const content = String(m.content ?? '');
+
+          // Transform <think></think> tags to collapsible spoilers
+          let processedContent = content;
+          if (hasThinkTags(processedContent)) {
+            processedContent = transformThinkTags(processedContent);
+          }
+
+          // Apply markdown rendering
+          let markdownNormalized = processedContent;
+          try {
+            markdownNormalized = await MarkdownRenderer.render(processedContent);
+          } catch (err) {
+            if (this.logger?.warn) {
+              this.logger.warn('Markdown rendering failed for historical message; using original content', err);
+            }
+          }
+
+          // Apply FoundryVTT HTML enrichment
+          const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+          const enrichedContent = await TextEditorImpl.enrichHTML(markdownNormalized, {
+            secrets: game.user.isGM,
+            documents: true,
+            async: true
+          });
+
+          projected.push({
             id: foundry.utils.randomID(),
             role: m.role,
-            content: String(m.content ?? ''),
-            display: String(m.content ?? ''),
+            content: content,
+            display: enrichedContent,
             timestamp: Date.now(),
             user: m.role === 'user' ? game.user : null
-          }));
+          });
+        }
+
         this.messages = projected;
       }
     } catch (_e) { /* ignore */ }
@@ -407,11 +453,18 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
    * Scroll chat log to bottom with options
    * @param {Object} options - Scroll options
    * @param {boolean} options.waitImages - Wait for images to load
+   * @param {HTMLElement} [options.container] - Specific scroll container to target
+   * @returns {Promise<boolean>} True when scroll applied
    */
-  async scrollBottom({waitImages=false}={}) {
-    const scroll = this.element?.querySelector('.chat-scroll');
-    if (!scroll) return;
-    
+  async scrollBottom({ waitImages = false, container = null } = {}) {
+    let scroll = container;
+    if (!scroll) {
+      scroll = this.element?.querySelector('.chat-scroll');
+    }
+    if (!(scroll instanceof HTMLElement)) {
+      return false;
+    }
+
     if (waitImages) {
       // Wait for any images to load before scrolling
       const images = scroll.querySelectorAll('img');
@@ -423,15 +476,17 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
         });
       }));
     }
-    
+
     scroll.scrollTop = scroll.scrollHeight;
     this.#isAtBottom = true;
-    
+
     // Hide jump-to-bottom button
     const jumpButton = this.element?.querySelector('.jump-to-bottom');
     if (jumpButton) {
       jumpButton.style.display = 'none';
     }
+
+    return true;
   }
 
   /**
@@ -446,10 +501,19 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
     if (hasThinkTags(processedContent)) {
       processedContent = transformThinkTags(processedContent);
     }
-    
+
+    let markdownNormalized = processedContent;
+    try {
+      markdownNormalized = await MarkdownRenderer.render(processedContent);
+    } catch (err) {
+      if (this.logger?.warn) {
+        this.logger.warn('Markdown rendering failed; using original content', err);
+      }
+    }
+
     // Use the modern namespaced TextEditor API for FoundryVTT v13+
     const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
-    const enrichedContent = await TextEditorImpl.enrichHTML(processedContent, {
+    const enrichedContent = await TextEditorImpl.enrichHTML(markdownNormalized, {
       secrets: game.user.isGM,
       documents: true,
       async: true

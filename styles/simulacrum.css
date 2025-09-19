@@ -292,3 +292,32 @@
   /* Ensure the icon rotates around its center */
   transform-origin: center center !important;
 }
+
+/* ---------------------------------------- */
+/*  Code Block Whitespace Fix              */
+/* ---------------------------------------- */
+
+/* Fix code block newline collapse in Simulacrum chat messages only */
+/* Use high-specificity selectors to override FoundryVTT's white-space: nowrap */
+
+/* Code blocks within pre tags (multiline code) */
+#simulacrum .chat-message .message-content pre code,
+#simulacrum .chat-message .message-content code.block {
+  white-space: pre-wrap;
+  word-break: normal;
+}
+
+/* Pre elements preserve whitespace and allow horizontal scrolling */
+#simulacrum .chat-message .message-content pre {
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* Inline code elements allow wrapping for long lines */
+#simulacrum .chat-message .message-content p code,
+#simulacrum .chat-message .message-content li code,
+#simulacrum .chat-message .message-content span code,
+#simulacrum .chat-message .message-content code.inline {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
