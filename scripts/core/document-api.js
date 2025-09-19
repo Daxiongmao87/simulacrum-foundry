@@ -50,7 +50,22 @@ export class DocumentAPI {
    * @returns {object|null} The document schema object, or null if the type is invalid.
    */
   static getDocumentSchema(documentType) {
-    const documentClass = CONFIG[documentType]?.documentClass;
+    let documentClass = CONFIG[documentType]?.documentClass;
+
+    // If not found as a top-level document, search in embedded documents
+    if (!documentClass) {
+      for (const parentType of Object.keys(game?.documentTypes || {})) {
+        const parentClass = CONFIG[parentType]?.documentClass;
+        if (parentClass?.hierarchy) {
+          const embeddedClass = parentClass.hierarchy[documentType];
+          if (embeddedClass) {
+            documentClass = embeddedClass;
+            break;
+          }
+        }
+      }
+    }
+
     if (!documentClass) return null;
 
     const schema = {
