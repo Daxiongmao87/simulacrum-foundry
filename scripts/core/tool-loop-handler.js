@@ -59,8 +59,7 @@ export async function processToolCallLoop(
       if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
         onToolResult({
           role: 'assistant',
-          content: currentResponse.content,
-          display: true // Signal to the UI that this content should be displayed
+          content: currentResponse.content
         });
       }
 
@@ -173,8 +172,7 @@ export async function processToolCallLoop(
     if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
       onToolResult({
         role: 'assistant',
-        content: currentResponse.content,
-        display: true
+        content: currentResponse.content
       });
     }
     return currentResponse;
