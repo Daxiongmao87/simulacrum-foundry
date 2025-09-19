@@ -21,8 +21,7 @@ export function sanitizeMessagesForFallback(messages) {
   }
 }
 
-import { createLogger } from './logger.js';
-import { isDiagnosticsEnabled } from './dev.js';
+import { createLogger, isDebugEnabled } from './logger.js';
 import { toolRegistry } from '../core/tool-registry.js';
 
 /**
@@ -33,7 +32,7 @@ export function normalizeAIResponse(raw) {
   // If already normalized, check for empty content
   if (typeof raw?.content === 'string') {
     if (!raw.content || raw.content.trim().length === 0) {
-      if (isDiagnosticsEnabled()) {
+      if (isDebugEnabled()) {
         const logger = createLogger('AIDiagnostics');
         logger.warn('Empty content detected in already-normalized response:', {
           rawContentValue: raw.content,
@@ -46,7 +45,7 @@ export function normalizeAIResponse(raw) {
           responseKeys: Object.keys(raw || {})
         });
       }
-      if (isDiagnosticsEnabled()) {
+      {
         const logger = createLogger('AIDiagnostics');
         logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0) });
       }
@@ -70,6 +69,39 @@ export function normalizeAIResponse(raw) {
     };
   }
 
+  // Gemini-compatible: { candidates: [ { content: { parts: [...] } } ] }
+  if (Array.isArray(raw?.candidates) && raw.candidates.length > 0) {
+    const candidate = raw.candidates.find(c => c?.content?.parts) || raw.candidates[0];
+    const parts = candidate?.content?.parts || [];
+    const textSegments = [];
+    const toolCalls = [];
+
+    for (const part of parts) {
+      if (part?.functionCall) {
+        const fc = part.functionCall;
+        toolCalls.push({
+          id: fc?.name ? `gemini_${fc.name}_${toolCalls.length + 1}` : `gemini_call_${toolCalls.length + 1}`,
+          function: {
+            name: fc?.name || 'unknown_function',
+            arguments: JSON.stringify(fc?.args ?? {})
+          }
+        });
+      } else if (typeof part?.text === 'string') {
+        textSegments.push(part.text);
+      }
+    }
+
+    const combinedText = textSegments.join('\n').trim();
+    return {
+      content: combinedText,
+      display: combinedText,
+      toolCalls,
+      model: raw?.model,
+      usage: raw?.usage,
+      raw
+    };
+  }
+
   // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
   const __choices = raw && raw.choices;
   const choice = Array.isArray(__choices) ? __choices[0] : undefined;
@@ -77,7 +109,7 @@ export function normalizeAIResponse(raw) {
   const content = typeof msg.content === 'string' ? msg.content : '';
 
   if (!content || content.trim().length === 0) {
-    if (isDiagnosticsEnabled()) {
+    if (isDebugEnabled()) {
       const logger = createLogger('AIDiagnostics');
       logger.warn('Empty content detected in OpenAI-style response:', {
         rawResponseStructure: {
@@ -96,7 +128,7 @@ export function normalizeAIResponse(raw) {
         usage: raw?.usage
       });
     }
-    if (isDiagnosticsEnabled()) {
+    {
       const logger = createLogger('AIDiagnostics');
       const has = !!(raw?.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0);
       logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: has });
@@ -159,7 +191,7 @@ export function normalizeAIResponse(raw) {
   }
 
   try {
-    if (isDiagnosticsEnabled()) {
+    if (isDebugEnabled()) {
       const diag = createLogger('AIDiagnostics');
       const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
       diag.info('tool_calls', { count: names.length, names });
@@ -180,7 +212,7 @@ export function parseInlineToolCall(text) {
   if (!cleanText || !cleanText.trim()) return null;
 
   try {
-    if (isDiagnosticsEnabled() && text !== cleanText) {
+    if (isDebugEnabled() && text !== cleanText) {
       createLogger('AIDiagnostics').info('think_tag_filtered', {
         originalLength: text.length,
         cleanedLength: cleanText.length,
@@ -223,7 +255,7 @@ export function parseInlineToolCall(text) {
   const obj = tryParse(block.trim());
   if (!obj) {
     try {
-      if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
+      if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
     } catch {}
     return { parseError: 'Invalid JSON', content: block };
   }
@@ -234,7 +266,7 @@ export function parseInlineToolCall(text) {
   let args = toolCall?.arguments ?? {};
   if (!name) {
     try {
-      if (isDiagnosticsEnabled()) {
+      if (isDebugEnabled()) {
         createLogger('AIDiagnostics').warn('fallback.parse.missing_name', {
           keys: Object.keys(obj)
         });
@@ -251,7 +283,7 @@ export function parseInlineToolCall(text) {
   try {
     const info = toolRegistry.getToolInfo(name);
     if (!info) {
-      try { if (isDiagnosticsEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch {}
+      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch {}
       return null;
     }
   } catch (e) { return null; }
@@ -259,7 +291,7 @@ export function parseInlineToolCall(text) {
   const cleanedText = cleanText.replace(match[0], '').trim();
 
   try {
-    if (isDiagnosticsEnabled()) {
+    if (isDebugEnabled()) {
       createLogger('AIDiagnostics').info('fallback.parse.success', {
         name,
         argsKeys: Object.keys(args)
@@ -269,4 +301,3 @@ export function parseInlineToolCall(text) {
 
   return { name, arguments: args, cleanedText };
 }
-

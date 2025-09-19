@@ -1,9 +1,9 @@
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 /**
  * ChatHandler - Single source of truth for all chat conversation flow
  * Orchestrates between AI, tools, conversation state, and UI
  */
 
-import { createLogger } from '../utils/logger.js';
 
 class ChatHandler {
   constructor(conversationManager) {
@@ -92,7 +92,7 @@ class ChatHandler {
    * Handle parse errors by continuing AI flow for correction
    */
   async handleParseError(parseErrorResponse, options = {}) {
-    if (isDiagnosticsEnabled()) {
+    if (isDebugEnabled()) {
       const { createLogger } = await import('../utils/logger.js');
       const logger = createLogger('ChatHandler');
       logger.warn('ChatHandler handling parse error:', {
@@ -200,9 +200,8 @@ class ChatHandler {
     
     if (currentRetries > maxRetries) {
       try {
-        const { isDiagnosticsEnabled } = await import('../utils/dev.js');
-        const { createLogger } = await import('../utils/logger.js');
-        if (isDiagnosticsEnabled()) {
+        const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
+        if (isDebugEnabled()) {
           const conversationMessages = this.conversationManager.getMessages();
           createLogger('AIDiagnostics').error('assistant.empty_response.exhausted', {
             maxRetries,
@@ -228,9 +227,8 @@ class ChatHandler {
     try {
       const { SimulacrumCore } = await import('./simulacrum-core.js');
       try {
-        const { isDiagnosticsEnabled } = await import('../utils/dev.js');
-        const { createLogger } = await import('../utils/logger.js');
-        if (isDiagnosticsEnabled()) {
+        const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
+        if (isDebugEnabled()) {
           const last = this.conversationManager.messages[this.conversationManager.messages.length - 1];
           createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
             attempt: currentRetries,

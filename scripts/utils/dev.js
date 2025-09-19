@@ -20,14 +20,25 @@ function _readUrlToggle() {
  * - CONFIG.debug.simulacrum === true
  * - URL contains ?simulacrumDev=1
  */
-export function isDiagnosticsEnabled() {
+export function isDebugEnabled() {
   try {
     if (globalThis.window && globalThis.window.SIMULACRUM_DEV === true) return true;
   } catch {}
   try {
     if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
   } catch {}
-  return _readUrlToggle();
+  // Default to true during development unless explicitly disabled.
+  // URL overrides: simulacrumDev=1 enables, simulacrumDev=0 disables
+  try {
+    const search = globalThis.location?.search || '';
+    if (search) {
+      const params = new URLSearchParams(search);
+      const q = params.get('simulacrumDev');
+      if (q === '0') return false;
+      if (q === '1') return true;
+    }
+  } catch {}
+  return true;
 }
 
 // Optional helpers for quick toggling via console
@@ -36,10 +47,9 @@ try {
     globalThis.SimulacrumDiagnostics = globalThis.SimulacrumDiagnostics || {
       enable() { globalThis.window.SIMULACRUM_DEV = true; return true; },
       disable() { globalThis.window.SIMULACRUM_DEV = false; return false; },
-      status() { return isDiagnosticsEnabled(); }
+      status() { return isDebugEnabled(); }
     };
   }
 } catch {}
 
-export default { isDiagnosticsEnabled };
-
+export default { isDebugEnabled, createLogger };

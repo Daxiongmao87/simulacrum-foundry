@@ -3,9 +3,8 @@
  * Handles automatic verification of tool operations like qwen-code
  */
 
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
-import { isDiagnosticsEnabled } from '../utils/dev.js';
-import { createLogger } from '../utils/logger.js';
 
 /**
  * Perform post-tool verification like qwen-code (auto-read after create/update)
@@ -61,7 +60,7 @@ export async function performPostToolVerification(
   } catch (verifyErr) {
     // Verification failure shouldn't break the main operation
     try { 
-      if (isDiagnosticsEnabled()) {
+      if (isDebugEnabled()) {
         createLogger('AIDiagnostics').info('verification failed', { 
           toolName, 
           error: verifyErr?.message 

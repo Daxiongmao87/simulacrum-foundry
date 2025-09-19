@@ -27,6 +27,16 @@ export class Logger {
     this.prefix = `[Simulacrum:${component}]`;
   }
 
+
+  static isDebugEnabled() {
+    try {
+      if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
+    } catch {}
+    // Default to true during development; flip to false at release.
+    return true;
+  }
+
+
   /**
    * Log error message
    * @param {string} message - Error message
@@ -87,3 +97,6 @@ export function createLogger(component, level = Logger.LEVELS.INFO) {
 }
 
 export default Logger;
+export function isDebugEnabled() {
+  return Logger.isDebugEnabled();
+}

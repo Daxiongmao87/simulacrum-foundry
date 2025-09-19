@@ -561,7 +561,6 @@ export class ToolRegistry {
   // addHook/removeHook removed
 }
 
-// Export singleton instance
-const toolRegistry = new ToolRegistry();
-export { toolRegistry };
+// Export singleton instance explicitly to guarantee named binding in bundlers
+export const toolRegistry = new ToolRegistry();
 export default toolRegistry;

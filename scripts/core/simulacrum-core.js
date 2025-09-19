@@ -1,6 +1,7 @@
 /**
  * Simulacrum Core - Main module logic
  */
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
 import { ConversationManager } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
@@ -12,8 +13,6 @@ import { DocumentListTool } from '../tools/document-list.js';
 import { DocumentSearchTool } from '../tools/document-search.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { DocumentAPI } from './document-api.js';
-import { createLogger } from '../utils/logger.js';
-import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 
@@ -85,9 +84,9 @@ class SimulacrumCore {
     try {
       const loaded = await this.loadConversationState();
       if (loaded) {
-        if (isDiagnosticsEnabled()) this.logger.debug('Loaded conversation history');
+        if (isDebugEnabled()) this.logger.debug('Loaded conversation history');
       } else {
-        if (isDiagnosticsEnabled()) this.logger.debug('No saved conversation history found, starting fresh');
+        if (isDebugEnabled()) this.logger.debug('No saved conversation history found, starting fresh');
       }
     } catch (error) {
       this.logger.warn('Failed to load conversation history:', error);
@@ -112,6 +111,8 @@ class SimulacrumCore {
       const baseURL = game.settings.get('simulacrum', 'baseURL');
       const model = game.settings.get('simulacrum', 'model');
       const contextLength = game.settings.get('simulacrum', 'contextLength');
+      const temperature = game.settings.get('simulacrum', 'temperature');
+      const provider = game.settings.get('simulacrum', 'provider') || 'openai';
       
       // Do not enforce API key at this layer. Some endpoints may not require it.
       
@@ -120,7 +121,9 @@ class SimulacrumCore {
         apiKey,
         baseURL,
         model,
-        contextLength
+        contextLength,
+        provider,
+        temperature
       });
       
       // Validate connection
@@ -175,7 +178,7 @@ class SimulacrumCore {
       const tools = toolRegistry.getToolSchemas();
       // Diagnostics: log tool schemas sent (names only)
       try {
-        if (isDiagnosticsEnabled()) {
+        if (isDebugEnabled()) {
           const diag = createLogger('AIDiagnostics');
           const toolNames = Array.isArray(tools) ? tools.map(t => t?.function?.name || t?.name).filter(Boolean) : [];
           diag.info('tools', { count: toolNames.length, names: toolNames });
@@ -193,7 +196,7 @@ class SimulacrumCore {
       const useNativeTools = !legacyMode;
       const sendTools = useNativeTools ? tools : null;
       
-      if (isDiagnosticsEnabled()) this.logger.debug('Chat request configuration:', {
+      if (isDebugEnabled()) this.logger.debug('Chat request configuration:', {
         legacyMode,
         useNativeTools,
         sendingTools: !!sendTools,
@@ -202,7 +205,7 @@ class SimulacrumCore {
       
       // Debug logging
       try {
-        if (isDiagnosticsEnabled()) {
+        if (isDebugEnabled()) {
           createLogger('AIDiagnostics').info('chat_request', { 
             legacyMode, 
             useNativeTools,
@@ -352,7 +355,7 @@ class SimulacrumCore {
     try {
       if (game?.user && typeof game.user.setFlag === 'function') {
         await game.user.setFlag('simulacrum', game.world.id, state);
-        if (isDiagnosticsEnabled()) this.logger.debug('Conversation state saved to user flags');
+        if (isDebugEnabled()) this.logger.debug('Conversation state saved to user flags');
         return true;
       }
     } catch (error) {
@@ -363,7 +366,7 @@ class SimulacrumCore {
     try {
       if (game?.settings && typeof game.settings.set === 'function') {
         await game.settings.set('simulacrum', key, state);
-        if (isDiagnosticsEnabled()) this.logger.debug('Conversation state saved to module settings');
+        if (isDebugEnabled()) this.logger.debug('Conversation state saved to module settings');
         return true;
       }
     } catch (error) {

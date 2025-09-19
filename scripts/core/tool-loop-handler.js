@@ -3,11 +3,10 @@
  * No conversation management - that's handled by ChatHandler
  */
 
+import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
 import { SimulacrumCore } from './simulacrum-core.js';
-import { createLogger } from '../utils/logger.js';
-import { isDiagnosticsEnabled } from '../utils/dev.js';
 import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection } from './correction.js';
 
@@ -47,11 +46,11 @@ export async function processToolCallLoop(
     
     while (repeatCount < REPEAT_LIMIT) {
       iterationCount++;
-      if (isDiagnosticsEnabled()) logger.debug(`Start of loop iteration ${iterationCount} (retries: ${repeatCount})`);
+      if (isDebugEnabled()) logger.debug(`Start of loop iteration ${iterationCount} (retries: ${repeatCount})`);
       
       // Check for cancellation
       if (signal?.aborted) {
-        if (isDiagnosticsEnabled()) logger.info('Process cancelled');
+        if (isDebugEnabled()) logger.info('Process cancelled');
         throw new Error('Process was cancelled');
       }
       
@@ -67,7 +66,7 @@ export async function processToolCallLoop(
 
       // Handle parse errors by getting AI correction
       if (currentResponse._parseError) {
-        if (isDiagnosticsEnabled()) {
+        if (isDebugEnabled()) {
           logger.info(`AI response parse error (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
             content: currentResponse.content || '(empty)',
             contentLength: (currentResponse.content || '').length,
@@ -91,19 +90,19 @@ export async function processToolCallLoop(
       
       // If no tool calls, terminate the loop - this is the intended behavior
       if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
-        if (isDiagnosticsEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
+        if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
         break; // Exit the loop - this is how the loop should terminate
       }
       
       // Execute all tool calls
-      if (isDiagnosticsEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
+      if (isDebugEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
       const toolResults = await executeToolCalls(currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal);
       
       
       // --- Check for tool execution failures and increment retry count ---
       const hasFailedTool = toolResults.some(result => !result.success);
       if (hasFailedTool) {
-        if (isDiagnosticsEnabled()) {
+        if (isDebugEnabled()) {
           const failedTools = toolResults.filter(result => !result.success);
           logger.info(`Tool execution failures (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
             failedToolCount: failedTools.length,
@@ -129,15 +128,15 @@ export async function processToolCallLoop(
       }
 
       // Get next AI response based on tool results
-      if (isDiagnosticsEnabled()) logger.debug('Getting next AI response after tool execution');
+      if (isDebugEnabled()) logger.debug('Getting next AI response after tool execution');
       currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
     }
     
     // If we hit the repeat limit, return the last response
     if (repeatCount >= REPEAT_LIMIT) {
-      if (isDiagnosticsEnabled()) {
+      {
         const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-        logger.error(`Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
+        console.error(`Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
           totalIterations: iterationCount,
           retryCount: repeatCount,
           lastResponseContent: currentResponse.content || '(empty)',
@@ -317,13 +316,13 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
   
   // Handle fallback tool calls if no native tool_calls found and in legacy mode
   if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0) && currentToolSupport !== true) {
-    if (isDiagnosticsEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
+    if (isDebugEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
     try {
       const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
-      if (isDiagnosticsEnabled()) logger.debug('Fallback parsing result:', parsed);
+      if (isDebugEnabled()) logger.debug('Fallback parsing result:', parsed);
       
       if (parsed && parsed.name) {
-        if (isDiagnosticsEnabled()) logger.debug(`Creating fallback tool call for '${parsed.name}'`);
+        if (isDebugEnabled()) logger.debug(`Creating fallback tool call for '${parsed.name}'`);
         normalized.toolCalls = [{
           id: 'fallback_' + Date.now(),
           function: {

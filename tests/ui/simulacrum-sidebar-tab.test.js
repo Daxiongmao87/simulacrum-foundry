@@ -61,6 +61,16 @@ jest.mock('../../scripts/ui/conversation-commands.js', () => ({
   }
 }));
 
+const mockSimulacrumCore = {
+  conversationManager: {
+    messages: []
+  }
+};
+
+jest.mock('../../scripts/core/simulacrum-core.js', () => ({
+  SimulacrumCore: mockSimulacrumCore
+}));
+
 // Import module dynamically after globals are set up to avoid hoisting issues
 let SimulacrumSidebarTab;
 let registerSimulacrumSidebarTab;
@@ -69,6 +79,31 @@ beforeAll(async () => {
   SimulacrumSidebarTab = mod.SimulacrumSidebarTab;
   registerSimulacrumSidebarTab = mod.registerSimulacrumSidebarTab;
 });
+
+const setupScrollDom = (tab, { scrollHeight = 1000, clientHeight = 200 } = {}) => {
+  const root = document.createElement('section');
+  const scroll = document.createElement('div');
+  scroll.className = 'chat-scroll';
+  let scrollTopValue = 0;
+  Object.defineProperty(scroll, 'scrollTop', {
+    configurable: true,
+    get: () => scrollTopValue,
+    set: (value) => { scrollTopValue = value; }
+  });
+  Object.defineProperty(scroll, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeight
+  });
+  Object.defineProperty(scroll, 'clientHeight', {
+    configurable: true,
+    get: () => clientHeight
+  });
+  const jumpButton = document.createElement('button');
+  jumpButton.className = 'jump-to-bottom';
+  root.append(scroll, jumpButton);
+  tab.element = root;
+  return { root, scroll, jumpButton };
+};
 
 describe('SimulacrumSidebarTab', () => {
   let sidebarTab;
@@ -111,9 +146,9 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('addMessage', () => {
-    it('should add a user message', () => {
+    it('should add a user message', async () => {
       const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
-      sidebarTab.addMessage('user', 'Hello world');
+      await sidebarTab.addMessage('user', 'Hello world');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.role).toBe('user');
@@ -122,9 +157,9 @@ describe('SimulacrumSidebarTab', () => {
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
     });
 
-    it('should add an assistant message', () => {
+    it('should add an assistant message', async () => {
       const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
-      sidebarTab.addMessage('assistant', 'Hello there!');
+      await sidebarTab.addMessage('assistant', 'Hello there!');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.role).toBe('assistant');
@@ -133,18 +168,18 @@ describe('SimulacrumSidebarTab', () => {
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
     });
 
-    it('should add message with display content', () => {
-      sidebarTab.addMessage('assistant', 'Raw content', '**Formatted** content');
+    it('should add message with display content', async () => {
+      await sidebarTab.addMessage('assistant', 'Raw content', '**Formatted** content');
 
       const last = sidebarTab.messages[sidebarTab.messages.length - 1];
       expect(last.content).toBe('Raw content');
       expect(last.display).toBe('**Formatted** content');
     });
 
-    it('should generate unique IDs and timestamps', () => {
+    it('should generate unique IDs and timestamps', async () => {
       sidebarTab.messages = [];
-      sidebarTab.addMessage('user', 'Message 1');
-      sidebarTab.addMessage('user', 'Message 2');
+      await sidebarTab.addMessage('user', 'Message 1');
+      await sidebarTab.addMessage('user', 'Message 2');
 
       const a = sidebarTab.messages[0];
       const b = sidebarTab.messages[1];
@@ -157,10 +192,10 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('clearMessages', () => {
-    it('should clear all messages', () => {
+    it('should clear all messages', async () => {
       sidebarTab.messages = [];
-      sidebarTab.addMessage('user', 'Hello');
-      sidebarTab.addMessage('assistant', 'Hi');
+      await sidebarTab.addMessage('user', 'Hello');
+      await sidebarTab.addMessage('assistant', 'Hi');
       
       expect(sidebarTab.messages).toHaveLength(2);
       
@@ -211,8 +246,8 @@ describe('SimulacrumSidebarTab', () => {
     let mockHtml, mockTextarea, mockForm;
 
     beforeEach(() => {
-      mockTextarea = { addEventListener: jest.fn(), focus: jest.fn() };
-      mockForm = { addEventListener: jest.fn(), querySelector: jest.fn(() => mockTextarea) };
+      mockTextarea = { addEventListener: jest.fn(), focus: jest.fn(), dataset: {} };
+      mockForm = { addEventListener: jest.fn(), querySelector: jest.fn(() => mockTextarea), dataset: {} };
       mockHtml = { querySelector: jest.fn((selector) => selector === '.chat-form' ? mockForm : (selector === 'textarea[name="message"]' ? mockTextarea : null)) };
 
       // Mock super._activateListeners
@@ -265,20 +300,44 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('Instance Methods', () => {
-    it('should render with updated context after adding message', () => {
-      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
-      const scrollSpy = jest.spyOn(sidebarTab, '_scrollToBottom');
-      sidebarTab.addMessage('user', 'Test message');
-      expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
-      expect(scrollSpy).toHaveBeenCalled();
-    });
-
     it('should render after clearing messages', () => {
       const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
       sidebarTab.messages = [{ id: '1', role: 'user', content: 'test' }];
       sidebarTab.clearMessages();
       expect(sidebarTab.messages).toEqual([]);
       expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
+    });
+  });
+
+  describe('Scroll anchoring', () => {
+    it('scrolls to bottom after render when new message is appended', async () => {
+      const { scroll } = setupScrollDom(sidebarTab);
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
+
+      await sidebarTab.addMessage('assistant', 'Bottom please');
+      await sidebarTab._postRender({}, { parts: ['log'] });
+
+      expect(scroll.scrollTop).toBe(scroll.scrollHeight);
+
+      renderSpy.mockRestore();
+    });
+
+    it('scrolls to bottom after history hydration completes', async () => {
+      const { scroll } = setupScrollDom(sidebarTab);
+      const renderSpy = jest.spyOn(sidebarTab, 'render').mockReturnValue(sidebarTab);
+
+      mockSimulacrumCore.conversationManager.messages = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' }
+      ];
+
+      await sidebarTab._loadConversationHistoryOnInit();
+      await sidebarTab._postRender({}, { parts: ['log'] });
+
+      expect(scroll.scrollTop).toBe(scroll.scrollHeight);
+
+      renderSpy.mockRestore();
+      mockSimulacrumCore.conversationManager.messages = [];
     });
   });
 
@@ -300,6 +359,46 @@ describe('SimulacrumSidebarTab', () => {
       const ctx2 = await tab._prepareContext();
       expect(ctx2.processActive).toBe(false);
       delete global.Hooks;
+    });
+
+    it('keeps the chat log anchored at the bottom during process updates', async () => {
+      const listeners = {};
+      global.Hooks = {
+        on: jest.fn((evt, cb) => { listeners[evt] = cb; })
+      };
+      const tab = new SimulacrumSidebarTab();
+      const { scroll } = setupScrollDom(tab);
+      const renderSpy = jest.spyOn(tab, 'render').mockReturnValue(tab);
+
+      listeners['simulacrum:processStatus']?.({ state: 'start', callId: 'c1', label: 'Working', toolName: 'tool' });
+      await tab._postRender({}, { parts: ['log'] });
+
+      expect(scroll.scrollTop).toBe(scroll.scrollHeight);
+
+      renderSpy.mockRestore();
+      delete global.Hooks;
+    });
+  });
+
+  describe('_loadConversationHistoryOnInit', () => {
+    it('scrolls to the latest message after history sync', async () => {
+      const tab = new SimulacrumSidebarTab();
+      const { scroll } = setupScrollDom(tab);
+      const renderSpy = jest.spyOn(tab, 'render').mockReturnValue(tab);
+
+      mockSimulacrumCore.conversationManager.messages = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' }
+      ];
+
+      await tab._loadConversationHistoryOnInit();
+
+      expect(renderSpy).toHaveBeenCalledWith({ parts: ['log'] });
+      await tab._postRender({}, { parts: ['log'] });
+      expect(scroll.scrollTop).toBe(scroll.scrollHeight);
+
+      renderSpy.mockRestore();
+      mockSimulacrumCore.conversationManager.messages = [];
     });
   });
 });

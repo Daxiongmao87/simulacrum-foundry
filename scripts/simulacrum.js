@@ -23,6 +23,28 @@ const logger = createLogger('Module');
  * Register API settings
  */
 function registerAPISettings() {
+  game.settings.register(MODULE_ID, 'provider', {
+    name: 'API Provider',
+    hint: 'Choose OpenAI-compatible or Gemini-compatible behavior.',
+    scope: 'world',
+    config: true,
+    type: String,
+    choices: {
+      openai: 'OpenAI-compatible',
+      gemini: 'Gemini-compatible'
+    },
+    default: 'openai',
+    restricted: true,
+    onChange: async (_value) => {
+      try {
+        await SimulacrumCore.initializeAIClient();
+        createLogger('Module').info('AI client reinitialized after provider change');
+      } catch (e) {
+        createLogger('Module').warn('Failed to reinitialize AI after provider change', e);
+      }
+    }
+  });
+
   game.settings.register(MODULE_ID, 'apiKey', {
     name: game.i18n.localize('SIMULACRUM.Settings.ApiKey.Name'),
     hint: game.i18n.localize('SIMULACRUM.Settings.ApiKey.Hint'),

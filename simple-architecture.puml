@@ -1,0 +1,31 @@
+@startuml
+!theme plain
+
+' Simple sequence diagram that doesn't require Graphviz
+title Simulacrum Architecture - Message Flow
+
+actor User
+participant "UI\nSidebarTab" as UI
+participant "ChatHandler" as CH
+participant "ConversationEngine" as CE
+participant "SimulacrumCore" as SC
+participant "AIClient" as AI
+participant "ToolRegistry" as TR
+participant "DocumentAPI" as DA
+
+User -> UI: Send message
+UI -> CH: processUserMessage()
+CH -> CE: processTurn()
+CE -> SC: generateResponse()
+SC -> AI: chat()
+AI --> SC: AI response
+SC --> CE: response
+CE -> TR: executeTool()
+TR -> DA: CRUD operations
+DA --> TR: results
+TR --> CE: tool results
+CE --> CH: final response
+CH --> UI: display results
+UI --> User: Show response
+
+@enduml

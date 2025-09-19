@@ -12,5 +12,8 @@ describe('tool-registry exports', () => {
     expect(toolRegistry).toBeDefined();
     expect(typeof toolRegistry).toBe('object');
   });
-});
 
+  it('keeps named and default exports in sync', () => {
+    expect(toolRegistry).toBe(defaultRegistry);
+  });
+});
