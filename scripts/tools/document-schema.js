@@ -46,62 +46,6 @@ class DocumentSchemaTool extends BaseTool {
   }
 
   /**
-   * Get document schema for a specific type
-   * @param {string} documentType - Document type
-   * @returns {Object|null} Document schema or null if not found
-   */
-  getDocumentSchema(documentType) {
-    const documentClass = CONFIG[documentType]?.documentClass;
-    if (!documentClass) return null;
-    
-    return {
-      type: documentType,
-      fields: Object.keys(documentClass.schema.fields),
-      systemFields: documentClass.schema.has('system') ? 
-        Object.keys(documentClass.schema.getField('system').fields) : [],
-      embedded: this.getEmbeddedTypes(documentClass),
-      relationships: this.getDocumentRelationships(documentClass),
-      references: this.getDocumentReferences(documentClass),
-      permissions: documentClass.PERMISSION_LEVELS || {}
-    };
-  }
-
-  /**
-   * Get document relationships
-   * @param {Object} documentClass - Document class
-   * @returns {Object} Document relationships
-   */
-  getDocumentRelationships(documentClass) {
-    const relationships = {};
-    
-    // Embedded documents (whatever exists in document hierarchy)
-    if (documentClass.hierarchy) {
-      Object.entries(documentClass.hierarchy).forEach(([key, embeddedClass]) => {
-        relationships[key] = {
-          type: 'embedded',
-          documentType: embeddedClass.documentName,
-          collection: key,
-          canCreate: true,
-          canUpdate: true,
-          canDelete: true
-        };
-      });
-    }
-    
-    return relationships;
-  }
-
-  /**
-   * Get document references
-   * @param {Object} documentClass - Document class
-   * @returns {Object} Document references
-   */
-  getDocumentReferences(documentClass) {
-    return detectDocumentReferences(documentClass);
-  }
-
-  /**
-  /**
    * Get all document types
    * @returns {Array} All document types with info
    */
@@ -113,15 +57,6 @@ class DocumentSchemaTool extends BaseTool {
         collection: game.collections.get(type)?.size || 0,
         compendiums: game.packs.filter(p => p.documentName === type).length
       }));
-  }
-
-  /**
-   * Get embedded types for a document class
-   * @param {Object} documentClass - Document class
-   * @returns {Array} Embedded types
-   */
-  getEmbeddedTypes(documentClass) {
-    return documentClass.hierarchy ? Object.keys(documentClass.hierarchy) : [];
   }
 
   /**

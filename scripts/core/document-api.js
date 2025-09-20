@@ -45,38 +45,358 @@ export class DocumentAPI {
 
   /**
    * Retrieves the schema for a given document type, including fields, embedded documents,
-   * relationships, and references.
+   * relationships, and references. Supports both top-level and embedded document types.
    * @param {string} documentType The name of the document type.
    * @returns {object|null} The document schema object, or null if the type is invalid.
    */
   static getDocumentSchema(documentType) {
-    let documentClass = CONFIG[documentType]?.documentClass;
+    const startTime = performance.now();
 
-    // If not found as a top-level document, search in embedded documents
-    if (!documentClass) {
-      for (const parentType of Object.keys(game?.documentTypes || {})) {
-        const parentClass = CONFIG[parentType]?.documentClass;
-        if (parentClass?.hierarchy) {
+    try {
+      let documentClass = CONFIG[documentType]?.documentClass;
+
+      // If not found as a top-level document, search comprehensively in embedded documents
+      if (!documentClass) {
+        documentClass = this.#findEmbeddedDocumentClass(documentType);
+      }
+
+      if (!documentClass) {
+        documentLogger.debug(`Document type "${documentType}" not found in any hierarchy`);
+        return null;
+      }
+
+      const schema = this.#extractDocumentSchema(documentType, documentClass);
+
+      const elapsed = performance.now() - startTime;
+      if (elapsed > 50) {
+        documentLogger.warn(`Schema discovery for "${documentType}" took ${elapsed.toFixed(2)}ms (exceeds 50ms threshold)`);
+      }
+
+      return schema;
+    } catch (error) {
+      documentLogger.error(`Schema extraction failed for document type "${documentType}":`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Comprehensively searches for an embedded document class across all parent document types.
+   * @param {string} documentType The embedded document type to find.
+   * @returns {object|null} The document class if found, null otherwise.
+   * @private
+   */
+  static #findEmbeddedDocumentClass(documentType) {
+    // Search through CONFIG keys in alphabetical order for consistency
+    const configKeys = Object.keys(CONFIG).sort();
+
+    for (const parentType of configKeys) {
+      try {
+        const parentConfig = CONFIG[parentType];
+        if (!parentConfig?.documentClass) {
+          continue;
+        }
+
+        const parentClass = parentConfig.documentClass;
+
+        // Check hierarchy property (computed from schema)
+        if (parentClass.hierarchy) {
           const embeddedClass = parentClass.hierarchy[documentType];
           if (embeddedClass) {
-            documentClass = embeddedClass;
-            break;
+            documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.hierarchy`);
+            return embeddedClass;
           }
+        }
+
+        // Also check metadata.embedded for additional discovery
+        if (parentClass.metadata?.embedded) {
+          for (const [embeddedDocType, collectionName] of Object.entries(parentClass.metadata.embedded)) {
+            if (embeddedDocType === documentType) {
+              // Try to resolve the document class from the schema
+              try {
+                const schema = parentClass.schema;
+                if (schema?.fields?.[collectionName]) {
+                  const field = schema.fields[collectionName];
+                  if (field.model || field.element) {
+                    const embeddedClass = field.model || field.element;
+                    documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.metadata.embedded`);
+                    return embeddedClass;
+                  }
+                }
+              } catch (schemaError) {
+                documentLogger.debug(`Failed to extract embedded class from schema for "${documentType}":`, schemaError);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        documentLogger.debug(`Error searching parent type "${parentType}" for embedded document "${documentType}":`, error);
+        continue;
+      }
+    }
+
+    // Also search through game.documentTypes as fallback
+    if (game?.documentTypes) {
+      for (const parentType of Object.keys(game.documentTypes).sort()) {
+        try {
+          const parentClass = CONFIG[parentType]?.documentClass;
+          if (!parentClass?.hierarchy) continue;
+
+          const embeddedClass = parentClass.hierarchy[documentType];
+          if (embeddedClass) {
+            documentLogger.debug(`Found embedded document "${documentType}" in game.documentTypes.${parentType}.hierarchy`);
+            return embeddedClass;
+          }
+        } catch (error) {
+          documentLogger.debug(`Error searching game.documentTypes["${parentType}"] for "${documentType}":`, error);
+          continue;
         }
       }
     }
 
-    if (!documentClass) return null;
+    // NEW: Search type-specific data models for embedded documents
+    const typeSpecificClass = this.#searchTypeSpecificDataModels(documentType);
+    if (typeSpecificClass) {
+      return typeSpecificClass;
+    }
 
+    // NEW: Search system-specific document namespaces for embedded documents
+    const systemSpecificClass = this.#searchSystemDocumentNamespaces(documentType);
+    if (systemSpecificClass) {
+      return systemSpecificClass;
+    }
+
+    return null;
+  }
+
+  /**
+   * Searches type-specific data models for embedded document classes.
+   * This enables discovery of embedded documents that only exist in certain document subtypes,
+   * such as Activity documents that only exist in weapon-type items.
+   * @param {string} documentType The embedded document type to find.
+   * @returns {object|null} The document class if found, null otherwise.
+   * @private
+   */
+  static #searchTypeSpecificDataModels(documentType) {
+    // Search through CONFIG keys in alphabetical order for consistency
+    const configKeys = Object.keys(CONFIG).sort();
+
+    for (const parentType of configKeys) {
+      try {
+        const parentConfig = CONFIG[parentType];
+        if (!parentConfig?.dataModels) {
+          continue;
+        }
+
+        // Search through all subtypes for this parent document type
+        const subtypeKeys = Object.keys(parentConfig.dataModels).sort();
+        for (const subtype of subtypeKeys) {
+          try {
+            const subtypeDataModel = parentConfig.dataModels[subtype];
+            if (!subtypeDataModel?.hierarchy) {
+              continue;
+            }
+
+            // Check if the embedded document exists in this subtype's hierarchy
+            const embeddedClass = subtypeDataModel.hierarchy[documentType];
+            if (embeddedClass) {
+              documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.dataModels.${subtype}.hierarchy`);
+              return embeddedClass;
+            }
+          } catch (subtypeError) {
+            documentLogger.debug(`Error searching ${parentType}.dataModels.${subtype} for "${documentType}":`, subtypeError);
+            continue;
+          }
+        }
+      } catch (error) {
+        documentLogger.debug(`Error searching ${parentType}.dataModels for "${documentType}":`, error);
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Searches system-specific document namespaces for embedded document classes.
+   * This enables discovery of system-provided documents like Activity documents in dnd5e.
+   * Works with any system (dnd5e, pf2e, cyberpunk, etc.) by dynamically discovering
+   * available system namespaces and searching their document collections.
+   * @param {string} documentType The embedded document type to find.
+   * @returns {object|null} The document class if found, null otherwise.
+   * @private
+   */
+  static #searchSystemDocumentNamespaces(documentType) {
+    // Get potential system namespaces to search
+    const systemNamespaces = this.#discoverSystemNamespaces();
+
+    // Search through each system namespace
+    for (const namespace of systemNamespaces) {
+      try {
+        const systemDocuments = this.#getSystemDocuments(namespace);
+        if (!systemDocuments || typeof systemDocuments !== 'object') {
+          continue;
+        }
+
+        // Search through document collections in this system
+        const documentCollections = Object.keys(systemDocuments).sort();
+        for (const collectionName of documentCollections) {
+          try {
+            const documentCollection = systemDocuments[collectionName];
+            if (!documentCollection || typeof documentCollection !== 'object') {
+              continue;
+            }
+
+            // Search through document classes in this collection
+            const documentClasses = Object.keys(documentCollection).sort();
+            for (const className of documentClasses) {
+              try {
+                const DocumentClass = documentCollection[className];
+                // Accept both function classes (real environment) and objects with documentName (test mocks)
+                if (!DocumentClass || (!DocumentClass.documentName)) {
+                  continue;
+                }
+
+                // Check if this document class matches our search
+                if (DocumentClass.documentName === documentType) {
+                  documentLogger.debug(`Found embedded document "${documentType}" in ${namespace}.documents.${collectionName}.${className}`);
+                  return DocumentClass;
+                }
+              } catch (classError) {
+                documentLogger.debug(`Error searching ${namespace}.documents.${collectionName}.${className} for "${documentType}":`, classError);
+                continue;
+              }
+            }
+          } catch (collectionError) {
+            documentLogger.debug(`Error searching ${namespace}.documents.${collectionName} for "${documentType}":`, collectionError);
+            continue;
+          }
+        }
+      } catch (namespaceError) {
+        documentLogger.debug(`Error searching ${namespace}.documents for "${documentType}":`, namespaceError);
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Discovers available system namespaces that might contain document classes.
+   * @returns {string[]} Array of system namespace names to search.
+   * @private
+   */
+  static #discoverSystemNamespaces() {
+    const namespaces = [];
+
+    // Add current system if available
+    if (game?.system?.id) {
+      namespaces.push(game.system.id);
+    }
+
+    // Add active modules that might provide documents
+    if (game?.modules) {
+      for (const [moduleId, module] of game.modules.entries()) {
+        if (module.active && this.#hasDocumentNamespace(moduleId)) {
+          namespaces.push(moduleId);
+        }
+      }
+    }
+
+    // Search global namespace for any other potential system namespaces
+    // This handles cases where systems register themselves differently
+    const globalKeys = Object.keys(globalThis || {}).sort();
+    for (const key of globalKeys) {
+      if (key !== game?.system?.id && this.#hasDocumentNamespace(key)) {
+        if (!namespaces.includes(key)) {
+          namespaces.push(key);
+        }
+      }
+    }
+
+    return namespaces.sort(); // Deterministic order
+  }
+
+  /**
+   * Checks if a namespace has a documents property that might contain document classes.
+   * @param {string} namespace The namespace to check.
+   * @returns {boolean} True if the namespace has document classes.
+   * @private
+   */
+  static #hasDocumentNamespace(namespace) {
+    try {
+      const obj = globalThis[namespace];
+      return obj && typeof obj === 'object' && obj.documents && typeof obj.documents === 'object';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Safely retrieves the documents collection from a system namespace.
+   * @param {string} namespace The namespace to get documents from.
+   * @returns {object|null} The documents object or null if not available.
+   * @private
+   */
+  static #getSystemDocuments(namespace) {
+    try {
+      return globalThis[namespace]?.documents || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Extracts and formats the schema information from a document class.
+   * @param {string} documentType The document type name.
+   * @param {object} documentClass The document class to extract schema from.
+   * @returns {object} The formatted schema object.
+   * @private
+   */
+  static #extractDocumentSchema(documentType, documentClass) {
     const schema = {
       type: documentType,
-      fields: Object.keys(documentClass.schema.fields || {}),
-      systemFields: documentClass.schema.has && documentClass.schema.has('system') && documentClass.schema.getField('system') ?
-        Object.keys(documentClass.schema.getField('system').fields || {}) : [],
-      embedded: Object.keys(documentClass.hierarchy || {}),
-      relationships: this.getDocumentRelationships(documentClass),
-      references: this.getDocumentReferences(documentClass),
+      fields: [],
+      systemFields: [],
+      embedded: [],
+      relationships: {},
+      references: {},
     };
+
+    try {
+      // Extract main schema fields
+      if (documentClass.schema?.fields) {
+        schema.fields = Object.keys(documentClass.schema.fields);
+      }
+
+      // Extract system fields if present
+      if (documentClass.schema?.has && documentClass.schema.has('system')) {
+        try {
+          const systemField = documentClass.schema.getField('system');
+          if (systemField?.fields) {
+            schema.systemFields = Object.keys(systemField.fields);
+          }
+        } catch (systemError) {
+          documentLogger.debug(`Failed to extract system fields for "${documentType}":`, systemError);
+        }
+      }
+
+      // Extract embedded document types
+      if (documentClass.hierarchy) {
+        schema.embedded = Object.keys(documentClass.hierarchy);
+      }
+
+      // Extract relationships and references
+      try {
+        schema.relationships = this.getDocumentRelationships(documentClass);
+        schema.references = this.getDocumentReferences(documentClass);
+      } catch (relationError) {
+        documentLogger.debug(`Failed to extract relationships for "${documentType}":`, relationError);
+      }
+
+    } catch (error) {
+      documentLogger.error(`Schema field extraction failed for "${documentType}":`, error);
+      throw error;
+    }
 
     return schema;
   }
