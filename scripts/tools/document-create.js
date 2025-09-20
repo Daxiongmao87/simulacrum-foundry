@@ -102,9 +102,23 @@ export class DocumentCreateTool extends BaseTool {
         };
       }
 
+      // Fetch the full document with embedded data for verification
+      const fullDocument = await DocumentAPI.getDocument(
+        documentType,
+        document.id || document._id,
+        { includeEmbedded: true }
+      );
+
+      const message = `Created ${documentType}: ${fullDocument.name || fullDocument._id}`;
+      const contentPayload = {
+        message,
+        document: fullDocument
+      };
+
       return {
-        content: `Created ${documentType}: ${document.name}`,
-        display: `✅ Created **${document.name}** (${documentType})`
+        content: JSON.stringify(contentPayload, null, 2),
+        display: `✅ Created **${fullDocument.name || fullDocument._id || fullDocument.id}** (${documentType})`,
+        document: fullDocument
       };
 
     } catch (error) {
