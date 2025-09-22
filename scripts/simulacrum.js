@@ -8,7 +8,7 @@
  */
 
 import { SimulacrumCore } from './core/simulacrum-core.js';
-import { registerSimulacrumSidebarTab } from './ui/simulacrum-sidebar-tab.js';
+import SimulacrumSidebarTab, { registerSimulacrumSidebarTab } from './ui/simulacrum-sidebar-tab.js';
 import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
 
@@ -110,6 +110,15 @@ Hooks.once('init', async () => {
 
   // Register sidebar tab
   registerSimulacrumSidebarTab();
+
+  // CRITICAL FIX (DEFECT #1): Instantiate immediately after registration
+  // This ensures ui.simulacrum exists when FoundryVTT's core UI initialization runs
+  if (CONFIG && CONFIG.ui && CONFIG.ui.simulacrum) {
+    ui.simulacrum = new CONFIG.ui.simulacrum({id: 'simulacrum'});
+    logger.info('Simulacrum sidebar tab instantiated during init for popout support');
+  } else {
+    logger.error('CONFIG.ui.simulacrum not found after registration - popout will not work');
+  }
 
   // Preload Handlebars templates and partials used by the sidebar
   try {

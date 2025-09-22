@@ -9,54 +9,48 @@ import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js'
 import { ChatHandler } from '../core/chat-handler.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 
-// Simple, direct base class resolution for FoundryVTT v13
-const AbstractSidebarTab = globalThis.foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
-const HandlebarsApplicationMixin = globalThis.foundry?.applications?.api?.HandlebarsApplicationMixin ?? globalThis.HandlebarsApplicationMixin;
+// Stable base class resolution for FoundryVTT v13 with fallback safety
+const AbstractSidebarTab = foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
+const HandlebarsApplicationMixin = foundry?.applications?.api?.HandlebarsApplicationMixin ?? globalThis.HandlebarsApplicationMixin;
 
-class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab) {
+export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab) {
   /**
    * Static configuration for the sidebar tab
    */
   static tabName = 'simulacrum';
 
+  /** @override */
+  static emittedEvents = Object.freeze(["render", "close", "position", "activate", "deactivate"]);
+
   /**
    * Define the parts of the application
    */
-  static get PARTS() {
-    return {
-      log: {
-        template: 'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
-        templates: ['modules/simulacrum/templates/simulacrum/message.hbs'],
-        scrollable: ['']
-      },
-      input: {
-        template: 'modules/simulacrum/templates/simulacrum/sidebar-input.hbs'
-      }
-    };
-  }
+  static PARTS = {
+    log: {
+      template: 'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
+      templates: ['modules/simulacrum/templates/simulacrum/message.hbs', 'modules/simulacrum/templates/simulacrum/sidebar-notifications.hbs'],
+      scrollable: ['']
+    },
+    input: {
+      template: 'modules/simulacrum/templates/simulacrum/sidebar-input.hbs'
+    }
+  };
 
   /**
    * Default application options (v13: use static DEFAULT_OPTIONS)
    */
-  static DEFAULT_OPTIONS = (() => {
-    const base = (foundry?.utils?.mergeObject)
-      ? foundry.utils.mergeObject({}, super.DEFAULT_OPTIONS ?? {})
-      : (super.DEFAULT_OPTIONS ? { ...super.DEFAULT_OPTIONS } : {});
-    return foundry.utils.mergeObject(base, {
-      id: 'simulacrum',
-      tag: 'section',
-      // Ensure our section inherits Chat tab layout rules
-      // Foundry's AbstractSidebarTab already adds ["tab", "sidebar-tab"]
-      classes: ["flexcol", "chat-sidebar"],
-      window: { frame: false, positioned: false, resizable: false },
-      actions: { 
-        sendMessage: this._onSendMessage, 
-        clearChat: this._onClearChat,
-        jumpToBottom: this._onJumpToBottom,
-        cancelProcess: this._onCancelProcess
-      }
-    });
-  })();
+  static DEFAULT_OPTIONS = {
+    classes: ["flexcol", "chat-sidebar"],
+    window: {
+      title: "SIMULACRUM.SidebarTab.Title"
+    },
+    actions: {
+      sendMessage: SimulacrumSidebarTab._onSendMessage,
+      clearChat: SimulacrumSidebarTab._onClearChat,
+      jumpToBottom: SimulacrumSidebarTab._onJumpToBottom,
+      cancelProcess: SimulacrumSidebarTab._onCancelProcess
+    }
+  };
 
   /**
    * Legacy-compatible render bridge used by Sidebar.#renderTabs which may prefer _render(force) for some tabs.
@@ -101,17 +95,228 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   #needsScroll = false;
 
   /**
-   * Initialize the sidebar tab
+   * The chat notifications container.
+   * @type {HTMLDivElement}
+   * @private
    */
-  constructor() {
-    super();
-    
-    this.messages = [];
-    this.logger = createLogger('SimulacrumSidebarTab');
-    this._syncedFromCore = false;
-    this.chatHandler = null; // Will be initialized when SimulacrumCore is ready
+  #notificationsElement;
 
-    // Seed a welcome message until conversation history loads
+  /**
+   * The chat input element.
+   * @type {HTMLTextAreaElement}
+   * @private
+   */
+  #inputElement;
+
+  /**
+   * Chat controls containing roll-privacy buttons and log actions
+   * @type {HTMLDivElement}
+   * @private
+   */
+  #chatControls;
+
+  /* -------------------------------------------- */
+  /*  Properties                                  */
+  /* -------------------------------------------- */
+
+  /* -------------------------------------------- */
+  /*  Rendering                                   */
+  /* -------------------------------------------- */
+
+
+
+  /**
+   * Handle drop events on the textarea.
+   * @param {DragEvent} event  The originating drop event.
+   * @private
+   */
+  async #onDropTextAreaData(event) {
+    event.preventDefault();
+    const textarea = event.currentTarget;
+    // Drop cross-linked content
+    const eventData = TextEditor.implementation.getDragEventData(event);
+    const link = await TextEditor.implementation.getContentLink(eventData);
+    if ( link ) textarea.value += link;
+    // Note: History system not implemented for Simulacrum sidebar
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Render chat notifications framework.
+   * @returns {Promise<void>}
+   */
+  async #renderNotifications() {
+    const right = document.getElementById("ui-right-column-1") ?? document.body;
+    const html = await renderTemplate("templates/simulacrum/sidebar-notifications.hbs", {user: game.user});
+    [this.#notificationsElement, this.#inputElement, this.#chatControls] = foundry.utils.parseHTML(html);
+    this.#notificationsElement.addEventListener("click", this._onClickNotification.bind(this));
+    this.#inputElement.addEventListener("keydown", this._onKeyDown.bind(this));
+    this.#inputElement.addEventListener("drop", this.#onDropTextAreaData.bind(this));
+    
+    right.append(this.#notificationsElement);
+    this.#notificationsElement.append(this.#inputElement, this.#chatControls);
+    this._toggleNotifications();
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Determine whether the notifications pane should be visible.
+   * @param {object} [options]
+   * @param {boolean} [options.closing=false]  Whether the chat popout is closing.
+   * @returns {boolean}
+   * @protected
+   */
+  _shouldShowNotifications({ closing=false }={}) {
+    const { chatNotifications, uiScale } = game.settings.get("core", "uiConfig");
+    
+    // Case 1 - Notifications disabled or pip mode.
+    if ( (chatNotifications === "pip") || this.options.stream ) return false;
+    
+    // Case 2 - Chat tab visible in sidebar.
+    if ( ui.sidebar.expanded && ui.sidebar.tabGroups.primary === this.tabName ) return false;
+    
+    // Case 3 - Chat popout visible.
+    if ( ui.sidebar.popouts[this.tabName]?.rendered && (!this.isPopout || !closing) ) return false;
+    
+    // Case 4 - Not enough viewport width available.
+    const cameraDock = ui.webrtc?.isVertical && !ui.webrtc?.hidden;
+    const viewportWidth = window.innerWidth / uiScale;
+    const spaceRequired = 1024 + (ui.sidebar.expanded * 300) + (cameraDock * 264);
+    if ( viewportWidth < spaceRequired ) return false;
+    
+    // Otherwise, show notifications.
+    return true;
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Toggle the display of the notifications area.
+   * If the sidebar is expanded, and the chat log is the active tab, embed chat input into it. Otherwise,
+   * embed chat input into the notifications area.
+   * If the sidebar is expanded, and the chat log is the active tab, do not display notifications.
+   * If the chat log is popped out, do not display notifications.
+   * @param {object} [options]
+   * @param {boolean} [options.closing=false]  Whether this method has been triggered by the chat popout closing.
+   * @fires {hookEvents:renderChatInput}
+   * @internal
+   */
+  _toggleNotifications({ closing=false }={}) {
+    if ( ui.sidebar.popouts[this.tabName]?.rendered && !this.isPopout ) return;
+    
+    const notifications = this.#notificationsElement;
+    const inputElement = this.#inputElement;
+    const chatControls = this.#chatControls;
+    
+    if ( !notifications || !inputElement || !chatControls ) return;
+    
+    const log = notifications.querySelector(".chat-log");
+    const privacyButtons = this.#chatControls?.querySelector("#simulacrum-privacy");
+    
+    const embedInput = !this._shouldShowNotifications({ closing });
+    log.hidden = embedInput;
+    privacyButtons?.classList.toggle("vertical", !embedInput);
+    
+    const previousParent = inputElement.parentElement;
+    if ( game.user.isGM ) {
+      const controlButtons = chatControls.querySelector(".control-buttons");
+      if ( controlButtons ) controlButtons.hidden = !embedInput;
+    }
+    
+    if ( embedInput ) {
+      const target = ui.sidebar.popouts[this.tabName]?.rendered && !closing ? ui.sidebar.popouts[this.tabName] : ui.sidebar;
+      target.element?.querySelector(".chat-form")?.append(chatControls, inputElement);
+    } else {
+      notifications.append(inputElement, chatControls);
+    }
+    
+    Hooks.callAll("renderChatInput", this, {
+      "#simulacrum-chat-message": inputElement,
+      "#simulacrum-controls": chatControls,
+      "#simulacrum-privacy": privacyButtons
+    }, {previousParent});
+    
+    // Note: Hotbar offset not implemented for Simulacrum
+    if ( this.#isAtBottom ) this.scrollBottom();
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Initialize the sidebar tab
+   * FIXED: Constructor now popout-aware, defers complex initialization
+   */
+  constructor(options = {}) {
+    super(options);
+
+    // Basic initialization only - safe for both main and popout instances
+    this.messages = [];
+    this.logger = createLogger(`SimulacrumSidebarTab${this.isPopout ? '-Popout' : ''}`);
+    this._syncedFromCore = false;
+    this.chatHandler = null;
+    this._deferredInitComplete = false;
+    this._activeProcesses = new Map(); // callId -> { label, toolName }
+
+    // DEFECT #2 FIX: Only register hooks for main sidebar instance, not popouts
+    if (!this.isPopout) {
+      this._initializeForMainInstance();
+    }
+  }
+
+  /**
+   * Initialize components that should only exist for the main sidebar instance
+   * DEFECT #2 FIX: Prevents duplicate hook registration for popouts
+   * @private
+   */
+  _initializeForMainInstance() {
+    try {
+      // Set up hook to load conversation history AFTER SimulacrumCore is ready
+      Hooks.once('ready', () => {
+        // Delay slightly to ensure SimulacrumCore.onReady() has completed
+        setTimeout(() => {
+          this._loadConversationHistoryOnInit();
+        }, 100);
+      });
+
+      // Active process labels reported by core while tools execute
+      Hooks.on('simulacrum:processStatus', (info) => {
+        if (isDebugEnabled()) this.logger.debug('Process status hook', info);
+        const { state, callId, label, toolName } = info || {};
+        if (!callId) return;
+
+        if (state === 'start') {
+          const capped = String(label || '').slice(0, 120);
+          this._activeProcesses.set(callId, { label: capped, toolName: String(toolName || '') });
+          if (isDebugEnabled()) this.logger.debug('Process started, active processes:', this._activeProcesses.size);
+        } else if (state === 'end') {
+          this._activeProcesses.delete(callId);
+          if (isDebugEnabled()) this.logger.debug('Process ended, active processes:', this._activeProcesses.size);
+        }
+
+        this.#needsScroll = true;
+        this.render({ parts: ['log', 'input'] });
+
+        // Also update popout if it exists
+        if (this.popout?.rendered) {
+          this.popout.#needsScroll = true;
+          this.popout.render({ parts: ['log', 'input'] });
+        }
+      });
+
+      this.logger.debug('Hooks registered for main instance');
+    } catch (err) {
+      this.logger.error('Hook registration failed:', err);
+    }
+  }
+
+  /**
+   * Create welcome message with safe i18n access
+   * DEFECT #3 FIX: Moved from constructor to ensure game.i18n is available
+   * @private
+   */
+  _createWelcomeMessage() {
     try {
       const welcome = {
         id: foundry.utils.randomID(),
@@ -123,43 +328,52 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
         user: null
       };
       this.messages.push(welcome);
-    } catch (_e) { /* ignore */ }
-
-    // Set up hook to load conversation history AFTER SimulacrumCore is ready
-    try {
-      Hooks.once('ready', () => {
-        // Delay slightly to ensure SimulacrumCore.onReady() has completed
-        setTimeout(() => {
-          this._loadConversationHistoryOnInit();
-        }, 100);
+      this.logger.debug('Welcome message created');
+    } catch (err) {
+      this.logger.warn('Failed to create welcome message:', err);
+      // Fallback without i18n
+      this.messages.push({
+        id: foundry.utils.randomID(),
+        role: 'assistant',
+        content: 'Welcome to Simulacrum!',
+        display: null,
+        timestamp: Date.now(),
+        timestampLabel: 'Welcome',
+        user: null
       });
-    } catch (_err) {
-      // Hooks may be unavailable in certain test contexts
     }
+  }
 
-    // Active process labels reported by core while tools execute
-    this._activeProcesses = new Map(); // callId -> { label, toolName }
-    try {
-      Hooks.on('simulacrum:processStatus', (info) => {
-        if (isDebugEnabled()) this.logger.debug('Process status hook', info);
-        const { state, callId, label, toolName } = info || {};
-        if (!callId) return;
-        if (state === 'start') {
-          const capped = String(label || '').slice(0, 120);
-          this._activeProcesses.set(callId, { label: capped, toolName: String(toolName || '') });
-          if (isDebugEnabled()) this.logger.debug('Process started, active processes:', this._activeProcesses.size);
-        } else if (state === 'end') {
-          this._activeProcesses.delete(callId);
-          if (isDebugEnabled()) this.logger.debug('Process ended, active processes:', this._activeProcesses.size);
+  /**
+   * Handle first render initialization
+   * DEFECT #3 & #4 FIX: Deferred initialization that requires game objects to be ready
+   * @param {ApplicationRenderContext} context
+   * @param {ApplicationRenderOptions} options
+   */
+  async _onFirstRender(context, options) {
+    await super._onFirstRender?.(context, options);
+
+    // DEFECT #3 & #4 FIX: Only run deferred initialization once
+    if (!this._deferredInitComplete) {
+      this.logger.debug('Running deferred initialization');
+
+      // DEFECT #3 FIX: Create welcome message now that game.i18n is available
+      if (this.messages.length === 0) {
+        this._createWelcomeMessage();
+      }
+
+      // For popout instances, sync from main instance if available
+      if (this.isPopout && ui.simulacrum && ui.simulacrum !== this) {
+        try {
+          this.messages = [...ui.simulacrum.messages]; // Copy messages from main instance
+          this.logger.debug('Synced messages from main instance to popout');
+        } catch (err) {
+          this.logger.warn('Failed to sync from main instance:', err);
         }
-        this.#needsScroll = true;
-        this.render({ parts: ['log', 'input'] });
-      });
-    } catch (_err) {
-      // Hooks may be unavailable in certain test contexts
-      this.logger.error('Hook registration failed:', _err);
-    }
+      }
 
+      this._deferredInitComplete = true;
+    }
   }
 
   /**
@@ -592,6 +806,56 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
   }
 
   /**
+   * Handle clicks on notifications
+   * @param {MouseEvent} event  The triggering event
+   * @private
+   */
+  _onClickNotification(event) {
+    const target = event.target.closest("[data-action]");
+    if ( !target ) return;
+    const { action } = target.dataset;
+    let handler = this.options.actions[action];
+    let buttons = [0];
+    if ( typeof handler === "object" ) {
+      buttons = handler.buttons;
+      handler = handler.handler;
+    }
+    if ( buttons.includes(event.button) ) handler?.call(this, event, target);
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Handle keydown events
+   * @param {KeyboardEvent} event  The triggering event
+   * @private
+   */
+  _onKeyDown(event) {
+    if ( event.isComposing ) return; // Ignore IME composition.
+
+    // Allow external hooks to intercept chat input
+    const inputOptions = { recordPending: true };
+    if ( Hooks.call("chatInput", event, inputOptions) === false ) {
+      // Note: History recording not implemented for Simulacrum
+      return;
+    }
+
+    switch ( event.key ) {
+      case "ArrowUp": case "ArrowDown":
+        // Note: Message recall not implemented for Simulacrum
+        return;
+
+      case "Enter":
+        SimulacrumSidebarTab._onSendMessage.call(this, event, event.target);
+        return;
+    }
+
+    // Note: History recording not implemented for Simulacrum
+  }
+
+  /* -------------------------------------------- */
+
+  /**
    * Activate event listeners
    * @param {HTMLElement} html - The rendered HTML
    */
@@ -684,6 +948,7 @@ class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab
       }
     }
   }
+
 }
 
 /**
@@ -732,4 +997,4 @@ function registerSimulacrumSidebarTab() {
   }
 }
 
-export { SimulacrumSidebarTab, registerSimulacrumSidebarTab };
+export { registerSimulacrumSidebarTab };
