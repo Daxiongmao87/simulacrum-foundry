@@ -137,7 +137,6 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     const eventData = TextEditor.implementation.getDragEventData(event);
     const link = await TextEditor.implementation.getContentLink(eventData);
     if ( link ) textarea.value += link;
-    // Note: History system not implemented for Simulacrum sidebar
   }
 
   /* -------------------------------------------- */
@@ -238,7 +237,6 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       "#simulacrum-privacy": privacyButtons
     }, {previousParent});
     
-    // Note: Hotbar offset not implemented for Simulacrum
     if ( this.#isAtBottom ) this.scrollBottom();
   }
 
@@ -836,13 +834,11 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     // Allow external hooks to intercept chat input
     const inputOptions = { recordPending: true };
     if ( Hooks.call("chatInput", event, inputOptions) === false ) {
-      // Note: History recording not implemented for Simulacrum
       return;
     }
 
     switch ( event.key ) {
       case "ArrowUp": case "ArrowDown":
-        // Note: Message recall not implemented for Simulacrum
         return;
 
       case "Enter":
@@ -850,7 +846,6 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         return;
     }
 
-    // Note: History recording not implemented for Simulacrum
   }
 
   /* -------------------------------------------- */
