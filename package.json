@@ -18,6 +18,9 @@
     "prepare": "husky install",
     "package:module": "node tools/package-module.js",
     "launch:foundry": "node tools/launch-foundry.js",
+    "dead-code": "knip",
+    "dead-code:fix": "knip --fix",
+    "unused": "unimported",
     "deploy:module": "node tools/deploy-to-instance.js",
     "build:foundry-image": "node tools/build-foundry-image.js",
     "run:foundry": "node tools/run-foundry-detached.js"
@@ -35,7 +38,9 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jsonc-eslint-parser": "^2.4.0",
-    "prettier": "^3.2.5"
+    "knip": "^5.64.0",
+    "prettier": "^3.2.5",
+    "unimported": "^1.31.0"
   },
   "keywords": [
     "foundryvtt",
