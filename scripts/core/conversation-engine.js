@@ -32,10 +32,10 @@ class ConversationEngine {
       { signal }
     );
 
-    // Pre-tool correction loop (bounded)
+    // Pre-tool correction loop (bounded) - handles parse errors and malformed function calls
     let attempts = 0;
     const MAX = 3;
-    while (aiResponse && aiResponse._parseError && attempts < MAX) {
+    while (aiResponse && (aiResponse._parseError || aiResponse._malformedFunctionCallError) && attempts < MAX) {
       attempts++;
       appendEmptyContentCorrection(this.conversationManager, aiResponse);
       aiResponse = await SimulacrumCore.generateResponse(
@@ -44,8 +44,8 @@ class ConversationEngine {
       );
     }
 
-    // If still parse error after retries, return failure message
-    if (aiResponse && aiResponse._parseError) {
+    // If still parse error or malformed function call error after retries, return failure message
+    if (aiResponse && (aiResponse._parseError || aiResponse._malformedFunctionCallError)) {
       const errorMessage = {
         role: 'assistant',
         content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
@@ -54,6 +54,7 @@ class ConversationEngine {
       if (onAssistantMessage) onAssistantMessage(errorMessage);
       return errorMessage;
     }
+
 
     // If no tools, emit assistant and finish
     if (!Array.isArray(aiResponse.toolCalls) || aiResponse.toolCalls.length === 0) {
@@ -86,6 +87,7 @@ class ConversationEngine {
 
     return finalResponse;
   }
+
 }
 
 export { ConversationEngine };

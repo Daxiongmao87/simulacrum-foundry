@@ -581,6 +581,31 @@ export class AIClient {
     if (!data.model && this.model) {
       data.model = this.model;
     }
+
+    // Check for MALFORMED_FUNCTION_CALL error in Gemini response
+    if (data.candidates && Array.isArray(data.candidates)) {
+      for (const candidate of data.candidates) {
+        if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
+          // Log detailed error information for debugging
+          const logger = createLogger('GeminiClient');
+          logger.warn('Gemini MALFORMED_FUNCTION_CALL detected', {
+            response: data,
+            modelVersion: data.model || this.model,
+            responseId: data.responseId || 'unknown',
+            candidateIndex: candidate.index || 0,
+            correlationId: `gemini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          });
+
+          // Return special error response that can be handled by retry logic
+          return {
+            ...data,
+            _malformedFunctionCallError: true,
+            _originalResponse: data
+          };
+        }
+      }
+    }
+
     return data;
   }
 

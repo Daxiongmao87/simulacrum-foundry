@@ -174,27 +174,27 @@ class SimulacrumCore {
         }
       }
       
-      // Get available tools
-      const tools = toolRegistry.getToolSchemas();
+      // Get available tools (use provided tools or default from registry)
+      const tools = options.tools !== undefined ? options.tools : toolRegistry.getToolSchemas();
       // Diagnostics: log tool schemas sent (names only)
       try {
         if (isDebugEnabled()) {
           const diag = createLogger('AIDiagnostics');
           const toolNames = Array.isArray(tools) ? tools.map(t => t?.function?.name || t?.name).filter(Boolean) : [];
-          diag.info('tools', { count: toolNames.length, names: toolNames });
+          diag.info('tools', { count: toolNames.length, names: toolNames, fromOptions: options.tools !== undefined });
         }
       } catch {}
-      
+
       // Get context length setting and limit conversation history
       const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
-      const limitedMessages = messages.length > contextLength 
+      const limitedMessages = messages.length > contextLength
         ? messages.slice(-contextLength)
         : messages;
-      
+
       // Get AI response - use legacy mode setting to determine tool support
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');
       const useNativeTools = !legacyMode;
-      const sendTools = useNativeTools ? tools : null;
+      const sendTools = useNativeTools && tools ? tools : null;
       
       if (isDebugEnabled()) this.logger.debug('Chat request configuration:', {
         legacyMode,
@@ -219,9 +219,13 @@ class SimulacrumCore {
         throw new Error('Process was cancelled');
       }
       
-      const raw = useNativeTools 
-        ? await this.aiClient.chatWithSystem(limitedMessages, this.getSystemPrompt.bind(this), sendTools, { signal })
-        : await this.aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: this.getSystemPrompt() }, ...limitedMessages]), sendTools, { signal });
+      // Get system prompt (use provided or default)
+      const systemPrompt = options.systemPrompt || this.getSystemPrompt();
+      const getSystemPromptFn = () => systemPrompt;
+
+      const raw = useNativeTools
+        ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, { signal })
+        : await this.aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPrompt }, ...limitedMessages]), sendTools, { signal });
       if (raw == null) {
         throw new Error('Empty AI response');
       }
