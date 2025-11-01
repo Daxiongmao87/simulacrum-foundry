@@ -7,6 +7,19 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
 import { normalizeAIResponse } from '../utils/ai-normalization.js';
 
+export const AI_ERROR_CODES = Object.freeze({
+  TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE'
+});
+
+const GEMINI_FINISH_REASON_TO_ERROR_CODE = Object.freeze({
+  MALFORMED_FUNCTION_CALL: AI_ERROR_CODES.TOOL_CALL_FAILURE
+});
+
+function mapGeminiFinishReasonToErrorCode(reason) {
+  if (!reason) return null;
+  return GEMINI_FINISH_REASON_TO_ERROR_CODE[reason] || null;
+}
+
 /**
  * AI Provider interface - Abstract base class for AI service providers
  */
@@ -582,27 +595,35 @@ export class AIClient {
       data.model = this.model;
     }
 
-    // Check for MALFORMED_FUNCTION_CALL error in Gemini response
+    // Normalize Gemini finish reasons into provider-agnostic error codes
     if (data.candidates && Array.isArray(data.candidates)) {
       for (const candidate of data.candidates) {
-        if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
-          // Log detailed error information for debugging
-          const logger = createLogger('GeminiClient');
-          logger.warn('Gemini MALFORMED_FUNCTION_CALL detected', {
-            response: data,
-            modelVersion: data.model || this.model,
-            responseId: data.responseId || 'unknown',
-            candidateIndex: candidate.index || 0,
-            correlationId: `gemini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-          });
+        const errorCode = mapGeminiFinishReasonToErrorCode(candidate.finishReason);
+        if (!errorCode) continue;
 
-          // Return special error response that can be handled by retry logic
-          return {
-            ...data,
-            _malformedFunctionCallError: true,
-            _originalResponse: data
-          };
-        }
+        const correlationId = `gemini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const logger = createLogger('GeminiClient');
+        logger.warn('Gemini tool call failure detected', {
+          response: data,
+          modelVersion: data.model || this.model,
+          responseId: data.responseId || 'unknown',
+          candidateIndex: candidate.index ?? 0,
+          finishReason: candidate.finishReason,
+          errorCode,
+          correlationId
+        });
+
+        return {
+          ...data,
+          errorCode,
+          errorMetadata: {
+            provider: 'gemini',
+            finishReason: candidate.finishReason,
+            candidateIndex: candidate.index ?? 0,
+            correlationId
+          },
+          _originalResponse: data
+        };
       }
     }
 

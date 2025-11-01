@@ -8,13 +8,124 @@ import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
 import { SimulacrumCore } from './simulacrum-core.js';
 import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
-import { appendEmptyContentCorrection } from './correction.js';
+import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
+import { AI_ERROR_CODES } from './ai-client.js';
 
 /**
  * Sanitize messages for fallback when tool calling is not supported
  * Filters out tool roles and ensures only valid roles are sent
  */
 const logger = createLogger('ToolLoop');
+
+const MAX_TOOL_FAILURE_ATTEMPTS = 3;
+const TOOL_RETRY_DELAYS_MS = [1000, 2000];
+const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
+
+function isToolCallFailure(response) {
+  return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
+}
+
+function emitRetryStatus(state, callId, label = null) {
+  try {
+    if (typeof Hooks === 'undefined' || typeof Hooks.call !== 'function') return;
+    const payload = state === 'start'
+      ? { state, callId, label, toolName: 'retry' }
+      : { state, callId };
+    Hooks.call('simulacrum:processStatus', payload);
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
+function buildRetryLabel(attempt, maxAttempts) {
+  return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
+}
+
+function getRetryDelayMs(previousAttemptIndex) {
+  if (previousAttemptIndex < 0) return 0;
+  return TOOL_RETRY_DELAYS_MS[Math.min(previousAttemptIndex, TOOL_RETRY_DELAYS_MS.length - 1)] || 0;
+}
+
+function delayWithSignal(ms, signal) {
+  if (!ms) {
+    if (signal?.aborted) {
+      throw new Error('Process was cancelled');
+    }
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Process was cancelled'));
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('Process was cancelled'));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function buildGenericFailureMessage() {
+  return {
+    role: 'assistant',
+    content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
+    display: '❌ Unable to generate a proper response after multiple attempts.',
+    toolCalls: []
+  };
+}
+
+async function runToolFailureFallback(conversationManager, aiClient, getSystemPrompt, signal) {
+  const fallbackInstruction = 'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';
+  const messages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+  const lastMessage = messages[messages.length - 1];
+  if (!lastMessage || lastMessage.role !== 'system' || lastMessage.content !== fallbackInstruction) {
+    conversationManager.addMessage('system', fallbackInstruction);
+  }
+
+  try {
+    const raw = await aiClient.chatWithSystem(messages, getSystemPrompt, null, { signal });
+    const fallbackResponse = SimulacrumCore._normalizeAIResponse(raw);
+
+    if (!fallbackResponse || fallbackResponse._parseError || isToolCallFailure(fallbackResponse)) {
+      return buildGenericFailureMessage();
+    }
+
+    const notice = 'Note: Tool functionality was temporarily unavailable for this response.';
+    const content = fallbackResponse.content
+      ? `${fallbackResponse.content}\n\n${notice}`
+      : notice;
+    const display = fallbackResponse.display
+      ? `${fallbackResponse.display}\n\n${notice}`
+      : content;
+
+    return {
+      ...fallbackResponse,
+      content,
+      display,
+      toolCalls: []
+    };
+  } catch (_error) {
+    return buildGenericFailureMessage();
+  }
+}
 
 /**
  * Execute tools from an AI response and continue autonomous loop
@@ -43,6 +154,7 @@ export async function processToolCallLoop(
     const REPEAT_LIMIT = 5;
     let repeatCount = 0;
     let iterationCount = 0;
+    let toolFailureAttempts = 0;
     
     while (repeatCount < REPEAT_LIMIT) {
       iterationCount++;
@@ -86,7 +198,39 @@ export async function processToolCallLoop(
         currentResponse = SimulacrumCore._normalizeAIResponse(raw);
         continue;
       }
-      
+
+      // Handle provider-level tool call failures before attempting execution
+      if (isToolCallFailure(currentResponse)) {
+        toolFailureAttempts += 1;
+        appendToolFailureCorrection(conversationManager, currentResponse);
+
+        if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
+          const fallback = await runToolFailureFallback(conversationManager, aiClient, getSystemPrompt, signal);
+          return fallback;
+        }
+
+        const nextAttempt = toolFailureAttempts + 1;
+        const delayMs = getRetryDelayMs(toolFailureAttempts - 1);
+        const retryCallId = `${TOOL_RETRY_STATUS_PREFIX}-${Date.now()}-${nextAttempt}`;
+        const label = buildRetryLabel(nextAttempt, MAX_TOOL_FAILURE_ATTEMPTS);
+
+        emitRetryStatus('start', retryCallId, label);
+        try {
+          if (delayMs) {
+            await delayWithSignal(delayMs, signal);
+          }
+          const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+          const toolsToSend = currentToolSupport === true ? tools : null;
+          const raw = currentToolSupport !== true
+            ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...conversationMessages]), toolsToSend, { signal })
+            : await aiClient.chatWithSystem(conversationMessages, getSystemPrompt, toolsToSend, { signal });
+          currentResponse = SimulacrumCore._normalizeAIResponse(raw);
+        } finally {
+          emitRetryStatus('end', retryCallId);
+        }
+        continue;
+      }
+
       // If no tool calls, terminate the loop - this is the intended behavior
       if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
         if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');

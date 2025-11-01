@@ -29,6 +29,22 @@ import { toolRegistry } from '../core/tool-registry.js';
  * Preserves existing behavior from SimulacrumCore._normalizeAIResponse.
  */
 export function normalizeAIResponse(raw) {
+  const attachProviderError = (payload, source) => {
+    const result = { ...payload, raw: source };
+    if (source && source.errorCode) {
+      result.errorCode = source.errorCode;
+    }
+    if (source && source.errorMetadata) {
+      result.errorMetadata = source.errorMetadata;
+    }
+    if (source && source._originalResponse) {
+      result._originalResponse = source._originalResponse;
+    } else if (!result._originalResponse) {
+      result._originalResponse = source;
+    }
+    return result;
+  };
+
   // If already normalized, check for empty content
   if (typeof raw?.content === 'string') {
     if (!raw.content || raw.content.trim().length === 0) {
@@ -49,24 +65,22 @@ export function normalizeAIResponse(raw) {
         const logger = createLogger('AIDiagnostics');
         logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0) });
       }
-      return {
+      return attachProviderError({
         content: 'Empty response not allowed - please provide a meaningful response to the user.',
         display: 'Empty response not allowed - please provide a meaningful response to the user.',
         toolCalls: [],
         model: raw.model,
         usage: raw.usage,
-        raw,
         _parseError: true
-      };
+      }, raw);
     }
-    return {
+    return attachProviderError({
       content: raw.content,
       display: raw.display ?? raw.content,
       toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
       model: raw.model,
-      usage: raw.usage,
-      raw
-    };
+      usage: raw.usage
+    }, raw);
   }
 
   // Gemini-compatible: { candidates: [ { content: { parts: [...] } } ] }
@@ -92,14 +106,13 @@ export function normalizeAIResponse(raw) {
     }
 
     const combinedText = textSegments.join('\n').trim();
-    return {
+    return attachProviderError({
       content: combinedText,
       display: combinedText,
       toolCalls,
       model: raw?.model,
-      usage: raw?.usage,
-      raw
-    };
+      usage: raw?.usage
+    }, raw);
   }
 
   // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
@@ -133,15 +146,13 @@ export function normalizeAIResponse(raw) {
       const has = !!(raw?.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0);
       logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: has });
     }
-    return {
+    return attachProviderError({
       content: 'Empty response not allowed - please provide a meaningful response to the user.',
       display: 'Empty response not allowed - please provide a meaningful response to the user.',
       toolCalls: [],
       model: raw?.model,
-      usage: raw?.usage,
-      raw,
       _parseError: true
-    };
+    }, raw);
   }
 
   let toolCalls = msg.tool_calls || [];
@@ -153,7 +164,7 @@ export function normalizeAIResponse(raw) {
   if (!content && !toolCalls?.length && (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))) {
     const parts = raw.output[0].content;
     const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-    return { content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage, raw };
+    return attachProviderError({ content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage }, raw);
   }
 
   const normalized = {
@@ -161,8 +172,7 @@ export function normalizeAIResponse(raw) {
     display: content,
     toolCalls,
     model: raw?.model,
-    usage: raw?.usage,
-    raw
+    usage: raw?.usage
   };
 
   // Inline fallback parsing if no native tool_calls
@@ -198,7 +208,7 @@ export function normalizeAIResponse(raw) {
     }
   } catch {}
 
-  return normalized;
+  return attachProviderError(normalized, raw);
 }
 
 /**

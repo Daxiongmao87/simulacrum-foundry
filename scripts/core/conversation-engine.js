@@ -7,7 +7,82 @@
 import { SimulacrumCore } from './simulacrum-core.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { toolRegistry } from './tool-registry.js';
-import { appendEmptyContentCorrection } from './correction.js';
+import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
+import { AI_ERROR_CODES } from './ai-client.js';
+
+const MAX_PRE_TOOL_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [1000, 2000];
+const RETRY_STATUS_CALL_PREFIX = 'tool-retry';
+
+function isToolCallFailure(response) {
+  return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
+}
+
+function emitProcessStatus(state, callId, label = null) {
+  try {
+    if (typeof Hooks === 'undefined' || typeof Hooks.call !== 'function') return;
+    const payload = state === 'start'
+      ? { state, callId, label, toolName: 'retry' }
+      : { state, callId };
+    Hooks.call('simulacrum:processStatus', payload);
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
+function buildRetryLabel(attempt, maxAttempts) {
+  return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
+}
+
+function getRetryDelayMs(previousAttemptIndex) {
+  if (previousAttemptIndex < 0) return 0;
+  return RETRY_DELAYS_MS[Math.min(previousAttemptIndex, RETRY_DELAYS_MS.length - 1)] || 0;
+}
+
+function delayWithSignal(ms, signal) {
+  if (!ms) {
+    if (signal?.aborted) {
+      throw new Error('Process was cancelled');
+    }
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Process was cancelled'));
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('Process was cancelled'));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function buildGenericFailureMessage() {
+  return {
+    role: 'assistant',
+    content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
+    display: '❌ Unable to generate a proper response after multiple attempts.'
+  };
+}
 
 class ConversationEngine {
   constructor(conversationManager) {
@@ -32,29 +107,55 @@ class ConversationEngine {
       { signal }
     );
 
-    // Pre-tool correction loop (bounded) - handles parse errors and malformed function calls
-    let attempts = 0;
-    const MAX = 3;
-    while (aiResponse && (aiResponse._parseError || aiResponse._malformedFunctionCallError) && attempts < MAX) {
-      attempts++;
-      appendEmptyContentCorrection(this.conversationManager, aiResponse);
-      aiResponse = await SimulacrumCore.generateResponse(
-        this.conversationManager.getMessages(),
-        { signal }
-      );
+    // Pre-tool correction loop (bounded) - handles parse errors and tool call failures
+    let attempt = 1;
+    while (
+      aiResponse &&
+      (aiResponse._parseError || isToolCallFailure(aiResponse)) &&
+      attempt < MAX_PRE_TOOL_ATTEMPTS
+    ) {
+      if (aiResponse._parseError) {
+        appendEmptyContentCorrection(this.conversationManager, aiResponse);
+      } else {
+        appendToolFailureCorrection(this.conversationManager, aiResponse);
+      }
+
+      const nextAttempt = attempt + 1;
+      const delayMs = getRetryDelayMs(attempt - 1);
+      const callId = `${RETRY_STATUS_CALL_PREFIX}-${Date.now()}-${nextAttempt}`;
+      const label = buildRetryLabel(nextAttempt, MAX_PRE_TOOL_ATTEMPTS);
+
+      emitProcessStatus('start', callId, label);
+      try {
+        if (delayMs) {
+          await delayWithSignal(delayMs, signal);
+        }
+        aiResponse = await SimulacrumCore.generateResponse(
+          this.conversationManager.getMessages(),
+          { signal }
+        );
+      } finally {
+        emitProcessStatus('end', callId);
+      }
+
+      attempt = nextAttempt;
     }
 
-    // If still parse error or malformed function call error after retries, return failure message
-    if (aiResponse && (aiResponse._parseError || aiResponse._malformedFunctionCallError)) {
-      const errorMessage = {
-        role: 'assistant',
-        content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-        display: '❌ Unable to generate a proper response after multiple attempts.'
-      };
+    // If parse error persists after retries, return failure message
+    if (aiResponse && aiResponse._parseError) {
+      const errorMessage = buildGenericFailureMessage();
       if (onAssistantMessage) onAssistantMessage(errorMessage);
       return errorMessage;
     }
 
+    // If tool failure persists after retries, run tool-free fallback flow
+    if (aiResponse && isToolCallFailure(aiResponse)) {
+      aiResponse = await this._runToolFailureFallback(aiResponse, signal);
+      if (aiResponse.role === 'assistant') {
+        if (onAssistantMessage) onAssistantMessage(aiResponse);
+        return aiResponse;
+      }
+    }
 
     // If no tools, emit assistant and finish
     if (!Array.isArray(aiResponse.toolCalls) || aiResponse.toolCalls.length === 0) {
@@ -88,7 +189,46 @@ class ConversationEngine {
     return finalResponse;
   }
 
+  async _runToolFailureFallback(failedResponse, signal) {
+    appendToolFailureCorrection(this.conversationManager, failedResponse);
+
+    const fallbackInstruction = 'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';
+    const messages = this.conversationManager.getMessages();
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'system' || lastMessage.content !== fallbackInstruction) {
+      this.conversationManager.addMessage('system', fallbackInstruction);
+    }
+
+    let fallbackResponse;
+    try {
+      fallbackResponse = await SimulacrumCore.generateResponse(
+        this.conversationManager.getMessages(),
+        { signal, tools: null }
+      );
+    } catch (_error) {
+      return buildGenericFailureMessage();
+    }
+
+    if (!fallbackResponse || fallbackResponse._parseError || isToolCallFailure(fallbackResponse)) {
+      return buildGenericFailureMessage();
+    }
+
+    const notice = 'Note: Tool functionality was temporarily unavailable for this response.';
+    const content = fallbackResponse.content
+      ? `${fallbackResponse.content}\n\n${notice}`
+      : notice;
+    const display = fallbackResponse.display
+      ? `${fallbackResponse.display}\n\n${notice}`
+      : content;
+
+    return {
+      ...fallbackResponse,
+      content,
+      display,
+      toolCalls: []
+    };
+  }
+
 }
 
 export { ConversationEngine };
-

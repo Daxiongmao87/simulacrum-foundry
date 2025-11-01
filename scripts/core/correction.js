@@ -31,3 +31,40 @@ export function appendEmptyContentCorrection(conversationManager, errorResponse)
   conversationManager.addMessage('system', systemInstruction);
 }
 
+/**
+ * Append assistant/system correction messages for malformed tool call responses.
+ * Ensures the next retry has natural-language context instead of repeating the
+ * invalid tool invocation.
+ *
+ * @param {object} conversationManager - Conversation manager instance
+ * @param {object} errorResponse - Normalized AI response with raw provider payload
+ */
+export function appendToolFailureCorrection(conversationManager, errorResponse) {
+  if (!conversationManager) return;
+
+  const functionName = (() => {
+    try {
+      const candidates = errorResponse?._originalResponse?.candidates || [];
+      for (const candidate of candidates) {
+        const parts = candidate?.content?.parts || [];
+        for (const part of parts) {
+          if (part?.functionCall?.name) {
+            return part.functionCall.name;
+          }
+        }
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+    return null;
+  })();
+
+  const assistantSummary = functionName
+    ? `Previous tool call "${functionName}" failed because the provider reported malformed arguments. The tool call has been removed.`
+    : 'Previous tool call failed because the provider reported malformed arguments. The malformed tool call has been removed.';
+
+  conversationManager.addMessage('assistant', assistantSummary);
+
+  const systemInstruction = 'Your last reply attempted to call a tool with invalid or malformed arguments. Provide corrected arguments if a tool call is still required, or respond in plain language without using tools.';
+  conversationManager.addMessage('system', systemInstruction);
+}

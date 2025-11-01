@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright © 2024-2025 Aaron Riechert
 
-import { AIClient, AIProvider, MockAIProvider, OpenAIProvider } from '../../scripts/core/ai-client.js';
+import { AIClient, AIProvider, MockAIProvider, OpenAIProvider, AI_ERROR_CODES } from '../../scripts/core/ai-client.js';
 // Use global.fetch provided by tests/setup.js
 
 // Common test setup
@@ -246,6 +246,37 @@ describe('AIClient - chat Gemini', () => {
     expect(parameters.properties.requiredField.required).toBeUndefined();
     expect(parameters.properties.nested.required).toEqual(expect.arrayContaining(['innerRequired']));
     expect(parameters.properties.nested.properties.innerRequired.required).toBeUndefined();
+  });
+
+  test('maps Gemini MALFORMED_FUNCTION_CALL to tool failure error code', async () => {
+    const malformedResponse = {
+      model: 'models/gemini-pro',
+      responseId: 'abc',
+      candidates: [
+        {
+          index: 0,
+          finishReason: 'MALFORMED_FUNCTION_CALL',
+          content: { parts: [] }
+        }
+      ]
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(malformedResponse)
+    });
+
+    const client = new AIClient(mockConfig);
+    const result = await client.chatWithSystem(
+      [{ role: 'user', content: 'Hi' }],
+      () => 'Be helpful',
+      [],
+      { provider: 'gemini' }
+    );
+
+    expect(result.errorCode).toBe(AI_ERROR_CODES.TOOL_CALL_FAILURE);
+    expect(result.errorMetadata).toMatchObject({ finishReason: 'MALFORMED_FUNCTION_CALL' });
+    expect(result._originalResponse).toEqual(malformedResponse);
   });
 });
 
