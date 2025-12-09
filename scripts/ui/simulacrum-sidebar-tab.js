@@ -77,7 +77,23 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     } else if (typeof args[0] === 'object' && args[0] !== null) {
       options = args[0];
     }
-    return Promise.resolve(super.render(options));
+    const result = super.render(options);
+    Promise.resolve(result).then(() => {
+      if (this.element && this.element.length) {
+        const font = game.settings.get('simulacrum', 'fontChoice');
+        this.element.css('font-family', `"${font}", "Signika", sans-serif`);
+      }
+    });
+    return Promise.resolve(result);
+  }
+
+  /**
+   * Compatibility alias for Sidebar right-click support
+   * Foundry's Sidebar class expects tab.popOut() to exist when right-clicking a tab
+   * @returns {void}
+   */
+  popOut() {
+    return this.renderPopout();
   }
 
   /**
@@ -93,6 +109,27 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @private
    */
   #needsScroll = false;
+
+  /**
+   * Track if AI is currently processing a message (Task-03)
+   * @type {boolean}
+   * @private
+   */
+  #isThinking = false;
+
+  /**
+   * Task-16: Index for rotating thinking words
+   * @type {number}
+   * @private
+   */
+  #thinkingWordIndex = 0;
+
+  /**
+   * Task-16: Interval ID for thinking word rotation
+   * @type {number|null}
+   * @private
+   */
+  #thinkingIntervalId = null;
 
   /**
    * The chat notifications container.
@@ -119,8 +156,30 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
   /*  Properties                                  */
   /* -------------------------------------------- */
 
+  /**
+   * Override renderPopout to hook into the close event
+   * @inheritDoc
+   */
+  async renderPopout() {
+    const popout = await super.renderPopout();
+    // Hook the close method to re-render the sidebar when popout closes
+    // This ensures the input field returns to the sidebar
+    const originalClose = popout.close.bind(popout);
+    popout.close = async (options) => {
+      this._popoutClosing = true;
+      if (this.rendered) this.render();
+      await originalClose(options);
+      this._popoutClosing = false;
+      // Final re-render to ensure state is clean
+      if (this.rendered) this.render();
+    };
+    // Force a re-render of the sidebar to hide the input immediately
+    if (this.rendered) this.render();
+    return popout;
+  }
+
   /* -------------------------------------------- */
-  /*  Rendering                                   */
+  /*  Event Listeners                             */
   /* -------------------------------------------- */
 
 
@@ -134,9 +193,10 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     event.preventDefault();
     const textarea = event.currentTarget;
     // Drop cross-linked content
-    const eventData = TextEditor.implementation.getDragEventData(event);
-    const link = await TextEditor.implementation.getContentLink(eventData);
-    if ( link ) textarea.value += link;
+    const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+    const eventData = TextEditorImpl.getDragEventData(event);
+    const link = await TextEditorImpl.getContentLink(eventData);
+    if (link) textarea.value += link;
   }
 
   /* -------------------------------------------- */
@@ -147,12 +207,12 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    */
   async #renderNotifications() {
     const right = document.getElementById("ui-right-column-1") ?? document.body;
-    const html = await renderTemplate("templates/simulacrum/sidebar-notifications.hbs", {user: game.user});
+    const html = await renderTemplate("templates/simulacrum/sidebar-notifications.hbs", { user: game.user });
     [this.#notificationsElement, this.#inputElement, this.#chatControls] = foundry.utils.parseHTML(html);
     this.#notificationsElement.addEventListener("click", this._onClickNotification.bind(this));
     this.#inputElement.addEventListener("keydown", this._onKeyDown.bind(this));
     this.#inputElement.addEventListener("drop", this.#onDropTextAreaData.bind(this));
-    
+
     right.append(this.#notificationsElement);
     this.#notificationsElement.append(this.#inputElement, this.#chatControls);
     this._toggleNotifications();
@@ -167,24 +227,24 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @returns {boolean}
    * @protected
    */
-  _shouldShowNotifications({ closing=false }={}) {
+  _shouldShowNotifications({ closing = false } = {}) {
     const { chatNotifications, uiScale } = game.settings.get("core", "uiConfig");
-    
+
     // Case 1 - Notifications disabled or pip mode.
-    if ( (chatNotifications === "pip") || this.options.stream ) return false;
-    
+    if ((chatNotifications === "pip") || this.options.stream) return false;
+
     // Case 2 - Chat tab visible in sidebar.
-    if ( ui.sidebar.expanded && ui.sidebar.tabGroups.primary === this.tabName ) return false;
-    
+    if (ui.sidebar.expanded && ui.sidebar.tabGroups.primary === this.tabName) return false;
+
     // Case 3 - Chat popout visible.
-    if ( ui.sidebar.popouts[this.tabName]?.rendered && (!this.isPopout || !closing) ) return false;
-    
+    if (ui.sidebar.popouts[this.tabName]?.rendered && (!this.isPopout || !closing)) return false;
+
     // Case 4 - Not enough viewport width available.
     const cameraDock = ui.webrtc?.isVertical && !ui.webrtc?.hidden;
     const viewportWidth = window.innerWidth / uiScale;
     const spaceRequired = 1024 + (ui.sidebar.expanded * 300) + (cameraDock * 264);
-    if ( viewportWidth < spaceRequired ) return false;
-    
+    if (viewportWidth < spaceRequired) return false;
+
     // Otherwise, show notifications.
     return true;
   }
@@ -202,42 +262,42 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @fires {hookEvents:renderChatInput}
    * @internal
    */
-  _toggleNotifications({ closing=false }={}) {
-    if ( ui.sidebar.popouts[this.tabName]?.rendered && !this.isPopout ) return;
-    
+  _toggleNotifications({ closing = false } = {}) {
+    if (ui.sidebar.popouts[this.tabName]?.rendered && !this.isPopout) return;
+
     const notifications = this.#notificationsElement;
     const inputElement = this.#inputElement;
     const chatControls = this.#chatControls;
-    
-    if ( !notifications || !inputElement || !chatControls ) return;
-    
+
+    if (!notifications || !inputElement || !chatControls) return;
+
     const log = notifications.querySelector(".chat-log");
     const privacyButtons = this.#chatControls?.querySelector("#simulacrum-privacy");
-    
+
     const embedInput = !this._shouldShowNotifications({ closing });
     log.hidden = embedInput;
     privacyButtons?.classList.toggle("vertical", !embedInput);
-    
+
     const previousParent = inputElement.parentElement;
-    if ( game.user.isGM ) {
+    if (game.user.isGM) {
       const controlButtons = chatControls.querySelector(".control-buttons");
-      if ( controlButtons ) controlButtons.hidden = !embedInput;
+      if (controlButtons) controlButtons.hidden = !embedInput;
     }
-    
-    if ( embedInput ) {
+
+    if (embedInput) {
       const target = ui.sidebar.popouts[this.tabName]?.rendered && !closing ? ui.sidebar.popouts[this.tabName] : ui.sidebar;
       target.element?.querySelector(".chat-form")?.append(chatControls, inputElement);
     } else {
       notifications.append(inputElement, chatControls);
     }
-    
+
     Hooks.callAll("renderChatInput", this, {
       "#simulacrum-chat-message": inputElement,
       "#simulacrum-controls": chatControls,
       "#simulacrum-privacy": privacyButtons
-    }, {previousParent});
-    
-    if ( this.#isAtBottom ) this.scrollBottom();
+    }, { previousParent });
+
+    if (this.#isAtBottom) this.scrollBottom();
   }
 
   /* -------------------------------------------- */
@@ -410,12 +470,12 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       if (SimulacrumCore?.conversationManager) {
         this.chatHandler = new ChatHandler(SimulacrumCore.conversationManager);
       }
-      
+
       await this._syncFromCoreConversation();
       this._syncedFromCore = true;
       // If history was loaded, replace welcome message and re-render
       if (this.messages.length > 1 ||
-          (this.messages.length === 1 && !this.messages[0].content?.includes('Welcome'))) {
+        (this.messages.length === 1 && !this.messages[0].content?.includes('Welcome'))) {
         this.#needsScroll = true;
         await this.render({ parts: ['log'] });
       }
@@ -430,8 +490,14 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    */
   async _prepareContext() {
     const context = await super._prepareContext();
+
+    // Sync messages from main instance if this is a popout
+    if (this.isPopout && ui.simulacrum && ui.simulacrum !== this) {
+      this.messages = [...ui.simulacrum.messages];
+    }
+
     // Conversation history is loaded via 'ready' hook
-    
+
     // Create welcome message if no messages exist
     const welcomeMessage = this.messages.length === 0 ? {
       messageId: 'welcome',
@@ -440,12 +506,21 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       timestamp: new Date(),
       user: game.user
     } : null;
-    
-    const processActive = this._activeProcesses.size > 0;
-    const processLabel = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
-    
-    if (isDebugEnabled()) this.logger.debug('_prepareContext processActive:', processActive, 'active:', this._activeProcesses.size);
-    
+
+    // Task-03: Use #isThinking for overall thinking indicator, _activeProcesses for detailed labels
+    const processActive = this.#isThinking || this._activeProcesses.size > 0;
+
+    // Task-16: Use rotating thematic words when thinking, fall back to tool labels when processing
+    let processLabel = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
+    if (!processLabel && this.#isThinking) {
+      // Get thematic words array from localization
+      const thinkingWords = game.i18n?.translations?.SIMULACRUM?.ThinkingWords ||
+        ['Divining...', 'Scrying...', 'Weaving...', 'Conjuring...'];
+      processLabel = thinkingWords[this.#thinkingWordIndex % thinkingWords.length];
+    }
+
+    if (isDebugEnabled()) this.logger.debug('_prepareContext processActive:', processActive, 'isThinking:', this.#isThinking, 'activeProcesses:', this._activeProcesses.size);
+
     return foundry.utils.mergeObject(context, {
       messages: this.messages,
       welcomeMessage: welcomeMessage,
@@ -453,7 +528,9 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       user: game.user,
       isAtBottom: this.#isAtBottom,
       processActive: processActive,
-      processLabel: processLabel
+      processLabel: processLabel,
+      processLabel: processLabel,
+      disableInput: !this.isPopout && !!ui.sidebar.popouts[this.constructor.tabName]?.rendered && !this._popoutClosing
     });
   }
 
@@ -470,7 +547,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         const { SimulacrumCore } = await import('../core/simulacrum-core.js');
         cm = SimulacrumCore?.conversationManager;
       }
-      
+
       if (cm && Array.isArray(cm.messages)) {
         const filtered = cm.messages.filter(m => m && (m.role === 'user' || m.role === 'assistant'));
         const projected = [];
@@ -524,20 +601,32 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  static async _onSendMessage(event, target) {
+  async _onSendMessage(event, target) {
     const form = target.closest('form');
     const input = form.querySelector('textarea[name="message"]');
     const message = input.value.trim();
-    
+
     if (!message) return;
-    
-    // Check if input is disabled (means agent is processing)
-    if (input.disabled) {
+
+    // Check if agent is processing (Task-04: textarea stays enabled but submission blocked)
+    if (this._activeProcesses?.size > 0 || this.#isThinking) {
       return; // Don't submit while agent is working
     }
 
     // Clear input immediately
     input.value = '';
+
+    // Task-03: Set thinking state immediately and trigger render
+    this.#isThinking = true;
+    this.#thinkingWordIndex = 0;
+    this.#needsScroll = true;
+    this.render({ parts: ['log', 'input'] });
+
+    // Task-16: Start word rotation interval (every 2.5 seconds)
+    this.#thinkingIntervalId = setInterval(() => {
+      this.#thinkingWordIndex++;
+      this.render({ parts: ['log'] });
+    }, 2500);
 
     try {
       // Ensure ChatHandler is initialized
@@ -548,18 +637,18 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
           this.chatHandler = new ChatHandler(SimulacrumCore.conversationManager);
         }
       }
-      
+
       if (!this.chatHandler) {
         throw new Error('ChatHandler not available');
       }
-      
+
       // Handle conversation commands
       if (this.chatHandler.conversationManager) {
         const commandResult = await ConversationCommands.handleConversationCommand(
-          message, 
+          message,
           this.chatHandler.conversationManager
         );
-        
+
         if (commandResult.isCommand) {
           await this.addMessage('assistant', commandResult.message, commandResult.message);
           return;
@@ -573,7 +662,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       const onUserMessage = ({ content }) => {
         // User message already added above
       };
-      
+
       const onAssistantMessage = async (response) => {
         if (response.content) {
           await this.addMessage('assistant', response.content, response.display);
@@ -581,14 +670,24 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       };
 
       // Process message through ChatHandler
-      await this.chatHandler.processUserMessage(message, game.user, { 
-        onUserMessage, 
-        onAssistantMessage 
+      await this.chatHandler.processUserMessage(message, game.user, {
+        onUserMessage,
+        onAssistantMessage
       });
 
     } catch (error) {
       this.logger.error('Error processing message', error);
       await this.addMessage('assistant', `Error: ${error.message}`, `❌ ${error.message}`);
+    } finally {
+      // Task-16: Clear word rotation interval
+      if (this.#thinkingIntervalId) {
+        clearInterval(this.#thinkingIntervalId);
+        this.#thinkingIntervalId = null;
+      }
+      // Task-03: Always clear thinking state when done
+      this.#isThinking = false;
+      this.#needsScroll = true;
+      this.render({ parts: ['log', 'input'] });
     }
   }
 
@@ -598,7 +697,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  static async _onClearChat() {
+  async _onClearChat() {
     try {
       if (this.chatHandler) {
         await this.chatHandler.clearConversation();
@@ -618,7 +717,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  static async _onJumpToBottom(event, target) {
+  async _onJumpToBottom(event, target) {
     this.scrollBottom();
   }
 
@@ -628,7 +727,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  static async _onCancelProcess(event, target) {
+  async _onCancelProcess(event, target) {
     try {
       // Cancel through SimulacrumCore (it handles the actual abort controller)
       const { SimulacrumCore } = await import('../core/simulacrum-core.js');
@@ -653,7 +752,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     const log = event.currentTarget;
     const pct = log.scrollTop / (log.scrollHeight - log.clientHeight);
     this.#isAtBottom = (pct > 0.99) || Number.isNaN(pct);
-    
+
     // Update jump-to-bottom button visibility
     const jumpButton = this.element?.querySelector('.jump-to-bottom');
     if (jumpButton) {
@@ -684,10 +783,10 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       await new Promise(resolve => {
         let attempts = 0;
         const maxAttempts = 50; // 50 * 100ms = 5 seconds max wait
-        
+
         const checkRender = () => {
           attempts++;
-          
+
           // If content has been rendered or we've waited long enough, proceed
           if (scroll.scrollHeight > 0 || attempts >= maxAttempts) {
             resolve();
@@ -703,7 +802,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
             });
           }
         };
-        
+
         // Start checking
         checkRender();
       });
@@ -810,15 +909,15 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    */
   _onClickNotification(event) {
     const target = event.target.closest("[data-action]");
-    if ( !target ) return;
+    if (!target) return;
     const { action } = target.dataset;
     let handler = this.options.actions[action];
     let buttons = [0];
-    if ( typeof handler === "object" ) {
+    if (typeof handler === "object") {
       buttons = handler.buttons;
       handler = handler.handler;
     }
-    if ( buttons.includes(event.button) ) handler?.call(this, event, target);
+    if (buttons.includes(event.button)) handler?.call(this, event, target);
   }
 
   /* -------------------------------------------- */
@@ -829,15 +928,15 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @private
    */
   _onKeyDown(event) {
-    if ( event.isComposing ) return; // Ignore IME composition.
+    if (event.isComposing) return; // Ignore IME composition.
 
     // Allow external hooks to intercept chat input
     const inputOptions = { recordPending: true };
-    if ( Hooks.call("chatInput", event, inputOptions) === false ) {
+    if (Hooks.call("chatInput", event, inputOptions) === false) {
       return;
     }
 
-    switch ( event.key ) {
+    switch (event.key) {
       case "ArrowUp": case "ArrowDown":
         return;
 
@@ -873,9 +972,23 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     if (input && !input.dataset.simulacrumBound) {
       input.dataset.simulacrumBound = '1';
       input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        // Escape key cancels AI processing (Task-05)
+        if (event.key === 'Escape' && this._activeProcesses.size > 0) {
           event.preventDefault();
-          // Directly call send message instead of clicking button
+          SimulacrumSidebarTab._onCancelProcess.call(this, event, input);
+          return;
+        }
+
+        if (event.key === 'Enter') {
+          // Shift+Enter inserts newline (Task-07)
+          if (event.shiftKey) {
+            return; // Allow default behavior (newline insertion)
+          }
+          event.preventDefault();
+          // Block submission when AI is processing (Task-04)
+          if (this._activeProcesses.size > 0) {
+            return;
+          }
           SimulacrumSidebarTab._onSendMessage.call(this, event, input);
         }
       });
@@ -921,9 +1034,23 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       if (input && !input.dataset.simulacrumBound) {
         input.dataset.simulacrumBound = '1';
         input.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter') {
+          // Escape key cancels AI processing (Task-05)
+          if (event.key === 'Escape' && this._activeProcesses.size > 0) {
             event.preventDefault();
-            // Directly call send message instead of clicking button
+            SimulacrumSidebarTab._onCancelProcess.call(this, event, input);
+            return;
+          }
+
+          if (event.key === 'Enter') {
+            // Shift+Enter inserts newline (Task-07)
+            if (event.shiftKey) {
+              return; // Allow default behavior (newline insertion)
+            }
+            event.preventDefault();
+            // Block submission when AI is processing (Task-04)
+            if (this._activeProcesses.size > 0) {
+              return;
+            }
             SimulacrumSidebarTab._onSendMessage.call(this, event, input);
           }
         });
@@ -931,7 +1058,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         // Auto-focus on input
         input.focus();
       }
-      
+
       // Handle cancel button explicitly (backup for data-action)
       const cancelButton = element.querySelector('[data-action="cancelProcess"]');
       if (cancelButton && !cancelButton.dataset.simulacrumBound) {
@@ -951,7 +1078,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
  */
 function registerSimulacrumSidebarTab() {
   const logger = createLogger('SidebarTab');
-  
+
   try {
     // Register the tab in the Sidebar TABS configuration
     const Sidebar = globalThis.foundry?.applications?.sidebar?.Sidebar ?? globalThis.Sidebar;
@@ -985,7 +1112,7 @@ function registerSimulacrumSidebarTab() {
     } else {
       logger.error('CONFIG.ui not found');
     }
-    
+
     logger.info('Sidebar tab registration completed');
   } catch (error) {
     logger.error('Failed to register sidebar tab:', error);

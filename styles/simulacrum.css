@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: MIT
-// Copyright © 2024-2025 Aaron Riechert
+/* SPDX-License-Identifier: MIT */
+/* Copyright © 2024-2025 Aaron Riechert */
 
 /* 
  * MINIMAL Simulacrum styling - inherit EVERYTHING from FoundryVTT 
@@ -18,6 +18,15 @@
   align-items: flex-end;
   width: 100%;
   gap: 8px;
+}
+
+/* Privacy Buttons */
+#simulacrum-chat-controls section {
+  display: flex;
+  flex-direction: row;
+  margin: 0;
+  border: none;
+  border-radius: 0;
 }
 
 /* Ensure flex column behavior for inner layout */
@@ -87,6 +96,17 @@
   font-weight: bold;
   margin-bottom: 0.25rem;
   color: var(--color-text-dark-primary);
+}
+
+/* Chat Controls */
+#simulacrum-chat-controls {
+  flex: 0 0 auto;
+  margin: 5px;
+  /* background-image: url('../assets/texture-dgray1.webp'); */
+  /* File missing */
+  border: 1px solid var(--color-border-dark);
+  border-radius: 4px;
+  background-color: var(--color-cool-4);
 }
 
 .simulacrum-settings .form-group input,
@@ -276,6 +296,96 @@
   background: rgba(255, 255, 255, 0.01);
 }
 
+.dark .simulacrum-tool-call {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ---------------------------------------- */
+/*  Hidden Form Styling (Fix)              */
+/* ---------------------------------------- */
+
+.simulacrum-sidebar-tab .chat-form.hidden {
+  display: none !important;
+}
+
+/* ---------------------------------------- */
+/*  Task-20: Custom Fonts                  */
+/* ---------------------------------------- */
+
+@font-face {
+  font-family: "Dumbledor";
+  src: url("../assets/fonts/dumbledor.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Alice in Wonderland";
+  src: url("../assets/fonts/alice-in-wonderland.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Morris Roman Black";
+  src: url("../assets/fonts/morris-roman-black.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Wizzta";
+  src: url("../assets/fonts/wizzta.ttf") format("truetype");
+}
+
+/* Default font for Simulacrum UI */
+#simulacrum {
+  font-family: "Dumbledor", "Signika", sans-serif;
+  letter-spacing: 0.05em;
+}
+
+/* ---------------------------------------- */
+/*  Task-19: Chat Message Styling          */
+/* ---------------------------------------- */
+
+/* Dark customized background for AI messages */
+.chat-message.simulacrum-chat-message {
+  background-color: rgb(18, 21, 21);
+  border: 1px solid #4b4a45;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+  /* Ensure texture stays contained */
+}
+
+/* Pale gold text for header and content */
+.simulacrum-chat-message .message-header,
+.simulacrum-chat-message .message-content {
+  color: #EEE8AA;
+  /* PaleGoldenRod */
+  position: relative;
+  z-index: 1;
+  /* Above texture */
+}
+
+/* Subtle texture overlay */
+.chat-message.simulacrum-chat-message::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('../assets/texture-dgray1.webp');
+  background-size: cover;
+  background-repeat: repeat;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure links and icons are visible on dark background */
+.simulacrum-chat-message a.content-link,
+.simulacrum-chat-message a.inline-roll {
+  color: #FFD700;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #7a7971;
+}
+
 /* ---------------------------------------- */
 /*  Process Status Spinner Fix             */
 /* ---------------------------------------- */
@@ -291,7 +401,48 @@
   box-sizing: border-box !important;
   /* Ensure the icon rotates around its center */
   transform-origin: center center !important;
+  /* Task-17: Violet color for spinner */
+  color: #8A2BE2 !important;
 }
+
+/* ---------------------------------------- */
+/*  Thinking Indicator Styling (Task-17)   */
+/* ---------------------------------------- */
+
+/* Process status container - transparent background */
+.process-status {
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  background: transparent;
+  border-radius: 4px;
+  font-style: italic;
+}
+
+/* Thinking text - violet with drop shadow */
+.process-status .label {
+  color: #8A2BE2;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  font-weight: 500;
+  /* Task-16: Smooth transition for word rotation */
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* ---------------------------------------- */
+/*  Sidebar Icon Glow (Task-18)            */
+/* ---------------------------------------- */
+
+/* Subtle magical glow on sidebar icon */
+li.tab[data-tab="simulacrum"] i.fa-hand-sparkles {
+  filter: drop-shadow(0 0 3px #8A2BE2);
+  transition: filter 0.3s ease;
+}
+
+/* Brighter glow when tab is active */
+li.tab[data-tab="simulacrum"].active i.fa-hand-sparkles {
+  filter: drop-shadow(0 0 5px #8A2BE2) drop-shadow(0 0 8px #8A2BE2);
+}
+
 
 /* ---------------------------------------- */
 /*  Code Block Whitespace Fix              */
@@ -320,4 +471,62 @@
 #simulacrum .chat-message .message-content code.inline {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ---------------------------------------- */
+/*  Tool Call Status Indicators (Task-09)  */
+/* ---------------------------------------- */
+
+/* Container for tool call results */
+.simulacrum-tool-results {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* Individual tool call indicator */
+.simulacrum-tool-call {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  margin: 0.25rem 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.03);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+/* Tool status icon base */
+.simulacrum-tool-call .tool-icon {
+  flex-shrink: 0;
+  width: 1em;
+  text-align: center;
+}
+
+/* Success indicator */
+.simulacrum-tool-call.tool-success .tool-icon {
+  color: var(--color-success, #28a745);
+}
+
+/* Failure indicator */
+.simulacrum-tool-call.tool-failure .tool-icon {
+  color: var(--color-warning, #dc3545);
+}
+
+/* Tool name/action text */
+.simulacrum-tool-call .tool-action {
+  font-weight: 500;
+  color: var(--color-text-dark-secondary);
+}
+
+/* Document link styling */
+.simulacrum-tool-call .tool-document {
+  color: var(--color-primary, #5e81ac);
+  font-style: italic;
+}
+
+/* Dark theme adjustments */
+.dark .simulacrum-tool-call {
+  background: rgba(255, 255, 255, 0.05);
 }
