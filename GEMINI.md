@@ -22,3 +22,14 @@ The following scripts are available in `package.json` to build, run, and test th
 ## Development Conventions
 
 The project uses ESLint and Prettier to enforce a consistent coding style. There are also pre-commit hooks set up with Husky to ensure that code is linted and formatted before being committed. The project has a comprehensive test suite using Jest. All code should be well-documented and follow the existing coding style.
+
+## CRITICAL DEPLOYMENT RULE
+
+> [!IMPORTANT]
+> **ALWAYS REDEPLOY AFTER CHANGES**
+> You MUST run the `deploy:module` script after making ANY changes to code, styles, or templates. The changes will NOT take effect in the running Foundry instance otherwise.
+>
+> **Workflow:**
+> 1.  Make changes.
+> 2.  Find running container: `docker ps`
+> 3.  Run deploy: `npm run deploy:module -- --container <container_name_or_id>`

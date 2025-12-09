@@ -338,13 +338,38 @@
   letter-spacing: 0.05em;
 }
 
+/* Ensure Dumbledor is used in chat messages with high specificity */
+/* Broad selector for ANY message within Simulacrum logs or popouts */
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message * {
+  font-family: "Dumbledor", "Signika", sans-serif !important;
+  letter-spacing: 0.05em;
+}
+
+/* Specific targeted overrides for existing classes */
+#chat-log .chat-message.simulacrum-chat-message,
+#chat-log .chat-message.simulacrum-chat-message .message-header,
+#chat-log .chat-message.simulacrum-chat-message .message-content,
+#chat-log .chat-message.simulacrum-chat-message .message-header .title,
+#chat-log .chat-message.simulacrum-chat-message .message-sender,
+#chat-log .chat-message.simulacrum-chat-message .message-content p,
+#chat-log .chat-message.simulacrum-chat-message .message-content div,
+#chat-log .chat-message.simulacrum-chat-message .message-content h3,
+#chat-log .chat-message.simulacrum-chat-message .message-content h4,
+#chat-log .chat-message.simulacrum-chat-message .message-content span,
+#chat-log .chat-message.simulacrum-chat-message .message-content li,
+#chat-log .chat-message.simulacrum-chat-message .message-content a {
+  font-family: "Dumbledor", "Signika", sans-serif !important;
+  letter-spacing: 0.05em;
+}
+
 /* ---------------------------------------- */
 /*  Task-19: Chat Message Styling          */
 /* ---------------------------------------- */
 
-/* Dark customized background for AI messages */
+/* Dark customized background for AI messages - Dark Indigo */
 .chat-message.simulacrum-chat-message {
-  background-color: rgb(18, 21, 21);
+  background-color: #1A1625;
   border: 1px solid #4b4a45;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -352,16 +377,36 @@
   /* Ensure texture stays contained */
 }
 
-/* Pale gold text for header and content */
-.simulacrum-chat-message .message-header,
-.simulacrum-chat-message .message-content {
-  color: #EEE8AA;
-  /* PaleGoldenRod */
-  position: relative;
-  z-index: 1;
-  /* Above texture */
+/* User messages - Slightly more blue for distinction */
+.chat-message.simulacrum-chat-message.simulacrum-role-user {
+  background-color: #101318;
+  /* Deep Obsidian Blue */
 }
 
+/* Pale gold text for header and content */
+/* Pale gold text for header and content */
+/* Removed gradient text to fix readability/outline issues */
+.simulacrum-chat-message .message-header,
+.simulacrum-chat-message .message-content,
+.simulacrum-chat-message .message-header .title {
+  color: #FFF4C2;
+  /* Very pale gold */
+  text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
+  /* Reverted radius to 5px, 50% opacity */
+  position: relative;
+  z-index: 1;
+}
+
+/* Fix for elements that shouldn't be transparent/gradient text */
+.simulacrum-chat-message .message-header .message-metadata,
+.simulacrum-chat-message .message-sender,
+.simulacrum-chat-message .message-timestamp,
+.simulacrum-chat-message .message-header .title {
+  color: #FFF4C2;
+  text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
+}
+
+/* Subtle texture overlay */
 /* Subtle texture overlay */
 .chat-message.simulacrum-chat-message::before {
   content: '';
@@ -370,7 +415,8 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: url('../assets/texture-dgray1.webp');
+  /* Using system texture as requested */
+  background-image: url('../../../systems/dnd5e/ui/texture-gray1.webp');
   background-size: cover;
   background-repeat: repeat;
   opacity: 0.15;
@@ -432,15 +478,30 @@
 /*  Sidebar Icon Glow (Task-18)            */
 /* ---------------------------------------- */
 
-/* Subtle magical glow on sidebar icon */
-li.tab[data-tab="simulacrum"] i.fa-hand-sparkles {
-  filter: drop-shadow(0 0 3px #8A2BE2);
-  transition: filter 0.3s ease;
+/* Sidebar Tab Styling - Correctly target the button element */
+#sidebar-tabs .ui-control.icon[data-tab="simulacrum"] {
+  background-color: #1A1625;
+  border: 1px solid #4b4a45;
+  border-radius: 4px;
+  /* Icon styling directly on the button */
+  color: #FFF4C2;
+  text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
+  transition: all 0.3s ease;
 }
 
-/* Brighter glow when tab is active */
-li.tab[data-tab="simulacrum"].active i.fa-hand-sparkles {
-  filter: drop-shadow(0 0 5px #8A2BE2) drop-shadow(0 0 8px #8A2BE2);
+/* Hover State */
+#sidebar-tabs .ui-control.icon[data-tab="simulacrum"]:hover {
+  border-color: #DAA520;
+  box-shadow: 0 0 5px rgba(218, 165, 32, 0.3);
+}
+
+/* Active State */
+#sidebar-tabs .ui-control.icon[data-tab="simulacrum"].active,
+#sidebar-tabs .ui-control.icon[data-tab="simulacrum"][aria-pressed="true"] {
+  color: #FFF4C2;
+  text-shadow: 0 0 8px rgba(218, 165, 32, 0.8);
+  background-color: #1A1625;
+  border-color: #665c3b;
 }
 
 
