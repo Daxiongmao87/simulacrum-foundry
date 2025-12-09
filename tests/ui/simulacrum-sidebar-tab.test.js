@@ -13,8 +13,8 @@ global.AbstractSidebarTab = class MockAbstractSidebarTab {
   }
   render() { return this; }
   _prepareContext() { return Promise.resolve({}); }
-  _activateListeners() {}
-  _attachPartListeners() {}
+  _activateListeners() { }
+  _attachPartListeners() { }
 };
 
 global.HandlebarsApplicationMixin = (BaseClass) => class extends BaseClass {
@@ -43,7 +43,14 @@ global.game = {
     avatar: 'icons/svg/mystery-man.svg',
     isGM: false
   },
-  i18n: { localize: (k) => k }
+  i18n: { localize: (k) => k },
+  settings: {
+    get: jest.fn((module, key) => {
+      if (module === 'simulacrum' && key === 'fontChoice') return 'Dumbledor';
+      if (module === 'core' && key === 'uiConfig') return { chatNotifications: 'standard', uiScale: 1 };
+      return null;
+    })
+  }
 };
 
 global.CONFIG = { ui: {} };
@@ -71,12 +78,32 @@ jest.mock('../../scripts/core/simulacrum-core.js', () => ({
   SimulacrumCore: mockSimulacrumCore
 }));
 
+// Mock Hooks globally for all tests
+global.Hooks = {
+  on: jest.fn(),
+  once: jest.fn(),
+  call: jest.fn(() => true),
+  callAll: jest.fn()
+};
+
+// Mock ui.sidebar for popout references
+global.ui = {
+  sidebar: {
+    popouts: {},
+    tabGroups: { primary: null },
+    changeTab: jest.fn(),
+    expand: jest.fn(),
+    expanded: true
+  }
+};
+
 // Import module dynamically after globals are set up to avoid hoisting issues
 let SimulacrumSidebarTab;
 let registerSimulacrumSidebarTab;
 beforeAll(async () => {
   const mod = await import('../../scripts/ui/simulacrum-sidebar-tab.js');
-  SimulacrumSidebarTab = mod.SimulacrumSidebarTab;
+  // SimulacrumSidebarTab is the default export
+  SimulacrumSidebarTab = mod.default;
   registerSimulacrumSidebarTab = mod.registerSimulacrumSidebarTab;
 });
 
@@ -114,12 +141,10 @@ describe('SimulacrumSidebarTab', () => {
   });
 
   describe('constructor', () => {
-    it('should seed a welcome assistant message', () => {
+    it('should initialize with empty messages array (welcome message now in SimulacrumCore)', () => {
+      // Task-06: Welcome message is now added in SimulacrumCore.onReady(), not sidebar constructor
       expect(Array.isArray(sidebarTab.messages)).toBe(true);
-      expect(sidebarTab.messages.length).toBeGreaterThanOrEqual(1);
-      const first = sidebarTab.messages[0];
-      expect(first.role).toBe('assistant');
-      expect(first.content).toBe('SIMULACRUM.WelcomeMessage');
+      expect(sidebarTab.messages.length).toBe(0);
     });
 
     it('should have correct static properties', () => {
@@ -196,11 +221,11 @@ describe('SimulacrumSidebarTab', () => {
       sidebarTab.messages = [];
       await sidebarTab.addMessage('user', 'Hello');
       await sidebarTab.addMessage('assistant', 'Hi');
-      
+
       expect(sidebarTab.messages).toHaveLength(2);
-      
+
       sidebarTab.clearMessages();
-      
+
       expect(sidebarTab.messages).toEqual([]);
     });
   });
@@ -258,7 +283,7 @@ describe('SimulacrumSidebarTab', () => {
     it('should call super._activateListeners', () => {
       const mockSuper = Object.getPrototypeOf(Object.getPrototypeOf(sidebarTab));
       sidebarTab._activateListeners(mockHtml);
-      
+
       expect(mockSuper._activateListeners).toHaveBeenCalledWith(mockHtml);
     });
 
@@ -283,14 +308,53 @@ describe('SimulacrumSidebarTab', () => {
       expect(sendSpy).toHaveBeenCalled();
     });
 
-    it('should handle Enter with Shift held consistently', () => {
+    it('should handle Enter with Shift held to insert newline (Task-07)', () => {
       const sendSpy = jest.spyOn(SimulacrumSidebarTab, '_onSendMessage').mockResolvedValue();
       sidebarTab._activateListeners(mockHtml);
       const keydownHandler = mockTextarea.addEventListener.mock.calls.find(c => c[0] === 'keydown')[1];
       const mockEvent = { key: 'Enter', shiftKey: true, preventDefault: jest.fn() };
       keydownHandler(mockEvent);
+      // Shift+Enter should NOT prevent default (allows newline) and should NOT send
+      expect(mockEvent.preventDefault).not.toHaveBeenCalled();
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it('should block Enter submission when AI is processing (Task-04)', () => {
+      const sendSpy = jest.spyOn(SimulacrumSidebarTab, '_onSendMessage').mockResolvedValue();
+      // Simulate AI processing
+      sidebarTab._activeProcesses = new Map([['test-id', { label: 'Working', toolName: 'test' }]]);
+      sidebarTab._activateListeners(mockHtml);
+      const keydownHandler = mockTextarea.addEventListener.mock.calls.find(c => c[0] === 'keydown')[1];
+      const mockEvent = { key: 'Enter', shiftKey: false, preventDefault: jest.fn() };
+      keydownHandler(mockEvent);
+      // Should prevent default but NOT send
       expect(mockEvent.preventDefault).toHaveBeenCalled();
-      expect(sendSpy).toHaveBeenCalled();
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it('should cancel AI processing when Escape is pressed (Task-05)', () => {
+      const cancelSpy = jest.spyOn(SimulacrumSidebarTab, '_onCancelProcess').mockResolvedValue();
+      // Simulate AI processing
+      sidebarTab._activeProcesses = new Map([['test-id', { label: 'Working', toolName: 'test' }]]);
+      sidebarTab._activateListeners(mockHtml);
+      const keydownHandler = mockTextarea.addEventListener.mock.calls.find(c => c[0] === 'keydown')[1];
+      const mockEvent = { key: 'Escape', preventDefault: jest.fn() };
+      keydownHandler(mockEvent);
+      expect(mockEvent.preventDefault).toHaveBeenCalled();
+      expect(cancelSpy).toHaveBeenCalled();
+    });
+
+    it('should not cancel when Escape is pressed but AI is not processing (Task-05)', () => {
+      const cancelSpy = jest.spyOn(SimulacrumSidebarTab, '_onCancelProcess').mockResolvedValue();
+      // No active processes
+      sidebarTab._activeProcesses = new Map();
+      sidebarTab._activateListeners(mockHtml);
+      const keydownHandler = mockTextarea.addEventListener.mock.calls.find(c => c[0] === 'keydown')[1];
+      const mockEvent = { key: 'Escape', preventDefault: jest.fn() };
+      keydownHandler(mockEvent);
+      // Should NOT prevent default or call cancel when not processing
+      expect(mockEvent.preventDefault).not.toHaveBeenCalled();
+      expect(cancelSpy).not.toHaveBeenCalled();
     });
 
     it('should handle missing form/textarea gracefully', () => {

@@ -101,7 +101,8 @@ async function runToolFailureFallback(conversationManager, aiClient, getSystemPr
   }
 
   try {
-    const raw = await aiClient.chatWithSystem(messages, getSystemPrompt, null, { signal });
+    const systemPromptRef = await getSystemPrompt();
+    const raw = await aiClient.chatWithSystem(messages, () => systemPromptRef, null, { signal });
     const fallbackResponse = SimulacrumCore._normalizeAIResponse(raw);
 
     if (!fallbackResponse || fallbackResponse._parseError || isToolCallFailure(fallbackResponse)) {
@@ -155,17 +156,17 @@ export async function processToolCallLoop(
     let repeatCount = 0;
     let iterationCount = 0;
     let toolFailureAttempts = 0;
-    
+
     while (repeatCount < REPEAT_LIMIT) {
       iterationCount++;
       if (isDebugEnabled()) logger.debug(`Start of loop iteration ${iterationCount} (retries: ${repeatCount})`);
-      
+
       // Check for cancellation
       if (signal?.aborted) {
         if (isDebugEnabled()) logger.info('Process cancelled');
         throw new Error('Process was cancelled');
       }
-      
+
       // --- Display AI's natural language content if present and not a parse error ---
       // This ensures conversational output is shown to the user.
       if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
@@ -192,9 +193,10 @@ export async function processToolCallLoop(
         // Request corrected response
         const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
         const toolsToSend = currentToolSupport === true ? tools : null;
+        const systemPromptRef = await getSystemPrompt();
         const raw = currentToolSupport !== true
-          ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...conversationMessages]), toolsToSend, { signal })
-          : await aiClient.chatWithSystem(conversationMessages, getSystemPrompt, toolsToSend, { signal });
+          ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...conversationMessages]), toolsToSend, { signal })
+          : await aiClient.chatWithSystem(conversationMessages, () => systemPromptRef, toolsToSend, { signal });
         currentResponse = SimulacrumCore._normalizeAIResponse(raw);
         continue;
       }
@@ -221,9 +223,10 @@ export async function processToolCallLoop(
           }
           const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
           const toolsToSend = currentToolSupport === true ? tools : null;
+          const systemPromptRef = await getSystemPrompt();
           const raw = currentToolSupport !== true
-            ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...conversationMessages]), toolsToSend, { signal })
-            : await aiClient.chatWithSystem(conversationMessages, getSystemPrompt, toolsToSend, { signal });
+            ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...conversationMessages]), toolsToSend, { signal })
+            : await aiClient.chatWithSystem(conversationMessages, () => systemPromptRef, toolsToSend, { signal });
           currentResponse = SimulacrumCore._normalizeAIResponse(raw);
         } finally {
           emitRetryStatus('end', retryCallId);
@@ -236,12 +239,12 @@ export async function processToolCallLoop(
         if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
         break; // Exit the loop - this is how the loop should terminate
       }
-      
+
       // Execute all tool calls
       if (isDebugEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
       const toolResults = await executeToolCalls(currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal);
-      
-      
+
+
       // --- Check for tool execution failures and increment retry count ---
       const hasFailedTool = toolResults.some(result => !result.success);
       if (hasFailedTool) {
@@ -263,10 +266,10 @@ export async function processToolCallLoop(
       // For legacy mode, add tool results as system message so AI notices them
       if (currentToolSupport !== true && toolResults.length > 0) {
         const latestResult = toolResults[toolResults.length - 1];
-        const toolStatusMessage = latestResult.success 
+        const toolStatusMessage = latestResult.success
           ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
           : `Tool execution failed: ${latestResult.toolName} failed with error: ${latestResult.result.error}`;
-        
+
         conversationManager.addMessage('system', toolStatusMessage);
       }
 
@@ -274,7 +277,7 @@ export async function processToolCallLoop(
       if (isDebugEnabled()) logger.debug('Getting next AI response after tool execution');
       currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
     }
-    
+
     // If we hit the repeat limit, return the last response
     if (repeatCount >= REPEAT_LIMIT) {
       {
@@ -310,7 +313,7 @@ export async function processToolCallLoop(
       }
       return finalErrorMessage;
     }
-    
+
     // If the loop exits gracefully (e.g., endTaskSignaled is true, or a final conversational response)
     // Ensure the last AI response's content is displayed if it hasn't been already.
     if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
@@ -331,35 +334,49 @@ export async function processToolCallLoop(
  */
 async function executeToolCalls(toolCalls, conversationManager, currentToolSupport, onToolResult, signal) {
   const results = [];
-  
+
   for (const toolCall of toolCalls) {
     if (signal?.aborted) {
       throw new Error('Process was cancelled');
     }
-    
+
     const toolName = toolCall?.function?.name || toolCall?.name;
     const toolArgs = toolCall?.function?.arguments || toolCall?.arguments;
-    
+
     try {
       // Parse arguments if they're a string
       const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
-      
+
       // Get tool instance
       const tool = toolRegistry.getTool(toolName);
       if (!tool) {
         throw new Error(`Unknown tool: ${toolName}`);
       }
-      
+
       // Execute tool
       const result = await tool.execute(parsedArgs);
-      
+
+      // Enforce global output truncation limit (Task-21)
+      const MAX_OUTPUT_CHARS = 10000;
+      if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
+        result.content = result.content.substring(0, MAX_OUTPUT_CHARS) +
+          `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters. Use specific tool parameters (like startLine/endLine) to view specific sections.]`;
+      }
+
       // Add tool result to conversation based on tool support mode
       if (currentToolSupport === true) {
         // Native mode: use tool role messages
         conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
       }
-      
-      // Notify about tool result
+
+      // Notify about tool result - Check if we should suppress UI notification for macros to avoid duplicates
+      // Macros already output to chat via simple-macro logic or system logic
+      // But we DO want the "Tool Result" card. 
+      // The issue is likely that BOTH `processToolCallLoop` calls `onToolResult` AND something else does?
+      // Wait, `processToolCallLoop` calls `onToolResult` around line 171 for assistant content, and line 371 for tool results.
+      // ChatHandler.processUserMessage calls `handleToolResult` in `onToolResult` callback.
+      // `handleToolResult` adds UI message.
+
       if (onToolResult) {
         onToolResult({
           role: 'tool',
@@ -368,39 +385,39 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
           toolName
         });
       }
-      
+
       // Check if the result indicates an error (even if no exception was thrown)
       const isSuccess = !result.error;
-      
+
       results.push({
         toolCall,
         toolName,
         result,
         success: isSuccess
       });
-      
+
       // Post-tool verification if needed
       try {
         await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
       } catch (verificationError) {
         logger.warn(`Post-tool verification failed for ${toolName}:`, verificationError);
       }
-      
+
     } catch (error) {
       logger.error(`Tool execution failed for ${toolName}:`, error);
-      
+
       const errorResult = {
         error: error.message,
         toolName,
         arguments: toolArgs
       };
-      
+
       // Add tool error to conversation based on tool support mode  
       if (currentToolSupport === true) {
         // Native mode: use tool role messages
         conversationManager.addMessage('tool', JSON.stringify(errorResult), null, toolCall.id);
       }
-      
+
       // Notify about tool error
       if (onToolResult) {
         onToolResult({
@@ -410,7 +427,7 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
           toolName
         });
       }
-      
+
       results.push({
         toolCall,
         toolName,
@@ -420,7 +437,7 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
       });
     }
   }
-  
+
   return results;
 }
 
@@ -434,10 +451,10 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
 async function getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal) {
   // Build context with tool results
   const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-  
+
   // For native mode, build messages without system (will be added by chatWithSystem)
   const messagesToSend = [...conversationMessages];
-  
+
   // Add tool results to conversation context for native mode only
   if (currentToolSupport === true) {
     for (const toolResult of toolResults) {
@@ -448,21 +465,22 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
       });
     }
   }
-  
+
   const toolsToSend = currentToolSupport === true ? tools : null;
-  
-  const raw = currentToolSupport !== true 
-    ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: getSystemPrompt() }, ...messagesToSend]), toolsToSend, { signal })
-    : await aiClient.chatWithSystem(messagesToSend, getSystemPrompt, toolsToSend, { signal });
+
+  const systemPromptRef = await getSystemPrompt();
+  const raw = currentToolSupport !== true
+    ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...messagesToSend]), toolsToSend, { signal })
+    : await aiClient.chatWithSystem(messagesToSend, () => systemPromptRef, toolsToSend, { signal });
   const normalized = SimulacrumCore._normalizeAIResponse(raw);
-  
+
   // Handle fallback tool calls if no native tool_calls found and in legacy mode
   if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0) && currentToolSupport !== true) {
     if (isDebugEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
     try {
       const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
       if (isDebugEnabled()) logger.debug('Fallback parsing result:', parsed);
-      
+
       if (parsed && parsed.name) {
         if (isDebugEnabled()) logger.debug(`Creating fallback tool call for '${parsed.name}'`);
         normalized.toolCalls = [{
@@ -477,7 +495,7 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
       logger.warn('Fallback tool parsing failed:', error);
     }
   }
-  
+
   return normalized;
 }
 

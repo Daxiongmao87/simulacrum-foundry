@@ -98,6 +98,18 @@ function registerAPISettings() {
       }
     }
   });
+
+  // Task-14: API Request Delay to prevent rate limiting
+  game.settings.register(MODULE_ID, 'apiRequestDelay', {
+    name: 'API Request Delay',
+    hint: 'Delay in seconds between API requests to prevent rate limiting (0-30 seconds, default 0).',
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: 0,
+    restricted: true,
+    range: { min: 0, max: 30, step: 0.5 }
+  });
 }
 
 Hooks.once('init', async () => {
@@ -114,7 +126,7 @@ Hooks.once('init', async () => {
   // CRITICAL FIX (DEFECT #1): Instantiate immediately after registration
   // This ensures ui.simulacrum exists when FoundryVTT's core UI initialization runs
   if (CONFIG && CONFIG.ui && CONFIG.ui.simulacrum) {
-    ui.simulacrum = new CONFIG.ui.simulacrum({id: 'simulacrum'});
+    ui.simulacrum = new CONFIG.ui.simulacrum({ id: 'simulacrum' });
     logger.info('Simulacrum sidebar tab instantiated during init for popout support');
   } else {
     logger.error('CONFIG.ui.simulacrum not found after registration - popout will not work');
@@ -150,7 +162,18 @@ Hooks.once('init', async () => {
   logger.info('Settings registered');
 });
 
+import { ensureSimulacrumMacros } from './macros.js';
+
 Hooks.once('ready', async () => {
+  // Expose API
+  const module = game.modules.get(MODULE_ID);
+  if (module) {
+    module.api = SimulacrumCore;
+  }
+
+  // Ensure default macros exist
+  ensureSimulacrumMacros().catch(err => logger.error('Failed to ensure macros', err));
+
   logger.info(`${MODULE_NAME} is ready!`);
 });
 

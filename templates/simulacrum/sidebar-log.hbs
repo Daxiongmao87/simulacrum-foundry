@@ -2,14 +2,14 @@
 <div class="chat-scroll" data-application-part="log">
   <ol class="chat-log plain themed theme-light">
     {{#each messages}}
-        {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
-      {{/each}}
-      
+    {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
+    {{/each}}
+
     {{!-- Process status shown inline in chat log while agent is working --}}
     {{#if processActive}}
     <li class="chat-message message flexcol process-status-message">
       <div class="message-content">
-        <div class="process-status flexrow" style="gap: 0.5rem; align-items: center; padding: 0.5rem; background: rgba(0,0,0,0.05); border-radius: 4px; font-style: italic;">
+        <div class="process-status flexrow">
           <i class="fa-solid fa-circle-notch fa-spin simulacrum-process-spinner"></i>
           <span class="label">{{processLabel}}</span>
         </div>

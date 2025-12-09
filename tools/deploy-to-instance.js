@@ -23,7 +23,7 @@ function parseArgs() {
   const res = { container: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if ((a === '--container' || a === '-c') && args[i+1]) res.container = args[++i];
+    if ((a === '--container' || a === '-c') && args[i + 1]) res.container = args[++i];
   }
   if (!res.container) {
     console.error('Usage: node tools/deploy-to-instance.js --container <name-or-id>');
@@ -50,14 +50,23 @@ function main() {
   execSync(`docker exec ${container} mkdir -p ${dest}`, { stdio: 'inherit' });
   // Copy project files
   execSync(`docker cp ${ROOT}/module.json ${container}:${dest}/module.json`, { stdio: 'inherit' });
-  for (const dir of ['scripts','styles','templates','lang','assets']) {
+  for (const dir of ['scripts', 'styles', 'templates', 'lang', 'assets', 'packs']) {
     const src = join(ROOT, dir);
     try {
       if (existsSync(src)) {
         execSync(`docker cp ${src} ${container}:${dest}/`, { stdio: 'inherit' });
       }
-    } catch {}
+    } catch { }
   }
+  // Force-clear the LevelDB cache for macros to ensure .db modifications are picked up
+  try {
+    const packsDest = `${dest}/packs/macros`;
+    console.log(`[deploy] Clearing LevelDB cache at ${packsDest}`);
+    execSync(`docker exec ${container} rm -rf ${packsDest}`, { stdio: 'inherit' });
+  } catch (e) {
+    console.warn('[deploy] Warning: Failed to clear LevelDB cache (might not exist yet)', e.message);
+  }
+
   console.log('[deploy] Deployed successfully. Reload the Foundry page to see changes.');
 }
 

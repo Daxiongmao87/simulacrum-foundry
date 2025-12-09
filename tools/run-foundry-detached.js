@@ -18,11 +18,11 @@ function parseArgs() {
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if ((a === '--image' || a === '-i') && args[i+1]) out.image = args[++i];
-    else if ((a === '--tag' || a === '-t') && args[i+1]) out.tag = args[++i];
-    else if ((a === '--name' || a === '-n') && args[i+1]) out.name = args[++i];
-    else if ((a === '--port' || a === '-p') && args[i+1]) out.port = Number(args[++i]);
-    else if (a === '--data' && args[i+1]) out.data = resolve(args[++i]);
+    if ((a === '--image' || a === '-i') && args[i + 1]) out.image = args[++i];
+    else if ((a === '--tag' || a === '-t') && args[i + 1]) out.tag = args[++i];
+    else if ((a === '--name' || a === '-n') && args[i + 1]) out.name = args[++i];
+    else if ((a === '--port' || a === '-p') && args[i + 1]) out.port = Number(args[++i]);
+    else if (a === '--data' && args[i + 1]) out.data = resolve(args[++i]);
   }
   if (!out.name) out.name = `foundry-v13-${out.port}`;
   return out;
@@ -31,16 +31,17 @@ function parseArgs() {
 async function main() {
   const { image, tag, name, port, data } = parseArgs();
   const imageRef = `${image}:${tag}`;
-  try { mkdirSync(data, { recursive: true }); } catch {}
+  try { mkdirSync(data, { recursive: true }); } catch { }
 
   // Stop any existing container with same name to avoid conflicts
-  try { execSync(`docker rm -f ${name}`, { stdio: 'ignore' }); } catch {}
+  try { execSync(`docker rm -f ${name}`, { stdio: 'ignore' }); } catch { }
 
   const args = [
-    'run','--rm','--name', name,
+    'run', '--rm', '--name', name,
     '-d',
     '-p', `${port}:30000`,
     '-v', `${data}:/data`,
+    '-e', `FOUNDRY_LICENSE_KEY=HT6S-SUP1-9PMZ-QL6X-LK4L-FONR`,
     imageRef
   ];
 

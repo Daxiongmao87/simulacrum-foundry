@@ -25,17 +25,17 @@ export class DocumentCreateTool extends BaseTool {
     this.schema = {
       type: 'object',
       properties: {
-        documentType: { 
-          type: 'string', 
+        documentType: {
+          type: 'string',
           required: true,
           description: 'Type of document to create'
         },
-        data: { 
-          type: 'object', 
+        data: {
+          type: 'object',
           required: true,
           description: 'Document data (will be validated by FoundryVTT)'
         },
-        folder: { 
+        folder: {
           type: 'string',
           description: 'Folder ID to create document in'
         }
@@ -56,10 +56,10 @@ export class DocumentCreateTool extends BaseTool {
    */
   async getConfirmationDetails(params) {
     const { documentType, data } = params;
-    
+
     // Mock DocumentAPI call (would be real in actual implementation)
     const mockSchema = { fields: ['name', 'type'], systemFields: ['attributes'] };
-    
+
     return {
       type: 'create',
       title: `Create ${documentType} Document`,
@@ -89,7 +89,11 @@ export class DocumentCreateTool extends BaseTool {
 
       // Validate parameters
       this.validateParameters(parameters, this.schema);
-      
+
+      // Validate image URLs (Task-04)
+      this.validateImageUrls(data);
+      if (parameters.folder) this.validateImageUrls({ folder: parameters.folder }); // unlikely but consistent
+
       // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
       const { DocumentAPI } = await import('../core/document-api.js');
       const document = await DocumentAPI.createDocument(documentType, data);

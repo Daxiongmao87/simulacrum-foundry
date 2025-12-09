@@ -99,14 +99,48 @@
 }
 
 /* Chat Controls */
+/* Chat Controls - Commented out to match standard styling */
+/*
 #simulacrum-chat-controls {
   flex: 0 0 auto;
   margin: 5px;
-  /* background-image: url('../assets/texture-dgray1.webp'); */
-  /* File missing */
   border: 1px solid var(--color-border-dark);
   border-radius: 4px;
   background-color: var(--color-cool-4);
+}
+*/
+
+/* Replicating #chat-message styles from foundry2.css */
+#simulacrum-chat-message {
+  --input-text-color: var(--text-color, var(--color-light-2));
+  --input-placeholder-color: var(--placeholder-color, var(--color-light-5));
+  margin: 0;
+  padding: var(--chat-message-spacing, 4px);
+  /* Default to 4px if var undefined */
+  width: 100%;
+  resize: none;
+  background: var(--background-color, var(--color-cool-5));
+  border: 2px solid var(--border-color, var(--color-cool-4));
+  font-family: var(--font-body);
+  transition: box-shadow 250ms, outline 250ms;
+}
+
+#simulacrum-chat-message::placeholder {
+  font-size: var(--font-size-16);
+  font-style: italic;
+}
+
+#simulacrum-chat-message:placeholder-shown:not(:focus) {
+  place-content: center;
+  text-align: center;
+}
+
+#simulacrum-chat-message:focus {
+  outline-color: var(--color-warm-1);
+}
+
+#simulacrum-chat-message:focus::placeholder {
+  color: transparent;
 }
 
 .simulacrum-settings .form-group input,

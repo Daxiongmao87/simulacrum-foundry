@@ -16,20 +16,28 @@ export class DocumentReadTool extends BaseTool {
     this.schema = {
       type: 'object',
       properties: {
-        documentType: { 
-          type: 'string', 
+        documentType: {
+          type: 'string',
           required: true,
           description: 'Type of document to read'
         },
-        documentId: { 
-          type: 'string', 
+        documentId: {
+          type: 'string',
           required: true,
           description: 'ID of document to read'
         },
-        includeEmbedded: { 
-          type: 'boolean', 
+        includeEmbedded: {
+          type: 'boolean',
           default: true,
           description: 'Include embedded documents (tokens, items, etc.)'
+        },
+        startLine: {
+          type: 'integer',
+          description: 'Start line for pagination (1-indexed). Optional.'
+        },
+        endLine: {
+          type: 'integer',
+          description: 'End line for pagination (inclusive). Optional.'
         }
       },
       required: ['documentType', 'documentId']
@@ -66,7 +74,7 @@ export class DocumentReadTool extends BaseTool {
           }
         };
       }
-      
+
       // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
       const { DocumentAPI } = await import('../core/document-api.js');
       const document = await DocumentAPI.getDocument(documentType, documentId);
@@ -75,9 +83,9 @@ export class DocumentReadTool extends BaseTool {
         return {
           content: `Failed to read ${documentType} document: Document not found`,
           display: '❌ Error reading document: Document not found',
-          error: { 
-            message: 'Document not found', 
-            type: 'DOCUMENT_NOT_FOUND' 
+          error: {
+            message: 'Document not found',
+            type: 'DOCUMENT_NOT_FOUND'
           }
         };
       }
@@ -88,7 +96,25 @@ export class DocumentReadTool extends BaseTool {
 
       const documentName = documentData?.name || documentId;
       const jsonPayload = JSON.stringify(documentData, null, 2);
-      const content = `Read ${documentType}: ${documentName}\n\n${jsonPayload}`;
+
+      // Handle pagination
+      let finalContent = jsonPayload;
+      const lines = jsonPayload.split('\n');
+      const totalLines = lines.length;
+
+      if (parameters.startLine || parameters.endLine) {
+        const start = Math.max(0, (parameters.startLine || 1) - 1);
+        const end = parameters.endLine ? Math.min(totalLines, parameters.endLine) : totalLines;
+
+        if (start < totalLines) {
+          finalContent = lines.slice(start, end).join('\n');
+          finalContent = `[Paginated View: Lines ${start + 1}-${end} of ${totalLines}]\n${finalContent}`;
+        } else {
+          finalContent = `[Error: Start line ${start + 1} exceeds line count ${totalLines}]`;
+        }
+      }
+
+      const content = `Read ${documentType}: ${documentName}\n\n${finalContent}`;
 
       return {
         content,
@@ -99,9 +125,9 @@ export class DocumentReadTool extends BaseTool {
       return {
         content: `Failed to read ${parameters.documentType} document: ${error.message}`,
         display: `❌ Error reading document: ${error.message}`,
-        error: { 
-          message: error.message, 
-          type: 'DOCUMENT_NOT_FOUND' 
+        error: {
+          message: error.message,
+          type: 'DOCUMENT_NOT_FOUND'
         }
       };
     }
@@ -155,7 +181,7 @@ export class DocumentReadTool extends BaseTool {
     // Handle case where data is an object
     if (typeof data === 'object') {
       const processed = { ...data };
-      
+
       // Remove system-specific fields that might clutter response
       const fieldsToRemove = ['_index', 'collection', '_createId', 'apps', '_sheet'];
       fieldsToRemove.forEach(field => delete processed[field]);

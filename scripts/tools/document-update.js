@@ -102,6 +102,10 @@ class DocumentUpdateTool extends BaseTool {
         throw new ToolValidationError('Parameter "documentId" must be a non-empty string');
       }
 
+      // Validate image URLs (Task-04)
+      if (normalizedParams.updates) this.validateImageUrls(normalizedParams.updates);
+      if (normalizedParams.operations) this.validateImageUrls(normalizedParams.operations);
+
       const { updates, embeddedOperations } = await this.#buildOperationPlan(normalizedParams);
 
       if (Object.keys(updates).length === 0 && embeddedOperations.length === 0) {

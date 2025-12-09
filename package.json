@@ -1,6 +1,6 @@
 {
   "name": "simulacrum",
-  "version": "0.1.0",
+  "version": "0.1.8",
   "type": "module",
   "description": "An AI-powered assistant for FoundryVTT campaign document management",
   "main": "scripts/simulacrum.js",

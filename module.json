@@ -9,7 +9,7 @@
       "url": "https://github.com/yourusername"
     }
   ],
-  "version": "0.1.0",
+  "version": "0.1.8",
   "compatibility": {
     "minimum": "13.0.0",
     "verified": "13.331",
@@ -32,6 +32,14 @@
       "lang": "en",
       "name": "English",
       "path": "lang/en.json"
+    }
+  ],
+  "packs": [
+    {
+      "name": "simulacrum-macros",
+      "label": "Simulacrum Macros",
+      "path": "packs/macros.db",
+      "type": "Macro"
     }
   ],
   "socket": false,

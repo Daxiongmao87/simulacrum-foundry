@@ -10,7 +10,7 @@ import { createLogger } from '../utils/logger.js';
  * Extends FoundryVTT's basic settings with API testing and advanced validation
  */
 export class SettingsInterface extends FormApplication {
-  
+
   /**
    * Create settings interface instance
    * @param {Object} [options={}] - Application options
@@ -81,13 +81,13 @@ export class SettingsInterface extends FormApplication {
     if (baseInput.length && !baseInput.attr('placeholder')) {
       baseInput.attr('placeholder', this._getPlaceholderForProvider(this.currentProvider || 'openai'));
     }
-    
+
     // API connection test button
     html.find('.test-connection').click(this._onTestConnection.bind(this));
-    
+
     // Reset to defaults button
     html.find('.reset-defaults').click(this._onResetDefaults.bind(this));
-    
+
     // Live validation
     html.find('input[name="apiKey"]').on('input', this._validateApiKey.bind(this));
     html.find('input[name="baseURL"]').on('input', this._validateBaseURL.bind(this));
@@ -133,7 +133,7 @@ export class SettingsInterface extends FormApplication {
    */
   async _onTestConnection(event) {
     event.preventDefault();
-    
+
     const button = event.currentTarget;
     const form = button.form;
     const formData = new FormData(form);
@@ -163,7 +163,7 @@ export class SettingsInterface extends FormApplication {
 
     try {
       const result = await this._testApiConnection(config);
-      
+
       if (result.success) {
         ui.notifications.info(`✅ Connection successful! Model: ${result.model || 'Unknown'}`);
       } else {
@@ -185,7 +185,7 @@ export class SettingsInterface extends FormApplication {
    */
   async _onResetDefaults(event) {
     event.preventDefault();
-    
+
     const confirmed = await Dialog.confirm({
       title: 'Reset to Defaults',
       content: '<p>Are you sure you want to reset all settings to their default values?</p>',
@@ -213,7 +213,7 @@ export class SettingsInterface extends FormApplication {
       form.querySelector('input[name="temperature"]').value = '0.7';
       form.querySelector('input[name="contextLength"]').value = '20';
       form.querySelector('textarea[name="customSystemPrompt"]').value = '';
-      
+
       ui.notifications.info('Settings reset to defaults');
       this._validateForm();
     }
@@ -229,7 +229,7 @@ export class SettingsInterface extends FormApplication {
     const value = input.value.trim();
     // Clear previous validation
     input.classList.remove('valid', 'invalid');
-    
+
     if (value) {
       input.classList.add('valid');
     }
@@ -243,10 +243,10 @@ export class SettingsInterface extends FormApplication {
   _validateBaseURL(event) {
     const input = event.target;
     const value = input.value.trim();
-    
+
     // Clear previous validation
     input.classList.remove('valid', 'invalid');
-    
+
     if (value) {
       try {
         new URL(value);
@@ -320,20 +320,20 @@ export class SettingsInterface extends FormApplication {
     }
   }
 
-_inferProviderFromURL(url) {
-  if (!url) return 'openai';
-  const lower = String(url).toLowerCase();
-  if (lower.includes('generativelanguage.googleapis.com')) return 'gemini';
-  return 'openai';
-}
+  _inferProviderFromURL(url) {
+    if (!url) return 'openai';
+    const lower = String(url).toLowerCase();
+    if (lower.includes('generativelanguage.googleapis.com')) return 'gemini';
+    return 'openai';
+  }
 
-_resolveHealthEndpoint(baseURL, provider) {
-  const base = String(baseURL || '').replace(/\/$/, '');
-  if (provider === 'gemini') {
+  _resolveHealthEndpoint(baseURL, provider) {
+    const base = String(baseURL || '').replace(/\/$/, '');
+    if (provider === 'gemini') {
+      return `${base}/models`;
+    }
     return `${base}/models`;
   }
-  return `${base}/models`;
-}
 
   /**
    * Handle form submission
@@ -357,7 +357,7 @@ _resolveHealthEndpoint(baseURL, provider) {
       await game.settings.set('simulacrum', 'apiKey', formData.apiKey);
       await game.settings.set('simulacrum', 'baseURL', formData.baseURL);
       await game.settings.set('simulacrum', 'model', formData.model);
-      
+
       // Set advanced settings if provided
       if (formData.maxTokens) {
         await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
@@ -371,14 +371,14 @@ _resolveHealthEndpoint(baseURL, provider) {
       if (formData.customSystemPrompt !== undefined) {
         await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
       }
-      
+
       ui.notifications.info('Simulacrum settings saved successfully');
-      
+
       // Reinitialize AI client with new settings if module is active
       if (typeof SimulacrumCore !== 'undefined') {
         await SimulacrumCore.initializeAIClient();
       }
-      
+
     } catch (error) {
       this.logger.error('Failed to save Simulacrum settings:', error);
       ui.notifications.error(`Failed to save settings: ${error.message}`);
@@ -402,22 +402,22 @@ _resolveHealthEndpoint(baseURL, provider) {
  */
 function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, repositionCallback) {
   const fullSettingId = `${moduleId}.${settingKey}`;
-  
+
   // Ensure html is a jQuery object for consistent API usage
   const $html = html instanceof jQuery ? html : $(html);
-  
+
   // Use the data-setting-id attribute to find the setting div
   const settingDiv = $html.find(`[data-setting-id="${fullSettingId}"]`);
   if (!settingDiv.length) {
     return;
   }
-  
+
   // Get the original stored value from settings
   let storedValue = game.settings.get(moduleId, settingKey) || "";
-  
+
   // Handle newlines - convert "\n" sequences to actual newlines
   storedValue = storedValue.replace(/\\n/g, "\n");
-  
+
   // Find the original input
   const inputEl = settingDiv.find(`input[name="${fullSettingId}"]`);
   if (!inputEl.length) {
@@ -431,10 +431,10 @@ function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, rep
               style="font-family: monospace; white-space: pre; overflow-x: auto; ${textareaStyle}"
               wrap="off">${storedValue}</textarea>
   `);
-  
+
   // Replace the input with our textarea
   inputEl.replaceWith(textarea);
-  
+
   // When the textarea changes, properly escape newlines before saving
   textarea.on("change", async (ev) => {
     const rawValue = ev.target.value;
@@ -494,6 +494,29 @@ export function registerAdvancedSettings() {
     restricted: true
   });
 
+
+  game.settings.register('simulacrum', 'fontChoice', {
+    name: 'UI Font',
+    hint: 'Select the font family for the Simulacrum interface.',
+    scope: 'client',
+    config: true,
+    type: String,
+    choices: {
+      'Dumbledor': 'Dumbledor',
+      'Alice in Wonderland': 'Alice in Wonderland',
+      'Morris Roman Black': 'Morris Roman Black',
+      'Wizzta': 'Wizzta',
+      'Signika': 'Signika (Default)'
+    },
+    default: 'Dumbledor',
+    onChange: value => {
+      // Live update if the tab is rendered
+      if (ui.sidebar?.tabs.simulacrum?.rendered) {
+        ui.sidebar.tabs.simulacrum.element.css('font-family', `"${value}", "Signika", sans-serif`);
+      }
+    }
+  });
+
   game.settings.register('simulacrum', 'customSystemPrompt', {
     name: 'Custom System Prompt',
     hint: 'Additional instructions to append to the system prompt.',
@@ -529,7 +552,7 @@ export function registerSettingsEnhancements() {
             }
           }
         );
-        
+
         // Add a click handler for tab switching to ensure textareas are converted
         html.find('a.item[data-tab="simulacrum"]').on('click', () => {
           setTimeout(() => {

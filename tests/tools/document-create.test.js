@@ -34,17 +34,17 @@ describe('DocumentCreateTool - constructor', () => {
     expect(documentCreateTool.schema).toEqual({
       type: 'object',
       properties: {
-        documentType: { 
-          type: 'string', 
+        documentType: {
+          type: 'string',
           required: true,
           description: 'Type of document to create'
         },
-        data: { 
-          type: 'object', 
+        data: {
+          type: 'object',
           required: true,
           description: 'Document data (will be validated by FoundryVTT)'
         },
-        folder: { 
+        folder: {
           type: 'string',
           description: 'Folder ID to create document in'
         }
@@ -71,14 +71,14 @@ describe('DocumentCreateTool - Utility Methods', () => {
     it('should return confirmation details', async () => {
       const mockSchema = { fields: ['name', 'type'], systemFields: ['attributes'] };
       DocumentAPI.getDocumentSchema.mockReturnValue(mockSchema);
-      
-      const params = { 
-        documentType: 'Actor', 
-        data: { name: 'New Actor' } 
+
+      const params = {
+        documentType: 'Actor',
+        data: { name: 'New Actor' }
       };
-      
+
       const details = await documentCreateTool.getConfirmationDetails(params);
-      
+
       expect(details.type).toBe('create');
       expect(details.title).toBe('Create Actor Document');
       expect(details.details).toContain('New Actor');
@@ -91,29 +91,29 @@ describe('DocumentCreateTool - Utility Methods', () => {
     it('should create document for valid parameters', async () => {
       const mockDocument = { name: 'New Actor', id: 'new-actor-id' };
       DocumentAPI.createDocument.mockResolvedValue(mockDocument);
-      
-      const result = await documentCreateTool.execute({ 
-        documentType: 'Actor', 
-        data: { name: 'New Actor' } 
+
+      const result = await documentCreateTool.execute({
+        documentType: 'Actor',
+        data: { name: 'New Actor' }
       });
-      
+
       expect(result.content).toBe('Created Actor: New Actor');
       expect(result.display).toBe('✅ Created **New Actor** (Actor)');
     });
 
     it('should return error for invalid document type', async () => {
-      await expect(documentCreateTool.execute({ 
-        documentType: 'InvalidType', 
-        data: { name: 'New Actor' } 
+      await expect(documentCreateTool.execute({
+        documentType: 'InvalidType',
+        data: { name: 'New Actor' }
       })).rejects.toThrow('not available in current system');
     });
 
     it('should handle API errors gracefully', async () => {
       DocumentAPI.createDocument.mockRejectedValue(new Error('Creation failed'));
-      
-      await expect(documentCreateTool.execute({ 
-        documentType: 'Actor', 
-        data: { name: 'New Actor' } 
+
+      await expect(documentCreateTool.execute({
+        documentType: 'Actor',
+        data: { name: 'New Actor' }
       })).rejects.toThrow('Creation failed');
     });
   });
@@ -144,11 +144,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle malformed document data', async () => {
         const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+
         if (documentTypes.length === 0) return; // Skip for empty systems
-        
+
         const validType = documentTypes[0];
-        
+
         // Test with various malformed data
         const malformedData = [
           null,
@@ -168,11 +168,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle DocumentAPI failures gracefully', async () => {
         const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         // Mock various API failure scenarios
         const apiErrors = [
           new Error('Network timeout'),
@@ -183,25 +183,39 @@ describe.each(createParameterizedSystemTests())(
 
         for (const error of apiErrors) {
           DocumentAPI.createDocument.mockRejectedValueOnce(error);
-          
+
           await expect(documentCreateTool.execute({
             documentType: validType,
             data: { name: 'Test Document' }
           })).rejects.toThrow(error.message);
         }
       });
+
+      it('should reject invalid image URLs', async () => {
+        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        if (documentTypes.length === 0) return;
+        const validType = documentTypes[0];
+
+        await expect(documentCreateTool.execute({
+          documentType: validType,
+          data: {
+            name: 'Bad Image',
+            img: 'Image of a castle on a hill'
+          }
+        })).rejects.toThrow(/Invalid image URL/);
+      });
     });
 
     describe('Performance Testing', () => {
       it('should complete document creation within performance threshold', async () => {
         const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         DocumentAPI.createDocument.mockResolvedValueOnce({ id: 'perf-test' });
-        
+
         const createDocument = () => documentCreateTool.execute({
           documentType: validType,
           data: { name: 'Performance Test Document' }
@@ -209,30 +223,30 @@ describe.each(createParameterizedSystemTests())(
 
         // Should complete within 500ms
         const result = PerformanceHelpers.assertPerformance(createDocument, 500);
-        
+
         await expect(result).resolves.toBeDefined();
       });
 
       it('should handle batch creation efficiently', async () => {
         const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
-        DocumentAPI.createDocument.mockImplementation(() => 
+
+        DocumentAPI.createDocument.mockImplementation(() =>
           Promise.resolve({ id: `batch-${Date.now()}-${Math.random()}` })
         );
-        
+
         const promises = Array.from({ length: 10 }, (_, i) =>
           documentCreateTool.execute({
             documentType: validType,
             data: { name: `Batch Document ${i}` }
           })
         );
-        
+
         const { duration } = PerformanceHelpers.measureTime(() => Promise.all(promises));
-        
+
         // Batch creation should complete within reasonable time
         expect(duration).toBeLessThan(1000); // 1 second for 10 documents
       });
@@ -242,7 +256,7 @@ describe.each(createParameterizedSystemTests())(
       it('should handle systems with no document types', async () => {
         if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
           expect(() => new DocumentCreateTool()).not.toThrow();
-          
+
           // Should reject any creation attempt in empty system
           await expect(documentCreateTool.execute({
             documentType: 'AnyType',
@@ -253,11 +267,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle special characters in document data', async () => {
         const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         const specialCharData = {
           name: 'Test 🧙‍♂️ Document with émojis and accénts',
           description: '<script>alert("xss")</script>',
@@ -265,7 +279,7 @@ describe.each(createParameterizedSystemTests())(
         };
 
         DocumentAPI.createDocument.mockResolvedValueOnce({ id: 'special-chars' });
-        
+
         const result = await documentCreateTool.execute({
           documentType: validType,
           data: specialCharData
@@ -273,7 +287,7 @@ describe.each(createParameterizedSystemTests())(
 
         // Should handle special characters without issues
         expect(DocumentAPI.createDocument).toHaveBeenCalledWith(
-          validType, 
+          validType,
           specialCharData
         );
       });
@@ -286,18 +300,18 @@ describe('DocumentCreateTool - System-Agnostic Validation', () => {
   afterEach(() => {
     cleanupMockEnvironment();
   });
-  
+
   it('should maintain consistent behavior across all systems', async () => {
     // Test that error handling works the same way regardless of system
     for (const system of ['D&D 5e', 'Pathfinder 2e', 'Minimal Core']) {
       setupMockFoundryEnvironment(system);
       const tool = new DocumentCreateTool();
-      
+
       await expect(tool.execute({
         documentType: 'InvalidType',
         data: { name: 'Test' }
       })).rejects.toThrow('not available in current system');
-      
+
       cleanupMockEnvironment();
     }
   });

@@ -45,10 +45,10 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       title: "SIMULACRUM.SidebarTab.Title"
     },
     actions: {
-      sendMessage: SimulacrumSidebarTab._onSendMessage,
-      clearChat: SimulacrumSidebarTab._onClearChat,
-      jumpToBottom: SimulacrumSidebarTab._onJumpToBottom,
-      cancelProcess: SimulacrumSidebarTab._onCancelProcess
+      sendMessage: SimulacrumSidebarTab.prototype._onSendMessage,
+      clearChat: SimulacrumSidebarTab.prototype._onClearChat,
+      jumpToBottom: SimulacrumSidebarTab.prototype._onJumpToBottom,
+      cancelProcess: SimulacrumSidebarTab.prototype._onCancelProcess
     }
   };
 
@@ -1035,9 +1035,9 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         input.dataset.simulacrumBound = '1';
         input.addEventListener('keydown', (event) => {
           // Escape key cancels AI processing (Task-05)
-          if (event.key === 'Escape' && this._activeProcesses.size > 0) {
+          if (event.key === 'Escape') {
             event.preventDefault();
-            SimulacrumSidebarTab._onCancelProcess.call(this, event, input);
+            this._onCancelProcess(event, input);
             return;
           }
 
@@ -1051,7 +1051,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
             if (this._activeProcesses.size > 0) {
               return;
             }
-            SimulacrumSidebarTab._onSendMessage.call(this, event, input);
+            this._onSendMessage(event, input);
           }
         });
 
@@ -1065,7 +1065,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         cancelButton.dataset.simulacrumBound = '1';
         cancelButton.addEventListener('click', (event) => {
           event.preventDefault();
-          SimulacrumSidebarTab._onCancelProcess.call(this, event, cancelButton);
+          this._onCancelProcess(event, cancelButton);
         });
       }
     }

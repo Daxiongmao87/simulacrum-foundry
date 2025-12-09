@@ -78,7 +78,7 @@ export class MockAIProvider extends AIProvider {
   async sendMessage(message, context = []) {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     return {
       content: `Mock response to: ${message} (context: ${context.length} messages)`,
       usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
@@ -157,7 +157,7 @@ export class OpenAIProvider extends AIProvider {
       }
 
       const data = await response.json();
-      
+
       return {
         content: data.choices[0]?.message?.content || '',
         usage: data.usage || {},
@@ -195,17 +195,18 @@ export class AIClient {
    * @throws {SimulacrumError} When unsupported provider baseURL is provided
    */
   constructor(config = {}) {
-    this.apiKey = config.apiKey;
+    this.apiKey = config.apiKey ? config.apiKey.trim() : config.apiKey;
     this.baseURL = config.baseURL;
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
-    this.contextLength = config.contextLength || 4096;
+    // Fix: If contextLength is small (likely a message count setting), default to a safe token limit (32k for Mistral).
+    this.contextLength = (config.contextLength && config.contextLength > 1000) ? config.contextLength : 32000;
     this.temperature = config.temperature;
     this.provider = config.provider || 'openai';
     this.providers = new Map();
     this.defaultProvider = null;
   }
-  
+
   /**
    * Detect provider type from baseURL
    * @param {string} baseURL - Base URL to check
@@ -218,7 +219,7 @@ export class AIClient {
     if (baseURL.includes('anthropic.com')) return 'anthropic';
     return null;
   }
-  
+
   /**
    * Check if baseURL is from a supported provider
    * @param {string} baseURL - Base URL to check
@@ -238,6 +239,31 @@ export class AIClient {
   }
 
   /**
+   * Task-14: Apply configured API request delay to prevent rate limiting
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _applyRequestDelay() {
+    // Get delay from settings (in seconds), default to 0
+    let delay = 0;
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        delay = game.settings.get('simulacrum', 'apiRequestDelay') || 0;
+      }
+    } catch {
+      // Settings not available, use default
+    }
+
+    if (delay > 0) {
+      const delayMs = Math.min(delay, 30) * 1000; // Cap at 30 seconds
+      if (isDebugEnabled()) {
+        createLogger('AIClient').debug(`Applying API request delay: ${delayMs}ms`);
+      }
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  /**
    * Chat with AI using OpenAI or Ollama API
    * @param {Array} messages - Array of message objects
    * @param {Array} tools - Optional tools for function calling
@@ -248,9 +274,28 @@ export class AIClient {
       throw new SimulacrumError('No baseURL configured for AI client');
     }
 
+    // Task-14: Apply request delay to prevent rate limiting
+    await this._applyRequestDelay();
+
     const provider = options.provider || this.provider || 'openai';
     if (provider === 'gemini') {
-      return this._chatGemini(messages, tools, options);
+      const MAX_GEMINI_RETRIES = 2;
+      let lastResult;
+
+      for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
+        lastResult = await this._chatGemini(messages, tools, options);
+
+        // If success or unknown error, return. If TOOL_CALL_FAILURE, retry.
+        if (!lastResult.errorCode) {
+          return lastResult;
+        }
+
+        if (i < MAX_GEMINI_RETRIES && isDebugEnabled()) {
+          createLogger('AIClient').warn(`Gemini tool call failure (attempt ${i + 1}/${MAX_GEMINI_RETRIES + 1}), retrying...`, { errorCode: lastResult.errorCode });
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Exponential-ish backoff
+        }
+      }
+      return lastResult; // partial failure returned if retries exhausted
     }
 
     // OpenAI-style providers
@@ -308,14 +353,40 @@ export class AIClient {
     const signal = options.signal;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
+      };
+
       try {
-        response = await fetch(`${this.baseURL.replace(/\/$/, '')}/chat/completions`, {
+        // Fallback: Add API key to query string in case Authorization header is stripped by proxy/browser
+        const url = new URL(`${this.baseURL.replace(/\/$/, '')}/chat/completions`);
+        if (this.apiKey) {
+          url.searchParams.append('api_key', this.apiKey);
+        }
+
+        if (isDebugEnabled()) {
+          const debugHeaders = { ...headers };
+          if (debugHeaders.Authorization) {
+            debugHeaders.Authorization = debugHeaders.Authorization.substring(0, 15) + '...[MASKED]';
+          }
+          createLogger('AIClient').info('Sending API Request:', {
+            url: url.toString(),
+            headers: debugHeaders,
+            hasApiKey: !!this.apiKey,
+            apiKeyLength: this.apiKey ? this.apiKey.length : 0
+          });
+        }
+
+        // Log full request body for WAF debugging
+        const stringifiedBody = JSON.stringify(body);
+        console.log('[Simulacrum] Request Body Preview:', stringifiedBody.substring(0, 500) + '...');
+        console.log('[Simulacrum] Full Request Body (Right-click to Copy):', body);
+
+        response = await fetch(url.toString(), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
-          },
-          body: JSON.stringify(body),
+          headers,
+          body: stringifiedBody,
           signal
         });
 
@@ -332,7 +403,7 @@ export class AIClient {
             if (isDebugEnabled()) {
               createLogger('AIDiagnostics').info('Retrying API request', { attempt: attempt + 1, status, delay });
             }
-          } catch {}
+          } catch { }
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           break;
@@ -721,7 +792,7 @@ export class AIClient {
     }
 
     this.providers.set(name, provider);
-    
+
     if (setAsDefault || !this.defaultProvider) {
       this.defaultProvider = name;
     }

@@ -19,7 +19,7 @@ class ChatHandler {
     try {
       // Add user message to conversation state
       this.addMessageToConversation('user', message);
-      
+
       // Notify UI if callback provided
       if (options.onUserMessage) {
         options.onUserMessage({ role: 'user', content: message, user });
@@ -45,7 +45,7 @@ class ChatHandler {
 
     } catch (error) {
       this.logger.error('Error processing user message', error);
-      
+
       // Handle cancellation specially
       if (error.name === 'AbortError' || error.message === 'Process was cancelled') {
         const cancelMessage = { role: 'assistant', content: 'Process cancelled by user', display: '🛑 Process cancelled' };
@@ -71,7 +71,7 @@ class ChatHandler {
 
     // Add assistant response to conversation
     this.addMessageToConversation('assistant', aiResponse.content, aiResponse.toolCalls);
-    
+
     // Add to UI
     this.addMessageToUI({
       role: 'assistant',
@@ -117,15 +117,15 @@ class ChatHandler {
     try {
       const { processToolCallLoop } = await import('./tool-loop-handler.js');
       const { SimulacrumCore } = await import('./simulacrum-core.js');
-      
+
       // Get tools and determine tool support mode
       const { toolRegistry } = await import('./tool-registry.js');
       const tools = toolRegistry.getToolSchemas();
-      
+
       // Check legacy mode setting to determine tool support
       const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
       const currentToolSupport = !legacyMode;
-      
+
       // Execute tools and get final response
       const finalResponse = await processToolCallLoop(
         aiResponse,
@@ -169,7 +169,7 @@ class ChatHandler {
 
     } catch (error) {
       this.logger.error('Error executing tools', error);
-      
+
       const errorMessage = { role: 'assistant', content: `Tool execution error: ${error.message}`, display: `❌ ${error.message}` };
       this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
@@ -185,7 +185,7 @@ class ChatHandler {
     if (response._parseError) {
       return await this.retryAIResponse(options);
     }
-    
+
     // For other autonomous cases, just return the response
     // This is where we would check for end_task or continue the conversation
     return response;
@@ -197,7 +197,7 @@ class ChatHandler {
   async retryAIResponse(options = {}) {
     const maxRetries = 3;
     const currentRetries = (options._retryCount || 0) + 1;
-    
+
     if (currentRetries > maxRetries) {
       try {
         const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
@@ -213,7 +213,7 @@ class ChatHandler {
             }))
           });
         }
-      } catch {}
+      } catch { }
       const errorMessage = {
         role: 'assistant',
         content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
@@ -223,7 +223,7 @@ class ChatHandler {
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
     }
-    
+
     try {
       const { SimulacrumCore } = await import('./simulacrum-core.js');
       try {
@@ -236,23 +236,23 @@ class ChatHandler {
             hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0
           });
         }
-      } catch {}
-      
+      } catch { }
+
       // Get corrected AI response
       const aiResponse = await SimulacrumCore.generateResponse(
         this.conversationManager.getMessages(),
         { signal: options.signal }
       );
-      
+
       // Recursively handle the new response with retry tracking
-      return await this.handleAIResponse(aiResponse, { 
-        ...options, 
-        _retryCount: currentRetries 
+      return await this.handleAIResponse(aiResponse, {
+        ...options,
+        _retryCount: currentRetries
       });
-      
+
     } catch (error) {
       this.logger.error('Error during AI response retry', error);
-      
+
       const errorMessage = {
         role: 'assistant',
         content: `Retry failed: ${error.message}`,
@@ -266,11 +266,23 @@ class ChatHandler {
 
   /**
    * Handle individual tool results during execution
+   * Task-09: Enhanced to format tool results with status icons
    */
   handleToolResult(toolResult, options = {}) {
     // Add tool result to conversation
     if (toolResult.role === 'tool') {
       this.addMessageToConversation('tool', toolResult.content, null, toolResult.toolCallId);
+
+      // Task-09: Format tool result with rich HTML display if it has a toolName
+      if (toolResult.toolName && options.onAssistantMessage) {
+        const formattedDisplay = this._formatToolCallDisplay(toolResult);
+        // Display as assistant message with tool indicator
+        this.addMessageToUI({
+          role: 'assistant',
+          content: toolResult.content,
+          display: formattedDisplay
+        }, options);
+      }
     } else if (toolResult.role === 'assistant') {
       this.addMessageToConversation('assistant', toolResult.content);
       this.addMessageToUI({
@@ -279,6 +291,136 @@ class ChatHandler {
         display: toolResult.display || toolResult.content
       }, options);
     }
+  }
+
+  /**
+   * Format a tool call result as rich HTML with status icons
+   * Task-09: Generates styled display for tool operations
+   * @param {Object} toolResult - The tool result object
+   * @returns {string} HTML string for display
+   * @private
+   */
+  _formatToolCallDisplay(toolResult) {
+    const isSuccess = !toolResult.isError && !toolResult.error;
+    const statusClass = isSuccess ? 'tool-success' : 'tool-failure';
+    const iconClass = isSuccess ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+
+    // Build action text from tool name
+    const toolName = toolResult.toolName || 'unknown';
+    const actionText = this._getToolActionText(toolName, toolResult);
+
+    // Extract document name if present in the result
+    const documentInfo = this._extractDocumentInfo(toolResult);
+    const documentHtml = documentInfo ? `<span class="tool-document">${documentInfo}</span>` : '';
+
+    // Specialized Macro Result Display
+    let resultHtml = '';
+    if (toolName === 'execute_macro' && isSuccess) {
+      try {
+        // Content is JSON stringified result from tool
+        const contentObj = JSON.parse(toolResult.content);
+        // Tool returns JSON string of { message, result }
+        // The outer content is double stringified if tool returned stringified JSON
+        // result.content is likely the JSON string from ExecuteMacroTool
+
+        // Result is often double-stringified (once by tool, once by tool-loop)
+        let macroResult = contentObj;
+
+        // Loop to unwrap nested JSON strings (max 3 levels to avoid infinite loops)
+        for (let i = 0; i < 3; i++) {
+          if (typeof macroResult === 'string') {
+            try {
+              const parsed = JSON.parse(macroResult);
+              // Ensure we parsed an object, not just a primitive
+              if (parsed && typeof parsed === 'object') {
+                macroResult = parsed;
+              } else {
+                break;
+              }
+            } catch {
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+
+        if (macroResult && macroResult.result && macroResult.result.total !== undefined) {
+          resultHtml = `<div class="tool-result"><strong>Roll Result:</strong> ${macroResult.result.total}</div>`;
+          if (macroResult.result.formula) {
+            resultHtml += `<div class="tool-result-detail"><small>Formula: ${macroResult.result.formula}</small></div>`;
+          }
+        } else if (macroResult && macroResult.result !== undefined) {
+          const resultStr = typeof macroResult.result === 'object'
+            ? JSON.stringify(macroResult.result, null, 2)
+            : String(macroResult.result);
+          resultHtml = `<div class="tool-result"><strong>Result:</strong> ${resultStr}</div>`;
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+
+    return `<div class="simulacrum-tool-call ${statusClass}">
+      <i class="${iconClass} tool-icon"></i>
+      <span class="tool-action">${actionText}</span>
+      ${documentHtml}
+      ${resultHtml}
+    </div>`;
+  }
+
+  /**
+   * Get human-readable action text for a tool
+   * @param {string} toolName - The tool name
+   * @param {Object} toolResult - The tool result for context
+   * @returns {string} Human-readable action text
+   * @private
+   */
+  _getToolActionText(toolName, toolResult) {
+    const toolActions = {
+      'document-create': 'Created',
+      'document-read': 'Read',
+      'document-update': 'Updated',
+      'document-delete': 'Deleted',
+      'document-list': 'Listed',
+      'document-search': 'Searched',
+      'document-schema': 'Retrieved schema for',
+      'execute_macro': 'Executed Macro'
+    };
+
+    const action = toolActions[toolName] || toolName.replace(/-/g, ' ');
+    const docType = toolResult.documentType || '';
+
+    return docType ? `${action} ${docType}` : action;
+  }
+
+  /**
+   * Extract document name/info from tool result for display
+   * @param {Object} toolResult - The tool result
+   * @returns {string|null} Document info or null
+   * @private
+   */
+  _extractDocumentInfo(toolResult) {
+    // Try to extract document name from the result content
+    const content = String(toolResult.content || '');
+
+    // Look for document name patterns
+    const nameMatch = content.match(/"name":\s*"([^"]+)"/);
+    if (nameMatch) {
+      return nameMatch[1];
+    }
+
+    // Look for "Created X" or similar success messages
+    const createdMatch = content.match(/(?:Created|Updated|Deleted|Read)\s+(\w+)\s+(?:document\s+)?['"]([^'"]+)['"]/i);
+    if (createdMatch) {
+      return createdMatch[2];
+    }
+
+    // Look for Macro execution message
+    const macroMatch = content.match(/executed macro:\s*([^"'}]+)/i);
+    if (macroMatch) {
+      return macroMatch[1].trim();
+    }
+
+    return null;
   }
 
   /**

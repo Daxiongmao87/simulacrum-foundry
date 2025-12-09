@@ -31,7 +31,7 @@ export class BaseTool {
     if (!Array.isArray(availableTypes) || availableTypes.length === 0) {
       return false;
     }
-    
+
     // Check if there's a corresponding collection users can interact with
     const collection = game?.collections?.get(documentType);
     return collection !== undefined;
@@ -70,7 +70,7 @@ export class BaseTool {
     }
 
     const result = ValidationUtils.validateParams(parameters, schema);
-    
+
     if (!result.valid) {
       throw new SimulacrumError(`Parameter validation failed: ${result.errors.join(', ')}`);
     }
@@ -118,7 +118,7 @@ export class BaseTool {
    */
   handleError(error, context = {}) {
     this.logger.error(`Tool ${this.name} failed:`, error);
-    
+
     return {
       success: false,
       error: {
@@ -151,5 +151,40 @@ export class BaseTool {
     if (!this.documentAPI) {
       throw new SimulacrumError('Document API not initialized');
     }
+  }
+
+  /**
+   * Validate image URLs in data object (recursive)
+   * @param {Object} data - Data to validate
+   * @throws {SimulacrumError} if invalid URL found
+   */
+  validateImageUrls(data) {
+    if (!data || typeof data !== 'object') return;
+
+    for (const [key, value] of Object.entries(data)) {
+      // targeted keys: img, texture.src, valid image fields
+      if (key === 'img' || key === 'src' || key.endsWith('.img') || key.endsWith('texture.src')) {
+        if (typeof value === 'string' && value.trim().length > 0) {
+          if (this.#isInvalidImageUrl(value)) {
+            throw new SimulacrumError(`Invalid image URL for field '${key}': '${value}'. Value must be a valid file path or URL, not a description.`);
+          }
+        }
+      }
+      if (typeof value === 'object' && value !== null) {
+        this.validateImageUrls(value);
+      }
+    }
+  }
+
+  #isInvalidImageUrl(url) {
+    // Reject descriptions or obvious non-URLs
+    if (url.includes(' ') && !url.startsWith('http')) return true; // URLs encoded spaces? usually %20
+    if (url.length > 500) return true; // Too long
+
+    const lower = url.toLowerCase();
+    // Heuristic: reject "natural language" starts
+    if (lower.startsWith('image of') || lower.startsWith('picture of') || lower.startsWith('a ')) return true;
+
+    return false;
   }
 }
