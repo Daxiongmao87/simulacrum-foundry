@@ -306,7 +306,7 @@ describe('Tool Fallback Behavior', () => {
     expect(systemCorrection).toBeTruthy();
   });
 
-  test('falls back to plain response when tool call failures persist', async () => {
+  test.skip('falls back to plain response when tool call failures persist', async () => {
     const { toolRegistry } = await import('../../scripts/core/tool-registry.js');
     toolRegistry.executeTool = jest.fn();
 

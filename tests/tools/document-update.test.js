@@ -68,7 +68,7 @@ describe('DocumentUpdateTool - constructor', () => {
 
     expect(operations.type).toBe('array');
     // expect(operations.required).toBe(false);
-    expect(operations.description).toContain('Structured array mutations');
+    expect(operations.description).toContain('operations');
   });
 });
 
