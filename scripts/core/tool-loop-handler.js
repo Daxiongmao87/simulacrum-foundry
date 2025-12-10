@@ -101,7 +101,8 @@ export async function processToolCallLoop(
 
       // --- Display AI's natural language content if present and not a parse error ---
       // This ensures conversational output is shown to the user.
-      if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
+      const hasContent = currentResponse.content && currentResponse.content.trim().length > 0;
+      if (hasContent && onToolResult && !currentResponse._parseError) {
         onToolResult({
           role: 'assistant',
           content: currentResponse.content
@@ -126,9 +127,13 @@ export async function processToolCallLoop(
         const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
         const toolsToSend = currentToolSupport === true ? tools : null;
         const systemPromptRef = await getSystemPrompt();
+        const sysMsg = { role: 'system', content: systemPromptRef };
+        const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...conversationMessages]);
         const raw = currentToolSupport !== true
-          ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...conversationMessages]), toolsToSend, { signal })
-          : await aiClient.chatWithSystem(conversationMessages, () => systemPromptRef, toolsToSend, { signal });
+          ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+          : await aiClient.chatWithSystem(
+            conversationMessages, () => systemPromptRef, toolsToSend, { signal }
+          );
         currentResponse = SimulacrumCore._normalizeAIResponse(raw);
         continue;
       }
@@ -156,9 +161,13 @@ export async function processToolCallLoop(
           const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
           const toolsToSend = currentToolSupport === true ? tools : null;
           const systemPromptRef = await getSystemPrompt();
+          const sysMsg = { role: 'system', content: systemPromptRef };
+          const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...conversationMessages]);
           const raw = currentToolSupport !== true
-            ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...conversationMessages]), toolsToSend, { signal })
-            : await aiClient.chatWithSystem(conversationMessages, () => systemPromptRef, toolsToSend, { signal });
+            ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+            : await aiClient.chatWithSystem(
+              conversationMessages, () => systemPromptRef, toolsToSend, { signal }
+            );
           currentResponse = SimulacrumCore._normalizeAIResponse(raw);
         } finally {
           emitRetryStatus('end', retryCallId);
@@ -264,7 +273,9 @@ export async function processToolCallLoop(
 /**
  * Execute all tool calls and return results
  */
-async function executeToolCalls(toolCalls, conversationManager, currentToolSupport, onToolResult, signal) {
+async function executeToolCalls(
+  toolCalls, conversationManager, currentToolSupport, onToolResult, signal
+) {
   const results = [];
 
   for (const toolCall of toolCalls) {
@@ -375,7 +386,9 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
 /**
  * Get next AI response after tool execution
  */
-async function getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal) {
+async function getNextAIResponse(
+  toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal
+) {
   // Build context with tool results
   const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
 
@@ -396,13 +409,18 @@ async function getNextAIResponse(toolResults, conversationManager, aiClient, get
   const toolsToSend = currentToolSupport === true ? tools : null;
 
   const systemPromptRef = await getSystemPrompt();
+  const sysMsg = { role: 'system', content: systemPromptRef };
+  const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messagesToSend]);
   const raw = currentToolSupport !== true
-    ? await aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPromptRef }, ...messagesToSend]), toolsToSend, { signal })
-    : await aiClient.chatWithSystem(messagesToSend, () => systemPromptRef, toolsToSend, { signal });
+    ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+    : await aiClient.chatWithSystem(
+      messagesToSend, () => systemPromptRef, toolsToSend, { signal }
+    );
   const normalized = SimulacrumCore._normalizeAIResponse(raw);
 
   // Handle fallback tool calls if no native tool_calls found and in legacy mode
-  if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0) && currentToolSupport !== true) {
+  const noToolCalls = !Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0;
+  if (noToolCalls && currentToolSupport !== true) {
     if (isDebugEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
     try {
       const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
