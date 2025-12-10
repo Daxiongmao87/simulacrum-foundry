@@ -23,10 +23,10 @@ function _readUrlToggle() {
 export function isDebugEnabled() {
   try {
     if (globalThis.window && globalThis.window.SIMULACRUM_DEV === true) return true;
-  } catch {}
+  } catch { }
   try {
     if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
-  } catch {}
+  } catch { }
   // Default to true during development unless explicitly disabled.
   // URL overrides: simulacrumDev=1 enables, simulacrumDev=0 disables
   try {
@@ -37,7 +37,7 @@ export function isDebugEnabled() {
       if (q === '0') return false;
       if (q === '1') return true;
     }
-  } catch {}
+  } catch { }
   return true;
 }
 
@@ -50,6 +50,6 @@ try {
       status() { return isDebugEnabled(); }
     };
   }
-} catch {}
+} catch { }
 
-export default { isDebugEnabled, createLogger };
+export default { isDebugEnabled };

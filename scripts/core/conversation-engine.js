@@ -8,81 +8,19 @@ import { SimulacrumCore } from './simulacrum-core.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { toolRegistry } from './tool-registry.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
-import { AI_ERROR_CODES } from './ai-client.js';
+import {
+  isToolCallFailure,
+  emitProcessStatus,
+  buildRetryLabel,
+  getRetryDelayMs,
+  delayWithSignal,
+  buildGenericFailureMessage
+} from '../utils/retry-helpers.js';
 
 const MAX_PRE_TOOL_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [1000, 2000];
 const RETRY_STATUS_CALL_PREFIX = 'tool-retry';
 
-function isToolCallFailure(response) {
-  return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
-}
-
-function emitProcessStatus(state, callId, label = null) {
-  try {
-    if (typeof Hooks === 'undefined' || typeof Hooks.call !== 'function') return;
-    const payload = state === 'start'
-      ? { state, callId, label, toolName: 'retry' }
-      : { state, callId };
-    Hooks.call('simulacrum:processStatus', payload);
-  } catch (_e) {
-    /* ignore */
-  }
-}
-
-function buildRetryLabel(attempt, maxAttempts) {
-  return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
-}
-
-function getRetryDelayMs(previousAttemptIndex) {
-  if (previousAttemptIndex < 0) return 0;
-  return RETRY_DELAYS_MS[Math.min(previousAttemptIndex, RETRY_DELAYS_MS.length - 1)] || 0;
-}
-
-function delayWithSignal(ms, signal) {
-  if (!ms) {
-    if (signal?.aborted) {
-      throw new Error('Process was cancelled');
-    }
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error('Process was cancelled'));
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      cleanup();
-      reject(new Error('Process was cancelled'));
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-      if (signal) {
-        signal.removeEventListener('abort', onAbort);
-      }
-    };
-
-    if (signal) {
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-  });
-}
-
-function buildGenericFailureMessage() {
-  return {
-    role: 'assistant',
-    content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-    display: '❌ Unable to generate a proper response after multiple attempts.'
-  };
-}
 
 class ConversationEngine {
   constructor(conversationManager) {

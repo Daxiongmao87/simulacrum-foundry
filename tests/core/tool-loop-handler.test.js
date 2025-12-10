@@ -12,10 +12,10 @@ describe('tool-loop-handler module imports', () => {
     expect(typeof processToolCallLoop).toBe('function');
   });
 
-  test('should import isDiagnosticsEnabled from dev utils', async () => {
-    const { isDiagnosticsEnabled } = await import('../../scripts/utils/dev.js');
-    expect(isDiagnosticsEnabled).toBeDefined();
-    expect(typeof isDiagnosticsEnabled).toBe('function');
+  test('should import isDebugEnabled from dev utils', async () => {
+    const { isDebugEnabled } = await import('../../scripts/utils/dev.js');
+    expect(isDebugEnabled).toBeDefined();
+    expect(typeof isDebugEnabled).toBe('function');
   });
 
   test('should import createLogger from logger utils', async () => {
@@ -40,7 +40,7 @@ describe('Tool Fallback Behavior', () => {
   let mockConversationManager;
   let mockAIClient;
   let originalExecuteTool;
-  
+
   const createMockConversationManager = () => ({
     messages: [],
     addMessage(role, content, toolCalls, toolCallId) {
@@ -76,16 +76,16 @@ describe('Tool Fallback Behavior', () => {
       });
     }
   });
-  
+
   beforeEach(async () => {
     mockConversationManager = createMockConversationManager();
     mockAIClient = createMockAIClient();
-    
+
     // Mock tool registry's executeTool method
     const { toolRegistry } = await import('../../scripts/core/tool-registry.js');
     originalExecuteTool = toolRegistry.executeTool;
   });
-  
+
   afterEach(async () => {
     // Restore original method
     if (originalExecuteTool) {
@@ -95,7 +95,7 @@ describe('Tool Fallback Behavior', () => {
   });
 
   const getSystemPrompt = () => 'Test system prompt';
-  
+
   const mockTools = [
     {
       type: 'function',
@@ -114,12 +114,12 @@ describe('Tool Fallback Behavior', () => {
 
   test('should disable tool calling after critical execution errors', async () => {
     const { toolRegistry } = await import('../../scripts/core/tool-registry.js');
-    
+
     // Mock tool execution to fail with "global is not defined"
     toolRegistry.executeTool = jest.fn().mockRejectedValue(
       new Error('global is not defined')
     );
-    
+
     const initialResponse = {
       content: 'I will execute a tool',
       display: 'I will execute a tool',
@@ -138,17 +138,17 @@ describe('Tool Fallback Behavior', () => {
       initialResponse,
       mockTools,
       mockConversationManager,
-    mockAIClient,
-    getSystemPrompt,
-    true // toolCallingSupported initially true
-  );
+      mockAIClient,
+      getSystemPrompt,
+      true // toolCallingSupported initially true
+    );
 
     // Check that at least one call was made
     expect(mockAIClient.calls.length).toBeGreaterThan(0);
-    
+
     // Find calls after the first tool execution failure
     const callsAfterFailure = mockAIClient.calls.slice(1);
-    
+
     if (callsAfterFailure.length > 0) {
       // Subsequent calls should not include tools due to the critical error
       callsAfterFailure.forEach(call => {
@@ -159,12 +159,12 @@ describe('Tool Fallback Behavior', () => {
 
   test('should continue with tools for non-critical errors', async () => {
     const { toolRegistry } = await import('../../scripts/core/tool-registry.js');
-    
+
     // Mock tool execution to fail with a non-critical error
     toolRegistry.executeTool = jest.fn().mockRejectedValue(
       new Error('Some other error')
     );
-    
+
     const initialResponse = {
       content: 'I will execute a tool',
       display: 'I will execute a tool',

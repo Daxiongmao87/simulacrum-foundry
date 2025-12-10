@@ -17,6 +17,11 @@ import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { DocumentAPI } from './document-api.js';
 import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
+import {
+  buildSystemPrompt,
+  getDocumentTypesInfo as getDocTypesInfo,
+  getAvailableMacrosList as getMacros
+} from './system-prompt-builder.js';
 
 class SimulacrumCore {
   static logger = createLogger('Core');
@@ -488,133 +493,19 @@ class SimulacrumCore {
    * Get document types information for the system prompt
    */
   static getDocumentTypesInfo() {
-    try {
-      const documentTypes = Object.keys(game?.documentTypes || {}).filter(type => {
-        const collection = game?.collections?.get(type);
-        return collection !== undefined;
-      });
-
-      if (documentTypes.length === 0) {
-        return 'No document types available in current system.';
-      }
-
-      const typeDetails = documentTypes.map(type => {
-        const subtypes = game.documentTypes[type] || [];
-        if (subtypes.length > 0) {
-          return `${type}: [${subtypes.join(', ')}]`;
-        }
-        return type;
-      });
-
-      return `Available document types: ${typeDetails.join(', ')}.`;
-    } catch (error) {
-      return 'Document type information unavailable.';
-    }
+    return getDocTypesInfo();
   }
 
   /**
    * Get formatted list of available macros (World + Module)
-   * @returns {string} Formatted list of macros
+   * @returns {Promise<string>} Formatted list of macros
    */
   static async getAvailableMacrosList() {
-    const macros = [];
-
-    // 1. World Macros
-    game.macros.forEach(m => {
-      macros.push(`- "${m.name}" (UUID: ${m.uuid})`);
-    });
-
-    // 2. Simulacrum Module Macros
-    const pack = game.packs.get('simulacrum.simulacrum-macros');
-    if (pack) {
-      const index = await pack.getIndex();
-      index.forEach(i => {
-        macros.push(`- "${i.name}" (UUID: ${i.uuid})`);
-      });
-    }
-
-    if (macros.length === 0) return 'No macros available.';
-    return macros.join('\n');
+    return getMacros();
   }
 
   static async getSystemPrompt() {
-    const documentTypesInfo = this.getDocumentTypesInfo();
-    const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') || false;
-    const customSystemPrompt = game?.settings?.get('simulacrum', 'customSystemPrompt') || '';
-
-    // Fetch available macros (World + Module) for execution context
-    const macrosList = await this.getAvailableMacrosList();
-
-    let basePrompt;
-
-    if (legacyMode) {
-      let toolSchemas = '';
-      try {
-        const schemas = toolRegistry.getToolSchemas();
-        // Assertion: schemas must be present and well-formed in legacy mode
-        const hasSchemas = Array.isArray(schemas) && schemas.length > 0;
-        const allWellFormed = hasSchemas && schemas.every(s => s && s.type === 'function' && s.function && s.function.name && s.function.parameters && s.function.parameters.type === 'object');
-        if (!hasSchemas || !allWellFormed) {
-          // Log a clear warning for maintainers and guide the model conservatively
-          this.logger.warn('Legacy mode active but tool schemas are missing or malformed; tool calls may fail.');
-          toolSchemas = '\n\nWARNING: Tool schemas are unavailable. Do NOT attempt tool calls.';
-        } else {
-          toolSchemas = `\n\nAvailable tool schemas:\n${JSON.stringify(schemas, null, 2)}`;
-        }
-      } catch (e) {
-        this.logger.error('Failed to retrieve tool schemas for legacy mode', e);
-      }
-
-      basePrompt = [
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Intro_v2'),
-        documentTypesInfo,
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Instructions'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Format'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Warning'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Action'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.DocumentSchema'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.EndTask'),
-        toolSchemas
-      ].join('\n\n');
-    } else {
-      basePrompt = [
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Identity'),
-        documentTypesInfo,
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.StrategicProtocol'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolOperatives'),
-        `## Available Macros\nThe following macros are available for execution via the execute_macro tool:\n${macrosList}`,
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.CommunicationStyle_v2'),
-        game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.LoopTermination')
-      ].join('\n\n');
-    }
-
-    // Append custom system prompt if provided
-    if (customSystemPrompt && customSystemPrompt.trim().length > 0) {
-      const customInstructions = game.i18n.format('SIMULACRUM.SystemPrompt.CustomInstructions', {
-        customPrompt: customSystemPrompt.trim()
-      });
-      basePrompt = basePrompt + '\n\n' + customInstructions;
-    }
-
-    // DEBUG: VERSION AND SECURITY CHECK (User Request)
-    const version = '0.1.8';
-    // Strict check: verify no HTML tags exist in the prompt
-    // This regex matches <tag> or </tag> where tag is 1+ letters
-    const tagRegex = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi;
-    const foundTags = basePrompt.match(tagRegex) || [];
-    const isClean = foundTags.length === 0;
-
-    console.log(`%c[Simulacrum] System Prompt Verification (v${version})`, 'color: #00ff00; font-weight: bold; font-size: 12px;');
-    console.log(`[Simulacrum] Content Length: ${basePrompt.length}`);
-    if (isClean) {
-      console.log('%c[Simulacrum] Security Check: PASS (No forbidden HTML tags found)', 'color: green');
-    } else {
-      console.error(`[Simulacrum] Security Check: FAIL (Found tags: ${foundTags.slice(0, 10).join(', ')}${foundTags.length > 10 ? '...' : ''})`);
-      console.warn('[Simulacrum] The presence of ANY HTML tags may trigger the API WAF.');
-    }
-    console.log('[Simulacrum] Prompt Preview:', basePrompt.substring(0, 200) + '...');
-
-    return basePrompt;
+    return buildSystemPrompt();
   }
 }
 // Export the SimulacrumCore class

@@ -9,7 +9,14 @@ import { performPostToolVerification } from './tool-verification.js';
 import { SimulacrumCore } from './simulacrum-core.js';
 import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
-import { AI_ERROR_CODES } from './ai-client.js';
+import {
+  isToolCallFailure,
+  emitProcessStatus as emitRetryStatus,
+  buildRetryLabel,
+  getRetryDelayMs,
+  delayWithSignal,
+  buildGenericFailureMessage
+} from '../utils/retry-helpers.js';
 
 /**
  * Sanitize messages for fallback when tool calling is not supported
@@ -21,76 +28,6 @@ const MAX_TOOL_FAILURE_ATTEMPTS = 3;
 const TOOL_RETRY_DELAYS_MS = [1000, 2000];
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
 
-function isToolCallFailure(response) {
-  return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
-}
-
-function emitRetryStatus(state, callId, label = null) {
-  try {
-    if (typeof Hooks === 'undefined' || typeof Hooks.call !== 'function') return;
-    const payload = state === 'start'
-      ? { state, callId, label, toolName: 'retry' }
-      : { state, callId };
-    Hooks.call('simulacrum:processStatus', payload);
-  } catch (_e) {
-    /* ignore */
-  }
-}
-
-function buildRetryLabel(attempt, maxAttempts) {
-  return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
-}
-
-function getRetryDelayMs(previousAttemptIndex) {
-  if (previousAttemptIndex < 0) return 0;
-  return TOOL_RETRY_DELAYS_MS[Math.min(previousAttemptIndex, TOOL_RETRY_DELAYS_MS.length - 1)] || 0;
-}
-
-function delayWithSignal(ms, signal) {
-  if (!ms) {
-    if (signal?.aborted) {
-      throw new Error('Process was cancelled');
-    }
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error('Process was cancelled'));
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      cleanup();
-      reject(new Error('Process was cancelled'));
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-      if (signal) {
-        signal.removeEventListener('abort', onAbort);
-      }
-    };
-
-    if (signal) {
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-  });
-}
-
-function buildGenericFailureMessage() {
-  return {
-    role: 'assistant',
-    content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-    display: '❌ Unable to generate a proper response after multiple attempts.',
-    toolCalls: []
-  };
-}
 
 async function runToolFailureFallback(conversationManager, aiClient, getSystemPrompt, signal) {
   const fallbackInstruction = 'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';

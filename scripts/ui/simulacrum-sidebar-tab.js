@@ -8,6 +8,11 @@ import { ConversationCommands } from './conversation-commands.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
 import { ChatHandler } from '../core/chat-handler.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
+import {
+  syncMessagesFromCore,
+  createWelcomeMessage as createWelcome,
+  initializeChatHandler
+} from './sidebar-state-syncer.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
 const AbstractSidebarTab = foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
@@ -376,15 +381,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    */
   _createWelcomeMessage() {
     try {
-      const welcome = {
-        id: foundry.utils.randomID(),
-        role: 'assistant',
-        content: game.i18n?.localize('SIMULACRUM.WelcomeMessage') ?? 'Welcome to Simulacrum!',
-        display: null,
-        timestamp: Date.now(),
-        timestampLabel: game.i18n?.localize('SIMULACRUM.Welcome') ?? 'Welcome',
-        user: null
-      };
+      const welcome = createWelcome();
       this.messages.push(welcome);
       this.logger.debug('Welcome message created');
     } catch (err) {
@@ -548,49 +545,8 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         cm = SimulacrumCore?.conversationManager;
       }
 
-      if (cm && Array.isArray(cm.messages)) {
-        const filtered = cm.messages.filter(m => m && (m.role === 'user' || m.role === 'assistant'));
-        const projected = [];
-
-        // Process each historical message through the same pipeline as new messages
-        for (const m of filtered) {
-          const content = String(m.content ?? '');
-
-          // Transform <think></think> tags to collapsible spoilers
-          let processedContent = content;
-          if (hasThinkTags(processedContent)) {
-            processedContent = transformThinkTags(processedContent);
-          }
-
-          // Apply markdown rendering
-          let markdownNormalized = processedContent;
-          try {
-            markdownNormalized = await MarkdownRenderer.render(processedContent);
-          } catch (err) {
-            if (this.logger?.warn) {
-              this.logger.warn('Markdown rendering failed for historical message; using original content', err);
-            }
-          }
-
-          // Apply FoundryVTT HTML enrichment
-          const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
-          const enrichedContent = await TextEditorImpl.enrichHTML(markdownNormalized, {
-            secrets: game.user.isGM,
-            documents: true,
-            async: true
-          });
-
-          projected.push({
-            id: foundry.utils.randomID(),
-            role: m.role,
-            content: content,
-            display: enrichedContent,
-            timestamp: Date.now(),
-            user: m.role === 'user' ? game.user : null
-          });
-        }
-
-        this.messages = projected;
+      if (cm) {
+        this.messages = await syncMessagesFromCore(cm);
       }
     } catch (_e) { /* ignore */ }
   }
@@ -669,15 +625,32 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         }
       };
 
+      // onError: Rollback user message from UI and restore to textarea
+      const onError = ({ originalMessage, error }) => {
+        // Remove the user message we just added to the UI
+        if (this.messages.length > 0 && this.messages[this.messages.length - 1]?.role === 'user') {
+          this.messages.pop();
+        }
+        // Restore message to textarea so user can retry
+        const form = this.element?.querySelector('form');
+        const textarea = form?.querySelector('textarea[name="message"]');
+        if (textarea) {
+          textarea.value = originalMessage;
+        }
+        // Error notification is already shown by ChatHandler via ui.notifications
+      };
+
       // Process message through ChatHandler
       await this.chatHandler.processUserMessage(message, game.user, {
         onUserMessage,
-        onAssistantMessage
+        onAssistantMessage,
+        onError
       });
 
     } catch (error) {
+      // Fallback: If ChatHandler itself fails to initialize, show notification
       this.logger.error('Error processing message', error);
-      await this.addMessage('assistant', `Error: ${error.message}`, `❌ ${error.message}`);
+      ui.notifications?.error(`Simulacrum: ${error.message}`, { permanent: false });
     } finally {
       // Task-16: Clear word rotation interval
       if (this.#thinkingIntervalId) {
