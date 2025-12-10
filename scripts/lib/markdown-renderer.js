@@ -2,7 +2,10 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('MarkdownRenderer');
 const HTML_PATTERN = /<\/?[a-z][^>]*>/i;
-const MARKDOWN_PATTERN = /(\*\*|__|[_*]{1}|`{1,3}|~~|^>\s|\n>\s|\n[-*+]\s|\n\d+\.\s|^#{1,6}\s|```)/m;
+const MARKDOWN_PATTERN = new RegExp(
+  /(\*\*|__|[_*]{1}|`{1,3}|~~|^>\s|\n>\s|\n[-*+]\s|\n\d+\.\s|^#{1,6}\s|```)/.source,
+  'm'
+);
 const IMAGE_TAG_PATTERN = /<img\b[^>]*>/gi;
 
 function resolveShowdownOptions() {

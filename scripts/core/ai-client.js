@@ -37,8 +37,11 @@ export class AIClient {
     this.baseURL = config.baseURL;
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
-    // Fix: If contextLength is small (likely a message count setting), default to a safe token limit (32k for Mistral).
-    this.contextLength = (config.contextLength && config.contextLength > 1000) ? config.contextLength : 32000;
+    // Fix: If contextLength is small (likely a message count setting),
+    // default to a safe token limit (32k for Mistral).
+    this.contextLength = (config.contextLength && config.contextLength > 1000)
+      ? config.contextLength
+      : 32000;
     this.temperature = config.temperature;
     this.provider = config.provider || 'openai';
     this.providers = new Map();
@@ -130,7 +133,10 @@ export class AIClient {
       let lastResult;
 
       for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
-        lastResult = await geminiProvider.chat(messages, { tools, systemPrompt: options.systemPrompt, signal: options.signal });
+        lastResult = await geminiProvider.chat(
+          messages,
+          { tools, systemPrompt: options.systemPrompt, signal: options.signal }
+        );
 
         // If success or unknown error, return. If TOOL_CALL_FAILURE, retry.
         if (!lastResult.errorCode) {
@@ -447,7 +453,9 @@ export class AIClient {
       ...contextMessages,
       { role: 'user', content: message }
     ];
-    const raw = await this.chat(baseMessages, options.tools || null, { provider: providerName, signal: options.signal });
+    const raw = await this.chat(
+      baseMessages, options.tools || null, { provider: providerName, signal: options.signal }
+    );
     const normalized = normalizeAIResponse(raw);
     return {
       content: normalized.content,
@@ -483,7 +491,11 @@ export class AIClient {
       }
     }
 
-    const raw = await this.chat(messages, options.tools || null, { provider: providerName, signal: options.signal, systemPrompt: options.systemPrompt });
+    const raw = await this.chat(messages, options.tools || null, {
+      provider: providerName,
+      signal: options.signal,
+      systemPrompt: options.systemPrompt
+    });
     const normalized = normalizeAIResponse(raw);
     return {
       content: normalized.content,

@@ -44,7 +44,7 @@ export class SchemaValidator {
    */
   static extractFieldInfo(schema) {
     const fields = {};
-    
+
     try {
       // Iterate through schema fields
       for (const [fieldName, field] of Object.entries(schema.fields || {})) {
@@ -78,7 +78,9 @@ export class SchemaValidator {
     // Extract field-specific validation rules
     try {
       if (field.choices) {
-        analysis.choices = Array.isArray(field.choices) ? field.choices : Object.values(field.choices);
+        analysis.choices = Array.isArray(field.choices)
+          ? field.choices
+          : Object.values(field.choices);
         analysis.suggestions.push(`Valid choices: ${analysis.choices.join(', ')}`);
       }
 

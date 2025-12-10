@@ -124,7 +124,8 @@ export async function processToolCallLoop(
         // Shared correction routine
         appendEmptyContentCorrection(conversationManager, currentResponse);
         // Request corrected response
-        const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+        const conversationMessages = conversationManager.getMessages?.() ??
+          conversationManager.messages ?? [];
         const toolsToSend = currentToolSupport === true ? tools : null;
         const systemPromptRef = await getSystemPrompt();
         const sysMsg = { role: 'system', content: systemPromptRef };
@@ -144,7 +145,9 @@ export async function processToolCallLoop(
         appendToolFailureCorrection(conversationManager, currentResponse);
 
         if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
-          const fallback = await runToolFailureFallback(conversationManager, aiClient, getSystemPrompt, signal);
+          const fallback = await runToolFailureFallback(
+            conversationManager, aiClient, getSystemPrompt, signal
+          );
           return fallback;
         }
 
@@ -158,7 +161,8 @@ export async function processToolCallLoop(
           if (delayMs) {
             await delayWithSignal(delayMs, signal);
           }
-          const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+          const conversationMessages = conversationManager.getMessages?.() ??
+            conversationManager.messages ?? [];
           const toolsToSend = currentToolSupport === true ? tools : null;
           const systemPromptRef = await getSystemPrompt();
           const sysMsg = { role: 'system', content: systemPromptRef };
@@ -183,7 +187,9 @@ export async function processToolCallLoop(
 
       // Execute all tool calls
       if (isDebugEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
-      const toolResults = await executeToolCalls(currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal);
+      const toolResults = await executeToolCalls(
+        currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal
+      );
 
 
       // --- Check for tool execution failures and increment retry count ---
@@ -197,7 +203,8 @@ export async function processToolCallLoop(
             failureDetails: failedTools.map(tool => ({
               toolName: tool.toolName,
               error: tool.error?.message || tool.result?.error || 'Unknown error',
-              arguments: tool.toolCall?.function?.arguments || tool.toolCall?.arguments
+              arguments: tool.toolCall?.function?.arguments ||
+                tool.toolCall?.arguments
             }))
           });
         }
@@ -208,7 +215,8 @@ export async function processToolCallLoop(
       if (currentToolSupport !== true && toolResults.length > 0) {
         const latestResult = toolResults[toolResults.length - 1];
         const toolStatusMessage = latestResult.success
-          ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)}`
+          ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)
+          }`
           : `Tool execution failed: ${latestResult.toolName} failed with error: ${latestResult.result.error}`;
 
         conversationManager.addMessage('system', toolStatusMessage);
@@ -216,14 +224,19 @@ export async function processToolCallLoop(
 
       // Get next AI response based on tool results
       if (isDebugEnabled()) logger.debug('Getting next AI response after tool execution');
-      currentResponse = await getNextAIResponse(toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal);
+      currentResponse = await getNextAIResponse(
+        toolResults, conversationManager, aiClient,
+        getSystemPrompt, currentToolSupport, tools, signal
+      );
     }
 
     // If we hit the repeat limit, return the last response
     if (repeatCount >= REPEAT_LIMIT) {
       {
-        const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-        console.error(`Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
+        const conversationMessages = conversationManager.getMessages?.() ??
+          conversationManager.messages ?? [];
+        console.error( // eslint-disable-line no-console
+          `Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
           totalIterations: iterationCount,
           retryCount: repeatCount,
           lastResponseContent: currentResponse.content || '(empty)',
@@ -257,7 +270,12 @@ export async function processToolCallLoop(
 
     // If the loop exits gracefully (e.g., endTaskSignaled is true, or a final conversational response)
     // Ensure the last AI response's content is displayed if it hasn't been already.
-    if (currentResponse.content && currentResponse.content.trim().length > 0 && onToolResult && !currentResponse._parseError) {
+    if (
+      currentResponse.content &&
+      currentResponse.content.trim().length > 0 &&
+      onToolResult &&
+      !currentResponse._parseError
+    ) {
       onToolResult({
         role: 'assistant',
         content: currentResponse.content
@@ -390,7 +408,8 @@ async function getNextAIResponse(
   toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal
 ) {
   // Build context with tool results
-  const conversationMessages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
+  const conversationMessages = conversationManager.getMessages?.() ??
+    conversationManager.messages ?? [];
 
   // For native mode, build messages without system (will be added by chatWithSystem)
   const messagesToSend = [...conversationMessages];

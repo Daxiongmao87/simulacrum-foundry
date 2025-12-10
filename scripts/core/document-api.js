@@ -22,7 +22,7 @@ export class DocumentAPI {
     if (!Array.isArray(availableTypes) || availableTypes.length === 0) {
       return false;
     }
-    
+
     // Check if there's a corresponding collection users can interact with
     const collection = game?.collections?.get(documentType);
     return collection !== undefined;
@@ -35,7 +35,7 @@ export class DocumentAPI {
    */
   static getAllDocumentTypes() {
     const allTypes = Object.keys(game?.documentTypes || {});
-    
+
     // Filter to only types that have collections (are user-manipulable)
     return allTypes.filter(type => {
       const collection = game?.collections?.get(type);
@@ -109,7 +109,9 @@ export class DocumentAPI {
 
         // Also check metadata.embedded for additional discovery
         if (parentClass.metadata?.embedded) {
-          for (const [embeddedDocType, collectionName] of Object.entries(parentClass.metadata.embedded)) {
+          for (const [embeddedDocType, collectionName] of Object.entries(
+            parentClass.metadata.embedded
+          )) {
             if (embeddedDocType === documentType) {
               // Try to resolve the document class from the schema
               try {
@@ -490,12 +492,12 @@ export class DocumentAPI {
       permitted = docs.filter(doc => {
         // GMs can always access documents
         if (game.user?.isGM) return true;
-        
+
         // For non-GMs, check document permissions if available
         if (typeof doc.canUserModify === 'function') {
           return doc.canUserModify(game.user, permission);
         }
-        
+
         // If no permission method available, default to true for READ
         return permission === 'READ';
       });
@@ -629,7 +631,7 @@ export class DocumentAPI {
         } catch (validationError) {
           throw validationError;
         }
-        
+
         // Step 2: Proceed with creation only after validation passes
         const created = await documentClass.create(data, { folder });
         return created?.toObject ? created.toObject() : created;
@@ -880,8 +882,8 @@ export class DocumentAPI {
         readable = await PermissionManager.filterByPermission(game.user, collection.contents, 'READ');
       } catch (error) {
         // Fallback permission filtering
-        readable = collection.contents.filter(doc => 
-          game.user?.isGM || 
+        readable = collection.contents.filter(doc =>
+          game.user?.isGM ||
           (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
         );
       }

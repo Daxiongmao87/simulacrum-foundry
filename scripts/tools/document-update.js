@@ -171,14 +171,18 @@ class DocumentUpdateTool extends BaseTool {
     let docInstance = null;
     let workingDocument = {};
     const embeddedState = new Map();
-    const requiresDocument = Object.keys(flatUpdates || {}).length || (Array.isArray(operations) && operations.length);
+    const requiresDocument = Object.keys(flatUpdates || {}).length ||
+      (Array.isArray(operations) && operations.length);
 
     if (requiresDocument) {
       console.log('[DocumentUpdateTool] Fetching document for operations');
-      documentSnapshot = await DocumentAPI.getDocument(params.documentType, params.documentId, { includeEmbedded: true });
+      documentSnapshot = await DocumentAPI.getDocument(
+        params.documentType, params.documentId, { includeEmbedded: true }
+      );
       workingDocument = this.#cloneValue(documentSnapshot);
       docInstance = await DocumentAPI.getDocumentInstance(params.documentType, params.documentId);
-      const extraction = this.#extractEmbeddedFieldUpdates(remainingUpdates, docInstance, embeddedState);
+      const extraction =
+        this.#extractEmbeddedFieldUpdates(remainingUpdates, docInstance, embeddedState);
       remainingUpdates = extraction.remainingUpdates;
       embeddedOperations.push(...extraction.embeddedOperations);
     }
@@ -293,14 +297,20 @@ class DocumentUpdateTool extends BaseTool {
     return Boolean(candidate && typeof candidate === 'object' && Array.isArray(candidate.contents) && candidate.documentClass);
   }
 
-  #prepareEmbeddedOperation(normalized, { docInstance, collectionKey, operationIndex, embeddedState }) {
+  #prepareEmbeddedOperation(
+    normalized, { docInstance, collectionKey, operationIndex, embeddedState }
+  ) {
     const metadata = this.#extractEmbeddedMetadata(docInstance, collectionKey);
     if (!metadata) {
-      throw new ToolValidationError(`Operation ${operationIndex + 1}: path "${normalized.path}" does not reference an embedded collection`);
+      throw new ToolValidationError(
+        `Operation ${operationIndex + 1}: path "${normalized.path}" does not reference an embedded collection`
+      );
     }
 
     const { collection, embeddedName } = metadata;
-    const entries = this.#getEmbeddedWorkingSet(embeddedState, collectionKey, collection, operationIndex);
+    const entries = this.#getEmbeddedWorkingSet(
+      embeddedState, collectionKey, collection, operationIndex
+    );
     const operation = {
       action: normalized.action,
       collection: collectionKey,
@@ -315,13 +325,19 @@ class DocumentUpdateTool extends BaseTool {
       let targetId = normalized.id;
       if (!targetId) {
         if (normalized.index === undefined) {
-          throw new ToolValidationError(`Operation ${operationIndex + 1}: delete requires an id or index for embedded collection "${collectionKey}"`);
+          throw new ToolValidationError(
+            `Operation ${operationIndex + 1}: delete requires an id or index for embedded collection "${collectionKey}"`
+          );
         }
-        targetId = this.#deriveEmbeddedIdFromIndex(entries, normalized.index, operationIndex, collectionKey);
+        targetId = this.#deriveEmbeddedIdFromIndex(
+          entries, normalized.index, operationIndex, collectionKey
+        );
       }
       const removalIndex = entries.findIndex(entry => entry.id === targetId);
       if (removalIndex === -1) {
-        throw new ToolValidationError(`Operation ${operationIndex + 1}: embedded id "${targetId}" not found in "${collectionKey}"`);
+        throw new ToolValidationError(
+          `Operation ${operationIndex + 1}: embedded id "${targetId}" not found in "${collectionKey}"`
+        );
       }
       entries.splice(removalIndex, 1);
       operation.targetId = targetId;
@@ -333,14 +349,20 @@ class DocumentUpdateTool extends BaseTool {
       let targetIndex = normalized.index;
       if (!targetId) {
         if (normalized.index === undefined) {
-          throw new ToolValidationError(`Operation ${operationIndex + 1}: replace requires an id or index for embedded collection "${collectionKey}"`);
+          throw new ToolValidationError(
+            `Operation ${operationIndex + 1}: replace requires an id or index for embedded collection "${collectionKey}"`
+          );
         }
-        targetId = this.#deriveEmbeddedIdFromIndex(entries, normalized.index, operationIndex, collectionKey);
+        targetId = this.#deriveEmbeddedIdFromIndex(
+          entries, normalized.index, operationIndex, collectionKey
+        );
         targetIndex = normalized.index;
       } else {
         const idx = entries.findIndex(entry => entry.id === targetId);
         if (idx === -1) {
-          throw new ToolValidationError(`Operation ${operationIndex + 1}: embedded id "${targetId}" not found in "${collectionKey}"`);
+          throw new ToolValidationError(
+            `Operation ${operationIndex + 1}: embedded id "${targetId}" not found in "${collectionKey}"`
+          );
         }
         targetIndex = idx;
       }
@@ -368,21 +390,29 @@ class DocumentUpdateTool extends BaseTool {
       if (!payload._id) {
         payload._id = this.#generateId();
       }
-      const insertIndex = normalized.index === null || normalized.index === undefined ? entries.length : normalized.index;
+      const insertIndex = (normalized.index === null || normalized.index === undefined)
+        ? entries.length
+        : normalized.index;
       if (!Number.isInteger(insertIndex) || insertIndex < 0 || insertIndex > entries.length) {
-        throw new ToolValidationError(`Operation ${operationIndex + 1}: index ${insertIndex} is out of bounds for embedded collection "${collectionKey}"`);
+        throw new ToolValidationError(
+          `Operation ${operationIndex + 1}: index ${insertIndex} is out of bounds for embedded collection "${collectionKey}"`
+        );
       }
       const sort = this.#calculateEmbeddedSort(entries, insertIndex);
       if (sort !== undefined && sort !== null) {
         payload.sort = sort;
       }
-      entries.splice(insertIndex, 0, { id: payload._id, sort: payload.sort ?? sort ?? insertIndex });
+      entries.splice(
+        insertIndex, 0, { id: payload._id, sort: payload.sort ?? sort ?? insertIndex }
+      );
       operation.data = payload;
       operation.index = insertIndex;
       return operation;
     }
 
-    throw new ToolValidationError(`Operation ${operationIndex + 1}: unsupported action "${normalized.action}" for embedded collection "${collectionKey}"`);
+    throw new ToolValidationError(
+      `Operation ${operationIndex + 1}: unsupported action "${normalized.action}" for embedded collection "${collectionKey}"`
+    );
   }
 
   #extractEmbeddedFieldUpdates(updates, docInstance, embeddedState) {
@@ -416,7 +446,8 @@ class DocumentUpdateTool extends BaseTool {
         throw new ToolValidationError(`Path "${path}" does not reference a known embedded collection`);
       }
 
-      const entries = this.#getEmbeddedWorkingSet(embeddedState, collectionKey, metadata.collection, -1);
+      const entries =
+        this.#getEmbeddedWorkingSet(embeddedState, collectionKey, metadata.collection, -1);
       const identifier = segments[1];
       let targetId = identifier;
       let targetIndex = entries.findIndex(entry => entry.id === identifier);
@@ -435,7 +466,9 @@ class DocumentUpdateTool extends BaseTool {
         throw new ToolValidationError(`Embedded update path "${path}" must target a nested field`);
       }
 
-      let op = embeddedOperations.find(entry => entry.collection === collectionKey && entry.targetId === targetId);
+      let op = embeddedOperations.find(
+        entry => entry.collection === collectionKey && entry.targetId === targetId
+      );
       if (!op) {
         op = {
           action: 'replace',

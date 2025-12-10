@@ -123,7 +123,11 @@ export function normalizeAIResponse(raw) {
 
   let toolCalls = msg.tool_calls || [];
   if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-    toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
+    const args = msg.function_call.arguments;
+    toolCalls = [{
+      id: msg.function_call.id,
+      function: { name: msg.function_call.name, arguments: args }
+    }];
   }
 
   if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
@@ -160,10 +164,16 @@ export function normalizeAIResponse(raw) {
   }
 
   // Responses API style
-  if (!content && !toolCalls?.length && (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))) {
+  if (
+    !content &&
+    !toolCalls?.length &&
+    (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))
+  ) {
     const parts = raw.output[0].content;
     const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-    return attachProviderError({ content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage }, raw);
+    return attachProviderError({
+      content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage
+    }, raw);
   }
 
   const normalized = {
@@ -202,7 +212,9 @@ export function normalizeAIResponse(raw) {
   try {
     if (isDebugEnabled()) {
       const diag = createLogger('AIDiagnostics');
-      const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
+      const names = Array.isArray(normalized.toolCalls)
+        ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean)
+        : [];
       diag.info('tool_calls', { count: names.length, names });
     }
   } catch { /* intentionally empty */ }

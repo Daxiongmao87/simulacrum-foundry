@@ -181,7 +181,9 @@ class ChatHandler {
 
       // Add final response if different from last message
       if (finalResponse && finalResponse.content) {
-        const lastMessage = this.conversationManager.messages[this.conversationManager.messages.length - 1];
+        const lastMessage = this.conversationManager.messages[
+          this.conversationManager.messages.length - 1
+        ];
         if (lastMessage.role !== 'assistant' || lastMessage.content !== finalResponse.content) {
           this.addMessageToConversation('assistant', finalResponse.content);
           this.addMessageToUI({
@@ -256,7 +258,9 @@ class ChatHandler {
       try {
         const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
         if (isDebugEnabled()) {
-          const last = this.conversationManager.messages[this.conversationManager.messages.length - 1];
+          const last = this.conversationManager.messages[
+            this.conversationManager.messages.length - 1
+          ];
           createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
             attempt: currentRetries,
             lastRole: last?.role,
@@ -437,7 +441,9 @@ class ChatHandler {
     }
 
     // Look for "Created X" or similar success messages
-    const createdMatch = content.match(/(?:Created|Updated|Deleted|Read)\s+(\w+)\s+(?:document\s+)?['"]([^'"]+)['"]/i);
+    const createdMatch = content.match(
+      /(?:Created|Updated|Deleted|Read)\s+(\w+)\s+(?:document\s+)?['"]([^'"]+)['"]/i
+    );
     if (createdMatch) {
       return createdMatch[2];
     }

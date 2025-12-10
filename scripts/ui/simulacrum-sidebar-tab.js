@@ -217,7 +217,8 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       "templates/simulacrum/sidebar-notifications.hbs",
       { user: game.user }
     );
-    [this.#notificationsElement, this.#inputElement, this.#chatControls] = foundry.utils.parseHTML(html);
+    [this.#notificationsElement, this.#inputElement, this.#chatControls] =
+      foundry.utils.parseHTML(html);
     this.#notificationsElement.addEventListener("click", this._onClickNotification.bind(this));
     this.#inputElement.addEventListener("keydown", this._onKeyDown.bind(this));
     this.#inputElement.addEventListener("drop", this.#onDropTextAreaData.bind(this));

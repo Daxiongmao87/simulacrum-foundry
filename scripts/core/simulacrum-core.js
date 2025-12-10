@@ -186,7 +186,9 @@ class SimulacrumCore {
       try {
         if (isDebugEnabled()) {
           const diag = createLogger('AIDiagnostics');
-          const toolNames = Array.isArray(tools) ? tools.map(t => t?.function?.name || t?.name).filter(Boolean) : [];
+          const toolNames = Array.isArray(tools)
+            ? tools.map(t => t?.function?.name || t?.name).filter(Boolean)
+            : [];
           diag.info('tools', { count: toolNames.length, names: toolNames, fromOptions: options.tools !== undefined });
         }
       } catch { }
@@ -230,8 +232,16 @@ class SimulacrumCore {
       const getSystemPromptFn = () => systemPrompt;
 
       const raw = useNativeTools
-        ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, { signal })
-        : await this.aiClient.chat(sanitizeMessagesForFallback([{ role: 'system', content: systemPrompt }, ...limitedMessages]), sendTools, { signal });
+        ? await this.aiClient.chatWithSystem(
+          limitedMessages, getSystemPromptFn, sendTools, { signal }
+        )
+        : await this.aiClient.chat(
+          sanitizeMessagesForFallback([
+            { role: 'system', content: systemPrompt }, ...limitedMessages
+          ]),
+          sendTools,
+          { signal }
+        );
       if (raw == null) {
         throw new Error('Empty AI response');
       }
