@@ -58,79 +58,66 @@ export class DocumentReadTool extends BaseTool {
    */
   async execute(parameters) {
     try {
+      this.validateParameters(parameters, this.schema);
       const { documentType, documentId } = parameters;
 
-      // Validate parameters using unified validator
-      this.validateParameters(parameters, this.schema);
-
-      // Validate document type against current system
       if (!this.isValidDocumentType(documentType)) {
-        return {
-          content: `Failed to read ${documentType} document: Document type "${documentType}" not available in current system`,
-          display: `❌ Error reading document: Document type "${documentType}" not available in current system`,
-          error: {
-            message: `Document type "${documentType}" not available in current system`,
-            type: 'DOCUMENT_TYPE_INVALID'
-          }
-        };
+        return this._createErrorResponse(documentType, 'DOCUMENT_TYPE_INVALID', `Document type "${documentType}" not available in current system`);
       }
 
-      // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
-      const { DocumentAPI } = await import('../core/document-api.js');
-      const document = await DocumentAPI.getDocument(documentType, documentId);
-
+      const document = await this._fetchDocument(documentType, documentId);
       if (!document) {
-        return {
-          content: `Failed to read ${documentType} document: Document not found`,
-          display: '❌ Error reading document: Document not found',
-          error: {
-            message: 'Document not found',
-            type: 'DOCUMENT_NOT_FOUND'
-          }
-        };
+        return this._createErrorResponse(documentType, 'DOCUMENT_NOT_FOUND', 'Document not found');
       }
 
-      const documentData = typeof document?.toObject === 'function'
-        ? document.toObject()
-        : document;
-
-      const documentName = documentData?.name || documentId;
-      const jsonPayload = JSON.stringify(documentData, null, 2);
-
-      // Handle pagination
-      let finalContent = jsonPayload;
-      const lines = jsonPayload.split('\n');
-      const totalLines = lines.length;
-
-      if (parameters.startLine || parameters.endLine) {
-        const start = Math.max(0, (parameters.startLine || 1) - 1);
-        const end = parameters.endLine ? Math.min(totalLines, parameters.endLine) : totalLines;
-
-        if (start < totalLines) {
-          finalContent = lines.slice(start, end).join('\n');
-          finalContent = `[Paginated View: Lines ${start + 1}-${end} of ${totalLines}]\n${finalContent}`;
-        } else {
-          finalContent = `[Error: Start line ${start + 1} exceeds line count ${totalLines}]`;
-        }
-      }
-
-      const content = `Read ${documentType}: ${documentName}\n\n${finalContent}`;
+      const content = this._formatDocumentContent(document, documentId, parameters);
+      const documentName = document?.name || documentId;
 
       return {
-        content,
+        content: `Read ${documentType}: ${documentName}\n\n${content}`,
         display: `**${documentName}** (${documentType})`
       };
 
     } catch (error) {
-      return {
-        content: `Failed to read ${parameters.documentType} document: ${error.message}`,
-        display: `❌ Error reading document: ${error.message}`,
-        error: {
-          message: error.message,
-          type: 'DOCUMENT_NOT_FOUND'
-        }
-      };
+      const isNotFound = error.message.includes('Document not found') || error.message.includes('not found');
+      const code = isNotFound ? 'DOCUMENT_NOT_FOUND' : 'UNKNOWN_ERROR';
+      return this._createErrorResponse(parameters.documentType, code, error.message);
     }
+  }
+
+  async _fetchDocument(type, id) {
+    const { DocumentAPI } = await import('../core/document-api.js');
+    return DocumentAPI.getDocument(type, id);
+  }
+
+  _formatDocumentContent(document, id, params) {
+    const data = typeof document?.toObject === 'function' ? document.toObject() : document;
+    const json = JSON.stringify(data, null, 2);
+
+    if (!params.startLine && !params.endLine) return json;
+    return this._paginateContent(json, params.startLine, params.endLine);
+  }
+
+  _paginateContent(json, startLine, endLine) {
+    const lines = json.split('\n');
+    const total = lines.length;
+    const start = Math.max(0, (startLine || 1) - 1);
+    const end = endLine ? Math.min(total, endLine) : total;
+
+    if (start >= total) {
+      return `[Error: Start line ${start + 1} exceeds line count ${total}]`;
+    }
+
+    const slice = lines.slice(start, end).join('\n');
+    return `[Paginated View: Lines ${start + 1}-${end} of ${total}]\n${slice}`;
+  }
+
+  _createErrorResponse(type, code, message) {
+    return {
+      content: `Failed to read ${type} document: ${message}`,
+      display: `❌ Error reading document: ${message}`,
+      error: { message, type: code }
+    };
   }
 
   /**

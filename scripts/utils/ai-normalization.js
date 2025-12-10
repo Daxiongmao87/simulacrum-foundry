@@ -54,33 +54,48 @@ export function normalizeAIResponse(raw) {
 export function parseInlineToolCall(text) {
   if (!text || typeof text !== 'string') return null;
 
-  const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  if (!cleanText || !cleanText.trim()) return null;
+  const cleanText = _cleanThinkTags(text);
+  if (!cleanText) return null;
 
-  try {
-    if (isDebugEnabled() && text !== cleanText) {
-      createLogger('AIDiagnostics').info('think_tag_filtered', {
-        originalLength: text.length,
-        cleanedLength: cleanText.length,
-        hadThinkTags: text.includes('<think>')
-      });
-    }
-  } catch { /* intentionally empty */ }
-
-  const fenced = /```json([\s\S]*?)```/i;
-  const match = cleanText.match(fenced);
+  const match = cleanText.match(/```json([\s\S]*?)```/i);
   if (!match) return null;
-  const block = match[1] || '';
-  const obj = _tryParseJSON(block.trim());
+
+  const block = (match[1] || '').trim();
+  const obj = _tryParseFallbackJson(block);
 
   if (!obj) {
-    try {
-      if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
-    } catch { /* intentionally empty */ }
     return { parseError: 'Invalid JSON', content: block };
   }
 
   return _extractToolCallFromObject(obj, cleanText, match[0]);
+}
+
+function _cleanThinkTags(text) {
+  const clean = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  if (!clean || !clean.trim()) return null;
+
+  try {
+    if (isDebugEnabled() && text !== clean) {
+      _logThinkTagStats(text.length, clean.length, text.includes('<think>'));
+    }
+  } catch { /* empty */ }
+  return clean;
+}
+
+function _logThinkTagStats(orig, clean, hasTags) {
+  createLogger('AIDiagnostics').info('think_tag_filtered', {
+    originalLength: orig, cleanedLength: clean, hadThinkTags: hasTags
+  });
+}
+
+function _tryParseFallbackJson(block) {
+  const obj = _tryParseJSON(block);
+  if (!obj) {
+    try {
+      if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
+    } catch { /* empty */ }
+  }
+  return obj;
 }
 
 // --- Internal Helper Functions ---
@@ -160,20 +175,7 @@ function _handleResponsesAPIFormat(raw) {
 }
 
 function _handleOpenAIFormat(raw) {
-  const __choices = raw && raw.choices;
-  const choice = Array.isArray(__choices) ? __choices[0] : undefined;
-  const msg = choice?.message ?? {};
-  const content = typeof msg.content === 'string' ? msg.content : '';
-
-  let toolCalls = msg.tool_calls || [];
-
-  // Handle deprecated function_call
-  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-    toolCalls = [{
-      id: msg.function_call.id,
-      function: { name: msg.function_call.name, arguments: msg.function_call.arguments }
-    }];
-  }
+  const { content, toolCalls } = _extractOpenAIData(raw);
 
   if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
     _logEmptyResponse('OpenAI-style', raw);
@@ -188,28 +190,48 @@ function _handleOpenAIFormat(raw) {
     usage: raw?.usage
   };
 
-  // Inline fallback parsing
-  if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
-    const parseResult = parseInlineToolCall(normalized.content);
-    if (parseResult) {
-      if (parseResult.name) {
-        normalized.toolCalls = [{
-          id: `fallback_${Date.now()}`,
-          function: { name: parseResult.name, arguments: JSON.stringify(parseResult.arguments || {}) }
-        }];
-        normalized.content = parseResult.cleanedText;
-        normalized.display = parseResult.cleanedText;
-      } else if (parseResult.parseError) {
-        const errorMessage = _buildJsonParseErrorMessage(parseResult);
-        normalized.content = errorMessage;
-        normalized.display = errorMessage;
-        normalized._parseError = true;
-      }
-    }
-  }
-
+  _applyInlineFallback(normalized);
   _logToolCalls(normalized.toolCalls);
   return _attachProviderError(normalized, raw);
+}
+
+function _extractOpenAIData(raw) {
+  const choice = Array.isArray(raw?.choices) ? raw.choices[0] : undefined;
+  const msg = choice?.message ?? {};
+  const content = typeof msg.content === 'string' ? msg.content : '';
+  let toolCalls = msg.tool_calls || [];
+
+  if ((!toolCalls || toolCalls.length === 0) && msg.function_call?.name) {
+    toolCalls = [{
+      id: msg.function_call.id,
+      function: { name: msg.function_call.name, arguments: msg.function_call.arguments }
+    }];
+  }
+  return { content, toolCalls };
+}
+
+function _applyInlineFallback(normalized) {
+  if (Array.isArray(normalized.toolCalls) && normalized.toolCalls.length > 0) return;
+
+  const parseResult = parseInlineToolCall(normalized.content);
+  if (!parseResult) return;
+
+  if (parseResult.name) {
+    normalized.toolCalls = [{
+      id: `fallback_${Date.now()}`,
+      function: {
+        name: parseResult.name,
+        arguments: JSON.stringify(parseResult.arguments || {})
+      }
+    }];
+    normalized.content = parseResult.cleanedText;
+    normalized.display = parseResult.cleanedText;
+  } else if (parseResult.parseError) {
+    const errorMessage = _buildJsonParseErrorMessage(parseResult);
+    normalized.content = errorMessage;
+    normalized.display = errorMessage;
+    normalized._parseError = true;
+  }
 }
 
 // --- Utility Helpers ---
@@ -288,49 +310,54 @@ function _tryParseJSON(s) {
 }
 
 function _extractToolCallFromObject(obj, cleanText, matchText) {
-  // Accept either { tool_call: { name, arguments } } or { name, arguments }
-  // Also support 'function' as alternative to 'name' (some models use this)
   const toolCall = obj.tool_call || obj;
   const name = toolCall?.name || toolCall?.function;
-  let args = toolCall?.arguments ?? {};
 
   if (!name) {
-    try {
-      if (isDebugEnabled()) {
-        createLogger('AIDiagnostics').warn('fallback.parse.missing_name', {
-          keys: Object.keys(obj)
-        });
-      }
-    } catch { /* intentionally empty */ }
+    _logFallbackError('missing_name', { keys: Object.keys(obj) });
     return null;
   }
 
+  let args = toolCall?.arguments ?? {};
   if (typeof args === 'string') {
     args = _tryParseJSON(args) || {};
   }
 
-  try {
-    const info = toolRegistry.getToolInfo(name);
-    if (!info) {
-      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch { /* intentionally empty */ }
-      return null;
-    }
-  } catch (e) { return null; }
+  if (!_validateToolName(name)) return null;
 
   const cleanedText = cleanText.replace(matchText, '').trim();
-
-  try {
-    if (isDebugEnabled()) {
-      createLogger('AIDiagnostics').info('fallback.parse.success', {
-        name,
-        argsKeys: Object.keys(args)
-      });
-    }
-  } catch { /* intentionally empty */ }
+  _logFallbackSuccess(name, args);
 
   return {
     name,
     arguments: args,
     cleanedText
   };
+}
+
+function _logFallbackError(type, data) {
+  try {
+    if (isDebugEnabled()) createLogger('AIDiagnostics').warn(`fallback.parse.${type}`, data);
+  } catch { /* empty */ }
+}
+
+function _validateToolName(name) {
+  try {
+    const info = toolRegistry.getToolInfo(name);
+    if (!info) {
+      _logFallbackError('invalid_tool', { name });
+      return false;
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+function _logFallbackSuccess(name, args) {
+  try {
+    if (isDebugEnabled()) {
+      createLogger('AIDiagnostics').info('fallback.parse.success', {
+        name, argsKeys: Object.keys(args)
+      });
+    }
+  } catch { /* empty */ }
 }

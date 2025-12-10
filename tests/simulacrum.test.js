@@ -19,7 +19,7 @@ jest.mock('../scripts/core/simulacrum-core.js', () => ({
   }
 }));
 
-jest.mock('../scripts/ui/simulacrum-sidebar-tab.js', () => ({
+jest.mock('../scripts/ui/sidebar-registration.js', () => ({
   registerSimulacrumSidebarTab: mockRegisterSidebarTab
 }));
 

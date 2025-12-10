@@ -103,11 +103,14 @@ global.ui = {
 // Import module dynamically after globals are set up to avoid hoisting issues
 let SimulacrumSidebarTab;
 let registerSimulacrumSidebarTab;
+
 beforeAll(async () => {
   const mod = await import('../../scripts/ui/simulacrum-sidebar-tab.js');
-  // SimulacrumSidebarTab is the default export
-  SimulacrumSidebarTab = mod.default;
-  registerSimulacrumSidebarTab = mod.registerSimulacrumSidebarTab;
+  // SimulacrumSidebarTab is a named export
+  SimulacrumSidebarTab = mod.SimulacrumSidebarTab;
+
+  const registrationMod = await import('../../scripts/ui/sidebar-registration.js');
+  registerSimulacrumSidebarTab = registrationMod.registerSimulacrumSidebarTab;
 });
 
 const setupScrollDom = (tab, { scrollHeight = 1000, clientHeight = 200 } = {}) => {

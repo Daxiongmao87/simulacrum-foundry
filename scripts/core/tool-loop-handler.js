@@ -6,8 +6,7 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
-import { SimulacrumCore } from './simulacrum-core.js';
-import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
+import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
   isToolCallFailure,
@@ -51,7 +50,9 @@ async function _runLoopIteration(context) {
     }
 
     // Process a single cycle of the loop
-    const cycleResult = await _processLoopCycle(currentResponse, context, { toolFailureAttempts, repeatCount, REPEAT_LIMIT });
+    const cycleResult = await _processLoopCycle(
+      currentResponse, context, { toolFailureAttempts, repeatCount, REPEAT_LIMIT }
+    );
 
     // Handle cycle outcome
     if (cycleResult.action === 'return') return cycleResult.value;
@@ -117,8 +118,39 @@ async function _processLoopCycle(currentResponse, context, state) {
   }
 
   // 7. Get Next Response
-  const response = await _getNextAIResponse(toolResults, context);
-  return { action: 'continue', response, repeatCount, toolFailureAttempts };
+  // 7. Get Next Response
+  try {
+    const response = await _getNextAIResponse(toolResults, context);
+    return { action: 'continue', response, repeatCount, toolFailureAttempts };
+  } catch (error) {
+    console.log('!!! CRITICAL: Entred CATCH block in _processLoopCycle !!!', error.message);
+    logger.error('API Error during loop cycle:', error);
+    toolFailureAttempts++;
+    if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
+      return { action: 'return', value: await _runToolFailureFallback(context) };
+    }
+    // TODO: Ideally we should delay here before retrying or use specific API retry logic
+    // For now, we treat it as a tool failure attempt to prevent infinite loops on broken APIs
+
+    // Construct a temporary error response to trigger retry logic in next cycle or falling back 
+    // Since we can't get a valid response, we might need to manually trigger refusal handling logic
+    // But _handleToolRefusal needs a response object.
+
+    // Force a retry by returning a fake "failure" response that will be caught by isToolCallFailure next time?
+    // Or just recurse?
+    // Simpler: Return a "continue" with the SAME response (if we didn't update it) but increment failure count?
+    // But we need NEW response.
+
+    // If we return action 'continue' without response? loop breaks?
+    // _runLoopIteration: currentResponse = cycleResult.response.
+
+    // We must return a valid response structure to continue.
+    // If we failed to get one, we are in trouble.
+    // Fallback immediately if we can't get response?
+    // OR try to return a dummy response that says "I failed"?
+
+    return { action: 'return', value: await _runToolFailureFallback(context) };
+  }
 }
 
 // --- Helper Functions ---
@@ -152,9 +184,8 @@ async function _handleToolRefusal(response, context, attempts) {
 }
 
 // eslint-disable-next-line complexity
-async function _executeToolCalls(context, response, callId) {
+async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
-  const toolCalls = response.toolCalls;
   const results = [];
 
   for (const toolCall of toolCalls) {
@@ -186,6 +217,7 @@ async function _executeToolCalls(context, response, callId) {
       }
 
     } catch (err) {
+      console.log(`ToolLoopHandler caught error during tool execution: ${err.message}`);
       error = err;
       logger.error(`Tool execution failed for ${toolName}:`, err);
       result = { error: err.message, toolName, arguments: toolArgs };
@@ -209,22 +241,10 @@ async function _executeToolCalls(context, response, callId) {
   return results;
 }
 
-async function _getNextAIResponse(context, currentResponse) {
-  const { conversationManager, currentToolSupport, getSystemPrompt, aiClient, signal, tools } = context;
+// eslint-disable-next-line no-unused-vars
+async function _getNextAIResponse(toolResults, context) {
+  const { getSystemPrompt } = context;
   const messages = _getConversationMessages(context);
-
-  // In native mode, we appended tool messages to conversationManager above.
-  // So messages already contains them? 
-  // Wait, typical flow handles tool outputs being in history.
-  // But getNextAIResponse in original code built a temporary array `messagesToSend`.
-  // Let's stick to that if `conversationManager` persists state?
-  // Original code: `conversationManager.addMessage` WAS called for native mode.
-  // So `messages` should have them.
-  // BUT legacy mode loop relied on `toolStatusMessage` added as system message.
-
-  // If native mode, `messages` is good.
-  // If legacy mode, `toolStatusMessage` was added.
-
   const systemPrompt = await getSystemPrompt();
   return _chatWithAI(messages, systemPrompt, context);
 }
@@ -282,11 +302,11 @@ async function _chatWithAI(messages, systemPrompt, context) {
     ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
     : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
 
-  const normalized = SimulacrumCore._normalizeAIResponse(raw);
+  const normalized = normalizeAIResponse(raw);
 
   // Legacy fallback tool parsing
   if (context.currentToolSupport !== true && (!normalized.toolCalls || !normalized.toolCalls.length)) {
-    const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
+    const parsed = parseInlineToolCall?.(normalized.content);
     if (parsed && parsed.name) {
       normalized.toolCalls = [{
         id: 'fallback_' + Date.now(),
@@ -328,7 +348,7 @@ async function _runToolFailureFallback(context) {
   }
   const systemPrompt = await context.getSystemPrompt();
   const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, { signal: context.signal });
-  const fallback = SimulacrumCore._normalizeAIResponse(raw);
+  const fallback = normalizeAIResponse(raw);
   const text = (fallback.content || '') + '\n\nNote: Tool functionality was temporarily unavailable.';
   return { ...fallback, content: text, display: text, toolCalls: [] };
 }

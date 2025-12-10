@@ -11,11 +11,12 @@ import { createLogger } from '../utils/logger.js';
  * Base tool that all other tools extend from
  */
 export class BaseTool {
-  constructor(name, description, schema = null) {
+  constructor(name, description, schema = null, requiresConfirmation = false) {
     this.name = name;
     this.description = description;
     this.schema = schema;
-    this.requiresConfirmation = false;
+    this.requiresConfirmation = requiresConfirmation;
+    console.log(`BaseTool initialized: ${name}, requiresConfirmation=${requiresConfirmation}, this.rc=${this.requiresConfirmation}`);
     this.documentAPI = null;
     this.logger = createLogger('BaseTool');
   }

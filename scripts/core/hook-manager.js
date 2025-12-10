@@ -11,7 +11,6 @@
 export const SimulacrumHooks = Object.freeze({
     // Process lifecycle hooks
     PROCESS_STATUS: 'simulacrum:processStatus',
-    PROCESS_STATUS: 'simulacrum:processStatus',
     PROCESS_CANCELLED: 'simulacrum:processCancelled',
     RETRY_STATUS: 'simulacrum:retryStatus',
 

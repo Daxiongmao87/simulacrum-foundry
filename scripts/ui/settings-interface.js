@@ -270,56 +270,6 @@ export class SettingsInterface extends FormApplication {
     }
   }
 
-  /**
-   * Test API connection with provided configuration
-   * @param {Object} config - API configuration
-   * @returns {Promise<Object>} Test result
-   * @private
-   */
-  async _testApiConnection(config) {
-    try {
-      const provider = config.provider || this._inferProviderFromURL(config.baseURL);
-      const endpoint = this._resolveHealthEndpoint(config.baseURL, provider);
-      const headers = { 'Content-Type': 'application/json' };
-      if (provider === 'gemini') {
-        if (config.apiKey) headers['x-goog-api-key'] = config.apiKey;
-      } else if (config.apiKey) {
-        headers['Authorization'] = `Bearer ${config.apiKey}`;
-      }
-
-      const response = await fetch(endpoint, { method: 'GET', headers });
-      if (!response.ok) {
-        let message;
-        try {
-          const body = await response.json();
-          message = body.error?.message || JSON.stringify(body);
-        } catch (_e) {
-          message = await response.text();
-        }
-        return { success: false, error: message || 'Unknown error' };
-      }
-
-      let model = config.model;
-      try {
-        const body = await response.json();
-        if (Array.isArray(body?.data) && body.data[0]?.id) {
-          model = body.data[0].id;
-        } else if (Array.isArray(body?.models) && body.models[0]?.name) {
-          model = body.models[0].name;
-        }
-      } catch (_e) {
-        // ignore JSON failures; we only needed a 200
-      }
-
-      return { success: true, model, content: 'Endpoint reachable' };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
   _inferProviderFromURL(url) {
     if (!url) return 'openai';
     const lower = String(url).toLowerCase();
@@ -343,34 +293,8 @@ export class SettingsInterface extends FormApplication {
    */
   async _updateObject(event, formData) {
     try {
-      const provider = formData.provider || this.currentProvider || 'openai';
-      if (formData.baseURL) {
-        try {
-          new URL(formData.baseURL);
-        } catch (_err) {
-          throw new Error('Base URL must be a valid URL');
-        }
-      }
-
-      // Update all settings (no redundant module enable toggle)
-      await game.settings.set('simulacrum', 'provider', provider);
-      await game.settings.set('simulacrum', 'apiKey', formData.apiKey);
-      await game.settings.set('simulacrum', 'baseURL', formData.baseURL);
-      await game.settings.set('simulacrum', 'model', formData.model);
-
-      // Set advanced settings if provided
-      if (formData.maxTokens) {
-        await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
-      }
-      if (formData.temperature) {
-        await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
-      }
-      if (formData.contextLength) {
-        await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
-      }
-      if (formData.customSystemPrompt !== undefined) {
-        await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
-      }
+      this._validateFormData(formData);
+      await this._saveSettings(formData);
 
       ui.notifications.info('Simulacrum settings saved successfully');
 
@@ -383,6 +307,31 @@ export class SettingsInterface extends FormApplication {
       this.logger.error('Failed to save Simulacrum settings:', error);
       ui.notifications.error(`Failed to save settings: ${error.message}`);
       throw error;
+    }
+  }
+
+  _validateFormData(formData) {
+    if (formData.baseURL) {
+      try {
+        new URL(formData.baseURL);
+      } catch (_err) {
+        throw new Error('Base URL must be a valid URL');
+      }
+    }
+  }
+
+  async _saveSettings(formData) {
+    const provider = formData.provider || this.currentProvider || 'openai';
+    await game.settings.set('simulacrum', 'provider', provider);
+    await game.settings.set('simulacrum', 'apiKey', formData.apiKey);
+    await game.settings.set('simulacrum', 'baseURL', formData.baseURL);
+    await game.settings.set('simulacrum', 'model', formData.model);
+
+    if (formData.maxTokens) await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
+    if (formData.temperature) await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
+    if (formData.contextLength) await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
+    if (formData.customSystemPrompt !== undefined) {
+      await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
     }
   }
 
@@ -399,8 +348,9 @@ export class SettingsInterface extends FormApplication {
 
 /**
  * Helper function that converts an input field for a setting into a textarea.
+ * @param {Object} options Configuration options
  */
-function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, repositionCallback) {
+function convertSettingToTextarea({ html, moduleId, settingKey, textareaStyle, repositionCallback }) {
   const fullSettingId = `${moduleId}.${settingKey}`;
 
   // Ensure html is a jQuery object for consistent API usage
@@ -408,21 +358,15 @@ function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, rep
 
   // Use the data-setting-id attribute to find the setting div
   const settingDiv = $html.find(`[data-setting-id="${fullSettingId}"]`);
-  if (!settingDiv.length) {
-    return;
-  }
+  if (!settingDiv.length) return;
 
   // Get the original stored value from settings
   let storedValue = game.settings.get(moduleId, settingKey) || "";
-
-  // Handle newlines - convert "\n" sequences to actual newlines
   storedValue = storedValue.replace(/\\n/g, "\n");
 
   // Find the original input
   const inputEl = settingDiv.find(`input[name="${fullSettingId}"]`);
-  if (!inputEl.length) {
-    return;
-  }
+  if (!inputEl.length) return;
 
   // Create the textarea with proper attributes for code display
   const textarea = $(`
@@ -438,12 +382,10 @@ function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, rep
   // When the textarea changes, properly escape newlines before saving
   textarea.on("change", async (ev) => {
     const rawValue = ev.target.value;
-    // Convert actual newlines to "\n" sequence before saving
     const escaped = rawValue.replace(/\n/g, "\\n");
     await game.settings.set(moduleId, settingKey, escaped);
   });
 
-  // Run the reposition callback if provided
   if (typeof repositionCallback === "function") {
     repositionCallback(settingDiv);
   }
@@ -453,12 +395,23 @@ function convertSettingToTextarea(html, moduleId, settingKey, textareaStyle, rep
  * Register additional settings not in basic config
  * Called during module initialization
  */
+/**
+ * Register additional settings not in basic config
+ * Called during module initialization
+ */
 export function registerAdvancedSettings() {
+  _registerCoreSettings();
+  _registerLegacySettings();
+  _registerContextSettings();
+  _registerStylingSettings();
+}
+
+function _registerCoreSettings() {
   game.settings.register('simulacrum', 'maxTokens', {
     name: 'Maximum Tokens',
     hint: 'Maximum number of tokens for AI responses.',
     scope: 'world',
-    config: false, // Hidden from basic config, shown in advanced interface
+    config: false,
     type: Number,
     default: 4096,
     restricted: true
@@ -468,22 +421,26 @@ export function registerAdvancedSettings() {
     name: 'Response Temperature',
     hint: 'Controls randomness in AI responses (0.0-1.0).',
     scope: 'world',
-    config: false, // Hidden from basic config, shown in advanced interface
+    config: false,
     type: Number,
     default: 0.7,
     restricted: true
   });
+}
 
+function _registerLegacySettings() {
   game.settings.register('simulacrum', 'legacyMode', {
     name: 'Legacy Mode',
     hint: 'Enable if your AI provider doesn\'t support OpenAI-style tool calling. Uses JSON block parsing instead.',
     scope: 'world',
-    config: true, // Show in basic config since this is important for compatibility
+    config: true,
     type: Boolean,
     default: false,
     restricted: true
   });
+}
 
+function _registerContextSettings() {
   game.settings.register('simulacrum', 'contextLength', {
     name: 'Context Length',
     hint: 'Maximum number of messages to include in conversation context.',
@@ -493,8 +450,9 @@ export function registerAdvancedSettings() {
     default: 20,
     restricted: true
   });
+}
 
-
+function _registerStylingSettings() {
   game.settings.register('simulacrum', 'fontChoice', {
     name: 'UI Font',
     hint: 'Select the font family for the Simulacrum interface.',
@@ -510,7 +468,6 @@ export function registerAdvancedSettings() {
     },
     default: 'Dumbledor',
     onChange: value => {
-      // Live update if the tab is rendered
       if (ui.sidebar?.tabs.simulacrum?.rendered) {
         ui.sidebar.tabs.simulacrum.element.css('font-family', `"${value}", "Signika", sans-serif`);
       }
@@ -532,52 +489,46 @@ export function registerAdvancedSettings() {
  * Register settings UI enhancements
  */
 export function registerSettingsEnhancements() {
-  // Handle settings UI rendering to convert text inputs to textareas
   Hooks.on("renderSettingsConfig", (app, html, _data) => {
-    // Wait a short moment to ensure DOM is fully rendered
     setTimeout(() => {
       try {
-        // Convert the customSystemPrompt setting field to textarea
-        convertSettingToTextarea(
-          html,
-          "simulacrum",
-          "customSystemPrompt",
-          "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;",
-          (settingDiv) => {
-            // Reposition the form-fields div so that it appears after the <p class="notes"> element
-            const notesEl = settingDiv.find("p.notes");
-            const formFieldsEl = settingDiv.find("div.form-fields");
-            if (notesEl.length && formFieldsEl.length) {
-              notesEl.after(formFieldsEl);
-            }
-          }
-        );
-
-        // Add a click handler for tab switching to ensure textareas are converted
-        html.find('a.item[data-tab="simulacrum"]').on('click', () => {
-          setTimeout(() => {
-            const promptInput = html.find('div[data-setting-id="simulacrum.customSystemPrompt"] input');
-            if (promptInput.length) {
-              // Run conversion again if input is still there
-              convertSettingToTextarea(
-                html,
-                "simulacrum",
-                "customSystemPrompt",
-                "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;",
-                (settingDiv) => {
-                  const notesEl = settingDiv.find("p.notes");
-                  const formFieldsEl = settingDiv.find("div.form-fields");
-                  if (notesEl.length && formFieldsEl.length) {
-                    notesEl.after(formFieldsEl);
-                  }
-                }
-              );
-            }
-          }, 100);
-        });
+        _applyEnhancements(html);
       } catch (error) {
-        console.error("Simulacrum | Error in settings render:", error);
+        createLogger('SettingsInterface').error("Error in settings render:", error);
       }
     }, 100);
+  });
+}
+
+function _applyEnhancements(html) {
+  const style = "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;";
+  const callback = (settingDiv) => {
+    const notesEl = settingDiv.find("p.notes");
+    const formFieldsEl = settingDiv.find("div.form-fields");
+    if (notesEl.length && formFieldsEl.length) {
+      notesEl.after(formFieldsEl);
+    }
+  };
+
+  convertSettingToTextarea({
+    html,
+    moduleId: "simulacrum",
+    settingKey: "customSystemPrompt",
+    textareaStyle: style,
+    repositionCallback: callback
+  });
+
+  html.find('a.item[data-tab="simulacrum"]').on('click', () => {
+    setTimeout(() => {
+      if (html.find('div[data-setting-id="simulacrum.customSystemPrompt"] input').length) {
+        convertSettingToTextarea({
+          html,
+          moduleId: "simulacrum",
+          settingKey: "customSystemPrompt",
+          textareaStyle: style,
+          repositionCallback: callback
+        });
+      }
+    }, 500);
   });
 }

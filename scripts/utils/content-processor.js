@@ -3,6 +3,8 @@
  * Handles transformation of AI response content for proper HTML rendering
  */
 
+import { createLogger } from './logger.js';
+
 /**
  * Transforms <think></think> tags into collapsible HTML details/summary elements
  * 
@@ -18,27 +20,31 @@ export function transformThinkTags(content) {
     // Handle both HTML-escaped and literal think tags
     // Pattern 1: HTML-escaped tags &lt;think&gt;...&lt;/think&gt;
     const escapedPattern = /&lt;think&gt;([\s\S]*?)&lt;\/think&gt;/gi;
-    
+
     // Pattern 2: Literal tags <think>...</think>
     const literalPattern = /<think>([\s\S]*?)<\/think>/gi;
-    
+
     let processedContent = content;
-    
+
     // Process HTML-escaped think tags first
     processedContent = processedContent.replace(escapedPattern, (match, thinkContent) => {
       return transformThinkBlock(thinkContent.trim());
     });
-    
+
     // Process literal think tags
     processedContent = processedContent.replace(literalPattern, (match, thinkContent) => {
       return transformThinkBlock(thinkContent.trim());
     });
-    
+
     return processedContent;
-    
+
   } catch (error) {
     // Graceful fallback - return original content if transformation fails
-    console.warn('Failed to transform think tags:', error);
+    try {
+      createLogger('ContentProcessor').warn('Failed to transform think tags:', error);
+    } catch (e) {
+      // Fallback if logger fails
+    }
     return content;
   }
 }
@@ -54,7 +60,7 @@ function transformThinkBlock(thinkContent) {
   if (!thinkContent) {
     return '';
   }
-  
+
   // Escape any remaining HTML in the think content to prevent injection
   const escapedContent = thinkContent
     .replace(/&/g, '&amp;')
@@ -62,10 +68,10 @@ function transformThinkBlock(thinkContent) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-  
+
   // Convert line breaks to HTML breaks for proper formatting
   const formattedContent = escapedContent.replace(/\n/g, '<br>');
-  
+
   return `<details class="simulacrum-thoughts">
     <summary>🤔 Thoughts</summary>
     <div class="think-content">${formattedContent}</div>
@@ -82,6 +88,6 @@ export function hasThinkTags(content) {
   if (!content || typeof content !== 'string') {
     return false;
   }
-  
+
   return /(&lt;think&gt;|<think>)/i.test(content);
 }

@@ -314,14 +314,8 @@ describe('Tool Fallback Behavior', () => {
     mockAIClientWithFailures.chatWithSystem = jest.fn()
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        choices: [{
-          message: {
-            content: 'Plain fallback response',
-            tool_calls: []
-          }
-        }]
-      });
+      .mockImplementationOnce(() => Promise.reject(new Error('API Error 3')))
+      .mockResolvedValue({ content: 'Fallback response' });
 
     const normalizeSpy = jest.spyOn(SimulacrumCore, '_normalizeAIResponse');
     try {
@@ -338,11 +332,7 @@ describe('Tool Fallback Behavior', () => {
           errorCode: AI_ERROR_CODES.TOOL_CALL_FAILURE,
           toolCalls: []
         })
-        .mockReturnValueOnce({
-          content: 'Plain fallback response',
-          display: 'Plain fallback response',
-          toolCalls: []
-        });
+        .mockRejectedValueOnce(new Error('API Error 3'));
 
       const initialResponse = {
         content: '',

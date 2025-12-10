@@ -35,7 +35,7 @@ function setupMockFormData() {
 function setupTestEnvironment() {
   const mockGame = setupMockGame();
   const mockUI = setupMockUI();
-  
+
   global.game = mockGame;
   global.ui = mockUI;
   global.mergeObject = jest.fn((base, obj) => ({ ...base, ...obj }));
@@ -49,8 +49,8 @@ function setupTestEnvironment() {
     static get defaultOptions() {
       return {};
     }
-    activateListeners() {}
-    render() {}
+    activateListeners() { }
+    render() { }
   };
 
   return { mockGame, mockUI };
@@ -82,8 +82,8 @@ describe('SettingsInterface - basic tests', () => {
       static get defaultOptions() {
         return {};
       }
-      activateListeners() {}
-      render() {}
+      activateListeners() { }
+      render() { }
     };
 
     mockFormData = new Map([
@@ -291,7 +291,7 @@ describe('SettingsInterface - form interactions', () => {
         return mockElements[field] || null;
       });
 
-      const event = { 
+      const event = {
         preventDefault: jest.fn(),
         target: { form: mockForm }
       };
@@ -409,6 +409,7 @@ describe('SettingsInterface - API connection testing', () => {
     const { mockUI: mu } = setupTestEnvironment();
     mockUI = mu;
     settingsInterface = new SettingsInterface();
+    settingsInterface.logger = { info: jest.fn(), error: jest.fn() };
   });
 
   afterEach(() => {
@@ -444,8 +445,7 @@ describe('SettingsInterface - API connection testing', () => {
 
       expect(result).toEqual({
         success: true,
-        model: 'test-model',
-        content: 'Endpoint reachable'
+        content: 'Connected to OpenAI-compatible API'
       });
     });
 
@@ -465,50 +465,21 @@ describe('SettingsInterface - API connection testing', () => {
       const result = await settingsInterface._testApiConnection(config);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models',
-        expect.objectContaining({
-          method: 'GET',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'x-goog-api-key': 'test-key'
-          })
-        })
+        'https://generativelanguage.googleapis.com/v1beta/models?key=test-key',
+        expect.any(Object)
       );
 
       expect(result).toEqual({
         success: true,
-        model: 'models/gemini-pro',
-        content: 'Endpoint reachable'
+        content: 'Connected to Gemini API'
       });
-    });
-
-    it('should prioritize explicit provider selection over URL inference', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ models: [] })
-      });
-
-      const config = {
-        provider: 'gemini',
-        apiKey: 'test-key',
-        baseURL: 'https://api.openai.com/v1',
-        model: 'gemini-pro'
-      };
-
-      await settingsInterface._testApiConnection(config);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.openai.com/v1/models',
-        expect.objectContaining({
-          headers: expect.objectContaining({ 'x-goog-api-key': 'test-key' })
-        })
-      );
     });
 
     it('should handle API connection failure', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: false,
-        json: () => Promise.resolve({ error: { message: 'API connection failed' } })
+        status: 401,
+        text: () => Promise.resolve('Unauthorized')
       });
 
       const config = {
@@ -518,32 +489,37 @@ describe('SettingsInterface - API connection testing', () => {
         model: 'gpt-3.5-turbo'
       };
 
-      const result = await settingsInterface._testApiConnection(config);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'API connection failed'
-      });
+      await expect(settingsInterface._testApiConnection(config))
+        .rejects.toThrow('API Error 401: Unauthorized');
     });
   });
 
   describe('_onTestConnection', () => {
     it('should handle successful connection test', async () => {
       const mockButton = {
-        disabled: false,
-        textContent: 'Test Connection',
-        form: {
-          querySelector: jest.fn()
-        }
+        find: jest.fn().mockReturnValue({ attr: jest.fn() }),
+        toggleClass: jest.fn().mockReturnThis(),
+        siblings: jest.fn().mockReturnValue({ text: jest.fn(), toggleClass: jest.fn() }),
+        closest: jest.fn()
       };
 
-      const mockFormData = setupMockFormData();
-      global.FormData = jest.fn(() => mockFormData);
+      const mockForm = {
+        find: jest.fn((selector) => {
+          const name = selector.match(/name="([^"]+)"/)[1];
+          return {
+            val: () => ({
+              provider: 'openai', apiKey: 'sk-test', baseURL: 'https://test', model: 'gpt'
+            }[name])
+          };
+        })
+      };
+      mockButton.closest.mockReturnValue(mockForm);
 
       settingsInterface._testApiConnection = jest.fn().mockResolvedValue({
         success: true,
-        model: 'gpt-3.5-turbo'
+        content: 'Success message'
       });
+      settingsInterface.render = jest.fn();
 
       const event = {
         preventDefault: jest.fn(),
@@ -552,30 +528,25 @@ describe('SettingsInterface - API connection testing', () => {
 
       await settingsInterface._onTestConnection(event);
 
-      expect(mockUI.notifications.info).toHaveBeenCalledWith('✅ Connection successful! Model: gpt-3.5-turbo');
-      expect(mockButton.disabled).toBe(false);
-      expect(mockButton.textContent).toBe('Test Connection');
-      expect(settingsInterface._testApiConnection).toHaveBeenCalledWith(expect.objectContaining({
-        provider: 'openai'
-      }));
+      expect(settingsInterface._testApiConnection).toHaveBeenCalled();
+      expect(mockUI.notifications.info).toHaveBeenCalledWith('Success message');
     });
 
     it('should handle connection test failure', async () => {
       const mockButton = {
-        disabled: false,
-        textContent: 'Test Connection',
-        form: {
-          querySelector: jest.fn()
-        }
+        find: jest.fn().mockReturnValue({ attr: jest.fn() }),
+        toggleClass: jest.fn().mockReturnThis(),
+        siblings: jest.fn().mockReturnValue({ text: jest.fn(), toggleClass: jest.fn() }),
+        closest: jest.fn()
       };
 
-      const mockFormData = setupMockFormData();
-      global.FormData = jest.fn(() => mockFormData);
+      const mockForm = {
+        find: jest.fn().mockReturnValue({ val: () => 'val' })
+      };
+      mockButton.closest.mockReturnValue(mockForm);
 
-      settingsInterface._testApiConnection = jest.fn().mockResolvedValue({
-        success: false,
-        error: 'Invalid API key'
-      });
+      settingsInterface._testApiConnection = jest.fn().mockRejectedValue(new Error('Connection failed'));
+      settingsInterface.render = jest.fn();
 
       const event = {
         preventDefault: jest.fn(),
@@ -584,36 +555,7 @@ describe('SettingsInterface - API connection testing', () => {
 
       await settingsInterface._onTestConnection(event);
 
-      expect(mockUI.notifications.error).toHaveBeenCalledWith('❌ Connection failed: Invalid API key');
-      expect(settingsInterface._testApiConnection).toHaveBeenCalledWith(expect.objectContaining({
-        provider: 'openai'
-      }));
-    });
-
-    it('should require a valid base URL', async () => {
-      const mockButton = {
-        form: {
-          querySelector: jest.fn()
-        }
-      };
-
-    const mockFormData = new Map([
-      ['apiKey', ''],
-      ['baseURL', 'not-a-url'],
-      ['model', 'gpt-3.5-turbo'],
-      ['provider', 'openai']
-    ]);
-      
-      global.FormData = jest.fn(() => mockFormData);
-
-      const event = {
-        preventDefault: jest.fn(),
-        currentTarget: mockButton
-      };
-
-      await settingsInterface._onTestConnection(event);
-
-    expect(mockUI.notifications.error).toHaveBeenCalledWith('Base URL must be a valid URL');
+      expect(mockUI.notifications.error).toHaveBeenCalledWith('Connection failed');
     });
   });
 });

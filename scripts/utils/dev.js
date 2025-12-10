@@ -10,24 +10,21 @@
  * - URL contains ?simulacrumDev=1
  */
 export function isDebugEnabled() {
+  const byWindow = globalThis.window?.SIMULACRUM_DEV === true;
+  const byConfig = globalThis.CONFIG?.debug?.simulacrum === true;
+
+  if (byWindow || byConfig) return true;
+
   try {
-    if (globalThis.window && globalThis.window.SIMULACRUM_DEV === true) return true;
-  } catch { /* intentionally empty */ }
-  try {
-    if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
-  } catch { /* intentionally empty */ }
-  // Default to true during development unless explicitly disabled.
-  // URL overrides: simulacrumDev=1 enables, simulacrumDev=0 disables
-  try {
-    const search = globalThis.location?.search || '';
+    const search = globalThis.location?.search;
     if (search) {
-      const params = new URLSearchParams(search);
-      const q = params.get('simulacrumDev');
-      if (q === '0') return false;
+      const q = new URLSearchParams(search).get('simulacrumDev');
       if (q === '1') return true;
+      if (q === '0') return false;
     }
-  } catch { /* intentionally empty */ }
-  return true;
+  } catch { /* empty */ }
+
+  return true; // Default enabled during dev
 }
 
 // Optional helpers for quick toggling via console
