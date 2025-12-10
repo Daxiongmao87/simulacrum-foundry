@@ -287,4 +287,92 @@ describe('ValidationErrorHandler', () => {
             expect(result).toContain('Items');
         });
     });
+
+    describe('enhanceWithSchemaAnalysis', () => {
+        it('should enhance suggestions with schema information', () => {
+            const suggestions = [{
+                field: 'name',
+                issue: 'is required',
+                action: 'Provide a value',
+                example: null,
+                invalidValue: undefined
+            }];
+
+            const result = ValidationErrorHandler.enhanceWithSchemaAnalysis(suggestions, 'Actor');
+            expect(result[0]).toHaveProperty('schemaAnalysis');
+            expect(result[0]).toHaveProperty('correctionMethod');
+        });
+    });
+
+    describe('createEnhancedAIContext', () => {
+        it('should create enhanced context with schema information', () => {
+            const details = { 'name': { field: 'name', error: 'required' } };
+            const suggestions = [{
+                field: 'name',
+                action: 'Provide value',
+                schemaExample: '"Example"',
+                schemaAnalysis: { fieldType: 'StringField' },
+                issue: 'is required'
+            }];
+
+            const result = ValidationErrorHandler.createEnhancedAIContext(details, suggestions, 'Actor');
+            expect(result).toContain('Actor validation failed');
+            expect(result).toContain('name');
+        });
+
+        it('should fall back to example when schemaExample missing', () => {
+            const details = { 'type': { field: 'type', error: 'invalid' } };
+            const suggestions = [{
+                field: 'type',
+                action: 'Fix type',
+                example: '"character"',
+                issue: 'invalid value'
+            }];
+
+            const result = ValidationErrorHandler.createEnhancedAIContext(details, suggestions, 'Actor');
+            expect(result).toContain('type');
+        });
+    });
+
+    describe('createAIContext', () => {
+        it('should create AI context for validation errors', () => {
+            const details = { 'name': { field: 'name', error: 'required' } };
+            const suggestions = [{
+                field: 'name',
+                action: 'Provide value for name',
+                example: '"Test"',
+                issue: 'is required'
+            }];
+
+            const result = ValidationErrorHandler.createAIContext(details, suggestions);
+            expect(result).toContain('validation failed');
+            expect(result).toContain('Required fixes');
+        });
+
+        it('should include ID error instructions', () => {
+            const details = { '_id': { field: '_id', error: '16-character alphanumeric ID' } };
+            const suggestions = [{
+                field: '_id',
+                action: 'Generate ID',
+                issue: '16-character alphanumeric ID required'
+            }];
+
+            const result = ValidationErrorHandler.createAIContext(details, suggestions);
+            expect(result).toContain('randomID()');
+        });
+
+        it('should include suggested values', () => {
+            const details = { 'type': { field: 'type', error: 'invalid' } };
+            const suggestions = [{
+                field: 'type',
+                action: 'Fix type',
+                suggestedValue: 'character',
+                issue: 'not valid'
+            }];
+
+            const result = ValidationErrorHandler.createAIContext(details, suggestions);
+            expect(result).toContain('suggested');
+        });
+    });
 });
+

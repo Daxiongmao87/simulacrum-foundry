@@ -328,3 +328,86 @@ describe('BaseTool - ensureDocumentAPI', () => {
     }).not.toThrow();
   });
 });
+
+describe('BaseTool - validateImageUrls', () => {
+  let baseTool;
+
+  beforeEach(() => {
+    baseTool = createTestBaseTool();
+  });
+
+  it('should not throw for valid image URLs', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: 'icons/weapons/sword.webp' });
+    }).not.toThrow();
+  });
+
+  it('should not throw for http URLs', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: 'https://example.com/image.png' });
+    }).not.toThrow();
+  });
+
+  it('should throw for description-like image values', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: 'image of a sword with flames' });
+    }).toThrow('Invalid image URL');
+  });
+
+  it('should throw for natural language descriptions', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: 'a picture of a warrior' });
+    }).toThrow('Invalid image URL');
+  });
+
+  it('should throw for values starting with "picture of"', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: 'picture of a dragon breathing fire' });
+    }).toThrow('Invalid image URL');
+  });
+
+  it('should throw for very long strings', () => {
+    const longUrl = 'x'.repeat(501);
+    expect(() => {
+      baseTool.validateImageUrls({ img: longUrl });
+    }).toThrow('Invalid image URL');
+  });
+
+  it('should handle nested objects', () => {
+    expect(() => {
+      baseTool.validateImageUrls({
+        texture: { src: 'tokens/token.png' }
+      });
+    }).not.toThrow();
+  });
+
+  it('should handle null data', () => {
+    expect(() => {
+      baseTool.validateImageUrls(null);
+    }).not.toThrow();
+  });
+
+  it('should handle empty objects', () => {
+    expect(() => {
+      baseTool.validateImageUrls({});
+    }).not.toThrow();
+  });
+
+  it('should not throw for empty string img values', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ img: '' });
+    }).not.toThrow();
+  });
+
+  it('should handle src key validation', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ src: 'image of something' });
+    }).toThrow('Invalid image URL');
+  });
+
+  it('should not validate non-image keys', () => {
+    expect(() => {
+      baseTool.validateImageUrls({ name: 'image of something with spaces' });
+    }).not.toThrow();
+  });
+});

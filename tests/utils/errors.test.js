@@ -138,3 +138,55 @@ describe('ERROR_TYPES', () => {
     expect(ERROR_TYPES.CREATION_FAILED).toBe('creation_failed');
   });
 });
+
+describe('SimulacrumError with null data', () => {
+  test('should handle null data by using empty object', () => {
+    const error = new SimulacrumError('Test', 'TYPE', null);
+    expect(error.data).toEqual({});
+  });
+});
+
+describe('Default error values', () => {
+  test('ValidationError with no field or value', () => {
+    const error = new ValidationError('Just a message');
+    expect(error.data.field).toBeNull();
+    expect(error.data.value).toBeNull();
+  });
+
+  test('ToolError with no toolName', () => {
+    const error = new ToolError('Tool failed');
+    expect(error.data.toolName).toBeNull();
+  });
+
+  test('DocumentError with only message', () => {
+    const error = new DocumentError('Doc error');
+    expect(error.data.documentType).toBeNull();
+    expect(error.data.operation).toBeNull();
+    expect(error.data.documentId).toBeNull();
+  });
+
+  test('PermissionError with only message', () => {
+    const error = new PermissionError('No access');
+    expect(error.data.action).toBeNull();
+    expect(error.data.userRole).toBeNull();
+    expect(error.data.requiredRole).toBeNull();
+  });
+
+  test('NetworkError with only message', () => {
+    const error = new NetworkError('Connection failed');
+    expect(error.data.provider).toBeNull();
+    expect(error.data.url).toBeNull();
+    expect(error.data.status).toBeNull();
+  });
+
+  test('NotFoundError with only message', () => {
+    const error = new NotFoundError('Not found');
+    expect(error.data.resource).toBeNull();
+    expect(error.data.id).toBeNull();
+  });
+
+  test('APIError with no data', () => {
+    const error = new APIError('API failed');
+    expect(error.data).toEqual({});
+  });
+});

@@ -41,4 +41,43 @@ describe('MarkdownRenderer', () => {
     const result = await MarkdownRenderer.render('**broken**');
     expect(result).toBe('**broken**');
   });
+
+  it('returns empty string for empty input', async () => {
+    const result = await MarkdownRenderer.render('   ');
+    expect(result).toBe('');
+  });
+
+  it('returns original text when disable option is true', async () => {
+    const result = await MarkdownRenderer.render('**bold**', { disable: true });
+    expect(result).toBe('**bold**');
+    expect(makeHtml).not.toHaveBeenCalled();
+  });
+
+  it('escapes HTML when allowHtml is false and input is HTML', async () => {
+    const result = await MarkdownRenderer.render('<script>alert(1)</script>', { allowHtml: false });
+    expect(result).toContain('&lt;');
+    expect(result).toContain('&gt;');
+  });
+
+  it('returns plain text if not markdown', async () => {
+    const result = await MarkdownRenderer.render('Just plain text');
+    expect(result).toBe('Just plain text');
+  });
+
+  describe('looksLikeHtml', () => {
+    it('should detect HTML tags', () => {
+      expect(MarkdownRenderer.looksLikeHtml('<div>test</div>')).toBe(true);
+      expect(MarkdownRenderer.looksLikeHtml('no html here')).toBe(false);
+    });
+  });
+
+  describe('looksLikeMarkdown', () => {
+    it('should detect markdown patterns', () => {
+      expect(MarkdownRenderer.looksLikeMarkdown('**bold**')).toBe(true);
+      expect(MarkdownRenderer.looksLikeMarkdown('_italic_')).toBe(true);
+      expect(MarkdownRenderer.looksLikeMarkdown('# Header')).toBe(true);
+      expect(MarkdownRenderer.looksLikeMarkdown('plain text')).toBe(false);
+    });
+  });
 });
+
