@@ -52,29 +52,32 @@ module.exports = {
     HandlebarsApplicationMixin: 'readonly',
     // FoundryVTT UI globals
     ui: 'readonly',
+    TextEditor: 'readonly',
+    jQuery: 'readonly',
+    $: 'readonly',
     // Module globals
     SimulacrumCore: 'readonly'
   },
   rules: {
     // Line length limit
-    'max-len': ['error', { 
-      code: 100, 
-      ignoreUrls: true, 
+    'max-len': ['error', {
+      code: 100,
+      ignoreUrls: true,
       ignoreStrings: true,
       ignoreTemplateLiterals: true,
       ignoreComments: true
     }],
     // Function length limit
-    'max-lines-per-function': ['error', { 
-      max: 50, 
-      skipBlankLines: true, 
-      skipComments: true 
+    'max-lines-per-function': ['error', {
+      max: 50,
+      skipBlankLines: true,
+      skipComments: true
     }],
     // File length limit
-    'max-lines': ['error', { 
-      max: 500, 
-      skipBlankLines: true, 
-      skipComments: true 
+    'max-lines': ['error', {
+      max: 500,
+      skipBlankLines: true,
+      skipComments: true
     }],
     // Class length (approximated by max statements)
     'max-statements': ['error', 75], // ~300 lines / 4 lines per statement
