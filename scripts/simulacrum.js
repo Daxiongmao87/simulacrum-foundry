@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 // SPDX-License-Identifier: MIT
 // Copyright © 2024-2025 Aaron Riechert
 

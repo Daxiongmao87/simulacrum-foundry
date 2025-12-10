@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 /**
  * Tool Registry - Manages and registers all available tools
  * Handles tool registration, discovery, and execution

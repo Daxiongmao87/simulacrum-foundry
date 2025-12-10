@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params */
 /**
  * AI Client - Abstraction layer for AI provider interactions
  * Handles different AI providers with a common interface

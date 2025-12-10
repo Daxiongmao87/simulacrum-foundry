@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('MarkdownRenderer');

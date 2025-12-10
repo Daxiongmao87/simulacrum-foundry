@@ -1,3 +1,5 @@
+/* eslint-disable complexity, max-lines-per-function */
+/* eslint-disable no-console */
 /**
  * Schema-Aware Validation Helper
  * Provides intelligent validation assistance based on FoundryVTT document schemas

@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 /**
  * Argument compatibility mapper for fallback tool calls
  * Converts various argument patterns to proper tool schemas

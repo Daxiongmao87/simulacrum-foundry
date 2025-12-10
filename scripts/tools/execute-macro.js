@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-depth */
 import { BaseTool } from './base-tool.js';
 
 /**

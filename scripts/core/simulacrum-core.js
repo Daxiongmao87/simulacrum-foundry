@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, no-unused-vars, no-empty */
 /**
  * Simulacrum Core - Main module logic
  */

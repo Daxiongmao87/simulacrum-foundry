@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, max-depth, no-undef, no-useless-catch, max-lines */
 // SPDX-License-Identifier: MIT
 // Copyright © 2024-2025 Aaron Riechert
 

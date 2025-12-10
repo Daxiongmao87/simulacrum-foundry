@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-len, no-console */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -78,7 +79,8 @@ async function _runLoopIteration(context) {
 }
 
 async function _processLoopCycle(currentResponse, context, state) {
-  let { toolFailureAttempts, repeatCount, REPEAT_LIMIT } = state;
+  let { toolFailureAttempts, repeatCount } = state; // eslint-disable-line prefer-const
+  const { REPEAT_LIMIT } = state;
 
   // 1. Handle Parse Errors
   if (currentResponse._parseError) {

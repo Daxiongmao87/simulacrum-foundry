@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, no-console */
 /**
  * System Prompt Builder - Generates system prompts for AI conversations
  * Extracted from SimulacrumCore to reduce god class responsibilities

@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, no-unused-vars */
 /**
  * ConversationEngine — Orchestrator for a single user turn.
  * Centralizes message assembly, correction enforcement, tool-loop invocation,

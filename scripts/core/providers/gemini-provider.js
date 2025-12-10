@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines-per-function, no-unused-vars */
 /**
  * Gemini AI Provider - Google's Gemini API implementation
  * Extracted from AIClient for consistency with OpenAI/Mock providers

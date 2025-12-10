@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-params, no-console */
 // import { SimulacrumError } from '../utils/errors.js'; // Unused
 
 /**

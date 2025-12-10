@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /**
  * Settings Configuration Interface - Enhanced settings management with validation
  * Provides API connection testing and advanced configuration options

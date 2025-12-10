@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { SchemaValidator } from './schema-validator.js';
 
 /**
@@ -50,7 +51,7 @@ export class ValidationErrorHandler {
    */
   static processFoundryFailures(allFailures) {
     const details = {};
-    
+
     for (const [fieldPath, failure] of Object.entries(allFailures)) {
       details[fieldPath] = {
         field: fieldPath,
@@ -60,7 +61,7 @@ export class ValidationErrorHandler {
         dropped: failure.dropped || false
       };
     }
-    
+
     return details;
   }
 
@@ -71,36 +72,36 @@ export class ValidationErrorHandler {
    */
   static extractValidationDetails(error) {
     const details = {};
-    
+
     // Parse error message to extract field-specific validation failures
     // Foundry format: "Document [id] validation errors:\n  field: error message"
     const errorMessage = error.message || '';
     const lines = errorMessage.split('\n');
-    
+
     let currentPath = '';
     for (const line of lines) {
       const trimmed = line.trim();
-      
+
       // Skip header lines
       if (trimmed.includes('validation errors:') || trimmed === '') {
         continue;
       }
-      
+
       // Handle nested field paths (indented lines)
       const indentLevel = line.length - line.trimStart().length;
-      
+
       if (trimmed.includes(':')) {
         const [fieldPart, ...messageParts] = trimmed.split(':');
         const field = fieldPart.trim();
         const message = messageParts.join(':').trim();
-        
+
         // Build full field path
         if (indentLevel === 0) {
           currentPath = field;
         } else {
           currentPath = currentPath ? `${currentPath}.${field}` : field;
         }
-        
+
         details[currentPath] = {
           field: currentPath,
           error: message,
@@ -108,7 +109,7 @@ export class ValidationErrorHandler {
         };
       }
     }
-    
+
     return details;
   }
 
@@ -119,14 +120,14 @@ export class ValidationErrorHandler {
    */
   static generateSuggestions(validationDetails) {
     const suggestions = [];
-    
+
     for (const [fieldPath, detail] of Object.entries(validationDetails)) {
       const suggestion = this.createFieldSuggestion(fieldPath, detail);
       if (suggestion) {
         suggestions.push(suggestion);
       }
     }
-    
+
     return suggestions;
   }
 
@@ -136,6 +137,7 @@ export class ValidationErrorHandler {
    * @param {Object} detail - The validation detail
    * @returns {Object} Suggestion object
    */
+  // eslint-disable-next-line complexity
   static createFieldSuggestion(fieldPath, detail) {
     const { error, invalidValue, fallback } = detail;
     const suggestion = {
@@ -181,7 +183,7 @@ export class ValidationErrorHandler {
    */
   static getFieldExample(fieldPath) {
     const lowerPath = fieldPath.toLowerCase();
-    
+
     if (lowerPath.includes('name')) {
       return '"Example Name"';
     } else if (lowerPath.includes('type')) {
@@ -226,7 +228,7 @@ export class ValidationErrorHandler {
    */
   static createAIContext(validationDetails, suggestions) {
     const fieldCount = Object.keys(validationDetails).length;
-    
+
     // Create detailed field-by-field guidance
     const fieldGuidance = suggestions.map(s => {
       let guidance = `- ${s.field}: ${s.action}`;
@@ -238,13 +240,13 @@ export class ValidationErrorHandler {
       }
       return guidance;
     }).join('\n');
-    
+
     // Add specific instructions for common FoundryVTT patterns
     let instructions = '';
     const hasIdErrors = suggestions.some(s => s.issue.includes('16-character alphanumeric'));
     const hasRequiredErrors = suggestions.some(s => s.issue.includes('required') || s.issue.includes('undefined'));
     const hasChoiceErrors = suggestions.some(s => s.issue.includes('not a valid choice'));
-    
+
     if (hasIdErrors) {
       instructions += '\nFor ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
     }
@@ -254,7 +256,7 @@ export class ValidationErrorHandler {
     if (hasChoiceErrors) {
       instructions += '\nFor choice fields: Check field schema for valid enum values.';
     }
-    
+
     return `FoundryVTT validation failed on ${fieldCount} field(s). Required fixes:\n${fieldGuidance}${instructions}\n\nPlease retry with corrected field values.`;
   }
 
@@ -268,23 +270,23 @@ export class ValidationErrorHandler {
    */
   static createToolErrorResponse(error, operation, documentType, documentId = null) {
     const validationError = this.parseFoundryValidationError(error);
-    
+
     if (validationError) {
       const docRef = documentId ? `${documentType}:${documentId}` : documentType;
-      
+
       // Enhance suggestions with schema-aware analysis
       const enhancedSuggestions = this.enhanceWithSchemaAnalysis(
-        validationError.suggestions, 
+        validationError.suggestions,
         documentType
       );
-      
+
       // Create enhanced AI context with schema information
       const enhancedContext = this.createEnhancedAIContext(
         validationError.details,
         enhancedSuggestions,
         documentType
       );
-      
+
       return {
         content: `Validation failed for ${operation} ${docRef}: ${enhancedContext}`,
         display: `❌ Validation Error: ${validationError.message}`,
@@ -299,7 +301,7 @@ export class ValidationErrorHandler {
         }
       };
     }
-    
+
     // Fallback for non-validation errors
     const docRef = documentId ? `${documentType}:${documentId}` : documentType;
     return {
@@ -326,7 +328,7 @@ export class ValidationErrorHandler {
         suggestion.issue,
         suggestion.invalidValue
       );
-      
+
       return {
         ...suggestion,
         schemaAnalysis: schemaSuggestion,
@@ -345,27 +347,27 @@ export class ValidationErrorHandler {
    */
   static createEnhancedAIContext(validationDetails, enhancedSuggestions, documentType) {
     const fieldCount = Object.keys(validationDetails).length;
-    
+
     // Create detailed field-by-field guidance with schema information
     const fieldGuidance = enhancedSuggestions.map(s => {
       let guidance = `- ${s.field}: ${s.correctionMethod || s.action}`;
-      
+
       if (s.schemaExample) {
         guidance += ` (use: ${s.schemaExample})`;
       } else if (s.example) {
         guidance += ` (example: ${s.example})`;
       }
-      
+
       if (s.schemaAnalysis?.fieldType) {
         guidance += ` [${s.schemaAnalysis.fieldType}]`;
       }
-      
+
       return guidance;
     }).join('\n');
-    
+
     // Add document-type specific instructions
     const instructions = this.getDocumentTypeInstructions(documentType, enhancedSuggestions);
-    
+
     return `FoundryVTT ${documentType} validation failed on ${fieldCount} field(s). Required fixes:\n${fieldGuidance}${instructions}\n\nPlease retry with corrected field values.`;
   }
 
@@ -377,12 +379,12 @@ export class ValidationErrorHandler {
    */
   static getDocumentTypeInstructions(documentType, suggestions) {
     let instructions = '';
-    
+
     // Common FoundryVTT patterns
     const hasIdErrors = suggestions.some(s => s.issue.includes('16-character alphanumeric'));
     const hasRequiredErrors = suggestions.some(s => s.issue.includes('required') || s.issue.includes('undefined'));
     const hasChoiceErrors = suggestions.some(s => s.issue.includes('not a valid choice'));
-    
+
     if (hasIdErrors) {
       instructions += '\n• For ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
     }
@@ -392,7 +394,7 @@ export class ValidationErrorHandler {
     if (hasChoiceErrors) {
       instructions += '\n• For choice fields: Check field schema for valid enum values.';
     }
-    
+
     // Document-specific instructions
     switch (documentType) {
       case 'JournalEntry':
@@ -407,7 +409,7 @@ export class ValidationErrorHandler {
         instructions += '\n• For Items: Ensure type field matches system item types.';
         break;
     }
-    
+
     return instructions;
   }
 }

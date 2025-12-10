@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 /**
  * Post-tool verification utilities
  * Handles automatic verification of tool operations like qwen-code

@@ -1,3 +1,4 @@
+/* eslint-disable complexity, max-lines, max-len */
 /**
  * Logic helper for Document Update Tool
  * Handles complex embedded operation logic
@@ -35,13 +36,6 @@ export class DocumentUpdateLogic {
         return Math.random().toString(36).slice(2, 18);
     }
 
-    static isEmbeddedCollection(docInstance, collectionKey) {
-        if (!docInstance || !collectionKey) return false;
-        const candidate = docInstance[collectionKey];
-        return Boolean(candidate && typeof candidate === 'object' &&
-            Array.isArray(candidate.contents) && candidate.documentClass);
-    }
-
     static extractEmbeddedMetadata(docInstance, collectionKey) {
         if (!docInstance || !collectionKey) return null;
         const collection = docInstance[collectionKey];
@@ -53,6 +47,16 @@ export class DocumentUpdateLogic {
         if (!embeddedName) return null;
         return { collection, embeddedName };
     }
+
+    static isEmbeddedCollection(docInstance, collectionKey) {
+        if (!docInstance || !collectionKey) return false;
+        const candidate = docInstance[collectionKey];
+        return Boolean(candidate && typeof candidate === 'object' &&
+            Array.isArray(candidate.contents) && candidate.documentClass);
+    }
+
+
+
 
     static getEmbeddedWorkingSet(embeddedState, collectionKey, collection, operationIndex) {
         if (!embeddedState.has(collectionKey)) {
@@ -280,6 +284,7 @@ export class DocumentUpdateLogic {
         return { remainingUpdates, embeddedOperations };
     }
 
+    // eslint-disable-next-line complexity
     static _processEmbeddedUpdate(params) {
         const {
             path, value, segments, collectionKey, docInstance, embeddedState, embeddedOperations

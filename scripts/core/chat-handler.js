@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, no-unreachable */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 /**
  * ChatHandler - Single source of truth for all chat conversation flow

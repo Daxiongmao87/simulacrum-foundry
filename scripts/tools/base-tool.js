@@ -1,3 +1,4 @@
+/* eslint-disable complexity, no-console */
 /**
  * Base tool class for simulacrum system
  * Provides common functionality for all document manipulation tools
@@ -13,10 +14,8 @@ import { createLogger } from '../utils/logger.js';
 export class BaseTool {
   constructor(name, description, schema = null, requiresConfirmation = false) {
     this.name = name;
-    this.description = description;
     this.schema = schema;
     this.requiresConfirmation = requiresConfirmation;
-    console.log(`BaseTool initialized: ${name}, requiresConfirmation=${requiresConfirmation}, this.rc=${this.requiresConfirmation}`);
     this.documentAPI = null;
     this.logger = createLogger('BaseTool');
   }

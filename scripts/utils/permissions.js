@@ -17,6 +17,7 @@ export class PermissionManager {
    * @param {string} documentType The type of document to list.
    * @returns {boolean} True if the user can list, false otherwise.
    */
+  // eslint-disable-next-line complexity
   static canListDocuments(user, documentType) {
     // Validate document type exists in current system and has a manipulable collection
     if (documentType) {

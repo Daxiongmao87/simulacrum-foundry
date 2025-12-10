@@ -167,7 +167,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     return this._syncFromCoreConversation();
   }
 
-  async _postRender(context, options) {
+  async _postRender(_context, _options) {
     if (this.#needsScroll) {
       this._scrollToBottom();
       this.#needsScroll = false;
