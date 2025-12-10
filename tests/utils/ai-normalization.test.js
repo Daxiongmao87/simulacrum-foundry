@@ -242,3 +242,103 @@ describe('normalizeAIResponse - Error handling', () => {
     expect(normalized._originalResponse).toBeDefined();
   });
 });
+
+import { sanitizeMessagesForFallback, parseInlineToolCall } from '../../scripts/utils/ai-normalization.js';
+
+describe('sanitizeMessagesForFallback', () => {
+  it('should filter out tool role messages', () => {
+    const messages = [
+      { role: 'user', content: 'Hello' },
+      { role: 'tool', content: 'Tool response' },
+      { role: 'assistant', content: 'Reply' }
+    ];
+    const sanitized = sanitizeMessagesForFallback(messages);
+    expect(sanitized).toHaveLength(2);
+    expect(sanitized.find(m => m.role === 'tool')).toBeUndefined();
+  });
+
+  it('should filter out messages with empty content', () => {
+    const messages = [
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: '' },
+      { role: 'assistant', content: '   ' }
+    ];
+    const sanitized = sanitizeMessagesForFallback(messages);
+    expect(sanitized).toHaveLength(1);
+  });
+
+  it('should handle null messages array', () => {
+    const sanitized = sanitizeMessagesForFallback(null);
+    expect(sanitized).toEqual([]);
+  });
+
+  it('should handle undefined messages array', () => {
+    const sanitized = sanitizeMessagesForFallback(undefined);
+    expect(sanitized).toEqual([]);
+  });
+
+  it('should keep system messages', () => {
+    const messages = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Hello' }
+    ];
+    const sanitized = sanitizeMessagesForFallback(messages);
+    expect(sanitized).toHaveLength(2);
+  });
+
+  it('should handle non-string content', () => {
+    const messages = [
+      { role: 'user', content: { text: 'object content' } }
+    ];
+    const sanitized = sanitizeMessagesForFallback(messages);
+    expect(sanitized).toHaveLength(0);
+  });
+});
+
+describe('parseInlineToolCall', () => {
+  it('should return null for null input', () => {
+    expect(parseInlineToolCall(null)).toBeNull();
+  });
+
+  it('should return null for undefined input', () => {
+    expect(parseInlineToolCall(undefined)).toBeNull();
+  });
+
+  it('should return null for empty string', () => {
+    expect(parseInlineToolCall('')).toBeNull();
+  });
+
+  it('should return null for non-string input', () => {
+    expect(parseInlineToolCall(123)).toBeNull();
+    expect(parseInlineToolCall({})).toBeNull();
+  });
+
+  it('should return null for text without JSON block', () => {
+    expect(parseInlineToolCall('Just some text without code blocks')).toBeNull();
+  });
+
+  it('should parse valid JSON tool call', () => {
+    const text = 'Here is the tool call:\n```json\n{"name":"testTool","arguments":{"key":"value"}}\n```';
+    const result = parseInlineToolCall(text);
+    expect(result).not.toBeNull();
+  });
+
+  it('should handle invalid JSON in code block', () => {
+    const text = '```json\n{invalid json}\n```';
+    const result = parseInlineToolCall(text);
+    expect(result?.parseError).toBeDefined();
+  });
+
+  it('should strip think tags before parsing', () => {
+    const text = '<think>Reasoning here</think>```json\n{"name":"tool"}\n```';
+    const result = parseInlineToolCall(text);
+    expect(result).not.toBeNull();
+  });
+
+  it('should return null for only think tags content', () => {
+    const text = '<think>Only thinking, no actual content</think>';
+    const result = parseInlineToolCall(text);
+    expect(result).toBeNull();
+  });
+});
+
