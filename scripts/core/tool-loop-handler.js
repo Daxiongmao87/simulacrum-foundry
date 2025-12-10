@@ -120,12 +120,10 @@ async function _processLoopCycle(currentResponse, context, state) {
   }
 
   // 7. Get Next Response
-  // 7. Get Next Response
   try {
     const response = await _getNextAIResponse(toolResults, context);
     return { action: 'continue', response, repeatCount, toolFailureAttempts };
   } catch (error) {
-    console.log('!!! CRITICAL: Entred CATCH block in _processLoopCycle !!!', error.message);
     logger.error('API Error during loop cycle:', error);
     toolFailureAttempts++;
     if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {

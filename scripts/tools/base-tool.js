@@ -14,6 +14,7 @@ import { createLogger } from '../utils/logger.js';
 export class BaseTool {
   constructor(name, description, schema = null, requiresConfirmation = false) {
     this.name = name;
+    this.description = description;
     this.schema = schema;
     this.requiresConfirmation = requiresConfirmation;
     this.documentAPI = null;

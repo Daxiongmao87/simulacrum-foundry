@@ -64,7 +64,7 @@ describe('DocumentUpdateTool - constructor', () => {
     expect(documentId.description).toContain('The ID of the document');
 
     expect(updates.type).toBe('object');
-    expect(updates.description).toContain('Document updates');
+    expect(updates.description).toContain('Object key/value document data');
 
     expect(operations.type).toBe('array');
     expect(operations.required).toBe(false);
