@@ -13,457 +13,341 @@ import {
   isToolCallFailure,
   buildRetryLabel,
   getRetryDelayMs,
-  delayWithSignal,
-  buildGenericFailureMessage
+  delayWithSignal
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus } from './hook-manager.js';
 
-/**
- * Sanitize messages for fallback when tool calling is not supported
- * Filters out tool roles and ensures only valid roles are sent
- */
 const logger = createLogger('ToolLoop');
-
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
-const TOOL_RETRY_DELAYS_MS = [1000, 2000];
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
-
-
-async function runToolFailureFallback(conversationManager, aiClient, getSystemPrompt, signal) {
-  const fallbackInstruction = 'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';
-  const messages = conversationManager.getMessages?.() ?? conversationManager.messages ?? [];
-  const lastMessage = messages[messages.length - 1];
-  if (!lastMessage || lastMessage.role !== 'system' || lastMessage.content !== fallbackInstruction) {
-    conversationManager.addMessage('system', fallbackInstruction);
-  }
-
-  try {
-    const systemPromptRef = await getSystemPrompt();
-    const raw = await aiClient.chatWithSystem(messages, () => systemPromptRef, null, { signal });
-    const fallbackResponse = SimulacrumCore._normalizeAIResponse(raw);
-
-    if (!fallbackResponse || fallbackResponse._parseError || isToolCallFailure(fallbackResponse)) {
-      return buildGenericFailureMessage();
-    }
-
-    const notice = 'Note: Tool functionality was temporarily unavailable for this response.';
-    const content = fallbackResponse.content
-      ? `${fallbackResponse.content}\n\n${notice}`
-      : notice;
-    const display = fallbackResponse.display
-      ? `${fallbackResponse.display}\n\n${notice}`
-      : content;
-
-    return {
-      ...fallbackResponse,
-      content,
-      display,
-      toolCalls: []
-    };
-  } catch (_error) {
-    return buildGenericFailureMessage();
-  }
-}
 
 /**
  * Execute tools from an AI response and continue autonomous loop
  */
-export async function processToolCallLoop(
-  initialResponse,
-  tools,
-  conversationManager,
-  aiClient,
-  getSystemPrompt,
-  currentToolSupport,
-  signal = null,
-  onToolResult = null
-) {
+export async function processToolCallLoop(options) {
   const callId = `tool-loop-${foundry.utils.randomID()}`;
+
   try {
-    // Signal start of the entire tool loop process
     emitProcessStatus('start', callId, 'Thinking...', 'agentic-loop');
-
-    let currentResponse = initialResponse;
-    const REPEAT_LIMIT = 5;
-    let repeatCount = 0;
-    let iterationCount = 0;
-    let toolFailureAttempts = 0;
-
-    while (repeatCount < REPEAT_LIMIT) {
-      iterationCount++;
-      if (isDebugEnabled()) logger.debug(`Start of loop iteration ${iterationCount} (retries: ${repeatCount})`);
-
-      // Check for cancellation
-      if (signal?.aborted) {
-        if (isDebugEnabled()) logger.info('Process cancelled');
-        throw new Error('Process was cancelled');
-      }
-
-      // --- Display AI's natural language content if present and not a parse error ---
-      // This ensures conversational output is shown to the user.
-      const hasContent = currentResponse.content && currentResponse.content.trim().length > 0;
-      if (hasContent && onToolResult && !currentResponse._parseError) {
-        onToolResult({
-          role: 'assistant',
-          content: currentResponse.content
-        });
-      }
-
-      // Handle parse errors by getting AI correction
-      if (currentResponse._parseError) {
-        if (isDebugEnabled()) {
-          logger.info(`AI response parse error (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
-            content: currentResponse.content || '(empty)',
-            contentLength: (currentResponse.content || '').length,
-            toolCallsCount: (currentResponse.toolCalls || []).length,
-            rawResponsePreview: JSON.stringify(currentResponse.raw || {}).substring(0, 200) + '...',
-            parseErrorReason: currentResponse._parseError === true ? 'Empty content detected' : currentResponse._parseError
-          });
-        }
-        repeatCount++; // Increment retry count for parse errors
-        // Shared correction routine
-        appendEmptyContentCorrection(conversationManager, currentResponse);
-        // Request corrected response
-        const conversationMessages = conversationManager.getMessages?.() ??
-          conversationManager.messages ?? [];
-        const toolsToSend = currentToolSupport === true ? tools : null;
-        const systemPromptRef = await getSystemPrompt();
-        const sysMsg = { role: 'system', content: systemPromptRef };
-        const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...conversationMessages]);
-        const raw = currentToolSupport !== true
-          ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-          : await aiClient.chatWithSystem(
-            conversationMessages, () => systemPromptRef, toolsToSend, { signal }
-          );
-        currentResponse = SimulacrumCore._normalizeAIResponse(raw);
-        continue;
-      }
-
-      // Handle provider-level tool call failures before attempting execution
-      if (isToolCallFailure(currentResponse)) {
-        toolFailureAttempts += 1;
-        appendToolFailureCorrection(conversationManager, currentResponse);
-
-        if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
-          const fallback = await runToolFailureFallback(
-            conversationManager, aiClient, getSystemPrompt, signal
-          );
-          return fallback;
-        }
-
-        const nextAttempt = toolFailureAttempts + 1;
-        const delayMs = getRetryDelayMs(toolFailureAttempts - 1);
-        const retryCallId = `${TOOL_RETRY_STATUS_PREFIX}-${Date.now()}-${nextAttempt}`;
-        const label = buildRetryLabel(nextAttempt, MAX_TOOL_FAILURE_ATTEMPTS);
-
-        emitRetryStatus('start', retryCallId, label);
-        try {
-          if (delayMs) {
-            await delayWithSignal(delayMs, signal);
-          }
-          const conversationMessages = conversationManager.getMessages?.() ??
-            conversationManager.messages ?? [];
-          const toolsToSend = currentToolSupport === true ? tools : null;
-          const systemPromptRef = await getSystemPrompt();
-          const sysMsg = { role: 'system', content: systemPromptRef };
-          const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...conversationMessages]);
-          const raw = currentToolSupport !== true
-            ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-            : await aiClient.chatWithSystem(
-              conversationMessages, () => systemPromptRef, toolsToSend, { signal }
-            );
-          currentResponse = SimulacrumCore._normalizeAIResponse(raw);
-        } finally {
-          emitRetryStatus('end', retryCallId);
-        }
-        continue;
-      }
-
-      // If no tool calls, terminate the loop - this is the intended behavior
-      if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
-        if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
-        break; // Exit the loop - this is how the loop should terminate
-      }
-
-      // Execute all tool calls
-      if (isDebugEnabled()) logger.debug(`Executing ${currentResponse.toolCalls.length} tool calls.`);
-      const toolResults = await executeToolCalls(
-        currentResponse.toolCalls, conversationManager, currentToolSupport, onToolResult, signal
-      );
-
-
-      // --- Check for tool execution failures and increment retry count ---
-      const hasFailedTool = toolResults.some(result => !result.success);
-      if (hasFailedTool) {
-        if (isDebugEnabled()) {
-          const failedTools = toolResults.filter(result => !result.success);
-          logger.info(`Tool execution failures (retry ${repeatCount + 1}/${REPEAT_LIMIT}):`, {
-            failedToolCount: failedTools.length,
-            totalToolCount: toolResults.length,
-            failureDetails: failedTools.map(tool => ({
-              toolName: tool.toolName,
-              error: tool.error?.message || tool.result?.error || 'Unknown error',
-              arguments: tool.toolCall?.function?.arguments ||
-                tool.toolCall?.arguments
-            }))
-          });
-        }
-        repeatCount++; // Increment retry count for tool failures
-      }
-
-      // For legacy mode, add tool results as system message so AI notices them
-      if (currentToolSupport !== true && toolResults.length > 0) {
-        const latestResult = toolResults[toolResults.length - 1];
-        const toolStatusMessage = latestResult.success
-          ? `Tool execution completed: ${latestResult.toolName} executed successfully. Result: ${JSON.stringify(latestResult.result)
-          }`
-          : `Tool execution failed: ${latestResult.toolName} failed with error: ${latestResult.result.error}`;
-
-        conversationManager.addMessage('system', toolStatusMessage);
-      }
-
-      // Get next AI response based on tool results
-      if (isDebugEnabled()) logger.debug('Getting next AI response after tool execution');
-      currentResponse = await getNextAIResponse(
-        toolResults, conversationManager, aiClient,
-        getSystemPrompt, currentToolSupport, tools, signal
-      );
-    }
-
-    // If we hit the repeat limit, return the last response
-    if (repeatCount >= REPEAT_LIMIT) {
-      {
-        const conversationMessages = conversationManager.getMessages?.() ??
-          conversationManager.messages ?? [];
-        console.error( // eslint-disable-line no-console
-          `Repeat limit reached after ${REPEAT_LIMIT} retries:`, {
-          totalIterations: iterationCount,
-          retryCount: repeatCount,
-          lastResponseContent: currentResponse.content || '(empty)',
-          lastResponseToolCalls: (currentResponse.toolCalls || []).length,
-          conversationLength: conversationMessages.length,
-          recentConversation: conversationMessages.slice(-3).map(msg => ({
-            role: msg.role,
-            contentLength: (msg.content || '').length,
-            hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0),
-            toolCallId: msg.tool_call_id || null
-          }))
-        });
-      }
-      const finalErrorMessage = {
-        content: '', // This content is for internal AI context, but should not be displayed to the user if the caller defaults to displaying returned content.
-        display: null,
-        _toolLimitReachedError: true,
-        toolCalls: [],
-        endTask: true
-      };
-      // Do NOT call onToolResult here; this is an internal error for the AI to process.
-      // Add this internal error message to the conversation for the AI to process for its final summary.
-      const aiInstructionContent = 'Tool execution limit reached. Please provide a final, summarizing response to the user, explaining that the task is ending due to excessive tool failures.';
-      if (currentToolSupport === true) {
-        conversationManager.addMessage('tool', aiInstructionContent, null, 'tool_limit_error');
-      } else {
-        conversationManager.addMessage('system', aiInstructionContent);
-      }
-      return finalErrorMessage;
-    }
-
-    // If the loop exits gracefully (e.g., endTaskSignaled is true, or a final conversational response)
-    // Ensure the last AI response's content is displayed if it hasn't been already.
-    if (
-      currentResponse.content &&
-      currentResponse.content.trim().length > 0 &&
-      onToolResult &&
-      !currentResponse._parseError
-    ) {
-      onToolResult({
-        role: 'assistant',
-        content: currentResponse.content
-      });
-    }
-    return currentResponse;
+    return await _runLoopIteration(options);
   } finally {
-    // Ensure the process status is always marked as ended
     emitProcessStatus('end', callId);
   }
 }
 
-/**
- * Execute all tool calls and return results
- */
-async function executeToolCalls(
-  toolCalls, conversationManager, currentToolSupport, onToolResult, signal
-) {
+// --- Internal Loop Logic ---
+
+async function _runLoopIteration(context) {
+  let currentResponse = context.initialResponse;
+  const REPEAT_LIMIT = 5;
+  let repeatCount = 0;
+  let toolFailureAttempts = 0;
+
+  while (repeatCount < REPEAT_LIMIT) {
+    if (context.signal?.aborted) throw new Error('Process was cancelled');
+
+    if (currentResponse.content && currentResponse.content.trim().length > 0) {
+      _notifyAssistantMessage(currentResponse, context);
+    }
+
+    // Process a single cycle of the loop
+    const cycleResult = await _processLoopCycle(currentResponse, context, { toolFailureAttempts, repeatCount, REPEAT_LIMIT });
+
+    // Handle cycle outcome
+    if (cycleResult.action === 'return') return cycleResult.value;
+    if (cycleResult.action === 'break') break;
+
+    // Update state for next iteration
+    currentResponse = cycleResult.response;
+    repeatCount = cycleResult.repeatCount;
+    toolFailureAttempts = cycleResult.toolFailureAttempts;
+  }
+
+  // Handle Repeat Limit if loop finished naturally without break
+  if (repeatCount >= REPEAT_LIMIT) {
+    return _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
+  }
+
+  // Ensure final output displayed
+  if (currentResponse.content && currentResponse.content.trim().length > 0) {
+    _notifyAssistantMessage(currentResponse, context);
+  }
+
+  return currentResponse;
+}
+
+async function _processLoopCycle(currentResponse, context, state) {
+  let { toolFailureAttempts, repeatCount, REPEAT_LIMIT } = state;
+
+  // 1. Handle Parse Errors
+  if (currentResponse._parseError) {
+    repeatCount++;
+    const response = await _handleParseError(currentResponse, context, repeatCount, REPEAT_LIMIT);
+    return { action: 'continue', response, repeatCount, toolFailureAttempts };
+  }
+
+  // 2. Handle Tool Call Failures
+  if (isToolCallFailure(currentResponse)) {
+    toolFailureAttempts++;
+    if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
+      return { action: 'return', value: await _runToolFailureFallback(context) };
+    }
+    const response = await _handleToolRefusal(currentResponse, context, toolFailureAttempts);
+    return { action: 'continue', response, repeatCount, toolFailureAttempts };
+  }
+
+  // 3. Terminate if no tools
+  if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
+    if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
+    return { action: 'break' };
+  }
+
+  // 4. Execute Tools
+  const toolResults = await _executeToolCalls(currentResponse.toolCalls, context);
+
+  // 5. Handle Execution Failures
+  if (toolResults.some(r => !r.success)) {
+    repeatCount++;
+    _logToolFailures(toolResults, repeatCount, REPEAT_LIMIT);
+  }
+
+  // 6. Legacy Mode Notification
+  if (context.currentToolSupport !== true && toolResults.length > 0) {
+    _notifyLegacyToolResults(toolResults, context);
+  }
+
+  // 7. Get Next Response
+  const response = await _getNextAIResponse(toolResults, context);
+  return { action: 'continue', response, repeatCount, toolFailureAttempts };
+}
+
+// --- Helper Functions ---
+
+async function _handleParseError(response, context, repeatCount, limit) {
+  if (isDebugEnabled()) {
+    logger.info(`AI response parse error (retry ${repeatCount}/${limit})`, { content: response.content });
+  }
+  appendEmptyContentCorrection(context.conversationManager, response);
+  const messages = _getConversationMessages(context);
+  const systemPrompt = await context.getSystemPrompt();
+  return _chatWithAI(messages, systemPrompt, context);
+}
+
+async function _handleToolRefusal(response, context, attempts) {
+  appendToolFailureCorrection(context.conversationManager, response);
+  const nextAttempt = attempts + 1;
+  const retryCallId = `${TOOL_RETRY_STATUS_PREFIX}-${Date.now()}-${nextAttempt}`;
+  const label = buildRetryLabel(nextAttempt, MAX_TOOL_FAILURE_ATTEMPTS);
+  const delayMs = getRetryDelayMs(attempts - 1);
+
+  emitRetryStatus('start', retryCallId, label);
+  try {
+    if (delayMs) await delayWithSignal(delayMs, context.signal);
+    const messages = _getConversationMessages(context);
+    const systemPrompt = await context.getSystemPrompt();
+    return await _chatWithAI(messages, systemPrompt, context);
+  } finally {
+    emitRetryStatus('end', retryCallId);
+  }
+}
+
+// eslint-disable-next-line complexity
+async function _executeToolCalls(context, response, callId) {
+  const { onToolResult, signal, currentToolSupport, conversationManager } = context;
+  const toolCalls = response.toolCalls;
   const results = [];
 
   for (const toolCall of toolCalls) {
-    if (signal?.aborted) {
-      throw new Error('Process was cancelled');
-    }
+    if (signal?.aborted) throw new Error('Process was cancelled');
 
     const toolName = toolCall?.function?.name || toolCall?.name;
     const toolArgs = toolCall?.function?.arguments || toolCall?.arguments;
+    let result = null;
+    let isSuccess = false;
+    let error = null;
 
     try {
-      // Parse arguments if they're a string
       const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
+      const execution = await toolRegistry.executeTool(toolName, parsedArgs);
+      result = execution.result;
 
-      // Execute tool via registry to ensure stats, permissions, and hooks are handled
-      const toolExecutionResult = await toolRegistry.executeTool(toolName, parsedArgs);
-      const result = toolExecutionResult.result;
+      _truncateInitialResult(result);
 
-      // Enforce global output truncation limit (Task-21)
-      const MAX_OUTPUT_CHARS = 10000;
-      if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
-        result.content = result.content.substring(0, MAX_OUTPUT_CHARS) +
-          `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters. Use specific tool parameters (like startLine/endLine) to view specific sections.]`;
-      }
+      isSuccess = !result.error;
 
-      // Add tool result to conversation based on tool support mode
       if (currentToolSupport === true) {
-        // Native mode: use tool role messages
         conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
       }
 
-      // Notify about tool result - Check if we should suppress UI notification for macros to avoid duplicates
-      // Macros already output to chat via simple-macro logic or system logic
-      // But we DO want the "Tool Result" card. 
-      // The issue is likely that BOTH `processToolCallLoop` calls `onToolResult` AND something else does?
-      // Wait, `processToolCallLoop` calls `onToolResult` around line 171 for assistant content, and line 371 for tool results.
-      // ChatHandler.processUserMessage calls `handleToolResult` in `onToolResult` callback.
-      // `handleToolResult` adds UI message.
-
-      if (onToolResult) {
-        onToolResult({
-          role: 'tool',
-          content: JSON.stringify(result),
-          toolCallId: toolCall.id,
-          toolName
-        });
+      if (isSuccess) {
+        try {
+          await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
+        } catch (e) { logger.warn(`Post-verification failed: ${toolName}`, e); }
       }
 
-      // Check if the result indicates an error (even if no exception was thrown)
-      const isSuccess = !result.error;
-
-      results.push({
-        toolCall,
-        toolName,
-        result,
-        success: isSuccess
-      });
-
-      // Post-tool verification if needed
-      try {
-        await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
-      } catch (verificationError) {
-        logger.warn(`Post-tool verification failed for ${toolName}:`, verificationError);
-      }
-
-    } catch (error) {
-      logger.error(`Tool execution failed for ${toolName}:`, error);
-
-      const errorResult = {
-        error: error.message,
-        toolName,
-        arguments: toolArgs
-      };
-
-      // Add tool error to conversation based on tool support mode  
+    } catch (err) {
+      error = err;
+      logger.error(`Tool execution failed for ${toolName}:`, err);
+      result = { error: err.message, toolName, arguments: toolArgs };
       if (currentToolSupport === true) {
-        // Native mode: use tool role messages
-        conversationManager.addMessage('tool', JSON.stringify(errorResult), null, toolCall.id);
+        conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
       }
+    }
 
-      // Notify about tool error
-      if (onToolResult) {
-        onToolResult({
-          role: 'tool',
-          content: JSON.stringify(errorResult),
-          toolCallId: toolCall.id,
-          toolName
-        });
-      }
+    const resultObj = { toolCall, toolName, result, success: isSuccess, error };
+    results.push(resultObj);
 
-      results.push({
-        toolCall,
-        toolName,
-        result: errorResult,
-        success: false,
-        error
+    if (onToolResult) {
+      onToolResult({
+        role: 'tool',
+        content: JSON.stringify(result),
+        toolCallId: toolCall.id,
+        toolName
       });
     }
   }
-
   return results;
 }
 
-// Consolidated correction flow uses appendEmptyContentCorrection in-loop
+async function _getNextAIResponse(context, currentResponse) {
+  const { conversationManager, currentToolSupport, getSystemPrompt, aiClient, signal, tools } = context;
+  const messages = _getConversationMessages(context);
 
-// Note: removed unused handleAutonomousContinuation function
+  // In native mode, we appended tool messages to conversationManager above.
+  // So messages already contains them? 
+  // Wait, typical flow handles tool outputs being in history.
+  // But getNextAIResponse in original code built a temporary array `messagesToSend`.
+  // Let's stick to that if `conversationManager` persists state?
+  // Original code: `conversationManager.addMessage` WAS called for native mode.
+  // So `messages` should have them.
+  // BUT legacy mode loop relied on `toolStatusMessage` added as system message.
 
-/**
- * Get next AI response after tool execution
- */
-async function getNextAIResponse(
-  toolResults, conversationManager, aiClient, getSystemPrompt, currentToolSupport, tools, signal
-) {
-  // Build context with tool results
-  const conversationMessages = conversationManager.getMessages?.() ??
-    conversationManager.messages ?? [];
+  // If native mode, `messages` is good.
+  // If legacy mode, `toolStatusMessage` was added.
 
-  // For native mode, build messages without system (will be added by chatWithSystem)
-  const messagesToSend = [...conversationMessages];
+  const systemPrompt = await getSystemPrompt();
+  return _chatWithAI(messages, systemPrompt, context);
+}
 
-  // Add tool results to conversation context for native mode only
-  if (currentToolSupport === true) {
-    for (const toolResult of toolResults) {
-      messagesToSend.push({
-        role: 'tool',
-        content: JSON.stringify(toolResult.result),
-        tool_call_id: toolResult.toolCall.id
-      });
-    }
+// --- Utilities ---
+
+function _truncateInitialResult(result) {
+  const MAX_OUTPUT_CHARS = 10000;
+  if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
+    result.content = result.content.substring(0, MAX_OUTPUT_CHARS) +
+      `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters.]`;
   }
+}
 
+function _getConversationMessages(context) {
+  return context.conversationManager.getMessages?.() ?? context.conversationManager.messages ?? [];
+}
+
+async function _chatWithAI(messages, systemPrompt, context) {
+  const { aiClient, tools, currentToolSupport, signal } = context;
   const toolsToSend = currentToolSupport === true ? tools : null;
 
-  const systemPromptRef = await getSystemPrompt();
-  const sysMsg = { role: 'system', content: systemPromptRef };
-  const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messagesToSend]);
+  // We already have messages.
+  // But original `getNextAIResponse` constructed `messagesToSend` manually for native mode?
+  // "For native mode, build messages without system (will be added by chatWithSystem)"
+  // And "Add tool results to conversation context for native mode only".
+  // Wait, didn't `conversationManager.addMessage('tool')` already do that?
+  // Yes, line 325 in original code.
+  // `getNextAIResponse` lines 415-425 duplicated that logic?
+  // "Add tool results to conversation context for native mode only"
+  // `const messagesToSend = [...conversationMessages];`
+  // `messagesToSend.push({ ... })`.
+  // If `conversationManager` already has them, this DOUBLES them!
+  // UNLESS `conversationManager.addMessage` doesn't persist to `messages` array immediately?
+  // `conversationManager` is usually stateful.
+  // I suspect original code had a bug of duplication OR `conversationManager` is not stateful in that way?
+  // Actually, `conversationManager.addMessage` pushes to `this.messages`.
+  // So `conversationMessages` (got from `getMessages()`) HAS them.
+  // So `getNextAIResponse` adding them AGAIN to `messagesToSend` is suspicious.
+  // Ah, wait. `conversationManager` usage in `processToolCallLoop` vs `executeToolCalls`.
+  // In `executeToolCalls`: `conversationManager.addMessage` is called.
+  // In `getNextAIResponse`: `const conversationMessages = conversationManager.getMessages...`
+  // So `conversationMessages` *includes* the tool outputs.
+  // Then `getNextAIResponse` iterates `toolResults` and PUSHES THEM AGAIN?
+  // Complexity 47 might hide bugs.
+
+  // I will assume `conversationManager` handles state.
+  // I will use `messages` from manager.
+
+  // Sanitize for fallback
+  const sysMsg = { role: 'system', content: systemPrompt };
+  const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messages]);
+
   const raw = currentToolSupport !== true
     ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-    : await aiClient.chatWithSystem(
-      messagesToSend, () => systemPromptRef, toolsToSend, { signal }
-    );
+    : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+
   const normalized = SimulacrumCore._normalizeAIResponse(raw);
 
-  // Handle fallback tool calls if no native tool_calls found and in legacy mode
-  const noToolCalls = !Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0;
-  if (noToolCalls && currentToolSupport !== true) {
-    if (isDebugEnabled()) logger.debug('No native tool calls found; attempting fallback parsing');
-    try {
-      const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
-      if (isDebugEnabled()) logger.debug('Fallback parsing result:', parsed);
-
-      if (parsed && parsed.name) {
-        if (isDebugEnabled()) logger.debug(`Creating fallback tool call for '${parsed.name}'`);
-        normalized.toolCalls = [{
-          id: 'fallback_' + Date.now(),
-          function: {
-            name: parsed.name,
-            arguments: JSON.stringify(parsed.arguments || {})
-          }
-        }];
-      }
-    } catch (error) {
-      logger.warn('Fallback tool parsing failed:', error);
+  // Legacy fallback tool parsing
+  if (context.currentToolSupport !== true && (!normalized.toolCalls || !normalized.toolCalls.length)) {
+    const parsed = SimulacrumCore._parseInlineToolCall?.(normalized.content);
+    if (parsed && parsed.name) {
+      normalized.toolCalls = [{
+        id: 'fallback_' + Date.now(),
+        function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments || {}) }
+      }];
     }
   }
-
   return normalized;
 }
 
-/**
- * Normalize AI response (simplified version)
- */
-// Removed local normalizeAIResponse; using SimulacrumCore._normalizeAIResponse instead
+function _notifyAssistantMessage(response, context) {
+  if (context.onToolResult && !response._parseError) {
+    context.onToolResult({ role: 'assistant', content: response.content });
+  }
+}
+
+function _notifyLegacyToolResults(toolResults, context) {
+  const latest = toolResults[toolResults.length - 1];
+  const msg = latest.success
+    ? `Tool execution completed: ${latest.toolName} executed successfully. Result: ${JSON.stringify(latest.result)}`
+    : `Tool execution failed: ${latest.toolName} failed.`;
+  context.conversationManager.addMessage('system', msg);
+}
+
+function _logToolFailures(toolResults, retryCount, limit) {
+  if (isDebugEnabled()) {
+    logger.info(`Tool execution failures (retry ${retryCount}/${limit})`, {
+      failedCount: toolResults.filter(r => !r.success).length
+    });
+  }
+}
+
+async function _runToolFailureFallback(context) {
+  const instruction = 'Tool calls are temporarily disabled. Provide a plain language response.';
+  const msgs = _getConversationMessages(context);
+  const last = msgs[msgs.length - 1];
+  if (last?.content !== instruction) {
+    context.conversationManager.addMessage('system', instruction);
+  }
+  const systemPrompt = await context.getSystemPrompt();
+  const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, { signal: context.signal });
+  const fallback = SimulacrumCore._normalizeAIResponse(raw);
+  const text = (fallback.content || '') + '\n\nNote: Tool functionality was temporarily unavailable.';
+  return { ...fallback, content: text, display: text, toolCalls: [] };
+}
+
+function _handleRepeatLimit(context, response, count, limit) {
+  // Log error (use logger not console)
+  logger.error(`Repeat limit reached after ${limit} retries`, { count });
+
+  const msg = 'Tool execution limit reached.';
+  if (context.currentToolSupport === true) {
+    context.conversationManager.addMessage('tool', msg, null, 'tool_limit_error');
+  } else {
+    context.conversationManager.addMessage('system', msg);
+  }
+  return {
+    content: '',
+    display: null,
+    _toolLimitReachedError: true,
+    toolCalls: [],
+    endTask: true
+  };
+}

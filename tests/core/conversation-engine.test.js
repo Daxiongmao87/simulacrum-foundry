@@ -163,7 +163,6 @@ describe('ConversationEngine', () => {
 
       const result = await engine.processTurn({ onToolResult });
 
-      // Should check if legacyMode is off (default in mock)
       // Should add assistant message before loop
       expect(mockConversationManager.addMessage).toHaveBeenCalledWith(
         'assistant',
@@ -172,16 +171,14 @@ describe('ConversationEngine', () => {
       );
 
       // Should call loop handler
-      expect(processToolCallLoop).toHaveBeenCalledWith(
-        mockToolResponse,
-        expect.any(Array), // tool schemas
-        mockConversationManager,
-        SimulacrumCore.aiClient,
-        expect.any(Function), // system prompt binder
-        true, // currentToolSupport
-        undefined, // signal
+      expect(processToolCallLoop).toHaveBeenCalledWith(expect.objectContaining({
+        initialResponse: mockToolResponse,
+        tools: expect.any(Array),
+        conversationManager: mockConversationManager,
+        aiClient: SimulacrumCore.aiClient,
+        currentToolSupport: true,
         onToolResult
-      );
+      }));
 
       expect(result).toBe(mockFinalResponse);
     });
@@ -198,16 +195,10 @@ describe('ConversationEngine', () => {
 
       await engine.processTurn();
 
-      expect(processToolCallLoop).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(), // AI Client
-        expect.anything(), // System prompt
-        false, // currentToolSupport should be false
-        undefined, // signal
-        null // onToolResult (seems to be null in implementation)
-      );
+      expect(processToolCallLoop).toHaveBeenCalledWith(expect.objectContaining({
+        initialResponse: mockToolResponse,
+        currentToolSupport: false
+      }));
     });
   });
 

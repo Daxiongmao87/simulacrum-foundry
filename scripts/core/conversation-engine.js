@@ -114,16 +114,16 @@ class ConversationEngine {
       this.conversationManager.addMessage('assistant', aiResponse.content || '', aiResponse.toolCalls);
     }
 
-    const finalResponse = await processToolCallLoop(
-      aiResponse,
+    const finalResponse = await processToolCallLoop({
+      initialResponse: aiResponse,
       tools,
-      this.conversationManager,
-      SimulacrumCore.aiClient,
-      SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
+      conversationManager: this.conversationManager,
+      aiClient: SimulacrumCore.aiClient,
+      getSystemPrompt: SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
       currentToolSupport,
       signal,
-      onToolResult || null
-    );
+      onToolResult: onToolResult || null
+    });
 
     // If loop produced a distinct final message, emit to UI
     if (finalResponse && finalResponse.content && onAssistantMessage) {

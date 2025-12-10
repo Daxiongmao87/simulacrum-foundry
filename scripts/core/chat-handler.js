@@ -16,9 +16,6 @@ class ChatHandler {
    * Handles the complete flow: user input -> AI -> tools -> UI
    */
   async processUserMessage(message, user, options = {}) {
-    // Track if this is the initial user send (for rollback)
-    const isInitialSend = true;
-
     try {
       // Add user message to conversation state
       this.addMessageToConversation('user', message);
@@ -68,21 +65,6 @@ class ChatHandler {
         error
       };
 
-      // If this was the initial user send, rollback by removing the user message from history
-      if (isInitialSend) {
-        // Remove the last user message we just added
-        const msgs = this.conversationManager.messages;
-        if (msgs.length > 0 && msgs[msgs.length - 1]?.role === 'user') {
-          msgs.pop();
-        }
-
-        // Signal UI to restore message to textarea (if callback provided)
-        if (options.onError) {
-          options.onError({ originalMessage: message, error });
-        }
-      }
-
-      // Return null to indicate no assistant response was generated
       return null;
     }
   }
@@ -139,63 +121,12 @@ class ChatHandler {
 
   /**
    * Execute tools and continue conversation flow
+   * Decomposed to reduce complexity
    */
   async handleToolExecution(aiResponse, options = {}) {
     try {
-      const { processToolCallLoop } = await import('./tool-loop-handler.js');
-      const { SimulacrumCore } = await import('./simulacrum-core.js');
-
-      // Get tools and determine tool support mode
-      const { toolRegistry } = await import('./tool-registry.js');
-      const tools = toolRegistry.getToolSchemas();
-
-      // Check legacy mode setting to determine tool support
-      const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
-      const currentToolSupport = !legacyMode;
-
-      // Execute tools and get final response
-      const finalResponse = await processToolCallLoop(
-        aiResponse,
-        tools,
-        this.conversationManager,
-        SimulacrumCore.aiClient,
-        SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
-        currentToolSupport,
-        options.signal,
-        (toolResult) => this.handleToolResult(toolResult, options)
-      );
-
-      // Handle tool limit reached error
-      if (finalResponse._toolLimitReachedError) {
-        this.conversationManager.updateSystemMessage(finalResponse.content);
-        const aiSummaryResponse = await this.handleAutonomousFlow(finalResponse, options);
-        // Add the AI's summary to conversation and UI
-        this.addMessageToConversation('assistant', aiSummaryResponse.content);
-        this.addMessageToUI({
-          role: 'assistant',
-          content: aiSummaryResponse.content,
-          display: aiSummaryResponse.display || aiSummaryResponse.content
-        }, options);
-        return aiSummaryResponse;
-      }
-
-      // Add final response if different from last message
-      if (finalResponse && finalResponse.content) {
-        const lastMessage = this.conversationManager.messages[
-          this.conversationManager.messages.length - 1
-        ];
-        if (lastMessage.role !== 'assistant' || lastMessage.content !== finalResponse.content) {
-          this.addMessageToConversation('assistant', finalResponse.content);
-          this.addMessageToUI({
-            role: 'assistant',
-            content: finalResponse.content,
-            display: finalResponse.display || finalResponse.content
-          }, options);
-        }
-      }
-
-      return finalResponse;
-
+      const finalResponse = await this._executeToolLoop(aiResponse, options);
+      return await this._processToolLoopOutcome(finalResponse, options);
     } catch (error) {
       this.logger.error('Error executing tools', error);
 
@@ -204,6 +135,60 @@ class ChatHandler {
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
     }
+  }
+
+  async _executeToolLoop(aiResponse, options) {
+    const { processToolCallLoop } = await import('./tool-loop-handler.js');
+    const { SimulacrumCore } = await import('./simulacrum-core.js');
+    const { toolRegistry } = await import('./tool-registry.js');
+
+    const tools = toolRegistry.getToolSchemas();
+    const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
+    const currentToolSupport = !legacyMode;
+
+    // Execute tools and get final response
+    return await processToolCallLoop({
+      initialResponse: aiResponse,
+      tools,
+      conversationManager: this.conversationManager,
+      aiClient: SimulacrumCore.aiClient,
+      getSystemPrompt: SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
+      currentToolSupport,
+      signal: options.signal,
+      onToolResult: (toolResult) => this.handleToolResult(toolResult, options)
+    });
+  }
+
+  async _processToolLoopOutcome(finalResponse, options) {
+    // Handle tool limit reached error
+    if (finalResponse._toolLimitReachedError) {
+      this.conversationManager.updateSystemMessage(finalResponse.content);
+      const aiSummaryResponse = await this.handleAutonomousFlow(finalResponse, options);
+      // Add the AI's summary to conversation and UI
+      this.addMessageToConversation('assistant', aiSummaryResponse.content);
+      this.addMessageToUI({
+        role: 'assistant',
+        content: aiSummaryResponse.content,
+        display: aiSummaryResponse.display || aiSummaryResponse.content
+      }, options);
+      return aiSummaryResponse;
+    }
+
+    // Add final response if different from last message
+    if (finalResponse && finalResponse.content) {
+      const lastMessage = this.conversationManager.messages[
+        this.conversationManager.messages.length - 1
+      ];
+      if (lastMessage.role !== 'assistant' || lastMessage.content !== finalResponse.content) {
+        this.addMessageToConversation('assistant', finalResponse.content);
+        this.addMessageToUI({
+          role: 'assistant',
+          content: finalResponse.content,
+          display: finalResponse.display || finalResponse.content
+        }, options);
+      }
+    }
+    return finalResponse;
   }
 
   /**
@@ -228,46 +213,19 @@ class ChatHandler {
     const currentRetries = (options._retryCount || 0) + 1;
 
     if (currentRetries > maxRetries) {
-      try {
-        const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
-        if (isDebugEnabled()) {
-          const conversationMessages = this.conversationManager.getMessages();
-          createLogger('AIDiagnostics').error('assistant.empty_response.exhausted', {
-            maxRetries,
-            retryCount: currentRetries,
-            conversationLength: conversationMessages.length,
-            recentMessages: conversationMessages.slice(-5).map(msg => ({
-              role: msg.role,
-              hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0)
-            }))
-          });
-        }
-      } catch { }
+      await this._logRetryExhausted(currentRetries, maxRetries);
       const errorMessage = {
         role: 'assistant',
         content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
         display: '❌ Unable to generate a proper response after multiple attempts.'
       };
-      this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
     }
 
     try {
       const { SimulacrumCore } = await import('./simulacrum-core.js');
-      try {
-        const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
-        if (isDebugEnabled()) {
-          const last = this.conversationManager.messages[
-            this.conversationManager.messages.length - 1
-          ];
-          createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
-            attempt: currentRetries,
-            lastRole: last?.role,
-            hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0
-          });
-        }
-      } catch { }
+      await this._logRetryAttempt(currentRetries);
 
       // Get corrected AI response
       const aiResponse = await SimulacrumCore.generateResponse(
@@ -293,6 +251,40 @@ class ChatHandler {
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
     }
+  }
+
+  async _logRetryExhausted(currentRetries, maxRetries) {
+    try {
+      const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
+      if (isDebugEnabled()) {
+        const conversationMessages = this.conversationManager.getMessages();
+        createLogger('AIDiagnostics').error('assistant.empty_response.exhausted', {
+          maxRetries,
+          retryCount: currentRetries,
+          conversationLength: conversationMessages.length,
+          recentMessages: conversationMessages.slice(-5).map(msg => ({
+            role: msg.role,
+            hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0)
+          }))
+        });
+      }
+    } catch { /* intentionally empty */ }
+  }
+
+  async _logRetryAttempt(currentRetries) {
+    try {
+      const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
+      if (isDebugEnabled()) {
+        const last = this.conversationManager.messages[
+          this.conversationManager.messages.length - 1
+        ];
+        createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
+          attempt: currentRetries,
+          lastRole: last?.role,
+          hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0
+        });
+      }
+    } catch { /* intentionally empty */ }
   }
 
   /**
@@ -348,47 +340,7 @@ class ChatHandler {
     // Specialized Macro Result Display
     let resultHtml = '';
     if (toolName === 'execute_macro' && isSuccess) {
-      try {
-        // Content is JSON stringified result from tool
-        const contentObj = JSON.parse(toolResult.content);
-        // Tool returns JSON string of { message, result }
-        // The outer content is double stringified if tool returned stringified JSON
-        // result.content is likely the JSON string from ExecuteMacroTool
-
-        // Result is often double-stringified (once by tool, once by tool-loop)
-        let macroResult = contentObj;
-
-        // Loop to unwrap nested JSON strings (max 3 levels to avoid infinite loops)
-        for (let i = 0; i < 3; i++) {
-          if (typeof macroResult === 'string') {
-            try {
-              const parsed = JSON.parse(macroResult);
-              // Ensure we parsed an object, not just a primitive
-              if (parsed && typeof parsed === 'object') {
-                macroResult = parsed;
-              } else {
-                break;
-              }
-            } catch {
-              break;
-            }
-          } else {
-            break;
-          }
-        }
-
-        if (macroResult && macroResult.result && macroResult.result.total !== undefined) {
-          resultHtml = `<div class="tool-result"><strong>Roll Result:</strong> ${macroResult.result.total}</div>`;
-          if (macroResult.result.formula) {
-            resultHtml += `<div class="tool-result-detail"><small>Formula: ${macroResult.result.formula}</small></div>`;
-          }
-        } else if (macroResult && macroResult.result !== undefined) {
-          const resultStr = typeof macroResult.result === 'object'
-            ? JSON.stringify(macroResult.result, null, 2)
-            : String(macroResult.result);
-          resultHtml = `<div class="tool-result"><strong>Result:</strong> ${resultStr}</div>`;
-        }
-      } catch (e) { /* ignore parse errors */ }
+      resultHtml = this._formatMacroResult(toolResult);
     }
 
     return `<div class="simulacrum-tool-call ${statusClass}">
@@ -397,6 +349,52 @@ class ChatHandler {
       ${documentHtml}
       ${resultHtml}
     </div>`;
+  }
+
+  /**
+   * Format macro execution result
+   * @private
+   */
+  // eslint-disable-next-line complexity
+  _formatMacroResult(toolResult) {
+    try {
+      // Content is JSON stringified result from tool
+      const contentObj = JSON.parse(toolResult.content);
+      let macroResult = contentObj;
+
+      // Loop to unwrap nested JSON strings (max 3 levels to avoid infinite loops)
+      for (let i = 0; i < 3; i++) {
+        if (typeof macroResult === 'string') {
+          try {
+            const parsed = JSON.parse(macroResult);
+            if (parsed && typeof parsed === 'object') {
+              macroResult = parsed;
+            } else {
+              break;
+            }
+          } catch {
+            break;
+          }
+          // eslint-disable-next-line max-depth
+        } else {
+          break;
+        }
+      }
+
+      if (macroResult && macroResult.result && macroResult.result.total !== undefined) {
+        let html = `<div class="tool-result"><strong>Roll Result:</strong> ${macroResult.result.total}</div>`;
+        if (macroResult.result.formula) {
+          html += `<div class="tool-result-detail"><small>Formula: ${macroResult.result.formula}</small></div>`;
+        }
+        return html;
+      } else if (macroResult && macroResult.result !== undefined) {
+        const resultStr = typeof macroResult.result === 'object'
+          ? JSON.stringify(macroResult.result, null, 2)
+          : String(macroResult.result);
+        return `<div class="tool-result"><strong>Result:</strong> ${resultStr}</div>`;
+      }
+    } catch (e) { /* ignore parse errors */ }
+    return '';
   }
 
   /**

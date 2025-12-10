@@ -145,14 +145,14 @@ describe('Tool Fallback Behavior', () => {
       usage: { total_tokens: 100 }
     };
 
-    await processToolCallLoop(
+    await processToolCallLoop({
       initialResponse,
-      mockTools,
-      mockConversationManager,
-      mockAIClient,
+      tools: mockTools,
+      conversationManager: mockConversationManager,
+      aiClient: mockAIClient,
       getSystemPrompt,
-      true // toolCallingSupported initially true
-    );
+      currentToolSupport: true // toolCallingSupported initially true
+    });
 
     // Check that at least one call was made
     expect(mockAIClient.calls.length).toBeGreaterThan(0);
@@ -190,14 +190,14 @@ describe('Tool Fallback Behavior', () => {
       usage: { total_tokens: 100 }
     };
 
-    await processToolCallLoop(
+    await processToolCallLoop({
       initialResponse,
-      mockTools,
-      mockConversationManager,
-      mockAIClient,
+      tools: mockTools,
+      conversationManager: mockConversationManager,
+      aiClient: mockAIClient,
       getSystemPrompt,
-      true // toolCallingSupported initially true
-    );
+      currentToolSupport: true
+    });
 
     // All calls should still include tools since it's not a critical error
     mockAIClient.calls.forEach(call => {
@@ -220,14 +220,14 @@ describe('Tool Fallback Behavior', () => {
       usage: { total_tokens: 100 }
     };
 
-    await processToolCallLoop(
+    await processToolCallLoop({
       initialResponse,
-      mockTools,
-      mockConversationManager,
-      mockAIClient,
+      tools: mockTools,
+      conversationManager: mockConversationManager,
+      aiClient: mockAIClient,
       getSystemPrompt,
-      false // toolCallingSupported initially false
-    );
+      currentToolSupport: false
+    });
 
     // All calls should not include tools
     mockAIClient.calls.forEach(call => {
@@ -286,14 +286,14 @@ describe('Tool Fallback Behavior', () => {
       }]
     };
 
-    const result = await processToolCallLoop(
+    const result = await processToolCallLoop({
       initialResponse,
-      mockTools,
-      mockConversationManager,
-      mockAIClientWithRetry,
+      tools: mockTools,
+      conversationManager: mockConversationManager,
+      aiClient: mockAIClientWithRetry,
       getSystemPrompt,
-      true
-    );
+      currentToolSupport: true
+    });
 
     expect(mockAIClientWithRetry.chatWithSystem).toHaveBeenCalledTimes(2);
     // expect(toolRegistry.executeTool).toHaveBeenCalledTimes(1);
@@ -365,14 +365,14 @@ describe('Tool Fallback Behavior', () => {
         }]
       };
 
-      const result = await processToolCallLoop(
+      const result = await processToolCallLoop({
         initialResponse,
-        mockTools,
-        mockConversationManager,
-        mockAIClientWithFailures,
+        tools: mockTools,
+        conversationManager: mockConversationManager,
+        aiClient: mockAIClientWithFailures,
         getSystemPrompt,
-        true
-      );
+        currentToolSupport: true
+      });
 
       expect(mockAIClientWithFailures.chatWithSystem).toHaveBeenCalledTimes(3);
       expect(toolRegistry.executeTool).not.toHaveBeenCalled();
