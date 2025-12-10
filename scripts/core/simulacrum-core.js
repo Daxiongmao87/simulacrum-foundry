@@ -5,15 +5,7 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
 import { ConversationManager } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
-import { DocumentCreateTool } from '../tools/document-create.js';
-import { DocumentReadTool } from '../tools/document-read.js';
-import { DocumentUpdateTool } from '../tools/document-update.js';
-import { DocumentDeleteTool } from '../tools/document-delete.js';
-import { DocumentListTool } from '../tools/document-list.js';
-import { DocumentSearchTool } from '../tools/document-search.js';
-import { ArtifactSearchTool } from '../tools/artifact-search.js';
-import { DocumentSchemaTool } from '../tools/document-schema.js';
-import { ExecuteMacroTool } from '../tools/execute-macro.js';
+
 import { DocumentAPI } from './document-api.js';
 import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
@@ -276,122 +268,50 @@ class SimulacrumCore {
     try {
       if (this.conversationManager) {
         this.conversationManager.clear();
+        await this.conversationManager.save();
       }
-      try { await this.saveConversationState(); } catch { /* ignore */ }
       return true;
     } catch (_e) {
       return false;
     }
   }
 
-  static getPersistenceKey() {
-    const uid = game?.user?.id || 'unknown-user';
-    const wid = game?.world?.id || 'unknown-world';
-    return `conversationState:${uid}:${wid}`;
-  }
   /**
-   * Load conversation state from user flag or settings
+   * Get persistence key - delegates to ConversationManager
+   * @deprecated Use conversationManager.getPersistenceKey() directly
+   */
+  static getPersistenceKey() {
+    return this.conversationManager?.getPersistenceKey()
+      || `conversationState:${game?.user?.id || 'unknown'}:${game?.world?.id || 'unknown'}`;
+  }
+
+  /**
+   * Load conversation state - delegates to ConversationManager
    */
   static async loadConversationState() {
-    const key = this.getPersistenceKey();
-    let state = null;
-    // Prefer user flag storage when available (per-user scope)
-    try {
-      if (game?.user && typeof game.user.getFlag === 'function') {
-        state = await game.user.getFlag('simulacrum', game.world.id);
-      }
-    } catch (_e) {
-      // fall back below
-    }
-    // Fallback to module settings if defined
-    if (!state) {
-      try {
-        if (game?.settings && typeof game.settings.get === 'function') {
-          state = game.settings.get('simulacrum', key);
-        }
-      } catch (_e) {
-        // ignore
-      }
-    }
-    if (!state) return false;
-    // Validate and apply
-    const msgs = Array.isArray(state.messages) ? state.messages : [];
-    const tokens = Number.isFinite(state.sessionTokens) ? state.sessionTokens : 0;
-    this.conversationManager.messages = msgs;
-    this.conversationManager.sessionTokens = tokens;
-    return true;
+    if (!this.conversationManager) return false;
+    return this.conversationManager.load();
   }
+
   /**
-   * Save conversation state to user flag or settings
-   */
-  /**
-   * Set up periodic auto-save for extra reliability
+   * Set up periodic auto-save - delegates to ConversationManager
    * @private
    */
   static _setupPeriodicSave() {
-    // Clear any existing interval
-    if (this._saveInterval) {
-      clearInterval(this._saveInterval);
-    }
-
-    // Auto-save every 30 seconds if conversation has changed
-    this._saveInterval = setInterval(async () => {
-      if (this.conversationManager && this.conversationManager.messages.length > 0) {
-        try {
-          await this.saveConversationState();
-        } catch (error) {
-          this.logger.warn('Periodic save failed:', error);
-        }
-      }
-    }, 30000); // 30 seconds
-
-    // Also save before page unload
-    if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', () => {
-        try {
-          // Use synchronous save if possible for beforeunload
-          this.saveConversationState();
-        } catch (error) {
-          this.logger.warn('beforeunload save failed:', error);
-        }
-      });
+    if (this.conversationManager) {
+      this.conversationManager.setupPeriodicSave(30000);
     }
   }
 
+  /**
+   * Save conversation state - delegates to ConversationManager
+   */
   static async saveConversationState() {
     if (!this.conversationManager) {
       this.logger.warn('Cannot save: conversationManager not initialized');
       return false;
     }
-    const key = this.getPersistenceKey();
-    const state = {
-      messages: this.conversationManager.messages,
-      sessionTokens: this.conversationManager.sessionTokens,
-      v: 1
-    };
-    // Prefer user flag when available
-    try {
-      if (game?.user && typeof game.user.setFlag === 'function') {
-        await game.user.setFlag('simulacrum', game.world.id, state);
-        if (isDebugEnabled()) this.logger.debug('Conversation state saved to user flags');
-        return true;
-      }
-    } catch (error) {
-      this.logger.warn('Failed to save to user flags:', error);
-      // fall back below
-    }
-    // Fallback to module settings when set() exists
-    try {
-      if (game?.settings && typeof game.settings.set === 'function') {
-        await game.settings.set('simulacrum', key, state);
-        if (isDebugEnabled()) this.logger.debug('Conversation state saved to module settings');
-        return true;
-      }
-    } catch (error) {
-      this.logger.warn('Failed to save to module settings:', error);
-    }
-    this.logger.warn('Failed to save conversation state - no storage method available');
-    return false;
+    return this.conversationManager.save();
   }
   /**
    * Notify of document changes
@@ -429,47 +349,7 @@ class SimulacrumCore {
    * Register the built-in document tools
    */
   static registerDefaultTools() {
-    try {
-      const tools = [
-        new DocumentCreateTool(),
-        new DocumentReadTool(),
-        new DocumentUpdateTool(),
-        new DocumentDeleteTool(),
-        new DocumentListTool(),
-
-        new DocumentSearchTool(),
-        new ArtifactSearchTool(),
-        new DocumentSchemaTool(),
-        new ExecuteMacroTool()
-      ];
-      for (const t of tools) {
-        if (typeof t.setDocumentAPI === 'function') {
-          t.setDocumentAPI(DocumentAPI);
-        }
-        // In some test/mocked contexts, toolRegistry may only expose getToolSchemas.
-        // Guard method access and register defensively to avoid init-time errors.
-        const hasGetInfo = typeof toolRegistry.getToolInfo === 'function';
-        const hasRegister = typeof toolRegistry.registerTool === 'function';
-        // If we cannot register in this environment, skip silently.
-        if (!hasRegister) {
-          continue;
-        }
-        // Prefer checking existing registration via getToolInfo when available.
-        const already = hasGetInfo ? Boolean(toolRegistry.getToolInfo(t.name)) : false;
-        if (already) continue;
-        // Attempt registration; tolerate duplicates deterministically.
-        try {
-          toolRegistry.registerTool(t);
-        } catch (e) {
-          const msg = String(e?.message || '');
-          if (!/already exists/i.test(msg)) {
-            throw e;
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.error('Failed to register default tools', err);
-    }
+    toolRegistry.registerDefaults();
   }
   /**
    * Build the ephemeral system prompt guiding tool usage.

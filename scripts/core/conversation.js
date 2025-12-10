@@ -41,7 +41,7 @@ class ConversationManager {
     }
     this.messages.push(message);
     this.sessionTokens += this._estimateTokens(message);
-    
+
     // Trigger auto-save if callback is provided
     this._triggerStateChange();
   }
@@ -56,7 +56,7 @@ class ConversationManager {
       this.messages[0].content += '\n\n' + additionalContent;
       const newTokens = this._estimateTokens(this.messages[0]);
       this.sessionTokens += (newTokens - oldTokens);
-      
+
       // Trigger auto-save if callback is provided
       this._triggerStateChange();
     }
@@ -78,7 +78,7 @@ class ConversationManager {
       this.messages = [systemMessage];
       this.sessionTokens = this._estimateTokens(systemMessage);
     }
-    
+
     // Trigger auto-save if callback is provided
     this._triggerStateChange();
   }
@@ -89,7 +89,7 @@ class ConversationManager {
   clear() {
     this.messages = [];
     this.sessionTokens = 0;
-    
+
     // Trigger auto-save if callback is provided
     this._triggerStateChange();
   }
@@ -161,6 +161,134 @@ class ConversationManager {
           console.warn('[ConversationManager] State change callback failed:', error);
         }
       }
+    }
+  }
+
+  // =========================================================================
+  // Persistence Methods (extracted from SimulacrumCore)
+  // =========================================================================
+
+  /**
+   * Get unique persistence key for this user/world combination
+   * @returns {string} Persistence key
+   */
+  getPersistenceKey() {
+    const uid = this.userId || 'unknown-user';
+    const wid = this.worldId || 'unknown-world';
+    return `conversationState:${uid}:${wid}`;
+  }
+
+  /**
+   * Save conversation state to user flag or module settings
+   * @returns {Promise<boolean>} Whether save was successful
+   */
+  async save() {
+    const key = this.getPersistenceKey();
+    const state = {
+      messages: this.messages,
+      sessionTokens: this.sessionTokens,
+      v: 1
+    };
+
+    // Prefer user flag when available (per-user scope)
+    try {
+      if (typeof game !== 'undefined' && game?.user && typeof game.user.setFlag === 'function') {
+        await game.user.setFlag('simulacrum', this.worldId, state);
+        return true;
+      }
+    } catch (_e) {
+      // fall back below
+    }
+
+    // Fallback to module settings
+    try {
+      if (typeof game !== 'undefined' && game?.settings && typeof game.settings.set === 'function') {
+        await game.settings.set('simulacrum', key, state);
+        return true;
+      }
+    } catch (_e) {
+      // ignore
+    }
+
+    return false;
+  }
+
+  /**
+   * Load conversation state from user flag or module settings
+   * @returns {Promise<boolean>} Whether load was successful
+   */
+  async load() {
+    const key = this.getPersistenceKey();
+    let state = null;
+
+    // Prefer user flag storage (per-user scope)
+    try {
+      if (typeof game !== 'undefined' && game?.user && typeof game.user.getFlag === 'function') {
+        state = await game.user.getFlag('simulacrum', this.worldId);
+      }
+    } catch (_e) {
+      // fall back below
+    }
+
+    // Fallback to module settings
+    if (!state) {
+      try {
+        if (typeof game !== 'undefined' && game?.settings && typeof game.settings.get === 'function') {
+          state = game.settings.get('simulacrum', key);
+        }
+      } catch (_e) {
+        // ignore
+      }
+    }
+
+    if (!state) return false;
+
+    // Validate and apply
+    this.messages = Array.isArray(state.messages) ? state.messages : [];
+    this.sessionTokens = Number.isFinite(state.sessionTokens) ? state.sessionTokens : 0;
+    return true;
+  }
+
+  /**
+   * Set up periodic auto-save for extra reliability
+   * @param {number} [intervalMs=30000] - Interval in milliseconds
+   */
+  setupPeriodicSave(intervalMs = 30000) {
+    // Clear any existing interval
+    if (this._saveInterval) {
+      clearInterval(this._saveInterval);
+    }
+
+    // Auto-save periodically if conversation has messages
+    this._saveInterval = setInterval(async () => {
+      if (this.messages.length > 0) {
+        try {
+          await this.save();
+        } catch (_e) {
+          // Ignore save failures in background
+        }
+      }
+    }, intervalMs);
+
+    // Save before page unload
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        try {
+          this.save();
+        } catch (_e) {
+          // Ignore
+        }
+      });
+    }
+  }
+
+  /**
+   * Stop periodic auto-save
+   */
+  stopPeriodicSave() {
+    if (this._saveInterval) {
+      clearInterval(this._saveInterval);
+      this._saveInterval = null;
     }
   }
 

@@ -6,6 +6,16 @@
 import { ToolError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { ValidationResult } from '../utils/validation.js';
 import { createLogger } from '../utils/logger.js';
+import { DocumentCreateTool } from '../tools/document-create.js';
+import { DocumentReadTool } from '../tools/document-read.js';
+import { DocumentUpdateTool } from '../tools/document-update.js';
+import { DocumentDeleteTool } from '../tools/document-delete.js';
+import { DocumentListTool } from '../tools/document-list.js';
+import { DocumentSearchTool } from '../tools/document-search.js';
+import { ArtifactSearchTool } from '../tools/artifact-search.js';
+import { DocumentSchemaTool } from '../tools/document-schema.js';
+import { ExecuteMacroTool } from '../tools/execute-macro.js';
+import { DocumentAPI } from './document-api.js';
 
 /**
  * Tool Registry - Manages all available tools and their registration
@@ -30,7 +40,7 @@ export class ToolRegistry {
     this._validateToolForRegistration(tool, options);
     const registration = this._createRegistration(tool, options);
     this._completeRegistration(tool, registration, options);
-    
+
     return {
       success: true,
       tool: tool.name,
@@ -38,6 +48,45 @@ export class ToolRegistry {
       dependencies: (options.dependencies || []).length,
       permissions: (options.permissions || []).length
     };
+  }
+
+  /**
+   * Register default system tools
+   */
+  registerDefaults() {
+    try {
+      const tools = [
+        new DocumentCreateTool(),
+        new DocumentReadTool(),
+        new DocumentUpdateTool(),
+        new DocumentDeleteTool(),
+        new DocumentListTool(),
+        new DocumentSearchTool(),
+        new ArtifactSearchTool(),
+        new DocumentSchemaTool(),
+        new ExecuteMacroTool()
+      ];
+
+      for (const t of tools) {
+        if (typeof t.setDocumentAPI === 'function') {
+          t.setDocumentAPI(DocumentAPI);
+        }
+
+        const already = Boolean(this.getToolInfo(t.name));
+        if (already) continue;
+
+        try {
+          this.registerTool(t);
+        } catch (e) {
+          const msg = String(e?.message || '');
+          if (!/already exists/i.test(msg)) {
+            throw e;
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error('Failed to register default tools', err);
+    }
   }
 
   _validateToolForRegistration(tool, options) {
@@ -57,7 +106,7 @@ export class ToolRegistry {
 
     // Validate dependencies
     const dependencies = options.dependencies || [];
-    const unresolvedDeps = dependencies.filter(dep => 
+    const unresolvedDeps = dependencies.filter(dep =>
       !this.tools.has(dep) && !this.dependencies.has(dep)
     );
 
@@ -98,7 +147,7 @@ export class ToolRegistry {
 
   _completeRegistration(tool, registration, options) {
     const { category = 'general', dependencies = [], permissions = [] } = options;
-    
+
     this.tools.set(tool.name, registration);
     this._addToCategory(category, tool.name);
     this._registerDependencies(tool.name, dependencies);
@@ -118,7 +167,7 @@ export class ToolRegistry {
     }
 
     const tool = this.tools.get(name);
-    
+
     // Check for dependent tools
     const dependents = this._getDependentTools(name);
     if (dependents.length > 0) {
@@ -129,16 +178,16 @@ export class ToolRegistry {
 
     // Remove from category
     this._removeFromCategory(tool.category, name);
-    
+
     // Remove dependencies
     this._unregisterDependencies(name);
-    
+
     // Remove permissions
     this.permissions.delete(name);
-    
+
     // Remove tool
     this.tools.delete(name);
-    
+
     // Hook emission removed (internal hooks deprecated)
 
     return true;
@@ -203,10 +252,10 @@ export class ToolRegistry {
    * @returns {Array<Object>}
    */
   listTools(options = {}) {
-    const { 
-      category = null, 
-      enabled = true, 
-      tags = [], 
+    const {
+      category = null,
+      enabled = true,
+      tags = [],
       sortBy = 'name'
     } = options;
 
@@ -221,7 +270,7 @@ export class ToolRegistry {
     }
 
     if (tags.length > 0) {
-      tools = tools.filter(tool => 
+      tools = tools.filter(tool =>
         tags.some(tag => tool.tags.includes(tag))
       );
     }
@@ -277,7 +326,7 @@ export class ToolRegistry {
   async executeTool(name, context = {}) {
     this.logger.debug(`[ToolExecution] Starting execution of tool '${name}'`);
     this.logger.debug(`[ToolExecution] Context:`, context);
-    
+
     const tool = this.getTool(name);
     if (!tool) {
       this.logger.error(`[ToolExecution] Tool '${name}' not found`);
@@ -290,10 +339,10 @@ export class ToolRegistry {
     try {
       this.logger.debug(`[ToolExecution] Validating permissions for '${name}'`);
       this._validatePermissions(name, context);
-      
+
       this.logger.debug(`[ToolExecution] Validating dependencies for '${name}'`);
       this._validateDependencies(name);
-      
+
       // Update execution stats
       registration.executionCount++;
       registration.lastExecution = new Date();
@@ -306,7 +355,7 @@ export class ToolRegistry {
 
       // Update success stats
       registration.successCount++;
-      
+
       this.logger.debug(`[ToolExecution] Tool '${name}' executed successfully`);
       this.logger.debug(`[ToolExecution] Result:`, result);
 
@@ -322,7 +371,7 @@ export class ToolRegistry {
     } catch (error) {
       // Update failure stats
       registration.failureCount++;
-      
+
       // Tool execution errors should be handled by the agentic loop, not logged to console
 
       // Error hook removed (internal hooks deprecated)
@@ -350,7 +399,7 @@ export class ToolRegistry {
     try {
       for (const task of tasks) {
         const { tool: toolName, context } = task;
-        
+
         // Check timeout
         if (Date.now() - startTime > timeout) {
           throw new ToolError('Tool sequence execution timed out');
@@ -387,7 +436,7 @@ export class ToolRegistry {
     }
 
     const tool = this.tools.get(name);
-    
+
     if (tool.required && !enabled) {
       throw new ToolError(`Cannot disable required tool '${name}'`);
     }
@@ -414,7 +463,7 @@ export class ToolRegistry {
     }
 
     const tool = this.tools.get(name);
-    
+
     if (!tool.enabled) {
       result.addError('tool', 'Tool is disabled', name);
       return result;
@@ -445,7 +494,7 @@ export class ToolRegistry {
    */
   getStats() {
     const tools = Array.from(this.tools.values());
-    
+
     return {
       total: tools.length,
       enabled: tools.filter(t => t.enabled).length,
@@ -467,7 +516,7 @@ export class ToolRegistry {
     if (!this.categories.has(category)) {
       this.categories.set(category, []);
     }
-    
+
     const categoryTools = this.categories.get(category);
     if (!categoryTools.includes(toolName)) {
       categoryTools.push(toolName);
@@ -489,7 +538,7 @@ export class ToolRegistry {
       if (!this.dependencies.has(dep)) {
         this.dependencies.set(dep, []);
       }
-      
+
       const dependants = this.dependencies.get(dep);
       if (!dependants.includes(toolName)) {
         dependants.push(toolName);
@@ -524,12 +573,12 @@ export class ToolRegistry {
 
   _validatePermissions(toolName, context) {
     const permissions = this.permissions.get(toolName) || [];
-    
+
     // Check general permissions
     if (permissions.includes('gm') && !game.user.isGM) {
       throw new ValidationError(`Tool '${toolName}' requires GM permissions`);
     }
-    
+
     // Check custom permissions defined by tool
     const tool = this.getTool(toolName);
     if (tool && typeof tool.validatePermissions === 'function') {
