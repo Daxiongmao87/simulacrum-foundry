@@ -17,6 +17,7 @@ import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { DocumentAPI } from './document-api.js';
 import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
+import { emitProcessCancelled } from './hook-manager.js';
 import {
   buildSystemPrompt,
   getDocumentTypesInfo as getDocTypesInfo,
@@ -158,9 +159,7 @@ class SimulacrumCore {
       this.currentAbortController.abort();
       this.currentAbortController = null;
       this.logger.info('Agent process cancelled by user');
-      try {
-        Hooks.call('simulacrum:processCancelled');
-      } catch (_e) { /* ignore */ }
+      emitProcessCancelled();
     }
   }
 

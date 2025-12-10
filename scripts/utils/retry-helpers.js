@@ -14,23 +14,8 @@ export function isToolCallFailure(response) {
     return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
 }
 
-/**
- * Emit process status updates via Hooks
- * @param {string} state - 'start' or 'end'
- * @param {string} callId - Unique call identifier
- * @param {string|null} label - Optional label for start state
- */
-export function emitProcessStatus(state, callId, label = null) {
-    try {
-        if (typeof Hooks === 'undefined' || typeof Hooks.call !== 'function') return;
-        const payload = state === 'start'
-            ? { state, callId, label, toolName: 'retry' }
-            : { state, callId };
-        Hooks.call('simulacrum:processStatus', payload);
-    } catch (_e) {
-        /* ignore */
-    }
-}
+// Re-export emitProcessStatus from hook-manager for backward compatibility
+export { emitProcessStatus } from '../core/hook-manager.js';
 
 /**
  * Build a human-readable retry label

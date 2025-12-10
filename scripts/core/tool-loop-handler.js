@@ -11,12 +11,12 @@ import { sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
   isToolCallFailure,
-  emitProcessStatus as emitRetryStatus,
   buildRetryLabel,
   getRetryDelayMs,
   delayWithSignal,
   buildGenericFailureMessage
 } from '../utils/retry-helpers.js';
+import { emitProcessStatus } from './hook-manager.js';
 
 /**
  * Sanitize messages for fallback when tool calling is not supported
@@ -81,12 +81,7 @@ export async function processToolCallLoop(
   const callId = `tool-loop-${foundry.utils.randomID()}`;
   try {
     // Signal start of the entire tool loop process
-    Hooks.call('simulacrum:processStatus', {
-      state: 'start',
-      callId,
-      label: 'Thinking...',
-      toolName: 'agentic-loop'
-    });
+    emitProcessStatus('start', callId, 'Thinking...', 'agentic-loop');
 
     let currentResponse = initialResponse;
     const REPEAT_LIMIT = 5;
@@ -262,7 +257,7 @@ export async function processToolCallLoop(
     return currentResponse;
   } finally {
     // Ensure the process status is always marked as ended
-    Hooks.call('simulacrum:processStatus', { state: 'end', callId });
+    emitProcessStatus('end', callId);
   }
 }
 

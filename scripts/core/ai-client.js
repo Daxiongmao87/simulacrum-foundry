@@ -7,22 +7,14 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
 import { normalizeAIResponse } from '../utils/ai-normalization.js';
 import { AIProvider } from './providers/base-provider.js';
+import { GeminiProvider } from './providers/gemini-provider.js';
 
 // Re-export providers for backward compatibility
-export { AIProvider, MockAIProvider, OpenAIProvider } from './providers/index.js';
+export { AIProvider, MockAIProvider, OpenAIProvider, GeminiProvider } from './providers/index.js';
 
 export const AI_ERROR_CODES = Object.freeze({
   TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE'
 });
-
-const GEMINI_FINISH_REASON_TO_ERROR_CODE = Object.freeze({
-  MALFORMED_FUNCTION_CALL: AI_ERROR_CODES.TOOL_CALL_FAILURE
-});
-
-function mapGeminiFinishReasonToErrorCode(reason) {
-  if (!reason) return null;
-  return GEMINI_FINISH_REASON_TO_ERROR_CODE[reason] || null;
-}
 
 /**
  * AI Client - Main abstraction layer for interacting with various AI providers
@@ -122,11 +114,20 @@ export class AIClient {
 
     const provider = options.provider || this.provider || 'openai';
     if (provider === 'gemini') {
+      // Use GeminiProvider for Gemini API calls
+      const geminiProvider = new GeminiProvider({
+        apiKey: this.apiKey,
+        baseURL: this.baseURL,
+        model: this.model,
+        maxTokens: this.maxTokens,
+        temperature: this.temperature
+      });
+
       const MAX_GEMINI_RETRIES = 2;
       let lastResult;
 
       for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
-        lastResult = await this._chatGemini(messages, tools, options);
+        lastResult = await geminiProvider.chat(messages, { tools, systemPrompt: options.systemPrompt, signal: options.signal });
 
         // If success or unknown error, return. If TOOL_CALL_FAILURE, retry.
         if (!lastResult.errorCode) {
@@ -314,234 +315,6 @@ export class AIClient {
       model: data.model,
       usage: data.usage
     };
-  }
-
-  _getGeminiEndpoint(action = 'generateContent') {
-    const base = (this.baseURL || '').replace(/\/$/, '');
-    const model = encodeURIComponent(this.model || 'gemini-1.5-pro-latest');
-    const suffix = action.startsWith(':') ? action : `:${action}`;
-    return `${base}/models/${model}${suffix}`;
-  }
-
-  _mapGeminiRole(role) {
-    switch (role) {
-      case 'assistant':
-      case 'model':
-        return 'model';
-      case 'tool':
-        return 'user';
-      case 'system':
-        return null;
-      default:
-        return 'user';
-    }
-  }
-
-  _buildGeminiContents(messages) {
-    const contents = [];
-    for (const message of messages || []) {
-      if (!message) continue;
-      const role = this._mapGeminiRole(message.role);
-      if (!role) continue;
-
-      let text = '';
-      if (typeof message.content === 'string') {
-        text = message.content;
-      } else if (Array.isArray(message.content)) {
-        text = message.content
-          .map(part => (typeof part === 'string' ? part : part?.text || ''))
-          .filter(Boolean)
-          .join('\n');
-      } else if (message.content != null) {
-        text = JSON.stringify(message.content);
-      }
-
-      if (!text && message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length) {
-        text = message.tool_calls
-          .map(call => {
-            const fn = call?.function || {};
-            return `Requested tool ${fn.name || 'unknown'} with args ${fn.arguments || '{}'}`;
-          })
-          .join('\n');
-      }
-
-      if (!text && message.role === 'tool') {
-        const toolLabel = message.tool_call_id ? ` (${message.tool_call_id})` : '';
-        text = `Tool response${toolLabel}: ${String(message.content ?? '')}`;
-      }
-
-      if (!text) continue;
-      contents.push({ role, parts: [{ text }] });
-    }
-    return contents;
-  }
-
-  _sanitizeGeminiParameters(schema) {
-    if (!schema || typeof schema !== 'object') {
-      return { type: 'object' };
-    }
-
-    const base = { ...schema };
-    base.type = base.type || 'object';
-
-    const properties = base.properties && typeof base.properties === 'object'
-      ? base.properties
-      : {};
-
-    const sanitizedProperties = {};
-    const requiredSet = new Set(Array.isArray(base.required) ? base.required : []);
-
-    for (const [key, value] of Object.entries(properties)) {
-      if (!value || typeof value !== 'object') {
-        sanitizedProperties[key] = value;
-        continue;
-      }
-
-      const propertySchema = { ...value };
-      if (propertySchema.required === true) {
-        requiredSet.add(key);
-      }
-      delete propertySchema.required;
-
-      if (propertySchema.type === 'object' || propertySchema.properties) {
-        sanitizedProperties[key] = this._sanitizeGeminiParameters(propertySchema);
-      } else {
-        if (propertySchema.items && typeof propertySchema.items === 'object') {
-          const itemsSchema = propertySchema.items;
-          if (itemsSchema.type === 'object' || itemsSchema.properties) {
-            propertySchema.items = this._sanitizeGeminiParameters(itemsSchema);
-          } else {
-            propertySchema.items = { ...itemsSchema };
-          }
-        }
-        sanitizedProperties[key] = propertySchema;
-      }
-    }
-
-    base.properties = sanitizedProperties;
-
-    if (requiredSet.size > 0) {
-      base.required = Array.from(requiredSet);
-    } else {
-      delete base.required;
-    }
-
-    return base;
-  }
-
-  _mapToolsForGemini(tools) {
-    return (tools || [])
-      .map(tool => tool?.function)
-      .filter(Boolean)
-      .map(fn => ({
-        name: fn.name,
-        description: fn.description || '',
-        parameters: this._sanitizeGeminiParameters(fn.parameters && typeof fn.parameters === 'object' ? fn.parameters : { type: 'object' })
-      }))
-      .filter(decl => decl.name);
-  }
-
-  async _chatGemini(messages, tools, options) {
-    const signal = options.signal;
-    const systemPrompt = options.systemPrompt;
-    const contents = this._buildGeminiContents(messages);
-
-    if (!contents.length) {
-      contents.push({ role: 'user', parts: [{ text: '' }] });
-    }
-
-    const body = {
-      contents
-    };
-
-    const generationConfig = {};
-    if (typeof this.maxTokens === 'number') {
-      generationConfig.maxOutputTokens = this.maxTokens;
-    }
-    if (typeof this.temperature === 'number') {
-      generationConfig.temperature = this.temperature;
-    }
-    if (Object.keys(generationConfig).length) {
-      body.generationConfig = generationConfig;
-    }
-
-    if (systemPrompt) {
-      body.systemInstruction = {
-        role: 'system',
-        parts: [{ text: systemPrompt }]
-      };
-    }
-
-    const functionDeclarations = this._mapToolsForGemini(tools);
-    if (functionDeclarations.length) {
-      body.tools = [{ functionDeclarations }];
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (this.apiKey) {
-      headers['x-goog-api-key'] = this.apiKey;
-    }
-
-    const response = await fetch(this._getGeminiEndpoint('generateContent'), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal
-    });
-
-    if (!response.ok) {
-      let errorText;
-      try {
-        const errorData = await response.json();
-        errorText = errorData.error?.message || JSON.stringify(errorData);
-      } catch {
-        try {
-          errorText = await response.text();
-        } catch {
-          errorText = 'API error';
-        }
-      }
-      throw new Error(`${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    if (!data.model && this.model) {
-      data.model = this.model;
-    }
-
-    // Normalize Gemini finish reasons into provider-agnostic error codes
-    if (data.candidates && Array.isArray(data.candidates)) {
-      for (const candidate of data.candidates) {
-        const errorCode = mapGeminiFinishReasonToErrorCode(candidate.finishReason);
-        if (!errorCode) continue;
-
-        const correlationId = `gemini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const logger = createLogger('GeminiClient');
-        logger.warn('Gemini tool call failure detected', {
-          response: data,
-          modelVersion: data.model || this.model,
-          responseId: data.responseId || 'unknown',
-          candidateIndex: candidate.index ?? 0,
-          finishReason: candidate.finishReason,
-          errorCode,
-          correlationId
-        });
-
-        return {
-          ...data,
-          errorCode,
-          errorMetadata: {
-            provider: 'gemini',
-            finishReason: candidate.finishReason,
-            candidateIndex: candidate.index ?? 0,
-            correlationId
-          },
-          _originalResponse: data
-        };
-      }
-    }
-
-    return data;
   }
 
   /**
