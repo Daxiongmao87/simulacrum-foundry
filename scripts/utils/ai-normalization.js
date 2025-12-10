@@ -1,6 +1,8 @@
 /**
  * AI normalization utilities (shared)
  */
+import { createLogger, isDebugEnabled } from './logger.js';
+import { toolRegistry } from '../core/tool-registry.js';
 
 /**
  * Sanitize messages for providers without native tool support.
@@ -21,205 +23,28 @@ export function sanitizeMessagesForFallback(messages) {
   }
 }
 
-import { createLogger, isDebugEnabled } from './logger.js';
-import { toolRegistry } from '../core/tool-registry.js';
-
 /**
  * Normalize AI response into consistent format.
  * Preserves existing behavior from SimulacrumCore._normalizeAIResponse.
  */
 export function normalizeAIResponse(raw) {
-  const attachProviderError = (payload, source) => {
-    const result = { ...payload, raw: source };
-    if (source && source.errorCode) {
-      result.errorCode = source.errorCode;
-    }
-    if (source && source.errorMetadata) {
-      result.errorMetadata = source.errorMetadata;
-    }
-    if (source && source._originalResponse) {
-      result._originalResponse = source._originalResponse;
-    } else if (!result._originalResponse) {
-      result._originalResponse = source;
-    }
-    return result;
-  };
-
-  // If already normalized, check for empty content
-  if (typeof raw?.content === 'string') {
-    if (!raw.content || raw.content.trim().length === 0) {
-      if (isDebugEnabled()) {
-        const logger = createLogger('AIDiagnostics');
-        logger.warn('Empty content detected in already-normalized response:', {
-          rawContentValue: raw.content,
-          rawContentType: typeof raw.content,
-          rawContentLength: (raw.content || '').length,
-          trimmedLength: (raw.content || '').trim().length,
-          hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0),
-          model: raw.model,
-          usage: raw.usage,
-          responseKeys: Object.keys(raw || {})
-        });
-      }
-      {
-        const logger = createLogger('AIDiagnostics');
-        logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: !!(raw.toolCalls && raw.toolCalls.length > 0) });
-      }
-      return attachProviderError({
-        content: 'Empty response not allowed - please provide a meaningful response to the user.',
-        display: 'Empty response not allowed - please provide a meaningful response to the user.',
-        toolCalls: [],
-        model: raw.model,
-        usage: raw.usage,
-        _parseError: true
-      }, raw);
-    }
-    return attachProviderError({
-      content: raw.content,
-      display: raw.display ?? raw.content,
-      toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
-      model: raw.model,
-      usage: raw.usage
-    }, raw);
+  // 1. Check if already normalized
+  if (typeof raw?.content === 'string' && !raw.choices && !raw.candidates) {
+    return _handleAlreadyNormalized(raw);
   }
 
-  // Gemini-compatible: { candidates: [ { content: { parts: [...] } } ] }
+  // 2. Check for Gemini format
   if (Array.isArray(raw?.candidates) && raw.candidates.length > 0) {
-    const candidate = raw.candidates.find(c => c?.content?.parts) || raw.candidates[0];
-    const parts = candidate?.content?.parts || [];
-    const textSegments = [];
-    const toolCalls = [];
-
-    for (const part of parts) {
-      if (part?.functionCall) {
-        const fc = part.functionCall;
-        toolCalls.push({
-          id: fc?.name ? `gemini_${fc.name}_${toolCalls.length + 1}` : `gemini_call_${toolCalls.length + 1}`,
-          function: {
-            name: fc?.name || 'unknown_function',
-            arguments: JSON.stringify(fc?.args ?? {})
-          }
-        });
-      } else if (typeof part?.text === 'string') {
-        textSegments.push(part.text);
-      }
-    }
-
-    const combinedText = textSegments.join('\n').trim();
-    return attachProviderError({
-      content: combinedText,
-      display: combinedText,
-      toolCalls,
-      model: raw?.model,
-      usage: raw?.usage
-    }, raw);
+    return _handleGeminiFormat(raw);
   }
 
-  // OpenAI-compatible: { choices: [ { message: { content, tool_calls } } ] }
-  const __choices = raw && raw.choices;
-  const choice = Array.isArray(__choices) ? __choices[0] : undefined;
-  const msg = choice?.message ?? {};
-  const content = typeof msg.content === 'string' ? msg.content : '';
-
-  let toolCalls = msg.tool_calls || [];
-  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-    const args = msg.function_call.arguments;
-    toolCalls = [{
-      id: msg.function_call.id,
-      function: { name: msg.function_call.name, arguments: args }
-    }];
+  // 3. Check for Responses API style (prioritize over OpenAI fallback to fix unreachable code bug)
+  if (Array.isArray(raw?.output) && raw.output[0] && raw.output[0].content) {
+    return _handleResponsesAPIFormat(raw);
   }
 
-  if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
-    if (isDebugEnabled()) {
-      const logger = createLogger('AIDiagnostics');
-      logger.warn('Empty content detected in OpenAI-style response:', {
-        rawResponseStructure: {
-          hasChoices: !!(raw.choices && raw.choices.length > 0),
-          choicesCount: (raw.choices || []).length,
-          firstChoiceKeys: raw.choices?.[0] ? Object.keys(raw.choices[0]) : [],
-          messageKeys: raw.choices?.[0]?.message ? Object.keys(raw.choices[0].message) : [],
-          contentValue: raw.choices?.[0]?.message?.content,
-          contentType: typeof raw.choices?.[0]?.message?.content,
-          hasToolCalls: false
-        },
-        extractedContent: content,
-        extractedContentLength: content.length,
-        trimmedLength: content.trim().length,
-        model: raw?.model,
-        usage: raw?.usage
-      });
-    }
-    {
-      const logger = createLogger('AIDiagnostics');
-      logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: false });
-    }
-    return attachProviderError({
-      content: 'Empty response not allowed - please provide a meaningful response to the user.',
-      display: 'Empty response not allowed - please provide a meaningful response to the user.',
-      toolCalls: [],
-      model: raw?.model,
-      _parseError: true
-    }, raw);
-  }
-
-  // Responses API style
-  if (
-    !content &&
-    !toolCalls?.length &&
-    (Array.isArray(raw && raw.output) && (raw.output[0] && raw.output[0].content))
-  ) {
-    const parts = raw.output[0].content;
-    const text = parts.map?.(p => p?.text ?? '').filter(Boolean).join('\n');
-    return attachProviderError({
-      content: text || '', display: text || '', toolCalls: [], model: raw?.model, usage: raw?.usage
-    }, raw);
-  }
-
-  const normalized = {
-    content,
-    display: content,
-    toolCalls,
-    model: raw?.model,
-    usage: raw?.usage
-  };
-
-  // Inline fallback parsing if no native tool_calls
-  if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
-    const parseResult = parseInlineToolCall(normalized.content);
-    if (parseResult && parseResult.name) {
-      normalized.toolCalls = [{
-        id: `fallback_${Date.now()}`,
-        function: { name: parseResult.name, arguments: JSON.stringify(parseResult.arguments || {}) }
-      }];
-      normalized.content = parseResult.cleanedText;
-      normalized.display = parseResult.cleanedText;
-    } else if (parseResult && parseResult.parseError) {
-      const errorMessage = [
-        game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
-        '',
-        game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
-        game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
-        '',
-        game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
-      ].join('\n');
-      normalized.content = errorMessage;
-      normalized.display = errorMessage;
-      normalized._parseError = true;
-    }
-  }
-
-  try {
-    if (isDebugEnabled()) {
-      const diag = createLogger('AIDiagnostics');
-      const names = Array.isArray(normalized.toolCalls)
-        ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean)
-        : [];
-      diag.info('tool_calls', { count: names.length, names });
-    }
-  } catch { /* intentionally empty */ }
-
-  return attachProviderError(normalized, raw);
+  // 4. Fallback to OpenAI format (standard)
+  return _handleOpenAIFormat(raw);
 }
 
 /**
@@ -242,38 +67,12 @@ export function parseInlineToolCall(text) {
     }
   } catch { /* intentionally empty */ }
 
-  const tryParse = (s) => {
-    try { return JSON.parse(s); } catch (e) {
-      try {
-        const fixed = s
-          .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
-          .replace(/:\s*'([^']*)'(?=\s*[,}])/g, ': "$1"')
-          .replace(/,(\s*[}\]])/g, '$1')
-          .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function (match) {
-            const quoteCount = (match.match(/"/g) || []).length;
-            if (quoteCount % 2 !== 0 && quoteCount > 2) {
-              try { JSON.parse('{' + match + '}'); return match; } catch (e) {
-                return match.replace(/^"(.*)"$/, function (inner) {
-                  return '"' + inner.slice(1, -1).replace(/([^\\])"/g, '$1\\"') + '"';
-                });
-              }
-            }
-            return match;
-          })
-          // D&D 5e specific patterns and other heuristics are preserved in core; keep minimal here
-          ;
-        return JSON.parse(fixed);
-      } catch (e2) {
-        return null;
-      }
-    }
-  };
-
   const fenced = /```json([\s\S]*?)```/i;
   const match = cleanText.match(fenced);
   if (!match) return null;
   const block = match[1] || '';
-  const obj = tryParse(block.trim());
+  const obj = _tryParseJSON(block.trim());
+
   if (!obj) {
     try {
       if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
@@ -281,11 +80,220 @@ export function parseInlineToolCall(text) {
     return { parseError: 'Invalid JSON', content: block };
   }
 
+  return _extractToolCallFromObject(obj, cleanText, match[0]);
+}
+
+// --- Internal Helper Functions ---
+
+function _attachProviderError(payload, source) {
+  const result = { ...payload, raw: source };
+  if (source && source.errorCode) result.errorCode = source.errorCode;
+  if (source && source.errorMetadata) result.errorMetadata = source.errorMetadata;
+
+  if (source && source._originalResponse) {
+    result._originalResponse = source._originalResponse;
+  } else if (!result._originalResponse) {
+    result._originalResponse = source;
+  }
+  return result;
+}
+
+function _handleAlreadyNormalized(raw) {
+  if (!raw.content || raw.content.trim().length === 0) {
+    _logEmptyResponse('already-normalized', raw);
+    return _createErrorResponse('Empty response not allowed - please provide a meaningful response to the user.', raw);
+  }
+
+  return _attachProviderError({
+    content: raw.content,
+    display: raw.display ?? raw.content,
+    toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
+    model: raw.model,
+    usage: raw.usage
+  }, raw);
+}
+
+function _handleGeminiFormat(raw) {
+  const candidate = raw.candidates.find(c => c?.content?.parts) || raw.candidates[0];
+  const parts = candidate?.content?.parts || [];
+  const textSegments = [];
+  const toolCalls = [];
+
+  for (const part of parts) {
+    if (part?.functionCall) {
+      const fc = part.functionCall;
+      toolCalls.push({
+        id: fc?.name ? `gemini_${fc.name}_${toolCalls.length + 1}` : `gemini_call_${toolCalls.length + 1}`,
+        function: {
+          name: fc?.name || 'unknown_function',
+          arguments: JSON.stringify(fc?.args ?? {})
+        }
+      });
+    } else if (typeof part?.text === 'string') {
+      textSegments.push(part.text);
+    }
+  }
+
+  const combinedText = textSegments.join('\n').trim();
+  return _attachProviderError({
+    content: combinedText,
+    display: combinedText,
+    toolCalls,
+    model: raw?.model,
+    usage: raw?.usage
+  }, raw);
+}
+
+function _handleResponsesAPIFormat(raw) {
+  const parts = raw.output[0].content;
+  const text = Array.isArray(parts)
+    ? parts.map(p => p?.text ?? '').filter(Boolean).join('\n')
+    : '';
+
+  return _attachProviderError({
+    content: text || '',
+    display: text || '',
+    toolCalls: [],
+    model: raw?.model,
+    usage: raw?.usage
+  }, raw);
+}
+
+function _handleOpenAIFormat(raw) {
+  const __choices = raw && raw.choices;
+  const choice = Array.isArray(__choices) ? __choices[0] : undefined;
+  const msg = choice?.message ?? {};
+  const content = typeof msg.content === 'string' ? msg.content : '';
+
+  let toolCalls = msg.tool_calls || [];
+
+  // Handle deprecated function_call
+  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
+    toolCalls = [{
+      id: msg.function_call.id,
+      function: { name: msg.function_call.name, arguments: msg.function_call.arguments }
+    }];
+  }
+
+  if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
+    _logEmptyResponse('OpenAI-style', raw);
+    return _createErrorResponse('Empty response not allowed - please provide a meaningful response to the user.', raw);
+  }
+
+  const normalized = {
+    content,
+    display: content,
+    toolCalls,
+    model: raw?.model,
+    usage: raw?.usage
+  };
+
+  // Inline fallback parsing
+  if ((!Array.isArray(normalized.toolCalls) || normalized.toolCalls.length === 0)) {
+    const parseResult = parseInlineToolCall(normalized.content);
+    if (parseResult) {
+      if (parseResult.name) {
+        normalized.toolCalls = [{
+          id: `fallback_${Date.now()}`,
+          function: { name: parseResult.name, arguments: JSON.stringify(parseResult.arguments || {}) }
+        }];
+        normalized.content = parseResult.cleanedText;
+        normalized.display = parseResult.cleanedText;
+      } else if (parseResult.parseError) {
+        const errorMessage = _buildJsonParseErrorMessage(parseResult);
+        normalized.content = errorMessage;
+        normalized.display = errorMessage;
+        normalized._parseError = true;
+      }
+    }
+  }
+
+  _logToolCalls(normalized.toolCalls);
+  return _attachProviderError(normalized, raw);
+}
+
+// --- Utility Helpers ---
+
+function _logEmptyResponse(type, raw) {
+  if (isDebugEnabled()) {
+    const logger = createLogger('AIDiagnostics');
+    logger.warn(`Empty content detected in ${type} response:`, {
+      model: raw?.model,
+      usage: raw?.usage,
+      rawKeys: Object.keys(raw || {})
+    });
+  }
+  {
+    const logger = createLogger('AIDiagnostics');
+    logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: false });
+  }
+}
+
+function _createErrorResponse(message, raw) {
+  return _attachProviderError({
+    content: message,
+    display: message,
+    toolCalls: [],
+    model: raw?.model,
+    _parseError: true
+  }, raw);
+}
+
+function _logToolCalls(toolCalls) {
+  try {
+    if (isDebugEnabled()) {
+      const diag = createLogger('AIDiagnostics');
+      const names = Array.isArray(toolCalls)
+        ? toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean)
+        : [];
+      diag.info('tool_calls', { count: names.length, names });
+    }
+  } catch { /* intentionally empty */ }
+}
+
+function _buildJsonParseErrorMessage(parseResult) {
+  return [
+    game.i18n.format('SIMULACRUM.Errors.JSONParsingError', { error: parseResult.parseError }),
+    '',
+    game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
+    game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
+    '',
+    game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
+  ].join('\n');
+}
+
+function _tryParseJSON(s) {
+  try { return JSON.parse(s); } catch (e) {
+    try {
+      const fixed = s
+        .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
+        .replace(/:\s*'([^']*)'(?=\s*[,}])/g, ': "$1"')
+        .replace(/,(\s*[}\]])/g, '$1')
+        .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function (match) {
+          const quoteCount = (match.match(/"/g) || []).length;
+          if (quoteCount % 2 !== 0 && quoteCount > 2) {
+            try { JSON.parse('{' + match + '}'); return match; } catch (e) {
+              return match.replace(/^"(.*)"$/, function (inner) {
+                return '"' + inner.slice(1, -1).replace(/([^\\])"/g, '$1\\"') + '"';
+              });
+            }
+          }
+          return match;
+        });
+      return JSON.parse(fixed);
+    } catch (e2) {
+      return null;
+    }
+  }
+}
+
+function _extractToolCallFromObject(obj, cleanText, matchText) {
   // Accept either { tool_call: { name, arguments } } or { name, arguments }
   // Also support 'function' as alternative to 'name' (some models use this)
   const toolCall = obj.tool_call || obj;
   const name = toolCall?.name || toolCall?.function;
   let args = toolCall?.arguments ?? {};
+
   if (!name) {
     try {
       if (isDebugEnabled()) {
@@ -298,8 +306,7 @@ export function parseInlineToolCall(text) {
   }
 
   if (typeof args === 'string') {
-    const parsedArgs = tryParse(args);
-    args = parsedArgs || {};
+    args = _tryParseJSON(args) || {};
   }
 
   try {
@@ -310,7 +317,7 @@ export function parseInlineToolCall(text) {
     }
   } catch (e) { return null; }
 
-  const cleanedText = cleanText.replace(match[0], '').trim();
+  const cleanedText = cleanText.replace(matchText, '').trim();
 
   try {
     if (isDebugEnabled()) {
@@ -321,5 +328,9 @@ export function parseInlineToolCall(text) {
     }
   } catch { /* intentionally empty */ }
 
-  return { name, arguments: args, cleanedText };
+  return {
+    name,
+    arguments: args,
+    cleanedText
+  };
 }
