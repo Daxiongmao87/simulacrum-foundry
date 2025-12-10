@@ -205,7 +205,7 @@ export function normalizeAIResponse(raw) {
       const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
       diag.info('tool_calls', { count: names.length, names });
     }
-  } catch { }
+  } catch { /* intentionally empty */ }
 
   return attachProviderError(normalized, raw);
 }
@@ -228,14 +228,14 @@ export function parseInlineToolCall(text) {
         hadThinkTags: text.includes('<think>')
       });
     }
-  } catch { }
+  } catch { /* intentionally empty */ }
 
   const tryParse = (s) => {
     try { return JSON.parse(s); } catch (e) {
       try {
         const fixed = s
           .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
-          .replace(/:\s*'([^']*)'(?=\s*[,\}])/g, ': "$1"')
+          .replace(/:\s*'([^']*)'(?=\s*[,}])/g, ': "$1"')
           .replace(/,(\s*[}\]])/g, '$1')
           .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function (match) {
             const quoteCount = (match.match(/"/g) || []).length;
@@ -265,7 +265,7 @@ export function parseInlineToolCall(text) {
   if (!obj) {
     try {
       if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
-    } catch { }
+    } catch { /* intentionally empty */ }
     return { parseError: 'Invalid JSON', content: block };
   }
 
@@ -281,7 +281,7 @@ export function parseInlineToolCall(text) {
           keys: Object.keys(obj)
         });
       }
-    } catch { }
+    } catch { /* intentionally empty */ }
     return null;
   }
 
@@ -293,7 +293,7 @@ export function parseInlineToolCall(text) {
   try {
     const info = toolRegistry.getToolInfo(name);
     if (!info) {
-      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch { }
+      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch { /* intentionally empty */ }
       return null;
     }
   } catch (e) { return null; }
@@ -307,7 +307,7 @@ export function parseInlineToolCall(text) {
         argsKeys: Object.keys(args)
       });
     }
-  } catch { }
+  } catch { /* intentionally empty */ }
 
   return { name, arguments: args, cleanedText };
 }

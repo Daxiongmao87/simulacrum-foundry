@@ -16,7 +16,7 @@ const logger = createLogger('SidebarSync');
  * @param {object} options - Processing options
  * @returns {Promise<string>} Processed HTML content
  */
-export async function processMessageForDisplay(content, options = {}) {
+export async function processMessageForDisplay(content, _options = {}) {
     let processedContent = String(content ?? '');
 
     // Transform <think></think> tags to collapsible spoilers

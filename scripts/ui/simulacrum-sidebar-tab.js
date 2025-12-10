@@ -11,12 +11,13 @@ import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import {
   syncMessagesFromCore,
   createWelcomeMessage as createWelcome,
-  initializeChatHandler
 } from './sidebar-state-syncer.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
-const AbstractSidebarTab = foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
-const HandlebarsApplicationMixin = foundry?.applications?.api?.HandlebarsApplicationMixin ?? globalThis.HandlebarsApplicationMixin;
+const AbstractSidebarTab =
+  foundry?.applications?.sidebar?.AbstractSidebarTab ?? globalThis.AbstractSidebarTab;
+const HandlebarsApplicationMixin =
+  foundry?.applications?.api?.HandlebarsApplicationMixin ?? globalThis.HandlebarsApplicationMixin;
 
 export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSidebarTab) {
   /**
@@ -212,7 +213,10 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    */
   async #renderNotifications() {
     const right = document.getElementById("ui-right-column-1") ?? document.body;
-    const html = await renderTemplate("templates/simulacrum/sidebar-notifications.hbs", { user: game.user });
+    const html = await renderTemplate(
+      "templates/simulacrum/sidebar-notifications.hbs",
+      { user: game.user }
+    );
     [this.#notificationsElement, this.#inputElement, this.#chatControls] = foundry.utils.parseHTML(html);
     this.#notificationsElement.addEventListener("click", this._onClickNotification.bind(this));
     this.#inputElement.addEventListener("keydown", this._onKeyDown.bind(this));
@@ -290,7 +294,8 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
     }
 
     if (embedInput) {
-      const target = ui.sidebar.popouts[this.tabName]?.rendered && !closing ? ui.sidebar.popouts[this.tabName] : ui.sidebar;
+      const popout = ui.sidebar.popouts[this.tabName];
+      const target = popout?.rendered && !closing ? popout : ui.sidebar;
       target.element?.querySelector(".chat-form")?.append(chatControls, inputElement);
     } else {
       notifications.append(inputElement, chatControls);
@@ -526,8 +531,9 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       isAtBottom: this.#isAtBottom,
       processActive: processActive,
       processLabel: processLabel,
-      processLabel: processLabel,
-      disableInput: !this.isPopout && !!ui.sidebar.popouts[this.constructor.tabName]?.rendered && !this._popoutClosing
+      disableInput: !this.isPopout &&
+        !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
+        !this._popoutClosing
     });
   }
 
@@ -615,7 +621,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       await this.addMessage('user', message);
 
       // Define callbacks for ChatHandler
-      const onUserMessage = ({ content }) => {
+      const onUserMessage = ({ _content }) => {
         // User message already added above
       };
 
@@ -626,7 +632,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
       };
 
       // onError: Rollback user message from UI and restore to textarea
-      const onError = ({ originalMessage, error }) => {
+      const onError = ({ originalMessage, _error }) => {
         // Remove the user message we just added to the UI
         if (this.messages.length > 0 && this.messages[this.messages.length - 1]?.role === 'user') {
           this.messages.pop();
@@ -690,7 +696,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  async _onJumpToBottom(event, target) {
+  async _onJumpToBottom(_event, _target) {
     this.scrollBottom();
   }
 
@@ -700,7 +706,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
    * @param {HTMLElement} target - The target element
    * @private
    */
-  async _onCancelProcess(event, target) {
+  async _onCancelProcess(_event, _target) {
     try {
       // Cancel through SimulacrumCore (it handles the actual abort controller)
       const { SimulacrumCore } = await import('../core/simulacrum-core.js');
@@ -999,7 +1005,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         form.dataset.simulacrumBound = '1';
         form.addEventListener('submit', (event) => {
           event.preventDefault();
-          const input = form.querySelector('textarea[name=\"message\"]');
+          const input = form.querySelector('textarea[name="message"]');
           if (input) SimulacrumSidebarTab._onSendMessage.call(this, event, input);
         });
       }

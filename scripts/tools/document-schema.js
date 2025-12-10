@@ -4,7 +4,6 @@
 
 import { BaseTool } from './base-tool.js';
 import { DocumentAPI } from '../core/document-api.js';
-import { detectDocumentReferences } from '../utils/schema-introspection.js';
 
 class DocumentSchemaTool extends BaseTool {
   /**
@@ -14,9 +13,9 @@ class DocumentSchemaTool extends BaseTool {
     super('inspect_document_schema', 'Inspect schema for any document type.  Important for creating rich documents.', {
       type: 'object',
       properties: {
-        documentType: { 
-          type: 'string', 
-          description: 'Document type to get schema for (optional - returns all if omitted)' 
+        documentType: {
+          type: 'string',
+          description: 'Document type to get schema for (optional - returns all if omitted)'
         }
       }
     });
@@ -72,13 +71,13 @@ class DocumentSchemaTool extends BaseTool {
 
     return `**${documentType} Schema**
 ` +
-           `Fields: ${schema.fields.join(', ')}
+      `Fields: ${schema.fields.join(', ')}
 ` +
-           `System Fields: ${schema.systemFields.join(', ')}
+      `System Fields: ${schema.systemFields.join(', ')}
 ` +
-           `Embedded Documents: ${schema.embedded.length > 0 ? schema.embedded.join(', ') + ' (use inspect_document_schema to view their schemas)' : 'None'}
+      `Embedded Documents: ${schema.embedded.length > 0 ? schema.embedded.join(', ') + ' (use inspect_document_schema to view their schemas)' : 'None'}
 ` +
-           `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}`;
+      `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}`;
   }
 
   /**
@@ -92,9 +91,9 @@ class DocumentSchemaTool extends BaseTool {
     }
 
     return '**Available Document Types**\n' +
-           types.map(type => 
-             `- ${type.name} (${type.collection} in world, ${type.compendiums} in compendiums)`
-           ).join('\n');
+      types.map(type =>
+        `- ${type.name} (${type.collection} in world, ${type.compendiums} in compendiums)`
+      ).join('\n');
   }
 }
 

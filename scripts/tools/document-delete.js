@@ -3,7 +3,6 @@
  */
 
 import { BaseTool } from './base-tool.js';
-import { SimulacrumError } from '../utils/errors.js';
 import { DocumentAPI } from '../core/document-api.js';
 import { ValidationErrorHandler } from '../utils/validation-errors.js';
 
@@ -15,13 +14,13 @@ class DocumentDeleteTool extends BaseTool {
     super('delete_document', 'Delete documents of any type supported by current system.', {
       type: 'object',
       properties: {
-        documentType: { 
-          type: 'string', 
+        documentType: {
+          type: 'string',
           required: true,
           description: 'Type of document to delete'
         },
-        documentId: { 
-          type: 'string', 
+        documentId: {
+          type: 'string',
           required: true,
           description: 'ID of document to delete'
         }

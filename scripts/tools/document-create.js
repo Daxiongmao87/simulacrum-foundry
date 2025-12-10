@@ -4,7 +4,6 @@
  */
 
 import { BaseTool } from './base-tool.js';
-import { SimulacrumError } from '../utils/errors.js';
 import { ValidationErrorHandler } from '../utils/validation-errors.js';
 
 /**

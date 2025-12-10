@@ -533,7 +533,7 @@ export function registerAdvancedSettings() {
  */
 export function registerSettingsEnhancements() {
   // Handle settings UI rendering to convert text inputs to textareas
-  Hooks.on("renderSettingsConfig", (app, html, data) => {
+  Hooks.on("renderSettingsConfig", (app, html, _data) => {
     // Wait a short moment to ensure DOM is fully rendered
     setTimeout(() => {
       try {

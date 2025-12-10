@@ -8,7 +8,7 @@
  */
 
 import { SimulacrumCore } from './core/simulacrum-core.js';
-import SimulacrumSidebarTab, { registerSimulacrumSidebarTab } from './ui/simulacrum-sidebar-tab.js';
+import { registerSimulacrumSidebarTab } from './ui/simulacrum-sidebar-tab.js';
 import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
 

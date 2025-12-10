@@ -31,7 +31,7 @@ export class Logger {
   static isDebugEnabled() {
     try {
       if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
-    } catch {}
+    } catch { /* intentionally empty */ }
     // Default to true during development; flip to false at release.
     return true;
   }

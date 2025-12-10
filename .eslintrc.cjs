@@ -56,7 +56,13 @@ module.exports = {
     jQuery: 'readonly',
     $: 'readonly',
     // Module globals
-    SimulacrumCore: 'readonly'
+    SimulacrumCore: 'readonly',
+    // Additional FoundryVTT globals
+    loadTemplates: 'readonly',
+    renderTemplate: 'readonly',
+    Folder: 'readonly',
+    Macro: 'readonly',
+    fromUuid: 'readonly'
   },
   rules: {
     // Line length limit
