@@ -108,6 +108,12 @@ class ConversationEngine {
     const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
     const currentToolSupport = !legacyMode;
 
+    // Fix: Ensure the assistant message invoking the tools is added to conversation history
+    // so that subsequent requests in the loop include it in the context.
+    if (currentToolSupport && aiResponse.toolCalls.length > 0) {
+      this.conversationManager.addMessage('assistant', aiResponse.content || '', aiResponse.toolCalls);
+    }
+
     const finalResponse = await processToolCallLoop(
       aiResponse,
       tools,

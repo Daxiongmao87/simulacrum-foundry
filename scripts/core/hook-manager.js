@@ -11,7 +11,9 @@
 export const SimulacrumHooks = Object.freeze({
     // Process lifecycle hooks
     PROCESS_STATUS: 'simulacrum:processStatus',
+    PROCESS_STATUS: 'simulacrum:processStatus',
     PROCESS_CANCELLED: 'simulacrum:processCancelled',
+    RETRY_STATUS: 'simulacrum:retryStatus',
 
     // Document operation hooks
     DOCUMENT_CHANGED: 'simulacrum:documentChanged',
@@ -64,6 +66,19 @@ export function emitProcessStatus(state, callId, label = null, toolName = null) 
  */
 export function emitProcessCancelled() {
     emitHook(SimulacrumHooks.PROCESS_CANCELLED, {});
+}
+
+/**
+ * Emit retry status update
+ * @param {string} state - 'start' or 'end'
+ * @param {string} callId - Unique retry call identifier
+ * @param {string|null} [label] - Optional label for retry attempt
+ */
+export function emitRetryStatus(state, callId, label = null) {
+    const payload = state === 'start'
+        ? { state, callId, label }
+        : { state, callId };
+    emitHook(SimulacrumHooks.RETRY_STATUS, payload);
 }
 
 /**

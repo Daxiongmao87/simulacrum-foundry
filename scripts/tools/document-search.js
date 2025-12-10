@@ -13,23 +13,23 @@ class DocumentSearchTool extends BaseTool {
     super('search_documents', 'Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.', {
       type: 'object',
       properties: {
-        query: { 
-          type: 'string', 
+        query: {
+          type: 'string',
           required: true,
           description: 'Search text - can be document names, content, or keywords.'
         },
-        documentTypes: { 
+        documentTypes: {
           type: 'array',
           items: { type: 'string' },
           description: 'Limit search to specific document types (optional - searches all types if omitted)'
         },
-        fields: { 
+        fields: {
           type: 'array',
           items: { type: 'string' },
           description: 'Specific document fields to search in (optional - searches all fields if omitted)'
         },
-        maxResults: { 
-          type: 'number', 
+        maxResults: {
+          type: 'number',
           default: 20,
           description: 'Maximum number of results to return (default: 20)'
         }
@@ -52,8 +52,8 @@ class DocumentSearchTool extends BaseTool {
         maxResults: params.maxResults
       });
 
-      // Results are already limited by maxResults in the API
-      const limitedResults = results;
+      // Ensure results are limited even if API returns more
+      const limitedResults = params.maxResults ? results.slice(0, params.maxResults) : results;
 
       return {
         content: 'Found ' + limitedResults.length + ' documents matching "' + params.query + '"',
@@ -80,7 +80,7 @@ class DocumentSearchTool extends BaseTool {
     }
 
     const formattedResults = results.map(doc => {
-      const name = doc.name || doc.title || 'Untitled';
+      const name = doc.name || doc.title || doc._id || 'Untitled';
       const id = doc._id || 'Unknown ID';
       const type = doc.type || 'Unknown';
       return '- **' + name + '** (ID: ' + id + ', Type: ' + type + ')';

@@ -35,20 +35,28 @@ describe('DocumentReadTool - constructor', () => {
       expect(documentReadTool.schema).toEqual({
         type: 'object',
         properties: {
-          documentType: { 
-            type: 'string', 
+          documentType: {
+            type: 'string',
             required: true,
             description: 'Type of document to read'
           },
-          documentId: { 
-            type: 'string', 
+          documentId: {
+            type: 'string',
             required: true,
             description: 'ID of document to read'
           },
-          includeEmbedded: { 
-            type: 'boolean', 
-            default: true,
-            description: 'Include embedded documents (tokens, items, etc.)'
+          includeEmbedded: {
+            type: 'boolean',
+            description: 'Include embedded documents (tokens, items, etc.)',
+            default: true
+          },
+          startLine: {
+            type: 'integer',
+            description: 'Start line for pagination (1-indexed). Optional.'
+          },
+          endLine: {
+            type: 'integer',
+            description: 'End line for pagination (inclusive). Optional.'
           }
         },
         required: ['documentType', 'documentId']
@@ -77,17 +85,17 @@ describe('DocumentReadTool - Utility Methods', () => {
     });
 
     it('should execute document reading successfully', async () => {
-      DocumentAPI.getDocument.mockResolvedValue({ 
+      DocumentAPI.getDocument.mockResolvedValue({
         name: 'Test Actor',
         type: 'character',
         system: { abilities: {} }
       });
 
-      const result = await documentReadTool.execute({ 
-        documentType: 'Actor', 
-        documentId: 'test-id' 
+      const result = await documentReadTool.execute({
+        documentType: 'Actor',
+        documentId: 'test-id'
       });
-      
+
       const [header, jsonText] = result.content.split(/\n\n/);
       const parsed = JSON.parse(jsonText);
       expect(header).toBe('Read Actor: Test Actor');
@@ -97,7 +105,7 @@ describe('DocumentReadTool - Utility Methods', () => {
     });
 
     it('should include journal pages in JSON payload', async () => {
-      DocumentAPI.getDocument.mockResolvedValue({ 
+      DocumentAPI.getDocument.mockResolvedValue({
         name: 'World of Venoure',
         pages: [{ id: 'page1', text: { content: '<p>Continents</p>' } }]
       });
@@ -135,43 +143,43 @@ describe.each(createParameterizedSystemTests())(
     describe('execute', () => {
       it('should return document content for valid document types', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const testDocType = documentTypes[0];
         const mockDocument = { name: 'Test Document', _id: '123' };
         const mockSchema = { type: testDocType, fields: ['name', '_id'], systemFields: [] };
-        
+
         DocumentAPI.getDocument.mockResolvedValue(mockDocument);
         DocumentAPI.getDocumentSchema.mockReturnValue(mockSchema);
-        
-        const result = await documentReadTool.execute({ 
-          documentType: testDocType, 
-          documentId: '123' 
+
+        const result = await documentReadTool.execute({
+          documentType: testDocType,
+          documentId: '123'
         });
-        
+
         expect(result.content).toContain('Test Document');
         expect(result.display).toContain(`**Test Document** (${testDocType})`);
       });
 
       it('should return error for non-existent document', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const testDocType = documentTypes[0];
         DocumentAPI.getDocument.mockRejectedValue(new Error('Document not found'));
-        
-        const result = await documentReadTool.execute({ 
-          documentType: testDocType, 
-          documentId: 'nonexistent' 
+
+        const result = await documentReadTool.execute({
+          documentType: testDocType,
+          documentId: 'nonexistent'
         });
-        
+
         expect(result.content).toBe(`Failed to read ${testDocType} document: Document not found`);
         expect(result.display).toBe('❌ Error reading document: Document not found');
-        expect(result.error).toEqual({ 
-          message: 'Document not found', 
-          type: 'DOCUMENT_NOT_FOUND' 
+        expect(result.error).toEqual({
+          message: 'Document not found',
+          type: 'DOCUMENT_NOT_FOUND'
         });
       });
 
@@ -187,11 +195,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle malformed document IDs', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         const malformedIds = [
           null,
           undefined,
@@ -212,11 +220,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle DocumentAPI failures gracefully', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         const apiErrors = [
           new Error('Network timeout'),
           new Error('Permission denied'),
@@ -226,7 +234,7 @@ describe.each(createParameterizedSystemTests())(
 
         for (const error of apiErrors) {
           DocumentAPI.getDocument.mockRejectedValueOnce(error);
-          
+
           const result = await documentReadTool.execute({
             documentType: validType,
             documentId: 'test-doc'
@@ -241,15 +249,15 @@ describe.each(createParameterizedSystemTests())(
     describe('Performance Testing', () => {
       it('should complete document reading within performance threshold', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
         const mockDocument = { name: 'Perf Test Doc', _id: 'perf-test' };
-        
+
         DocumentAPI.getDocument.mockResolvedValueOnce(mockDocument);
         DocumentAPI.getDocumentSchema.mockReturnValue({ fields: [], systemFields: [] });
-        
+
         const readDocument = () => documentReadTool.execute({
           documentType: validType,
           documentId: 'perf-test'
@@ -257,35 +265,35 @@ describe.each(createParameterizedSystemTests())(
 
         // Should complete within 300ms
         const result = PerformanceHelpers.assertPerformance(readDocument, 300);
-        
+
         await expect(result).resolves.toBeDefined();
       });
 
       it('should handle batch document reading efficiently', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
-        DocumentAPI.getDocument.mockImplementation(() => 
-          Promise.resolve({ 
-            name: `Batch Doc ${Date.now()}`, 
-            _id: `batch-${Math.random()}` 
+
+        DocumentAPI.getDocument.mockImplementation(() =>
+          Promise.resolve({
+            name: `Batch Doc ${Date.now()}`,
+            _id: `batch-${Math.random()}`
           })
         );
-        
+
         DocumentAPI.getDocumentSchema.mockReturnValue({ fields: [], systemFields: [] });
-        
+
         const promises = Array.from({ length: 5 }, (_, i) =>
           documentReadTool.execute({
             documentType: validType,
             documentId: `batch-doc-${i}`
           })
         );
-        
+
         const { duration } = PerformanceHelpers.measureTime(() => Promise.all(promises));
-        
+
         // Batch reading should complete within reasonable time
         expect(duration).toBeLessThan(800); // 800ms for 5 documents
       });
@@ -295,7 +303,7 @@ describe.each(createParameterizedSystemTests())(
       it('should handle systems with no document types', () => {
         if (Object.keys(game.documentTypes || {}).length === 0) {
           expect(() => new DocumentReadTool()).not.toThrow();
-          
+
           return documentReadTool.execute({
             documentType: 'AnyType',
             documentId: 'test'
@@ -307,11 +315,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle documents with special characters and unicode', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         const specialCharDoc = {
           name: 'Test 🧙‍♂️ Document with émojis and accénts',
           _id: 'unicode-test',
@@ -320,7 +328,7 @@ describe.each(createParameterizedSystemTests())(
 
         DocumentAPI.getDocument.mockResolvedValueOnce(specialCharDoc);
         DocumentAPI.getDocumentSchema.mockReturnValue({ fields: [], systemFields: [] });
-        
+
         const result = await documentReadTool.execute({
           documentType: validType,
           documentId: 'unicode-test'
@@ -332,11 +340,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle deeply nested document structures', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         const deeplyNestedDoc = {
           name: 'Nested Doc',
           _id: 'nested-test',
@@ -353,7 +361,7 @@ describe.each(createParameterizedSystemTests())(
 
         DocumentAPI.getDocument.mockResolvedValueOnce(deeplyNestedDoc);
         DocumentAPI.getDocumentSchema.mockReturnValue({ fields: [], systemFields: [] });
-        
+
         const result = await documentReadTool.execute({
           documentType: validType,
           documentId: 'nested-test',
@@ -365,11 +373,11 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle circular reference prevention', async () => {
         const documentTypes = Object.keys(game.documentTypes || {});
-        
+
         if (documentTypes.length === 0) return;
-        
+
         const validType = documentTypes[0];
-        
+
         // Create circular reference structure
         const circularDoc = {
           name: 'Circular Doc',
@@ -379,7 +387,7 @@ describe.each(createParameterizedSystemTests())(
 
         DocumentAPI.getDocument.mockResolvedValueOnce(circularDoc);
         DocumentAPI.getDocumentSchema.mockReturnValue({ fields: [], systemFields: [] });
-        
+
         const result = await documentReadTool.execute({
           documentType: validType,
           documentId: 'circular-test'
@@ -420,13 +428,13 @@ describe('DocumentReadTool - Utility Methods', () => {
         data: { hp: 100 },
         secret: 'should not be included'
       };
-      
+
       const result = await documentReadTool.prepareDocumentData(
-        document, 
-        ['name', 'type'], 
+        document,
+        ['name', 'type'],
         0
       );
-      
+
       expect(result.name).toBe('Test Document');
       expect(result.type).toBe('Actor');
       expect(result.id).toBeUndefined();
@@ -439,9 +447,9 @@ describe('DocumentReadTool - Utility Methods', () => {
         name: 'Test Document',
         type: 'Actor'
       };
-      
+
       const result = await documentReadTool.prepareDocumentData(document, [], 0);
-      
+
       expect(result.id).toBe('test123');
       expect(result.name).toBe('Test Document');
       expect(result.type).toBe('Actor');
@@ -455,9 +463,9 @@ describe('DocumentReadTool - Utility Methods', () => {
         name: 'Test Document',
         nested: { data: 'value' }
       };
-      
+
       const result = await documentReadTool.prepareDocumentData(document, [], 1);
-      
+
       expect(result.id).toBe('test123');
       expect(result.nested).toBeDefined();
     });
@@ -467,13 +475,13 @@ describe('DocumentReadTool - Utility Methods', () => {
     it('should return data unchanged when remainingDepth < 0', async () => {
       const data = { test: 'value' };
       const result = await documentReadTool.processReferences(data, -1);
-      
+
       expect(result).toEqual(data);
     });
 
     it('should return data unchanged when data is null', async () => {
       const result = await documentReadTool.processReferences(null, 5);
-      
+
       expect(result).toBe(null);
     });
 
@@ -482,9 +490,9 @@ describe('DocumentReadTool - Utility Methods', () => {
         { id: '1', name: 'Doc 1' },
         { id: '2', name: 'Doc 2' }
       ];
-      
+
       const result = await documentReadTool.processReferences(data, 1);
-      
+
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('1');
@@ -504,9 +512,9 @@ describe('DocumentReadTool - Utility Methods', () => {
         _sheet: 'should be removed',
         keepThis: 'should remain'
       };
-      
+
       const result = await documentReadTool.processReferences(data, 1);
-      
+
       expect(result.id).toBe('test123');
       expect(result.name).toBe('Test');
       expect(result.keepThis).toBe('should remain');
@@ -528,9 +536,9 @@ describe('DocumentReadTool - Utility Methods', () => {
           }
         }
       };
-      
+
       const result = await documentReadTool.processReferences(data, 2);
-      
+
       expect(result.nested.keepThis).toBe('should remain');
       expect(result.nested._index).toBeUndefined();
       expect(result.nested.deepNested.value).toBe('deep value');
@@ -544,7 +552,7 @@ describe('DocumentReadTool - Utility Methods', () => {
       const originalWarn = console.warn;
       // eslint-disable-next-line no-console
       console.warn = jest.fn();
-      
+
       const data = {
         id: 'test123',
         problematicField: {
@@ -554,9 +562,9 @@ describe('DocumentReadTool - Utility Methods', () => {
           }
         }
       };
-      
+
       const result = await documentReadTool.processReferences(data, 1);
-      
+
       expect(result.id).toBe('test123');
       // eslint-disable-next-line no-console
       expect(console.warn).toHaveBeenCalledWith(
@@ -564,7 +572,7 @@ describe('DocumentReadTool - Utility Methods', () => {
         expect.stringContaining('Error processing nested reference'),
         expect.any(Error)
       );
-      
+
       // Restore console.warn
       // eslint-disable-next-line no-console
       console.warn = originalWarn;
@@ -582,10 +590,10 @@ describe('DocumentReadTool - Utility Methods', () => {
   describe('getExamples', () => {
     it('should return usage examples', () => {
       const examples = documentReadTool.getExamples();
-      
+
       expect(Array.isArray(examples)).toBe(true);
       expect(examples.length).toBeGreaterThan(0);
-      
+
       examples.forEach(example => {
         expect(example).toHaveProperty('description');
         expect(example).toHaveProperty('parameters');
@@ -598,11 +606,11 @@ describe('DocumentReadTool - Utility Methods', () => {
   describe('getRequiredPermissions', () => {
     it('should return required permissions', () => {
       const permissions = documentReadTool.getRequiredPermissions();
-      
+
       expect(permissions).toHaveProperty('FILES_BROWSE');
       expect(permissions).toHaveProperty('DOCUMENT_CREATE');
       expect(permissions).toHaveProperty('DOCUMENT_READ');
-      
+
       expect(permissions.FILES_BROWSE).toBe(true);
       expect(permissions.DOCUMENT_CREATE).toBe(false);
       expect(permissions.DOCUMENT_READ).toBe(true);
@@ -615,20 +623,20 @@ describe('DocumentReadTool - System-Agnostic Validation', () => {
   afterEach(() => {
     cleanupMockEnvironment();
   });
-  
+
   it('should maintain consistent behavior across all systems', async () => {
     // Test that error handling works the same way regardless of system
     for (const system of ['D&D 5e', 'Pathfinder 2e', 'Minimal Core']) {
       setupMockFoundryEnvironment(system);
       const tool = new DocumentReadTool();
-      
+
       const result = await tool.execute({
         documentType: 'InvalidType',
         documentId: 'test'
       });
-      
+
       expect(result.error).toBeDefined();
-      
+
       cleanupMockEnvironment();
     }
   });

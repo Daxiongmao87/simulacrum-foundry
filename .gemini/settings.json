@@ -1,0 +1,6 @@
+{
+    "allowlist": [
+        "specs/**",
+        "reference/**"
+    ]
+}

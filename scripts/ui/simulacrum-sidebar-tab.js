@@ -743,7 +743,9 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
   async scrollBottom({ waitImages = false, container = null } = {}) {
     let scroll = container;
     if (!scroll) {
-      scroll = this.element?.querySelector('.chat-scroll');
+      const isJQuery = typeof jQuery !== 'undefined' && this.element instanceof jQuery;
+      const el = isJQuery ? this.element[0] : this.element;
+      scroll = el?.querySelector('.chat-scroll');
     }
     if (!(scroll instanceof HTMLElement)) {
       return false;
@@ -948,7 +950,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
         // Escape key cancels AI processing (Task-05)
         if (event.key === 'Escape' && this._activeProcesses.size > 0) {
           event.preventDefault();
-          SimulacrumSidebarTab._onCancelProcess.call(this, event, input);
+          this._onCancelProcess(event, input);
           return;
         }
 
@@ -962,7 +964,7 @@ export default class SimulacrumSidebarTab extends HandlebarsApplicationMixin(Abs
           if (this._activeProcesses.size > 0) {
             return;
           }
-          SimulacrumSidebarTab._onSendMessage.call(this, event, input);
+          this._onSendMessage(event, input);
         }
       });
 

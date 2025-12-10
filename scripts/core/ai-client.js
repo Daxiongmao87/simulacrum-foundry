@@ -6,11 +6,14 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
 import { normalizeAIResponse } from '../utils/ai-normalization.js';
+// Import providers
 import { AIProvider } from './providers/base-provider.js';
 import { GeminiProvider } from './providers/gemini-provider.js';
+import { MockAIProvider } from './providers/mock-provider.js';
+import { OpenAIProvider } from './providers/openai-provider.js';
 
 // Re-export providers for backward compatibility
-export { AIProvider, MockAIProvider, OpenAIProvider, GeminiProvider } from './providers/index.js';
+export { AIProvider, MockAIProvider, OpenAIProvider, GeminiProvider };
 
 export const AI_ERROR_CODES = Object.freeze({
   TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE'

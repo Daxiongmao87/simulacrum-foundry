@@ -16,6 +16,9 @@ class ChatHandler {
    * Handles the complete flow: user input -> AI -> tools -> UI
    */
   async processUserMessage(message, user, options = {}) {
+    // Track if this is the initial user send (for rollback)
+    const isInitialSend = true;
+
     try {
       // Add user message to conversation state
       this.addMessageToConversation('user', message);
@@ -53,10 +56,34 @@ class ChatHandler {
         return cancelMessage;
       }
 
-      const errorMessage = { role: 'assistant', content: `Error: ${error.message}`, display: `❌ ${error.message}` };
-      this.addMessageToConversation('assistant', errorMessage.content);
-      this.addMessageToUI(errorMessage, options);
-      return errorMessage;
+      // API/Network errors: Show via FoundryVTT notification system, NOT in chat
+      if (global.ui?.notifications?.error) {
+        ui.notifications.error(`Simulacrum: ${error.message}`, { permanent: false });
+      } else {
+        this.logger.error(`Simulacrum Error: ${error.message}`);
+      }
+      return {
+        content: `Error: ${error.message}`,
+        display: `❌ ${error.message}`,
+        error
+      };
+
+      // If this was the initial user send, rollback by removing the user message from history
+      if (isInitialSend) {
+        // Remove the last user message we just added
+        const msgs = this.conversationManager.messages;
+        if (msgs.length > 0 && msgs[msgs.length - 1]?.role === 'user') {
+          msgs.pop();
+        }
+
+        // Signal UI to restore message to textarea (if callback provided)
+        if (options.onError) {
+          options.onError({ originalMessage: message, error });
+        }
+      }
+
+      // Return null to indicate no assistant response was generated
+      return null;
     }
   }
 
@@ -283,7 +310,8 @@ class ChatHandler {
           display: formattedDisplay
         }, options);
       }
-    } else if (toolResult.role === 'assistant') {
+    } else if (toolResult.role === 'assistant' && toolResult.content) {
+      // Only add assistant messages that have actual content
       this.addMessageToConversation('assistant', toolResult.content);
       this.addMessageToUI({
         role: 'assistant',

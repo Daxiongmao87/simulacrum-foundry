@@ -24,7 +24,8 @@ jest.mock('../scripts/ui/simulacrum-sidebar-tab.js', () => ({
 }));
 
 jest.mock('../scripts/ui/settings-interface.js', () => ({
-  registerAdvancedSettings: mockRegisterAdvancedSettings
+  registerAdvancedSettings: mockRegisterAdvancedSettings,
+  registerSettingsEnhancements: jest.fn()
 }));
 
 jest.mock('../scripts/utils/logger.js', () => ({
@@ -38,7 +39,18 @@ global.Hooks = {
 
 global.game = {
   settings: {
+    register: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+  },
+  keybindings: {
     register: jest.fn()
+  },
+  modules: {
+    get: jest.fn().mockReturnValue({ api: {} })
+  },
+  user: {
+    isGM: true
   },
   i18n: {
     localize: jest.fn((key) => key)
@@ -63,7 +75,7 @@ global.window = {
 
 describe('Simulacrum Module Initialization', () => {
   let moduleExports;
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetModules();
@@ -94,7 +106,7 @@ describe('Simulacrum Module Initialization', () => {
 
   describe('Init Hook Handler', () => {
     let initHandler;
-    
+
     beforeEach(() => {
       moduleExports = require('../scripts/simulacrum.js');
       const initCall = Hooks.once.mock.calls.find(call => call[0] === 'init');
@@ -103,7 +115,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should initialize all components when init hook fires', async () => {
       await initHandler();
-      
+
       expect(mockSimulacrumCoreInit).toHaveBeenCalled();
       expect(mockRegisterSidebarTab).toHaveBeenCalled();
       expect(mockRegisterAdvancedSettings).toHaveBeenCalled();
@@ -120,7 +132,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should register API key setting during init', async () => {
       await initHandler();
-      
+
       expect(game.settings.register).toHaveBeenCalledWith(
         'simulacrum',
         'apiKey',
@@ -135,7 +147,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should register base URL setting during init', async () => {
       await initHandler();
-      
+
       expect(game.settings.register).toHaveBeenCalledWith(
         'simulacrum',
         'baseURL',
@@ -150,7 +162,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should register model setting during init', async () => {
       await initHandler();
-      
+
       expect(game.settings.register).toHaveBeenCalledWith(
         'simulacrum',
         'model',
@@ -165,7 +177,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should use logger for initialization messages', async () => {
       await initHandler();
-      
+
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Initializing Simulacrum AI Assistant'
       );
@@ -175,11 +187,11 @@ describe('Simulacrum Module Initialization', () => {
 
   describe('Ready Hook Handler', () => {
     let readyHandler;
-    
+
     beforeEach(() => {
       // Reset window.ui for each test
       global.window.ui = {};
-      
+
       moduleExports = require('../scripts/simulacrum.js');
       const readyCall = Hooks.once.mock.calls.find(call => call[0] === 'ready');
       readyHandler = readyCall[1];
@@ -192,7 +204,7 @@ describe('Simulacrum Module Initialization', () => {
 
     it('should use logger for ready messages', async () => {
       await readyHandler();
-      
+
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Simulacrum AI Assistant is ready!'
       );
@@ -206,7 +218,7 @@ describe('Simulacrum Module Initialization', () => {
         require.resolve('../scripts/simulacrum.js'),
         'utf8'
       );
-      
+
       expect(moduleCode).toContain('try {');
       expect(moduleCode).toContain('} catch (error) {');
     });

@@ -16,7 +16,7 @@ import {
   delayWithSignal,
   buildGenericFailureMessage
 } from '../utils/retry-helpers.js';
-import { emitProcessStatus } from './hook-manager.js';
+import { emitProcessStatus, emitRetryStatus } from './hook-manager.js';
 
 /**
  * Sanitize messages for fallback when tool calling is not supported
@@ -279,14 +279,9 @@ async function executeToolCalls(toolCalls, conversationManager, currentToolSuppo
       // Parse arguments if they're a string
       const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
 
-      // Get tool instance
-      const tool = toolRegistry.getTool(toolName);
-      if (!tool) {
-        throw new Error(`Unknown tool: ${toolName}`);
-      }
-
-      // Execute tool
-      const result = await tool.execute(parsedArgs);
+      // Execute tool via registry to ensure stats, permissions, and hooks are handled
+      const toolExecutionResult = await toolRegistry.executeTool(toolName, parsedArgs);
+      const result = toolExecutionResult.result;
 
       // Enforce global output truncation limit (Task-21)
       const MAX_OUTPUT_CHARS = 10000;

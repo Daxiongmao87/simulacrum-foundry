@@ -3,9 +3,9 @@
  */
 
 import { BaseTool } from '../../scripts/tools/base-tool.js';
-import { 
-  setupMockFoundryEnvironment, 
-  cleanupMockEnvironment, 
+import {
+  setupMockFoundryEnvironment,
+  cleanupMockEnvironment,
   createParameterizedSystemTests
 } from '../helpers/mock-setup.js';
 
@@ -68,8 +68,8 @@ describe.each(createParameterizedSystemTests())(
 
     describe('validation', () => {
       it('should return true for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+        const documentTypes = Object.keys(systemConfig.documentTypes);
+
         documentTypes.forEach(docType => {
           expect(baseTool.isValidDocumentType(docType))
             .toBe(true);
@@ -107,8 +107,8 @@ describe.each(createParameterizedSystemTests())(
 
     describe('parameter validation', () => {
       it('should not throw for valid document types', () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+        const documentTypes = Object.keys(systemConfig.documentTypes);
+
         documentTypes.forEach(docType => {
           expect(() => {
             baseTool.validateParams({ documentType: docType });
@@ -129,7 +129,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle systems with no document types', () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => {
             baseTool.validateParams({ documentType: 'AnyType' });
           }).toThrow();
@@ -190,7 +190,7 @@ describe('BaseTool - validateParameters', () => {
       },
       required: ['name']
     };
-    
+
     expect(() => {
       baseTool.validateParameters({ name: 'test' }, schema);
     }).not.toThrow();
@@ -204,7 +204,7 @@ describe('BaseTool - validateParameters', () => {
       },
       required: ['name']
     };
-    
+
     expect(() => {
       baseTool.validateParameters({}, schema);
     }).toThrow('Parameter validation failed');
@@ -263,9 +263,9 @@ describe('BaseTool - handleError', () => {
   it('should format error response correctly', () => {
     const testError = new Error('Test error message');
     const context = { userId: '123' };
-    
+
     const result = baseTool.handleError(testError, context);
-    
+
     expect(result).toEqual({
       success: false,
       error: {
@@ -275,15 +275,15 @@ describe('BaseTool - handleError', () => {
         context: { userId: '123' }
       }
     });
-    
+
     expect(baseTool.logger.error).toHaveBeenCalledWith('Tool test_tool failed:', testError);
   });
 
   it('should handle error without context', () => {
     const testError = new Error('Test error message');
-    
+
     const result = baseTool.handleError(testError);
-    
+
     expect(result.error.context).toEqual({});
   });
 });
@@ -297,9 +297,9 @@ describe('BaseTool - createSuccessResponse', () => {
 
   it('should format success response correctly', () => {
     const testData = { result: 'success', count: 5 };
-    
+
     const result = baseTool.createSuccessResponse(testData);
-    
+
     expect(result).toEqual({
       success: true,
       data: { result: 'success', count: 5 },

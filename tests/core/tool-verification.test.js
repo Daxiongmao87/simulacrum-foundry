@@ -12,10 +12,10 @@ describe('tool-verification module imports', () => {
     expect(typeof performPostToolVerification).toBe('function');
   });
 
-  test('should import isDiagnosticsEnabled from dev utils', async () => {
-    const { isDiagnosticsEnabled } = await import('../../scripts/utils/dev.js');
-    expect(isDiagnosticsEnabled).toBeDefined();
-    expect(typeof isDiagnosticsEnabled).toBe('function');
+  test('should import isDebugEnabled from dev utils', async () => {
+    const { isDebugEnabled } = await import('../../scripts/utils/dev.js');
+    expect(isDebugEnabled).toBeDefined();
+    expect(typeof isDebugEnabled).toBe('function');
   });
 
   test('should import createLogger from logger utils', async () => {

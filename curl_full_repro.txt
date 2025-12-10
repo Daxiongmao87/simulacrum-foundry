@@ -1,0 +1,105 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.llm7.io:443 was resolved.
+* IPv6: 2606:4700:3037::6815:3a67, 2606:4700:3032::ac43:9f02
+* IPv4: 172.67.159.2, 104.21.58.103
+*   Trying 172.67.159.2:443...
+* Connected to api.llm7.io (172.67.159.2) port 443
+* ALPN: curl offers h2,http/1.1
+} [5 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+} [512 bytes data]
+*  CAfile: /etc/ssl/certs/ca-certificates.crt
+*  CApath: /etc/ssl/certs
+{ [5 bytes data]
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+{ [19 bytes data]
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+{ [2517 bytes data]
+* TLSv1.3 (IN), TLS handshake, CERT verify (15):
+{ [79 bytes data]
+* TLSv1.3 (IN), TLS handshake, Finished (20):
+{ [52 bytes data]
+* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
+} [1 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Finished (20):
+} [52 bytes data]
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519 / id-ecPublicKey
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=llm7.io
+*  start date: Dec  1 18:43:25 2025 GMT
+*  expire date: Mar  1 19:40:56 2026 GMT
+*  subjectAltName: host "api.llm7.io" matched cert's "*.llm7.io"
+*  issuer: C=US; O=Google Trust Services; CN=WE1
+*  SSL certificate verify ok.
+*   Certificate level 0: Public key type EC/prime256v1 (256/128 Bits/secBits), signed using ecdsa-with-SHA256
+*   Certificate level 1: Public key type EC/prime256v1 (256/128 Bits/secBits), signed using ecdsa-with-SHA384
+*   Certificate level 2: Public key type EC/secp384r1 (384/192 Bits/secBits), signed using ecdsa-with-SHA384
+} [5 bytes data]
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.llm7.io/v1/chat/completions?api_key=SZjSDYNBd2RN%2B5bi%2BHASPst87s%2BGByN1QJaEaZrcFf8veyAQydEuGZ3deRY8%2F9EgVIGQNs4lnGMzV5nzFvkY3RatvqjB%2FSyLaxWYvKaR0O6nWCZVkEjEkalYbmxL
+* [HTTP/2] [1] [:method: POST]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.llm7.io]
+* [HTTP/2] [1] [:path: /v1/chat/completions?api_key=SZjSDYNBd2RN%2B5bi%2BHASPst87s%2BGByN1QJaEaZrcFf8veyAQydEuGZ3deRY8%2F9EgVIGQNs4lnGMzV5nzFvkY3RatvqjB%2FSyLaxWYvKaR0O6nWCZVkEjEkalYbmxL]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [accept-language: en-US,en;q=0.9]
+* [HTTP/2] [1] [authorization: Bearer SZjSDYNBd2RN+5bi+HASPst87s+GByN1QJaEaZrcFf8veyAQydEuGZ3deRY8/9EgVIGQNs4lnGMzV5nzFvkY3RatvqjB/SyLaxWYvKaR0O6nWCZVkEjEkalYbmxL]
+* [HTTP/2] [1] [content-type: application/json]
+* [HTTP/2] [1] [origin: http://localhost:30051]
+* [HTTP/2] [1] [priority: u=1, i]
+* [HTTP/2] [1] [referer: http://localhost:30051/]
+* [HTTP/2] [1] [sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"]
+* [HTTP/2] [1] [sec-ch-ua-mobile: ?0]
+* [HTTP/2] [1] [sec-ch-ua-platform: "Linux"]
+* [HTTP/2] [1] [sec-fetch-dest: empty]
+* [HTTP/2] [1] [sec-fetch-mode: cors]
+* [HTTP/2] [1] [sec-fetch-site: cross-site]
+* [HTTP/2] [1] [user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36]
+* [HTTP/2] [1] [content-length: 9086]
+} [5 bytes data]
+> POST /v1/chat/completions?api_key=SZjSDYNBd2RN%2B5bi%2BHASPst87s%2BGByN1QJaEaZrcFf8veyAQydEuGZ3deRY8%2F9EgVIGQNs4lnGMzV5nzFvkY3RatvqjB%2FSyLaxWYvKaR0O6nWCZVkEjEkalYbmxL HTTP/2
+> Host: api.llm7.io
+> accept: */*
+> accept-language: en-US,en;q=0.9
+> authorization: Bearer SZjSDYNBd2RN+5bi+HASPst87s+GByN1QJaEaZrcFf8veyAQydEuGZ3deRY8/9EgVIGQNs4lnGMzV5nzFvkY3RatvqjB/SyLaxWYvKaR0O6nWCZVkEjEkalYbmxL
+> content-type: application/json
+> origin: http://localhost:30051
+> priority: u=1, i
+> referer: http://localhost:30051/
+> sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+> sec-ch-ua-mobile: ?0
+> sec-ch-ua-platform: "Linux"
+> sec-fetch-dest: empty
+> sec-fetch-mode: cors
+> sec-fetch-site: cross-site
+> user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+> Content-Length: 9086
+> 
+} [9086 bytes data]
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+{ [230 bytes data]
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+{ [230 bytes data]
+* old SSL session ID is stale, removing
+{ [5 bytes data]
+100  9086    0     0  100  9086      0   7548  0:00:01  0:00:01 --:--:--  7552100  9086    0     0  100  9086      0   4121  0:00:02  0:00:02 --:--:--  4122< HTTP/2 200 
+< date: Tue, 09 Dec 2025 22:57:57 GMT
+< content-type: application/json
+< content-length: 602
+< server: cloudflare
+< nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+< access-control-allow-origin: *
+< access-control-allow-credentials: true
+< cf-cache-status: DYNAMIC
+< report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=Vha0KFAEp41uBg%2FMl68jtQYpfvraxkOp2lSsdVCp7Sj84j6LZt9tfbD0bJU1KTvgs%2BJVhs8ddLvkfpez77n38lMjQS4XKTKWXg%3D%3D"}]}
+< cf-ray: 9ab81aad3dbd8e43-DFW
+< alt-svc: h3=":443"; ma=86400
+< 
+ 93  9688    0     0  100  9086      0   3413  0:00:02  0:00:02 --:--:--  3413{ [5 bytes data]
+100  9688  100   602  100  9086    226   3411  0:00:02  0:00:02 --:--:--  3638
+* Connection #0 to host api.llm7.io left intact
+{"id":"chatcmpl-9cfa0180-60d3-4381-9d0b-ddc7e2880577","object":"chat.completion","created":1765321077,"model":"gemini-2.5-flash-lite","choices":[{"message":{"role":"assistant","content":"That's quite the outpouring of \"a\"s! What's on your mind? Did something happen, or are you just feeling the urge to express yourself in a very... vocally minimalist way?\n\nSometimes a string of letters can say more than words, you know? Is it a sigh? A scream? A frustrated grunt? I'm genuinely curious! Tell me all about it, or don't! The floor is yours, in whatever form that takes."},"finish_reason":"stop"}]}

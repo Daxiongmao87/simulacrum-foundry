@@ -12,20 +12,21 @@ import { ALL_GAME_SYSTEMS, getSystemConfig } from '../fixtures/game-systems.js';
  */
 export function setupMockFoundryEnvironment(systemName = 'D&D 5e') {
   const systemConfig = getSystemConfig(systemName);
-  
+
   if (!systemConfig) {
     throw new Error(`Unknown system: ${systemName}`);
   }
 
   const mockGame = createMockGame();
   const mockUI = createMockUI();
-  
+
   // Setup game.documentTypes from system config (real FoundryVTT pattern)
   mockGame.documentTypes = systemConfig.documentTypes || {};
-  
+
   // Setup global mocks
   global.game = mockGame;
   global.CONFIG = systemConfig.config || {};
+  global.CONFIG.Document = { documentTypes: systemConfig.documentTypes || {} };
   global.ui = mockUI;
   global.foundry = createMockFoundry();
 
@@ -52,6 +53,16 @@ function createMockGame() {
       }),
       set: jest.fn(),
       register: jest.fn()
+    },
+    packs: {
+      get: jest.fn(),
+      filter: jest.fn(() => [])
+    },
+    macros: createMockCollection('Macro'),
+    messages: {
+      contents: [],
+      get: jest.fn(),
+      set: jest.fn()
     },
     collections: {
       get: jest.fn().mockImplementation((documentType) => {
@@ -91,17 +102,19 @@ function createMockGame() {
  * Create mock document collection
  */
 function createMockCollection(documentType) {
+  const contents = [
+    createMockDocument(`${documentType.toLowerCase()}1`, `Test ${documentType} 1`, documentType),
+    createMockDocument(`${documentType.toLowerCase()}2`, `Test ${documentType} 2`, documentType),
+    createMockDocument(`${documentType.toLowerCase()}3`, `Test ${documentType} 3`, documentType)
+  ];
+
   return {
     size: 3,
     documentName: documentType,
-    contents: [
-      createMockDocument(`${documentType.toLowerCase()}1`, `Test ${documentType} 1`, documentType),
-      createMockDocument(`${documentType.toLowerCase()}2`, `Test ${documentType} 2`, documentType),
-      createMockDocument(`${documentType.toLowerCase()}3`, `Test ${documentType} 3`, documentType)
-    ],
+    contents,
     get: jest.fn((id) => {
-      const doc = createMockDocument(id, `Test ${documentType}`, documentType);
-      return doc;
+      const existing = contents.find(d => d.id === id);
+      return existing || createMockDocument(id, `Test ${documentType}`, documentType);
     }),
     filter: jest.fn(() => []),
     find: jest.fn(() => null),
@@ -168,7 +181,8 @@ function createMockFoundry() {
       duplicate: jest.fn((obj) => JSON.parse(JSON.stringify(obj))),
       deepClone: jest.fn((obj) => JSON.parse(JSON.stringify(obj))),
       isEmpty: jest.fn((obj) => Object.keys(obj).length === 0),
-      getType: jest.fn((obj) => typeof obj)
+      getType: jest.fn((obj) => typeof obj),
+      randomID: jest.fn(() => 'mock-random-id-' + Math.random().toString(36).substring(7))
     },
     data: {
       validators: {
@@ -190,7 +204,7 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   global.game.user.hasRole = jest.fn().mockImplementation((role) => {
     switch (role) {
       case 'GM':
-      case 'GAMEMASTER': 
+      case 'GAMEMASTER':
         return isGM;
       case 'TRUSTED':
         return isGM || userRole === 'trusted';
@@ -206,12 +220,12 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   // Mock the can method for general permissions (like document creation)
   global.game.user.can = jest.fn().mockImplementation((permission) => {
     if (isGM) return true; // GM can do anything
-    
+
     // Check specific permissions passed to setupMockPermissions
     if (documentPermissions[permission] !== undefined) {
       return documentPermissions[permission];
     }
-    
+
     // Default permissions based on user role
     switch (permission) {
       case 'create':
@@ -227,19 +241,19 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   // Mock document permission checks
   const mockCanUserModify = jest.fn().mockImplementation((user, permission = 'update') => {
     if (isGM) return true; // GM can do anything
-    
+
     // Check specific document permissions
     if (documentPermissions[permission]) {
       return documentPermissions[permission];
     }
-    
+
     // Default permissions based on user role
     switch (permission) {
       case 'view':
       case 'read':
         return true;
       case 'create':
-      case 'update':  
+      case 'update':
       case 'delete':
         return isGM || isPlayer;
       default:
@@ -250,12 +264,12 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   // Mock testUserPermission method that PermissionManager uses
   const mockTestUserPermission = jest.fn().mockImplementation((user, permission) => {
     if (isGM) return true; // GM has all permissions
-    
+
     // Check specific document permissions (handle both true and false values explicitly)
     if (documentPermissions.hasOwnProperty(permission)) {
       return documentPermissions[permission];
     }
-    
+
     // Default permissions based on user role and permission level
     switch (permission) {
       case 'OWNER':
@@ -295,7 +309,7 @@ export function setupMockPermissions(userRole = 'gm', documentPermissions = {}) 
   // Return the mockTestUserPermission function but add properties for backward compatibility
   mockTestUserPermission.canUserModify = mockCanUserModify;
   mockTestUserPermission.testUserPermission = mockTestUserPermission;
-  
+
   return mockTestUserPermission;
 }
 
@@ -316,7 +330,7 @@ export function cleanupMockEnvironment() {
 export function createParameterizedSystemTests() {
   return ALL_GAME_SYSTEMS.map(system => [
     system.name,
-    system.config
+    system
   ]);
 }
 
@@ -327,16 +341,16 @@ export function setupTestScenario(scenario) {
   switch (scenario) {
     case 'basic':
       return setupMockFoundryEnvironment('D&D 5e');
-      
+
     case 'minimal':
       return setupMockFoundryEnvironment('Minimal Core');
-      
+
     case 'edge-case':
       return setupMockFoundryEnvironment('Edge Case System');
-      
+
     case 'pf2e':
       return setupMockFoundryEnvironment('Pathfinder 2e');
-      
+
     default:
       throw new Error(`Unknown test scenario: ${scenario}`);
   }
@@ -349,19 +363,19 @@ export function setupTestScenario(scenario) {
 export function assertSystemAgnostic(testFunction, expectedBehavior) {
   ALL_GAME_SYSTEMS.forEach(system => {
     // Skip empty systems for some tests
-    if (system.name === 'Edge Case System' && 
-        Object.keys(system.documentTypes || {}).length === 0) {
+    if (system.name === 'Edge Case System' &&
+      Object.keys(system.documentTypes || {}).length === 0) {
       return;
     }
 
     setupMockFoundryEnvironment(system.name);
     const result = testFunction();
-    
+
     expect(result).toEqual(
       expect.objectContaining(expectedBehavior),
       `System-agnostic test failed for ${system.name}`
     );
-    
+
     cleanupMockEnvironment();
   });
 }
@@ -393,7 +407,7 @@ export const PerformanceHelpers = {
    * Create large document set for performance testing
    */
   createLargeDocumentSet: (documentType, count = 1000) => {
-    return Array.from({ length: count }, (_, i) => 
+    return Array.from({ length: count }, (_, i) =>
       createMockDocument(`${documentType.toLowerCase()}${i}`, `Test ${documentType} ${i}`, documentType)
     );
   }

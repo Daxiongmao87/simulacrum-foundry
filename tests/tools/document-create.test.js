@@ -91,30 +91,38 @@ describe('DocumentCreateTool - Utility Methods', () => {
     it('should create document for valid parameters', async () => {
       const mockDocument = { name: 'New Actor', id: 'new-actor-id' };
       DocumentAPI.createDocument.mockResolvedValue(mockDocument);
+      DocumentAPI.getDocument.mockResolvedValue(mockDocument);
 
       const result = await documentCreateTool.execute({
         documentType: 'Actor',
         data: { name: 'New Actor' }
       });
 
-      expect(result.content).toBe('Created Actor: New Actor');
+      const contentObj = JSON.parse(result.content);
+      expect(contentObj.message).toBe('Created Actor: New Actor');
       expect(result.display).toBe('✅ Created **New Actor** (Actor)');
     });
 
     it('should return error for invalid document type', async () => {
-      await expect(documentCreateTool.execute({
+      const result = await documentCreateTool.execute({
         documentType: 'InvalidType',
         data: { name: 'New Actor' }
-      })).rejects.toThrow('not available in current system');
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.content).toContain('not available in current system');
     });
 
     it('should handle API errors gracefully', async () => {
       DocumentAPI.createDocument.mockRejectedValue(new Error('Creation failed'));
 
-      await expect(documentCreateTool.execute({
+      const result = await documentCreateTool.execute({
         documentType: 'Actor',
         data: { name: 'New Actor' }
-      })).rejects.toThrow('Creation failed');
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.content).toContain('Creation failed');
     });
   });
 });
@@ -136,14 +144,18 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Error Scenario Coverage', () => {
       it('should handle invalid document type errors', async () => {
-        await expect(documentCreateTool.execute({
+        const result = await documentCreateTool.execute({
           documentType: 'InvalidDocumentType',
           data: { name: 'Test' }
-        })).rejects.toThrow('not available in current system');
+        });
+
+        expect(result.error).toBeDefined();
+        expect(result.error.type).toBe('UNKNOWN_DOCUMENT_TYPE');
+        expect(result.content).toContain('not available in current system');
       });
 
       it('should handle malformed document data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
 
         if (documentTypes.length === 0) return; // Skip for empty systems
 
@@ -159,15 +171,16 @@ describe.each(createParameterizedSystemTests())(
         ];
 
         for (const badData of malformedData) {
-          await expect(documentCreateTool.execute({
+          const result = await documentCreateTool.execute({
             documentType: validType,
             data: badData
-          })).rejects.toThrow();
+          });
+          expect(result.error).toBeDefined();
         }
       });
 
       it('should handle DocumentAPI failures gracefully', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
 
         if (documentTypes.length === 0) return;
 
@@ -184,31 +197,39 @@ describe.each(createParameterizedSystemTests())(
         for (const error of apiErrors) {
           DocumentAPI.createDocument.mockRejectedValueOnce(error);
 
-          await expect(documentCreateTool.execute({
+
+
+          const result = await documentCreateTool.execute({
             documentType: validType,
             data: { name: 'Test Document' }
-          })).rejects.toThrow(error.message);
+          });
+
+          expect(result.error).toBeDefined();
+          expect(result.error.message).toBe(error.message);
         }
       });
 
       it('should reject invalid image URLs', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
         if (documentTypes.length === 0) return;
         const validType = documentTypes[0];
 
-        await expect(documentCreateTool.execute({
+        const result = await documentCreateTool.execute({
           documentType: validType,
           data: {
             name: 'Bad Image',
             img: 'Image of a castle on a hill'
           }
-        })).rejects.toThrow(/Invalid image URL/);
+        });
+
+        expect(result.error).toBeDefined();
+        expect(result.content).toContain('Invalid image URL');
       });
     });
 
     describe('Performance Testing', () => {
       it('should complete document creation within performance threshold', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
 
         if (documentTypes.length === 0) return;
 
@@ -228,7 +249,7 @@ describe.each(createParameterizedSystemTests())(
       });
 
       it('should handle batch creation efficiently', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
 
         if (documentTypes.length === 0) return;
 
@@ -254,19 +275,22 @@ describe.each(createParameterizedSystemTests())(
 
     describe('Edge Case Testing', () => {
       it('should handle systems with no document types', async () => {
-        if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+        if (Object.keys(systemConfig.documentTypes).length === 0) {
           expect(() => new DocumentCreateTool()).not.toThrow();
 
           // Should reject any creation attempt in empty system
-          await expect(documentCreateTool.execute({
+          const result = await documentCreateTool.execute({
             documentType: 'AnyType',
             data: { name: 'Test' }
-          })).rejects.toThrow('not available in current system');
+          });
+
+          expect(result.error).toBeDefined();
+          expect(result.content).toContain('not available in current system');
         }
       });
 
       it('should handle special characters in document data', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+        const documentTypes = Object.keys(systemConfig.documentTypes);
 
         if (documentTypes.length === 0) return;
 
@@ -307,10 +331,13 @@ describe('DocumentCreateTool - System-Agnostic Validation', () => {
       setupMockFoundryEnvironment(system);
       const tool = new DocumentCreateTool();
 
-      await expect(tool.execute({
+      const result = await tool.execute({
         documentType: 'InvalidType',
         data: { name: 'Test' }
-      })).rejects.toThrow('not available in current system');
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.content).toContain('not available in current system');
 
       cleanupMockEnvironment();
     }

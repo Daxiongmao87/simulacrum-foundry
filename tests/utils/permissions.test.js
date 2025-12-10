@@ -42,8 +42,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('GM should always be able to list documents', () => {
       setupMockPermissions('gm');
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canListDocuments(global.game.user, docType)).toBe(true);
       });
@@ -51,8 +51,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('Player should be able to list documents if they have permission', () => {
       setupMockPermissions('player');
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         // Players can typically list documents (viewing is usually allowed)
         expect(PermissionManager.canListDocuments(global.game.user, docType)).toBe(true);
@@ -61,15 +61,15 @@ describe.each(createParameterizedSystemTests())(
 
     test('Observer should be able to list documents', () => {
       setupMockPermissions('observer');
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canListDocuments(global.game.user, docType)).toBe(true);
       });
     });
 
     test('should handle systems with no document types', () => {
-      if (Object.keys(systemConfig.Document.documentTypes).length === 0) {
+      if (Object.keys(systemConfig.documentTypes).length === 0) {
         setupMockPermissions('gm');
         // Even GMs shouldn't be able to list non-existent document types
         expect(PermissionManager.canListDocuments(global.game.user, 'NonExistentType')).toBe(false);
@@ -87,11 +87,11 @@ describe.each(createParameterizedSystemTests())(
     beforeEach(() => {
       setupMockFoundryEnvironment(systemName);
       setupConstants();
-      
+
       // Create mock document using first available document type
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       const docType = documentTypes.length > 0 ? documentTypes[0] : 'TestDoc';
-      
+
       mockDocument = {
         _id: 'test-doc-id',
         documentName: docType,
@@ -109,7 +109,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('gm');
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canReadDocument(global.game.user, mockDocument)).toBe(true);
     });
 
@@ -117,7 +117,7 @@ describe.each(createParameterizedSystemTests())(
       const mockCanModify = setupMockPermissions('player', { read: true });
       mockDocument.canUserModify = mockCanModify;
       mockDocument.testUserPermission = mockCanModify;
-      
+
       expect(PermissionManager.canReadDocument(global.game.user, mockDocument)).toBe(true);
     });
 
@@ -125,7 +125,7 @@ describe.each(createParameterizedSystemTests())(
       const mockCanModify = setupMockPermissions('player', { read: false });
       mockDocument.canUserModify = mockCanModify;
       mockDocument.testUserPermission = mockCanModify;
-      
+
       expect(PermissionManager.canReadDocument(global.game.user, mockDocument)).toBe(false);
     });
 
@@ -133,7 +133,7 @@ describe.each(createParameterizedSystemTests())(
       const mockCanModify = setupMockPermissions('observer', { read: true });
       mockDocument.canUserModify = mockCanModify;
       mockDocument.testUserPermission = mockCanModify;
-      
+
       expect(PermissionManager.canReadDocument(global.game.user, mockDocument)).toBe(true);
     });
   }
@@ -154,8 +154,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('GM should always be able to create documents', () => {
       setupMockPermissions('gm');
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canCreateDocument(global.game.user, docType, {})).toBe(true);
       });
@@ -163,8 +163,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('Player creation permissions should be configurable', () => {
       setupMockPermissions('player', { create: true });
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canCreateDocument(global.game.user, docType, {})).toBe(true);
       });
@@ -172,8 +172,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('Player should not be able to create documents when restricted', () => {
       setupMockPermissions('player', { create: false });
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canCreateDocument(global.game.user, docType, {})).toBe(false);
       });
@@ -181,8 +181,8 @@ describe.each(createParameterizedSystemTests())(
 
     test('Observer should not be able to create documents', () => {
       setupMockPermissions('observer');
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-      
+      const documentTypes = Object.keys(systemConfig.documentTypes);
+
       documentTypes.forEach(docType => {
         expect(PermissionManager.canCreateDocument(global.game.user, docType, {})).toBe(false);
       });
@@ -199,10 +199,10 @@ describe.each(createParameterizedSystemTests())(
     beforeEach(() => {
       setupMockFoundryEnvironment(systemName);
       setupConstants();
-      
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       const docType = documentTypes.length > 0 ? documentTypes[0] : 'TestDoc';
-      
+
       mockDocument = {
         _id: 'test-doc-id',
         documentName: docType,
@@ -220,7 +220,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('gm');
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canUpdateDocument(global.game.user, mockDocument, {})).toBe(true);
     });
 
@@ -228,7 +228,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('player', { update: true });
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canUpdateDocument(global.game.user, mockDocument, {})).toBe(true);
     });
 
@@ -236,7 +236,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('player', { update: false });
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canUpdateDocument(global.game.user, mockDocument, {})).toBe(false);
     });
 
@@ -244,7 +244,7 @@ describe.each(createParameterizedSystemTests())(
       const mockCanModify = setupMockPermissions('observer', { update: false });
       mockDocument.canUserModify = mockCanModify;
       mockDocument.testUserPermission = mockCanModify;
-      
+
       expect(PermissionManager.canUpdateDocument(global.game.user, mockDocument, {})).toBe(false);
     });
   }
@@ -259,10 +259,10 @@ describe.each(createParameterizedSystemTests())(
     beforeEach(() => {
       setupMockFoundryEnvironment(systemName);
       setupConstants();
-      
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       const docType = documentTypes.length > 0 ? documentTypes[0] : 'TestDoc';
-      
+
       mockDocument = {
         _id: 'test-doc-id',
         documentName: docType,
@@ -279,7 +279,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('gm');
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canDeleteDocument(global.game.user, mockDocument)).toBe(true);
     });
 
@@ -287,7 +287,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('player', { delete: true });
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canDeleteDocument(global.game.user, mockDocument)).toBe(true);
     });
 
@@ -295,7 +295,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('player', { delete: false });
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canDeleteDocument(global.game.user, mockDocument)).toBe(false);
     });
 
@@ -303,7 +303,7 @@ describe.each(createParameterizedSystemTests())(
       const mockPermissions = setupMockPermissions('observer');
       mockDocument.canUserModify = mockPermissions.canUserModify;
       mockDocument.testUserPermission = mockPermissions;
-      
+
       expect(PermissionManager.canDeleteDocument(global.game.user, mockDocument)).toBe(false);
     });
   }
@@ -318,9 +318,9 @@ describe.each(createParameterizedSystemTests())(
     beforeEach(() => {
       setupMockFoundryEnvironment(systemName);
       setupConstants();
-      
+
       // Create test documents using available document types
-      const documentTypes = Object.keys(systemConfig.Document.documentTypes);
+      const documentTypes = Object.keys(systemConfig.documentTypes);
       documents = documentTypes.slice(0, 3).map((docType, index) => ({
         _id: `doc${index + 1}`,
         documentName: docType,
@@ -339,21 +339,21 @@ describe.each(createParameterizedSystemTests())(
         doc.canUserModify = mockCanModify;
         doc.testUserPermission = mockCanModify; // Add the missing method
       });
-      
+
       const filtered = await PermissionManager.filterByPermission(global.game.user, documents, 'READ');
       expect(filtered.length).toBe(documents.length);
     });
 
     test('Player should only see documents they have permission for', async () => {
       const mockCanModify = setupMockPermissions('player');
-      
+
       // Set up mixed permissions
       documents.forEach((doc, index) => {
         const hasPermission = index % 2 === 0; // Every other document
         doc.canUserModify = jest.fn().mockReturnValue(hasPermission);
         doc.testUserPermission = jest.fn().mockReturnValue(hasPermission);
       });
-      
+
       const filtered = await PermissionManager.filterByPermission(global.game.user, documents, 'READ');
       const expectedCount = Math.ceil(documents.length / 2);
       expect(filtered.length).toBe(expectedCount);
@@ -367,7 +367,7 @@ describe.each(createParameterizedSystemTests())(
 
     test('should handle permission checking errors gracefully', async () => {
       setupMockPermissions('player');
-      
+
       // Mock one document to throw an error during permission check
       if (documents.length > 0) {
         documents[0].canUserModify = jest.fn().mockImplementation(() => {
@@ -376,7 +376,7 @@ describe.each(createParameterizedSystemTests())(
         documents[0].testUserPermission = jest.fn().mockImplementation(() => {
           throw new Error('Permission check failed');
         });
-        
+
         const filtered = await PermissionManager.filterByPermission(global.game.user, documents, 'READ');
         // Should continue processing other documents despite the error
         expect(Array.isArray(filtered)).toBe(true);

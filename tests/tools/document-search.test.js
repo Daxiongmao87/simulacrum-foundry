@@ -48,7 +48,7 @@ describe('DocumentSearchTool - constructor', () => {
 
   it('should initialize with correct properties', () => {
     expect(tool.name).toBe('search_documents');
-    expect(tool.description).toBe('Search documents by content or metadata');
+    expect(tool.description).toBe('Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.');
     expect(tool.requiresConfirmation).toBe(false);
   });
 
@@ -63,19 +63,19 @@ describe('DocumentSearchTool - constructor', () => {
 
   it('should define parameters correctly', () => {
     const { query, documentTypes, fields, maxResults } = tool.schema.properties;
-    
+
     expect(query.type).toBe('string');
     expect(query.required).toBe(true);
-    expect(query.description).toContain('Search query text');
-    
+    expect(query.description).toContain('Search text - can be document names');
+
     expect(documentTypes.type).toBe('array');
     expect(documentTypes.items.type).toBe('string');
-    expect(documentTypes.description).toContain('Document types to search');
-    
+    expect(documentTypes.description).toContain('Limit search to specific document types');
+
     expect(fields.type).toBe('array');
     expect(fields.items.type).toBe('string');
-    expect(fields.description).toContain('Fields to search in');
-    
+    expect(fields.description).toContain('Specific document fields to search in');
+
     expect(maxResults.type).toBe('number');
     expect(maxResults.default).toBe(20);
     expect(maxResults.description).toContain('Maximum number of results');
@@ -102,9 +102,9 @@ describe('DocumentSearchTool - execute - basic search', () => {
     });
     expect(result.content).toBe('Found 3 documents matching "magic"');
     expect(result.display).toContain('**Search Results for "magic"**');
-    expect(result.display).toContain('- **Hero Character** (Actor)');
-    expect(result.display).toContain('- **Magic Sword** (Item)');
-    expect(result.display).toContain('- **Castle Dungeon** (Scene)');
+    expect(result.display).toContain('- **Hero Character** (ID: actor-123, Type: character)');
+    expect(result.display).toContain('- **Magic Sword** (ID: item-456, Type: weapon)');
+    expect(result.display).toContain('- **Castle Dungeon** (ID: scene-789, Type: Unknown)');
     expect(result.error).toBeUndefined();
   });
 });
@@ -118,7 +118,7 @@ describe('DocumentSearchTool - execute - filtered search', () => {
       documentTypes: ['Item', 'Actor']
     };
 
-    const filteredResults = mockSearchResults.filter(doc => 
+    const filteredResults = mockSearchResults.filter(doc =>
       doc.documentName === 'Item' || doc.documentName === 'Actor'
     );
     DocumentAPI.searchDocuments.mockResolvedValue(filteredResults);
@@ -160,32 +160,32 @@ describe('DocumentSearchTool - execute - result limiting', () => {
   beforeEach(setupTest);
 
   it('should limit results when maxResults specified', async () => {
-      const params = {
-        query: 'test',
-        maxResults: 2
-      };
+    const params = {
+      query: 'test',
+      maxResults: 2
+    };
 
-      DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
+    DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(result.content).toBe('Found 2 documents matching "test"');
-      // Should only show first 2 results
-      const displayLines = result.display.split('\n');
-      expect(displayLines).toHaveLength(3); // Title + 2 results
+    expect(result.content).toBe('Found 2 documents matching "test"');
+    // Should only show first 2 results
+    const displayLines = result.display.split('\n');
+    expect(displayLines).toHaveLength(3); // Title + 2 results
   });
 
   it('should handle no results found', async () => {
-      const params = {
-        query: 'nonexistent'
-      };
+    const params = {
+      query: 'nonexistent'
+    };
 
-      DocumentAPI.searchDocuments.mockResolvedValue([]);
+    DocumentAPI.searchDocuments.mockResolvedValue([]);
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(result.content).toBe('Found 0 documents matching "nonexistent"');
-      expect(result.display).toBe('No documents found matching "nonexistent"');
+    expect(result.content).toBe('Found 0 documents matching "nonexistent"');
+    expect(result.display).toBe('No documents found matching "nonexistent"');
   });
 
 });
@@ -214,23 +214,23 @@ describe('DocumentSearchTool - execute - advanced queries', () => {
     expect(result.content).toBe('Found 1 documents matching "magic sword +3"');
   });
 
-    it('should handle empty query gracefully', async () => {
-      const params = {
-        query: ''
-      };
+  it('should handle empty query gracefully', async () => {
+    const params = {
+      query: ''
+    };
 
-      DocumentAPI.searchDocuments.mockResolvedValue([]);
+    DocumentAPI.searchDocuments.mockResolvedValue([]);
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
-        query: '',
-        types: undefined,
-        fields: undefined,
-        maxResults: undefined
-      });
-      expect(result.content).toBe('Found 0 documents matching ""');
+    expect(DocumentAPI.searchDocuments).toHaveBeenCalledWith({
+      query: '',
+      types: undefined,
+      fields: undefined,
+      maxResults: undefined
     });
+    expect(result.content).toBe('Found 0 documents matching ""');
+  });
 });
 
 describe('DocumentSearchTool - execute - error handling', () => {
@@ -275,32 +275,32 @@ describe('DocumentSearchTool - formatSearchResults - basic formatting', () => {
   beforeEach(setupTest);
 
   it('should format results with names', () => {
-      const results = [
-        { _id: '1', name: 'Test Item', documentName: 'Item' },
-        { _id: '2', name: 'Test Actor', documentName: 'Actor' }
-      ];
+    const results = [
+      { _id: '1', name: 'Test Item', documentName: 'Item' },
+      { _id: '2', name: 'Test Actor', documentName: 'Actor' }
+    ];
 
-      const formatted = tool.formatSearchResults(results, 'test');
+    const formatted = tool.formatSearchResults(results, 'test');
 
-      expect(formatted).toBe(
-        '**Search Results for "test"**\n' +
-        '- **Test Item** (Item)\n' +
-        '- **Test Actor** (Actor)'
-      );
+    expect(formatted).toBe(
+      '**Search Results for "test"**\n' +
+      '- **Test Item** (ID: 1, Type: Unknown)\n' +
+      '- **Test Actor** (ID: 2, Type: Unknown)'
+    );
   });
 
   it('should handle documents without names', () => {
-      const results = [
-        { _id: 'no-name-1', documentName: 'Item' },
-        { _id: 'no-name-2', title: 'Has Title', documentName: 'Scene' },
-        { _id: 'no-name-3' }
-      ];
+    const results = [
+      { _id: 'no-name-1', documentName: 'Item' },
+      { _id: 'no-name-2', title: 'Has Title', documentName: 'Scene' },
+      { _id: 'no-name-3' }
+    ];
 
-      const formatted = tool.formatSearchResults(results, 'unnamed');
+    const formatted = tool.formatSearchResults(results, 'unnamed');
 
-      expect(formatted).toContain('- **no-name-1** (Item)');
-      expect(formatted).toContain('- **Has Title** (Scene)');
-      expect(formatted).toContain('- **no-name-3** (Unknown)');
+    expect(formatted).toContain('- **no-name-1** (ID: no-name-1, Type: Unknown)');
+    expect(formatted).toContain('- **Has Title** (ID: no-name-2, Type: Unknown)');
+    expect(formatted).toContain('- **no-name-3** (ID: no-name-3, Type: Unknown)');
   });
 });
 
@@ -308,36 +308,36 @@ describe('DocumentSearchTool - formatSearchResults - edge cases', () => {
   beforeEach(setupTest);
 
   it('should handle empty results', () => {
-      const formatted = tool.formatSearchResults([], 'nothing');
+    const formatted = tool.formatSearchResults([], 'nothing');
 
-      expect(formatted).toBe('No documents found matching "nothing"');
+    expect(formatted).toBe('No documents found matching "nothing"');
   });
 
   it('should handle documents with various name fields', () => {
-      const results = [
-        { _id: '1', name: 'Has Name', documentName: 'Actor' },
-        { _id: '2', title: 'Has Title', documentName: 'Scene' },
-        { _id: '3', documentName: 'Item' }, // Will use _id
-        { _id: '4' } // Will use _id and 'Unknown' type
-      ];
+    const results = [
+      { _id: '1', name: 'Has Name', documentName: 'Actor', type: 'character' },
+      { _id: '2', title: 'Has Title', documentName: 'Scene', type: 'scene' },
+      { _id: '3', documentName: 'Item', type: 'item' }, // Will use _id
+      { _id: '4', type: 'unknown' } // Will use _id and 'unknown' type
+    ];
 
-      const formatted = tool.formatSearchResults(results, 'various');
+    const formatted = tool.formatSearchResults(results, 'various');
 
-      expect(formatted).toContain('- **Has Name** (Actor)');
-      expect(formatted).toContain('- **Has Title** (Scene)');
-      expect(formatted).toContain('- **3** (Item)');
-      expect(formatted).toContain('- **4** (Unknown)');
+    expect(formatted).toContain('- **Has Name** (ID: 1, Type: character)');
+    expect(formatted).toContain('- **Has Title** (ID: 2, Type: scene)');
+    expect(formatted).toContain('- **3** (ID: 3, Type: item)');
+    expect(formatted).toContain('- **4** (ID: 4, Type: unknown)');
   });
 
   it('should handle special characters in names and queries', () => {
-      const results = [
-        { _id: '1', name: 'Test "Special" Characters & More', documentName: 'Item' }
-      ];
+    const results = [
+      { _id: '1', name: 'Test "Special" Characters & More', documentName: 'Item' }
+    ];
 
-      const formatted = tool.formatSearchResults(results, 'special "query"');
+    const formatted = tool.formatSearchResults(results, 'special "query"');
 
-      expect(formatted).toContain('**Search Results for "special "query""**');
-      expect(formatted).toContain('- **Test "Special" Characters & More** (Item)');
+    expect(formatted).toContain('**Search Results for "special "query""**');
+    expect(formatted).toContain('- **Test "Special" Characters & More** (ID: 1, Type: Unknown)');
   });
 });
 
@@ -357,25 +357,25 @@ describe('DocumentSearchTool - edge cases - large datasets', () => {
   beforeEach(setupTest);
 
   it('should handle large result sets', async () => {
-      const params = {
-        query: 'common',
-        maxResults: 5
-      };
+    const params = {
+      query: 'common',
+      maxResults: 5
+    };
 
-      // Create 100 mock results
-      const largeResultSet = Array.from({ length: 100 }, (_, i) => ({
-        _id: `doc-${i}`,
-        name: `Document ${i}`,
-        documentName: 'Item'
-      }));
+    // Create 100 mock results
+    const largeResultSet = Array.from({ length: 100 }, (_, i) => ({
+      _id: `doc-${i}`,
+      name: `Document ${i}`,
+      documentName: 'Item'
+    }));
 
-      DocumentAPI.searchDocuments.mockResolvedValue(largeResultSet);
+    DocumentAPI.searchDocuments.mockResolvedValue(largeResultSet.slice(0, 5));
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(result.content).toBe('Found 5 documents matching "common"');
-      const displayLines = result.display.split('\n');
-      expect(displayLines).toHaveLength(6); // Title + 5 results
+    expect(result.content).toBe('Found 5 documents matching "common"');
+    const displayLines = result.display.split('\n');
+    expect(displayLines).toHaveLength(6); // Title + 5 results
   });
 });
 
@@ -383,28 +383,28 @@ describe('DocumentSearchTool - edge cases - maxResults handling', () => {
   beforeEach(setupTest);
 
   it('should handle maxResults larger than result set', async () => {
-      const params = {
-        query: 'test',
-        maxResults: 100
-      };
+    const params = {
+      query: 'test',
+      maxResults: 100
+    };
 
-      DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
+    DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(result.content).toBe('Found 3 documents matching "test"');
+    expect(result.content).toBe('Found 3 documents matching "test"');
   });
 
   it('should handle undefined maxResults', async () => {
-      const params = {
-        query: 'test'
-        // maxResults not specified
-      };
+    const params = {
+      query: 'test'
+      // maxResults not specified
+    };
 
-      DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
+    DocumentAPI.searchDocuments.mockResolvedValue(mockSearchResults);
 
-      const result = await tool.execute(params);
+    const result = await tool.execute(params);
 
-      expect(result.content).toBe('Found 3 documents matching "test"');
+    expect(result.content).toBe('Found 3 documents matching "test"');
   });
 });

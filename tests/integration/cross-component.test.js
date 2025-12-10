@@ -19,7 +19,7 @@ import {
  */
 function createMockHooks() {
   const registeredHooks = new Map();
-  
+
   return {
     registered: registeredHooks,
     once: jest.fn((event, callback) => {
@@ -37,7 +37,7 @@ function createMockHooks() {
     call: jest.fn((event, ...args) => {
       const hooks = registeredHooks.get(event) || [];
       const results = [];
-      
+
       hooks.forEach(({ callback, once }) => {
         try {
           results.push(callback(...args));
@@ -52,7 +52,7 @@ function createMockHooks() {
           if (index > -1) hooks.splice(index, 1);
         }
       });
-      
+
       return results;
     }),
     callAll: jest.fn((event, ...args) => {
@@ -71,7 +71,7 @@ describe('FoundryVTT Lifecycle Integration', () => {
     setupMockFoundryEnvironment('D&D 5e');
     mockHooks = createMockHooks();
     global.Hooks = mockHooks;
-    
+
     // Mock module core that would register hooks
     mockModuleCore = {
       ready: false,
@@ -91,7 +91,7 @@ describe('FoundryVTT Lifecycle Integration', () => {
       // Simulate module registration phase
       const initCallback = jest.fn();
       mockHooks.once('init', initCallback);
-      
+
       expect(mockHooks.once).toHaveBeenCalledWith('init', initCallback);
       expect(mockHooks.registered.has('init')).toBe(true);
     });
@@ -99,7 +99,7 @@ describe('FoundryVTT Lifecycle Integration', () => {
     it('should register ready hook for system initialization', () => {
       const readyCallback = jest.fn();
       mockHooks.once('ready', readyCallback);
-      
+
       expect(mockHooks.once).toHaveBeenCalledWith('ready', readyCallback);
       expect(mockHooks.registered.has('ready')).toBe(true);
     });
@@ -107,14 +107,14 @@ describe('FoundryVTT Lifecycle Integration', () => {
     it('should execute hooks in correct order', () => {
       const initCallback = jest.fn(() => 'init');
       const readyCallback = jest.fn(() => 'ready');
-      
+
       mockHooks.once('init', initCallback);
       mockHooks.once('ready', readyCallback);
-      
+
       // Simulate FoundryVTT calling hooks in order
       const initResults = mockHooks.call('init');
       const readyResults = mockHooks.call('ready');
-      
+
       expect(initCallback).toHaveBeenCalled();
       expect(readyCallback).toHaveBeenCalled();
       expect(initResults).toContain('init');
@@ -123,19 +123,19 @@ describe('FoundryVTT Lifecycle Integration', () => {
 
     it('should handle dependency initialization order', () => {
       const dependencies = [];
-      
+
       const initDocumentAPI = jest.fn(() => dependencies.push('DocumentAPI'));
       const initToolRegistry = jest.fn(() => dependencies.push('ToolRegistry'));
       const initAIClient = jest.fn(() => dependencies.push('AIClient'));
-      
+
       // Register in dependency order
       mockHooks.once('ready', initDocumentAPI);
       mockHooks.once('ready', initToolRegistry);
       mockHooks.once('ready', initAIClient);
-      
+
       // Simulate ready event
       mockHooks.call('ready');
-      
+
       expect(dependencies).toEqual(['DocumentAPI', 'ToolRegistry', 'AIClient']);
     });
   });
@@ -147,9 +147,9 @@ describe('FoundryVTT Lifecycle Integration', () => {
         if (!global.CONFIG.Document) throw new Error('Document types not loaded');
         return true;
       });
-      
+
       mockHooks.once('ready', validateEnvironment);
-      
+
       // CONFIG should be available during ready phase
       expect(() => mockHooks.call('ready')).not.toThrow();
       expect(validateEnvironment).toHaveReturnedWith(true);
@@ -159,9 +159,9 @@ describe('FoundryVTT Lifecycle Integration', () => {
       const failingInit = jest.fn(() => {
         throw new Error('Initialization failed');
       });
-      
+
       mockHooks.once('ready', failingInit);
-      
+
       // Should not crash when initialization fails
       expect(() => mockHooks.call('ready')).not.toThrow();
       expect(failingInit).toHaveBeenCalled();
@@ -174,10 +174,10 @@ describe('FoundryVTT Lifecycle Integration', () => {
         if (!global.game.world) throw new Error('World not loaded');
         return true;
       });
-      
+
       mockHooks.once('ready', checkGameReady);
       mockHooks.call('ready');
-      
+
       expect(checkGameReady).toHaveReturnedWith(true);
     });
   });
@@ -187,11 +187,11 @@ describe('FoundryVTT Lifecycle Integration', () => {
       const createHook = jest.fn();
       const updateHook = jest.fn();
       const deleteHook = jest.fn();
-      
+
       mockHooks.on('createDocument', createHook);
       mockHooks.on('updateDocument', updateHook);
       mockHooks.on('deleteDocument', deleteHook);
-      
+
       expect(mockHooks.registered.has('createDocument')).toBe(true);
       expect(mockHooks.registered.has('updateDocument')).toBe(true);
       expect(mockHooks.registered.has('deleteDocument')).toBe(true);
@@ -204,17 +204,17 @@ describe('FoundryVTT Lifecycle Integration', () => {
         }
         // Process document change
       });
-      
+
       mockHooks.on('createDocument', documentChangeHandler);
-      
+
       // Simulate document creation before module ready
       mockModuleCore.ready = false;
       mockHooks.call('createDocument', { id: 'test' }, {}, 'user1');
-      
+
       // Simulate document creation after module ready
       mockModuleCore.ready = true;
       mockHooks.call('createDocument', { id: 'test2' }, {}, 'user1');
-      
+
       expect(documentChangeHandler).toHaveBeenCalledTimes(2);
     });
   });
@@ -224,14 +224,14 @@ describe('FoundryVTT Lifecycle Integration', () => {
       const componentA = jest.fn(() => { throw new Error('Component A failed'); });
       const componentB = jest.fn(() => 'Component B success');
       const componentC = jest.fn(() => 'Component C success');
-      
+
       mockHooks.once('ready', componentA);
       mockHooks.once('ready', componentB);
       mockHooks.once('ready', componentC);
-      
+
       // All components should run despite A failing
       const results = mockHooks.call('ready');
-      
+
       expect(componentA).toHaveBeenCalled();
       expect(componentB).toHaveBeenCalled();
       expect(componentC).toHaveBeenCalled();
@@ -252,7 +252,7 @@ describe.each(createParameterizedSystemTests())(
       // Initialize components in dependency order
       documentAPI = new DocumentAPI();
       toolRegistry = new ToolRegistry();
-      
+
       // Mock AI client settings
       global.game.settings.get
         // provider removed
@@ -289,7 +289,7 @@ describe.each(createParameterizedSystemTests())(
     describe('Tool Registry Integration', () => {
       it('should register tools with valid schemas', () => {
         const toolMap = toolRegistry.tools;
-        
+
         // Tool registry should be initialized
         expect(toolMap).toBeInstanceOf(Map);
       });
@@ -297,7 +297,7 @@ describe.each(createParameterizedSystemTests())(
       it('should validate tool execution flow', async () => {
         const toolMap = toolRegistry.tools;
         expect(toolMap).toBeInstanceOf(Map);
-        
+
         // Validate tool registry structure
         expect(toolRegistry.categories).toBeInstanceOf(Map);
         expect(toolRegistry.dependencies).toBeInstanceOf(Map);
@@ -308,22 +308,22 @@ describe.each(createParameterizedSystemTests())(
       it('should handle document operations through API', async () => {
         // Test document type discovery using static methods
         const types = DocumentAPI.getAllDocumentTypes();
-        const expectedTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+        const expectedTypes = Object.keys(systemConfig.documentTypes);
+
         expectedTypes.forEach(docType => {
           expect(types).toContain(docType);
         });
       });
 
       it('should validate system-agnostic operation', async () => {
-        const documentTypes = Object.keys(systemConfig.Document.documentTypes);
-        
+        const documentTypes = Object.keys(systemConfig.documentTypes);
+
         if (documentTypes.length > 0) {
           const firstType = documentTypes[0];
           const isValid = DocumentAPI.isValidDocumentType(firstType);
           expect(isValid).toBe(true);
         }
-        
+
         const isInvalid = DocumentAPI.isValidDocumentType('NonExistentType');
         expect(isInvalid).toBe(false);
       });
@@ -338,71 +338,71 @@ describe.each(createParameterizedSystemTests())(
 
       it('should handle conversation management integration', () => {
         expect(conversationManager).toBeDefined();
-        
-      // Test conversation manager has expected methods
-      expect(typeof conversationManager.addMessage).toBe('function');
-      expect(typeof conversationManager.clear).toBe('function');
+
+        // Test conversation manager has expected methods
+        expect(typeof conversationManager.addMessage).toBe('function');
+        expect(typeof conversationManager.clear).toBe('function');
+      });
     });
-  });
 
-  describe('Full Workflow Integration', () => {
-    it('should support complete AI workflow simulation', async () => {
-      // Mock AI response with tool calls
-      const mockResponse = {
-        choices: [{
-          message: {
-            content: null,
-            tool_calls: [{
-              id: 'call_test',
-              type: 'function',
-              function: {
-                name: 'list_documents',
-                arguments: JSON.stringify({ documentType: 'JournalEntry' })
-              }
-            }]
-          }
-        }]
-      };
+    describe('Full Workflow Integration', () => {
+      it('should support complete AI workflow simulation', async () => {
+        // Mock AI response with tool calls
+        const mockResponse = {
+          choices: [{
+            message: {
+              content: null,
+              tool_calls: [{
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'list_documents',
+                  arguments: JSON.stringify({ documentType: 'JournalEntry' })
+                }
+              }]
+            }
+          }]
+        };
 
-      // Mock the AI client's sendMessage method
-      aiClient.sendMessage = jest.fn().mockResolvedValue({
-        content: 'I found 2 Journal Entry documents in your world.',
-        tool_calls: mockResponse.choices[0].message.tool_calls
+        // Mock the AI client's sendMessage method
+        aiClient.sendMessage = jest.fn().mockResolvedValue({
+          content: 'I found 2 Journal Entry documents in your world.',
+          tool_calls: mockResponse.choices[0].message.tool_calls
+        });
+
+        // Simulate message processing
+        const userMessage = 'List my journal entries';
+        conversationManager.addMessage('user', userMessage);
+
+        const response = await aiClient.sendMessage(userMessage);
+        expect(response.content).toContain('Journal Entry');
       });
 
-      // Simulate message processing
-      const userMessage = 'List my journal entries';
-      conversationManager.addMessage('user', userMessage);
-      
-      const response = await aiClient.sendMessage(userMessage);
-      expect(response.content).toContain('Journal Entry');
+      it('should handle error propagation across components', async () => {
+        // Test error handling integration
+        const invalidType = 'NonExistentDocumentType';
+
+        const isValid = DocumentAPI.isValidDocumentType(invalidType);
+        expect(isValid).toBe(false);
+      });
     });
 
-    it('should handle error propagation across components', async () => {
-      // Test error handling integration
-      const invalidType = 'NonExistentDocumentType';
-      
-      const isValid = DocumentAPI.isValidDocumentType(invalidType);
-      expect(isValid).toBe(false);
-    });
-  });
+    describe('Settings Integration', () => {
+      it('should propagate settings changes across components', () => {
+        // Mock settings change
+        const newProvider = 'ollama';
+        global.game.settings.get.mockReturnValue(newProvider);
 
-  describe('Settings Integration', () => {
-    it('should propagate settings changes across components', () => {
-      // Mock settings change
-      const newProvider = 'ollama';
-      global.game.settings.get.mockReturnValue(newProvider);
-      
-      // Verify components can react to settings changes
-      expect(global.game.settings.get).toBeDefined();
+        // Verify components can react to settings changes
+        expect(global.game.settings.get).toBeDefined();
+      });
     });
-  });
 
-  describe('Permission Integration', () => {
-    it('should validate permissions across component boundaries', () => {
-      // Test that document operations respect permissions
-      expect(global.game.user.isGM).toBe(true);
-      expect(global.game.user.hasRole()).toBe(true);
+    describe('Permission Integration', () => {
+      it('should validate permissions across component boundaries', () => {
+        // Test that document operations respect permissions
+        expect(global.game.user.isGM).toBe(true);
+        expect(global.game.user.hasRole()).toBe(true);
+      });
     });
   });
-});

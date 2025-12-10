@@ -121,7 +121,12 @@ export function normalizeAIResponse(raw) {
   const msg = choice?.message ?? {};
   const content = typeof msg.content === 'string' ? msg.content : '';
 
-  if (!content || content.trim().length === 0) {
+  let toolCalls = msg.tool_calls || [];
+  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
+    toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
+  }
+
+  if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
     if (isDebugEnabled()) {
       const logger = createLogger('AIDiagnostics');
       logger.warn('Empty content detected in OpenAI-style response:', {
@@ -132,7 +137,7 @@ export function normalizeAIResponse(raw) {
           messageKeys: raw.choices?.[0]?.message ? Object.keys(raw.choices[0].message) : [],
           contentValue: raw.choices?.[0]?.message?.content,
           contentType: typeof raw.choices?.[0]?.message?.content,
-          hasToolCalls: !!(raw.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0)
+          hasToolCalls: false
         },
         extractedContent: content,
         extractedContentLength: content.length,
@@ -143,8 +148,7 @@ export function normalizeAIResponse(raw) {
     }
     {
       const logger = createLogger('AIDiagnostics');
-      const has = !!(raw?.choices?.[0]?.message?.tool_calls && raw.choices[0].message.tool_calls.length > 0);
-      logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: has });
+      logger.error('assistant.empty_response', { model: raw?.model, hasToolCalls: false });
     }
     return attachProviderError({
       content: 'Empty response not allowed - please provide a meaningful response to the user.',
@@ -153,11 +157,6 @@ export function normalizeAIResponse(raw) {
       model: raw?.model,
       _parseError: true
     }, raw);
-  }
-
-  let toolCalls = msg.tool_calls || [];
-  if ((!toolCalls || toolCalls.length === 0) && msg.function_call && msg.function_call.name) {
-    toolCalls = [{ id: msg.function_call.id, function: { name: msg.function_call.name, arguments: msg.function_call.arguments } }];
   }
 
   // Responses API style
@@ -206,7 +205,7 @@ export function normalizeAIResponse(raw) {
       const names = Array.isArray(normalized.toolCalls) ? normalized.toolCalls.map(c => c?.function?.name || c?.name).filter(Boolean) : [];
       diag.info('tool_calls', { count: names.length, names });
     }
-  } catch {}
+  } catch { }
 
   return attachProviderError(normalized, raw);
 }
@@ -229,7 +228,7 @@ export function parseInlineToolCall(text) {
         hadThinkTags: text.includes('<think>')
       });
     }
-  } catch {}
+  } catch { }
 
   const tryParse = (s) => {
     try { return JSON.parse(s); } catch (e) {
@@ -238,11 +237,11 @@ export function parseInlineToolCall(text) {
           .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
           .replace(/:\s*'([^']*)'(?=\s*[,\}])/g, ': "$1"')
           .replace(/,(\s*[}\]])/g, '$1')
-          .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function(match) {
+          .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function (match) {
             const quoteCount = (match.match(/"/g) || []).length;
             if (quoteCount % 2 !== 0 && quoteCount > 2) {
-              try { JSON.parse('{'+match+'}'); return match; } catch (e) {
-                return match.replace(/^"(.*)"$/, function(inner) {
+              try { JSON.parse('{' + match + '}'); return match; } catch (e) {
+                return match.replace(/^"(.*)"$/, function (inner) {
                   return '"' + inner.slice(1, -1).replace(/([^\\])"/g, '$1\\"') + '"';
                 });
               }
@@ -250,7 +249,7 @@ export function parseInlineToolCall(text) {
             return match;
           })
           // D&D 5e specific patterns and other heuristics are preserved in core; keep minimal here
-        ;
+          ;
         return JSON.parse(fixed);
       } catch (e2) {
         return null;
@@ -266,13 +265,14 @@ export function parseInlineToolCall(text) {
   if (!obj) {
     try {
       if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
-    } catch {}
+    } catch { }
     return { parseError: 'Invalid JSON', content: block };
   }
 
   // Accept either { tool_call: { name, arguments } } or { name, arguments }
+  // Also support 'function' as alternative to 'name' (some models use this)
   const toolCall = obj.tool_call || obj;
-  const name = toolCall?.name;
+  const name = toolCall?.name || toolCall?.function;
   let args = toolCall?.arguments ?? {};
   if (!name) {
     try {
@@ -281,7 +281,7 @@ export function parseInlineToolCall(text) {
           keys: Object.keys(obj)
         });
       }
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -293,7 +293,7 @@ export function parseInlineToolCall(text) {
   try {
     const info = toolRegistry.getToolInfo(name);
     if (!info) {
-      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch {}
+      try { if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.invalid_tool', { name }); } catch { }
       return null;
     }
   } catch (e) { return null; }
@@ -307,7 +307,7 @@ export function parseInlineToolCall(text) {
         argsKeys: Object.keys(args)
       });
     }
-  } catch {}
+  } catch { }
 
   return { name, arguments: args, cleanedText };
 }

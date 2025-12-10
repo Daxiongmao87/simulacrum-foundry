@@ -22,7 +22,6 @@ describe('All JSON files are strict JSON', () => {
   const root = resolve(process.cwd());
   const candidates = [
     'module.json',
-    '.foundry.env.json',
     'package.json',
     // language files
     ...readdirSync('lang').filter((f) => f.endsWith('.json')).map((f) => join('lang', f))
