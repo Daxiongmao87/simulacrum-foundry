@@ -93,6 +93,13 @@ export class DocumentCreateTool extends BaseTool {
 
       // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
       const { DocumentAPI } = await import('../core/document-api.js');
+
+      // RESHAPE DATA: Transform AI-friendly arrays into Foundry-required objects (e.g., MappingField)
+      const documentClass = CONFIG[documentType]?.documentClass;
+      if (documentClass) {
+        this.#reshapeData(data, documentClass, data.type);
+      }
+
       const document = await DocumentAPI.createDocument(documentType, data);
 
       if (!document) {
@@ -129,6 +136,108 @@ export class DocumentCreateTool extends BaseTool {
         parameters.documentType
       );
     }
+  }
+
+  /**
+   * Reshape data to match Foundry's strict DataModel expectations.
+   * Specifically transforms Arrays -> ID-keyed Objects for MappingFields.
+   * @param {Object} data - The data object to reshape (modified in place)
+   * @param {Class} documentClass - The DataModel class
+   * @param {String} [documentSubType] - The sub-type (e.g., 'weapon') for system data lookup
+   */
+  #reshapeData(data, documentClass, documentSubType) {
+    if (!data || typeof data !== 'object') return;
+
+    // 1. Get the relevant schema
+    // If we are looking at 'system' data, we need the type-specific model
+    let schema = documentClass.schema;
+
+    // Attempt to handle system data reshaping
+    if (data.system && typeof data.system === 'object') {
+      try {
+        const systemModel = CONFIG[documentClass.documentName]?.dataModels?.[documentSubType];
+        if (systemModel && systemModel.schema) {
+          this.#reshapeDataFields(data.system, systemModel.schema);
+        } else if (documentClass.schema?.fields?.system?.model?.schema) {
+          // Some systems handle it differently, simplified fallback
+          this.#reshapeDataFields(data.system, documentClass.schema.fields.system.model.schema);
+        }
+      } catch (e) {
+        // Ignore system lookup errors
+      }
+    }
+
+    // 2. Reshape top-level fields
+    // (Note: Top level fields on Documents are rarely MappingFields, but good for completeness)
+    if (schema) {
+      this.#reshapeDataFields(data, schema);
+    }
+  }
+
+  /**
+   * Recursive field processor for #reshapeData
+   * @param {Object} dataObject - The object containing data properties
+   * @param {Schema} schema - The schema defining those properties
+   */
+  #reshapeDataFields(dataObject, schema) {
+    if (!schema?.fields) return;
+
+    for (const [fieldName, value] of Object.entries(dataObject)) {
+      if (!value) continue;
+      const field = schema.fields[fieldName];
+      if (!field) continue;
+
+      // CHECK: Array provided for a MappingField?
+      // MappingFields (like system.activities in dnd5e) require ID-keyed objects
+      if (Array.isArray(value)) {
+
+        // USE HELPER: Check full prototype chain for MappingField ancestry
+        // (Fixes issue where 'ActivitiesField' subclass was not detected)
+        if (this.#isMappingField(field)) {
+          // TRANSFORM: Array -> Object with random IDs
+          const obj = {};
+          value.forEach(item => {
+            // Use standard randomID if available, else simple fallback
+            const id = typeof foundry !== 'undefined' ? foundry.utils.randomID() : Math.random().toString(36).substring(2, 18);
+            obj[id] = item;
+
+            // Recurse into the item if it has its own schema (e.g. Activity DataModel)
+            if (field.model?.schema) {
+              this.#reshapeDataFields(item, field.model.schema);
+            }
+          });
+          dataObject[fieldName] = obj;
+          continue; // Done with this field
+        }
+      }
+
+      // Recurse for nested objects (SchemaField)
+      if (field.constructor.name === 'SchemaField' && typeof value === 'object' && !Array.isArray(value)) {
+        this.#reshapeDataFields(value, field); // SchemaField acts as schema
+      }
+    }
+  }
+
+  /**
+   * Helper to identify MappingField instances by checking prototype chain.
+   * Handles subclasses like ActivitiesField.
+   * @param {DataField} field 
+   * @returns {boolean}
+   */
+  #isMappingField(field) {
+    if (!field) return false;
+
+    // Check direct constructor
+    if (field.constructor.name === 'MappingField') return true;
+
+    // Walk prototype chain to check for inheritance
+    let proto = Object.getPrototypeOf(field);
+    while (proto) {
+      if (proto.constructor?.name === 'MappingField') return true;
+      proto = Object.getPrototypeOf(proto);
+    }
+
+    return false;
   }
 
   /**

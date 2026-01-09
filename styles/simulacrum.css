@@ -354,33 +354,28 @@
 
 /* Default font for Simulacrum UI */
 #simulacrum {
-  font-family: "Dumbledor", "Signika", sans-serif;
+  font-family: "Roboto", sans-serif;
+}
+
+/* Header Fonts - Modesto Condensed */
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-header,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-header .title,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h1,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h2,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h3,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h4 {
+  font-family: "Modesto Condensed", "Modesto", serif !important;
   letter-spacing: 0.05em;
 }
 
-/* Ensure Dumbledor is used in chat messages with high specificity */
-/* Broad selector for ANY message within Simulacrum logs or popouts */
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message * {
-  font-family: "Dumbledor", "Signika", sans-serif !important;
-  letter-spacing: 0.05em;
-}
-
-/* Specific targeted overrides for existing classes */
-#chat-log .chat-message.simulacrum-chat-message,
-#chat-log .chat-message.simulacrum-chat-message .message-header,
-#chat-log .chat-message.simulacrum-chat-message .message-content,
-#chat-log .chat-message.simulacrum-chat-message .message-header .title,
-#chat-log .chat-message.simulacrum-chat-message .message-sender,
-#chat-log .chat-message.simulacrum-chat-message .message-content p,
-#chat-log .chat-message.simulacrum-chat-message .message-content div,
-#chat-log .chat-message.simulacrum-chat-message .message-content h3,
-#chat-log .chat-message.simulacrum-chat-message .message-content h4,
-#chat-log .chat-message.simulacrum-chat-message .message-content span,
-#chat-log .chat-message.simulacrum-chat-message .message-content li,
-#chat-log .chat-message.simulacrum-chat-message .message-content a {
-  font-family: "Dumbledor", "Signika", sans-serif !important;
-  letter-spacing: 0.05em;
+/* Body Text Fonts - Roboto */
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content p,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content div,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content span,
+:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content li {
+  font-family: "Roboto", sans-serif !important;
+  letter-spacing: normal;
 }
 
 /* ---------------------------------------- */

@@ -14,29 +14,28 @@ The following scripts are available in `package.json` to build, run, and test th
 *   `npm run lint`: Lint the codebase using ESLint.
 *   `npm run format`: Format the codebase using Prettier.
 *   `npm run package:module`: Package the module for distribution.
-*   `npm run launch:foundry`: Launch a Foundry VTT instance for development.
-*   `npm run:foundry`: Run a Foundry VTT instance in a detached Docker container.
+*   `npm run deploy:module`: Deploy the current module code to the remote Foundry VTT server via SSH.
 
-## MCP Tools Workflow
+## Deployment Workflow
 
-The following tools are available via MCP and should be used for standard development operations:
+The project is deployed to a remote Foundry VTT server acting as the development environment.
 
-1.  **Validation**: Use `read_architecture` **BEFORE** proposing significant implementation plans to ensure alignment with `docs/ARCHITECTURE.md`.
-2.  **Deployment**: Use `deploy_module` **IMMEDIATELY AFTER** any code or template changes to sync with the running Foundry instance.
-3.  **Distribution**: Use `package_module` to create a release-ready zip file.
-4.  **Testing**: Use `run_foundry` to launch a clean, detached Foundry VTT environment.
+### 1. Deployment Check
+Ensure you have SSH access to the remote server configured. The deployment script uses `scp` and `ssh` to:
+1.  Generate a build hash.
+2.  Package the module.
+3.  Upload to `${DEPLOY_HOST}`.
+4.  Unzip and restart the Foundry VTT service.
 
-## Development Conventions
-
-The project uses ESLint and Prettier to enforce a consistent coding style. There are also pre-commit hooks set up with Husky to ensure that code is linted and formatted before being committed. The project has a comprehensive test suite using Jest. All code should be well-documented and follow the existing coding style.
-
-## CRITICAL DEPLOYMENT RULE
-
+### 2. Deploying Changes
 > [!IMPORTANT]
 > **ALWAYS REDEPLOY AFTER CHANGES**
-> You MUST run the `deploy:module` script after making ANY changes to code, styles, or templates. The changes will NOT take effect in the running Foundry instance otherwise.
+> You MUST run the deployment script after making ANY changes to code, styles, or templates.
 >
-> **Workflow:**
-> 1.  Make changes.
-> 2.  Find running container: `docker ps`
-> 3.  Run deploy: `npm run deploy:module -- --container <container_name_or_id>`
+> **Command:**
+> ```bash
+> npm run deploy:module
+> ```
+
+### 3. Verification
+After deployment, the Foundry VTT instance will automatically restart. Refresh your browser to see changes.

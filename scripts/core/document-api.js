@@ -350,42 +350,70 @@ export class DocumentAPI {
 
   /**
    * Extracts and formats the schema information from a document class.
+   * Recursively discovers nested schemas for full structure awareness.
+   * Uses cycle detection to prevent infinite loops instead of arbitrary depth limits.
    * @param {string} documentType The document type name.
    * @param {object} documentClass The document class to extract schema from.
+   * @param {Set} [visited] Set of visited class references to detect cycles.
    * @returns {object} The formatted schema object.
    * @private
    */
-  static #extractDocumentSchema(documentType, documentClass) {
+  static #extractDocumentSchema(documentType, documentClass, visited = new Set()) {
     const schema = {
       type: documentType,
       fields: [],
+      fieldDetails: {},
       systemFields: [],
+      systemFieldDetails: {},
       embedded: [],
+      embeddedSchemas: {},
       relationships: {},
       references: {},
     };
 
+    // Cycle detection: if we've seen this class before, don't recurse
+    const classId = documentClass?.name || documentClass?.documentName || String(documentClass);
+    if (visited.has(classId)) {
+      schema._cycleDetected = true;
+      return schema;
+    }
+    visited.add(classId);
+
     try {
-      // Extract main schema fields
+      // Extract main schema fields with type information
       if (documentClass.schema?.fields) {
         schema.fields = Object.keys(documentClass.schema.fields);
+        schema.fieldDetails = this.#extractFieldDetails(documentClass.schema.fields, new Set(visited));
       }
 
-      // Extract system fields if present
+      // Extract system fields with full nested structure if present
       if (documentClass.schema?.has && documentClass.schema.has('system')) {
         try {
           const systemField = documentClass.schema.getField('system');
           if (systemField?.fields) {
             schema.systemFields = Object.keys(systemField.fields);
+            schema.systemFieldDetails = this.#extractFieldDetails(systemField.fields, new Set(visited));
           }
         } catch (systemError) {
           documentLogger.debug(`Failed to extract system fields for "${documentType}":`, systemError);
         }
       }
 
-      // Extract embedded document types
+      // Extract embedded document types with their schemas (recursive with cycle detection)
       if (documentClass.hierarchy) {
         schema.embedded = Object.keys(documentClass.hierarchy);
+        for (const [embeddedName, embeddedClass] of Object.entries(documentClass.hierarchy)) {
+          try {
+            schema.embeddedSchemas[embeddedName] = this.#extractDocumentSchema(
+              embeddedClass.documentName || embeddedName,
+              embeddedClass,
+              new Set(visited)
+            );
+          } catch (embeddedError) {
+            documentLogger.debug(`Failed to extract embedded schema for "${embeddedName}":`, embeddedError);
+            schema.embeddedSchemas[embeddedName] = { error: 'Failed to extract schema' };
+          }
+        }
       }
 
       // Extract relationships and references
@@ -403,6 +431,146 @@ export class DocumentAPI {
 
     return schema;
   }
+
+  /**
+   * Extracts detailed information about schema fields including types and nested structures.
+   * Uses cycle detection to prevent infinite loops on circular field references.
+   * @param {object} fields The fields object from a DataModel schema.
+   * @param {Set} [visited] Set of visited field references to detect cycles.
+   * @returns {object} Field details object with type information.
+   * @private
+   */
+  static #extractFieldDetails(fields, visited = new Set()) {
+    const details = {};
+
+    for (const [fieldName, field] of Object.entries(fields)) {
+      try {
+        // Cycle detection for field objects
+        const fieldId = field?.constructor?.name || String(field);
+        const fullFieldId = `${fieldName}:${fieldId}`;
+
+        const fieldInfo = {
+          type: this.#getFieldTypeName(field),
+          required: field.required || false,
+        };
+
+        // Check for nullable
+        if (field.nullable !== undefined) {
+          fieldInfo.nullable = field.nullable;
+        }
+
+        // Check for default value
+        if (field.initial !== undefined) {
+          try {
+            const initial = typeof field.initial === 'function' ? field.initial() : field.initial;
+            // Only include simple defaults, not complex objects
+            if (initial !== null && typeof initial !== 'object') {
+              fieldInfo.default = initial;
+            }
+          } catch (_e) {
+            // Ignore default extraction errors
+          }
+        }
+
+        // Handle collection fields (EmbeddedCollectionField, SetField, ArrayField)
+        if (field.element || field.model) {
+          fieldInfo.isCollection = true;
+          const elementClass = field.element || field.model;
+          const elementId = elementClass?.name || elementClass?.documentName || String(elementClass);
+
+          if (!visited.has(elementId) && elementClass?.schema?.fields) {
+            const childVisited = new Set(visited);
+            childVisited.add(elementId);
+            fieldInfo.elementSchema = this.#extractFieldDetails(elementClass.schema.fields, childVisited);
+          } else if (elementClass?.documentName) {
+            fieldInfo.elementType = elementClass.documentName;
+          } else if (visited.has(elementId)) {
+            fieldInfo._cycleDetected = true;
+          }
+        }
+
+        // Handle SchemaField (nested object structure)
+        if (field.fields && typeof field.fields === 'object') {
+          if (!visited.has(fullFieldId)) {
+            const childVisited = new Set(visited);
+            childVisited.add(fullFieldId);
+            fieldInfo.nested = this.#extractFieldDetails(field.fields, childVisited);
+          } else {
+            fieldInfo._cycleDetected = true;
+          }
+        }
+
+        // Handle MappingField (object with dynamic keys)
+        if (field.constructor?.name === 'MappingField' || field.model) {
+          fieldInfo.isMapping = true;
+          if (field.model?.schema?.fields) {
+            const modelId = field.model?.name || String(field.model);
+            if (!visited.has(modelId)) {
+              const childVisited = new Set(visited);
+              childVisited.add(modelId);
+              fieldInfo.valueSchema = this.#extractFieldDetails(field.model.schema.fields, childVisited);
+            } else {
+              fieldInfo._cycleDetected = true;
+            }
+          }
+        }
+
+        // Handle StringField with choices
+        if (field.choices) {
+          try {
+            const choices = typeof field.choices === 'function' ? field.choices() : field.choices;
+            if (Array.isArray(choices)) {
+              fieldInfo.choices = choices.slice(0, 20); // Limit for readability
+            } else if (typeof choices === 'object') {
+              fieldInfo.choices = Object.keys(choices).slice(0, 20);
+            }
+          } catch (_e) {
+            // Ignore choice extraction errors
+          }
+        }
+
+        details[fieldName] = fieldInfo;
+      } catch (fieldError) {
+        documentLogger.debug(`Failed to extract field details for "${fieldName}":`, fieldError);
+        details[fieldName] = { type: 'unknown', error: 'Failed to extract' };
+      }
+    }
+
+    return details;
+  }
+
+  /**
+   * Gets a human-readable type name for a schema field.
+   * @param {object} field The schema field object.
+   * @returns {string} The type name.
+   * @private
+   */
+  static #getFieldTypeName(field) {
+    if (!field) return 'unknown';
+
+    // Check constructor name first
+    const constructorName = field.constructor?.name;
+    if (constructorName && constructorName !== 'Object') {
+      // Clean up common Foundry field type names
+      return constructorName
+        .replace(/Field$/, '')
+        .replace(/([A-Z])/g, ' $1')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+    }
+
+    // Fallback to type property if available
+    if (field.type) {
+      if (typeof field.type === 'function') {
+        return field.type.name?.toLowerCase() || 'function';
+      }
+      return String(field.type).toLowerCase();
+    }
+
+    return 'unknown';
+  }
+
 
   /**
    * Identifies and returns relationships (embedded documents, references) for a given document class.
