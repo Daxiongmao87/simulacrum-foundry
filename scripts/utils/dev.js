@@ -22,7 +22,9 @@ export function isDebugEnabled() {
       if (q === '1') return true;
       if (q === '0') return false;
     }
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
 
   return true; // Default enabled during dev
 }
@@ -31,11 +33,21 @@ export function isDebugEnabled() {
 try {
   if (typeof globalThis.window !== 'undefined') {
     globalThis.SimulacrumDiagnostics = globalThis.SimulacrumDiagnostics || {
-      enable() { globalThis.window.SIMULACRUM_DEV = true; return true; },
-      disable() { globalThis.window.SIMULACRUM_DEV = false; return false; },
-      status() { return isDebugEnabled(); }
+      enable() {
+        globalThis.window.SIMULACRUM_DEV = true;
+        return true;
+      },
+      disable() {
+        globalThis.window.SIMULACRUM_DEV = false;
+        return false;
+      },
+      status() {
+        return isDebugEnabled();
+      },
     };
   }
-} catch { /* intentionally empty */ }
+} catch {
+  /* intentionally empty */
+}
 
 export default { isDebugEnabled };

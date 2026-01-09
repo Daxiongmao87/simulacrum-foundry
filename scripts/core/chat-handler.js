@@ -6,7 +6,6 @@ import { formatToolCallDisplay } from '../utils/message-utils.js';
  * Orchestrates between AI, tools, conversation state, and UI
  */
 
-
 class ChatHandler {
   constructor(conversationManager) {
     this.conversationManager = conversationManager;
@@ -33,24 +32,30 @@ class ChatHandler {
 
       const finalResponse = await engine.processTurn({
         signal: options.signal,
-        onAssistantMessage: (msg) => {
+        onAssistantMessage: msg => {
           // Mirror previous behavior: add to conversation and UI when appropriate
           if (msg?.role === 'assistant' && msg?.content) {
             this.addMessageToConversation('assistant', msg.content);
-            this.addMessageToUI({ role: 'assistant', content: msg.content, display: msg.display || msg.content }, options);
+            this.addMessageToUI(
+              { role: 'assistant', content: msg.content, display: msg.display || msg.content },
+              options
+            );
           }
         },
-        onToolResult: (toolResult) => this.handleToolResult(toolResult, options)
+        onToolResult: toolResult => this.handleToolResult(toolResult, options),
       });
 
       return finalResponse;
-
     } catch (error) {
       this.logger.error('Error processing user message', error);
 
       // Handle cancellation specially
       if (error.name === 'AbortError' || error.message === 'Process was cancelled') {
-        const cancelMessage = { role: 'assistant', content: 'Process cancelled by user', display: '🛑 Process cancelled' };
+        const cancelMessage = {
+          role: 'assistant',
+          content: 'Process cancelled by user',
+          display: '🛑 Process cancelled',
+        };
         this.addMessageToUI(cancelMessage, options);
         return cancelMessage;
       }
@@ -64,7 +69,7 @@ class ChatHandler {
       return {
         content: `Error: ${error.message}`,
         display: `❌ ${error.message}`,
-        error
+        error,
       };
 
       return null;
@@ -84,11 +89,14 @@ class ChatHandler {
     this.addMessageToConversation('assistant', aiResponse.content, aiResponse.toolCalls);
 
     // Add to UI
-    this.addMessageToUI({
-      role: 'assistant',
-      content: aiResponse.content,
-      display: aiResponse.display || aiResponse.content
-    }, options);
+    this.addMessageToUI(
+      {
+        role: 'assistant',
+        content: aiResponse.content,
+        display: aiResponse.display || aiResponse.content,
+      },
+      options
+    );
 
     // Execute tools if present; pass full response so parseError is preserved
     if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
@@ -110,7 +118,7 @@ class ChatHandler {
         parseErrorType: parseErrorResponse._parseError,
         content: parseErrorResponse.content || '(empty)',
         hasToolCalls: !!(parseErrorResponse.toolCalls && parseErrorResponse.toolCalls.length > 0),
-        retryCount: options._retryCount || 0
+        retryCount: options._retryCount || 0,
       });
     }
     // Append assistant failed turn + system correction to conversation
@@ -132,7 +140,11 @@ class ChatHandler {
     } catch (error) {
       this.logger.error('Error executing tools', error);
 
-      const errorMessage = { role: 'assistant', content: `Tool execution error: ${error.message}`, display: `❌ ${error.message}` };
+      const errorMessage = {
+        role: 'assistant',
+        content: `Tool execution error: ${error.message}`,
+        display: `❌ ${error.message}`,
+      };
       this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
@@ -157,7 +169,7 @@ class ChatHandler {
       getSystemPrompt: SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
       currentToolSupport,
       signal: options.signal,
-      onToolResult: (toolResult) => this.handleToolResult(toolResult, options)
+      onToolResult: toolResult => this.handleToolResult(toolResult, options),
     });
   }
 
@@ -168,26 +180,31 @@ class ChatHandler {
       const aiSummaryResponse = await this.handleAutonomousFlow(finalResponse, options);
       // Add the AI's summary to conversation and UI
       this.addMessageToConversation('assistant', aiSummaryResponse.content);
-      this.addMessageToUI({
-        role: 'assistant',
-        content: aiSummaryResponse.content,
-        display: aiSummaryResponse.display || aiSummaryResponse.content
-      }, options);
+      this.addMessageToUI(
+        {
+          role: 'assistant',
+          content: aiSummaryResponse.content,
+          display: aiSummaryResponse.display || aiSummaryResponse.content,
+        },
+        options
+      );
       return aiSummaryResponse;
     }
 
     // Add final response if different from last message
     if (finalResponse && finalResponse.content) {
-      const lastMessage = this.conversationManager.messages[
-        this.conversationManager.messages.length - 1
-      ];
+      const lastMessage =
+        this.conversationManager.messages[this.conversationManager.messages.length - 1];
       if (lastMessage.role !== 'assistant' || lastMessage.content !== finalResponse.content) {
         this.addMessageToConversation('assistant', finalResponse.content);
-        this.addMessageToUI({
-          role: 'assistant',
-          content: finalResponse.content,
-          display: finalResponse.display || finalResponse.content
-        }, options);
+        this.addMessageToUI(
+          {
+            role: 'assistant',
+            content: finalResponse.content,
+            display: finalResponse.display || finalResponse.content,
+          },
+          options
+        );
       }
     }
     return finalResponse;
@@ -218,8 +235,9 @@ class ChatHandler {
       await this._logRetryExhausted(currentRetries, maxRetries);
       const errorMessage = {
         role: 'assistant',
-        content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-        display: '❌ Unable to generate a proper response after multiple attempts.'
+        content:
+          'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
+        display: '❌ Unable to generate a proper response after multiple attempts.',
       };
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
@@ -238,16 +256,15 @@ class ChatHandler {
       // Recursively handle the new response with retry tracking
       return await this.handleAIResponse(aiResponse, {
         ...options,
-        _retryCount: currentRetries
+        _retryCount: currentRetries,
       });
-
     } catch (error) {
       this.logger.error('Error during AI response retry', error);
 
       const errorMessage = {
         role: 'assistant',
         content: `Retry failed: ${error.message}`,
-        display: `❌ Retry failed: ${error.message}`
+        display: `❌ Retry failed: ${error.message}`,
       };
       this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
@@ -266,27 +283,30 @@ class ChatHandler {
           conversationLength: conversationMessages.length,
           recentMessages: conversationMessages.slice(-5).map(msg => ({
             role: msg.role,
-            hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0)
-          }))
+            hasToolCalls: !!(msg.tool_calls && msg.tool_calls.length > 0),
+          })),
         });
       }
-    } catch { /* intentionally empty */ }
+    } catch {
+      /* intentionally empty */
+    }
   }
 
   async _logRetryAttempt(currentRetries) {
     try {
       const { isDebugEnabled, createLogger } = await import('../utils/logger.js');
       if (isDebugEnabled()) {
-        const last = this.conversationManager.messages[
-          this.conversationManager.messages.length - 1
-        ];
+        const last =
+          this.conversationManager.messages[this.conversationManager.messages.length - 1];
         createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
           attempt: currentRetries,
           lastRole: last?.role,
-          hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0
+          hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0,
         });
       }
-    } catch { /* intentionally empty */ }
+    } catch {
+      /* intentionally empty */
+    }
   }
 
   /**
@@ -303,23 +323,28 @@ class ChatHandler {
       if (toolResult.toolName && options.onAssistantMessage) {
         const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName);
         // Display as assistant message with tool indicator
-        this.addMessageToUI({
-          role: 'assistant',
-          content: toolResult.content,
-          display: formattedDisplay
-        }, options);
+        this.addMessageToUI(
+          {
+            role: 'assistant',
+            content: toolResult.content,
+            display: formattedDisplay,
+          },
+          options
+        );
       }
     } else if (toolResult.role === 'assistant' && toolResult.content) {
       // Only add assistant messages that have actual content
       this.addMessageToConversation('assistant', toolResult.content);
-      this.addMessageToUI({
-        role: 'assistant',
-        content: toolResult.content,
-        display: toolResult.display || toolResult.content
-      }, options);
+      this.addMessageToUI(
+        {
+          role: 'assistant',
+          content: toolResult.content,
+          display: toolResult.display || toolResult.content,
+        },
+        options
+      );
     }
   }
-
 
   /**
    * Add message to conversation state only

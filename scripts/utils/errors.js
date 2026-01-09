@@ -14,7 +14,7 @@ export class SimulacrumError extends Error {
     this.type = type;
     this.data = data || {};
     this.timestamp = new Date().toISOString();
-    
+
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
@@ -27,7 +27,7 @@ export class SimulacrumError extends Error {
       type: this.type,
       data: this.data,
       timestamp: this.timestamp,
-      stack: this.stack
+      stack: this.stack,
     };
   }
 }
@@ -131,7 +131,7 @@ export const ERROR_TYPES = {
   VALIDATION_ERROR: 'validation_error',
   API_ERROR: 'api_error',
   UNKNOWN_DOCUMENT_TYPE: 'unknown_document_type',
-  CREATION_FAILED: 'creation_failed'
+  CREATION_FAILED: 'creation_failed',
 };
 
 // Export error codes as constants
@@ -144,7 +144,7 @@ export const ERROR_CODES = {
   NETWORK_ERROR: 'NETWORK_ERROR',
   NOT_FOUND: 'NOT_FOUND',
   API_ERROR: 'API_ERROR',
-  UNKNOWN_ERROR: 'UNKNOWN_ERROR'
+  UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 };
 
 // Export all error types for convenience
@@ -158,5 +158,5 @@ export default {
   NotFoundError,
   APIError,
   ERROR_CODES,
-  ERROR_TYPES
+  ERROR_TYPES,
 };

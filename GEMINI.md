@@ -8,26 +8,29 @@ This project is a Foundry VTT module called "Simulacrum: AI Campaign Assistant".
 
 The following scripts are available in `package.json` to build, run, and test the project:
 
-*   `npm test`: Run the test suite using Jest.
-*   `npm run test:watch`: Run the test suite in watch mode.
-*   `npm run test:coverage`: Generate a test coverage report.
-*   `npm run lint`: Lint the codebase using ESLint.
-*   `npm run format`: Format the codebase using Prettier.
-*   `npm run package:module`: Package the module for distribution.
-*   `mcp_projectTools_deploy_module`: Deploy the current module code to the remote Foundry VTT server via SSH.
+- `npm test`: Run the test suite using Jest.
+- `npm run test:watch`: Run the test suite in watch mode.
+- `npm run test:coverage`: Generate a test coverage report.
+- `npm run lint`: Lint the codebase using ESLint.
+- `npm run format`: Format the codebase using Prettier.
+- `npm run package:module`: Package the module for distribution.
+- `mcp_projectTools_deploy_module`: Deploy the current module code to the remote Foundry VTT server via SSH.
 
 ## Deployment Workflow
 
 The project is deployed to a remote Foundry VTT server acting as the development environment.
 
 ### 1. Deployment Check
+
 Ensure you have SSH access to the remote server configured. The deployment script uses `scp` and `ssh` to:
+
 1.  Generate a build hash.
 2.  Package the module.
 3.  Upload to `${DEPLOY_HOST}`.
 4.  Unzip and restart the Foundry VTT service.
 
 ### 2. Deploying Changes
+
 > [!IMPORTANT]
 > **ALWAYS REDEPLOY AFTER CHANGES**
 > You MUST run the deployment script after making ANY changes to code, styles, or templates.
@@ -36,4 +39,5 @@ Ensure you have SSH access to the remote server configured. The deployment scrip
 > mcp_projectTools_deploy_module
 
 ### 3. Verification
+
 After deployment, the Foundry VTT instance will automatically restart. Refresh your browser to see changes.

@@ -30,7 +30,7 @@ export function detectDocumentReferences(documentClass) {
         documentType: field?.model?.documentName,
         path: `system.${fieldName}`,
         type: 'reference',
-        required: Boolean(field?.required)
+        required: Boolean(field?.required),
       };
       continue;
     }
@@ -44,7 +44,7 @@ export function detectDocumentReferences(documentClass) {
           documentType: field?.element?.model?.documentName,
           path: `system.${fieldName}`,
           type: 'array',
-          required: Boolean(field?.required)
+          required: Boolean(field?.required),
         };
       }
     }

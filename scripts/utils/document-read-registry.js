@@ -105,7 +105,7 @@ class DocumentReadRegistry {
     if (!entry) {
       const error = new Error(
         `REJECTED: Document ${key} has not been read. ` +
-        `You MUST use document_read to inspect a document before modifying it.`
+          `You MUST use document_read to inspect a document before modifying it.`
       );
       error.code = 'DOCUMENT_NOT_READ';
       error.documentType = documentType;
@@ -120,14 +120,16 @@ class DocumentReadRegistry {
       if (currentHash !== entry.hash) {
         const error = new Error(
           `REJECTED: Document ${key} has changed since you last read it. ` +
-          `Please use document_read to get the current state before modifying.`
+            `Please use document_read to get the current state before modifying.`
         );
         error.code = 'DOCUMENT_STALE';
         error.documentType = documentType;
         error.documentId = documentId;
         error.storedHash = entry.hash;
         error.currentHash = currentHash;
-        logger.warn(`Modification rejected - stale read: ${key} (stored: ${entry.hash}, current: ${currentHash})`);
+        logger.warn(
+          `Modification rejected - stale read: ${key} (stored: ${entry.hash}, current: ${currentHash})`
+        );
         throw error;
       }
     }

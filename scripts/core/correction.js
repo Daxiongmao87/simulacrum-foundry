@@ -18,16 +18,21 @@ export function appendEmptyContentCorrection(conversationManager, errorResponse)
   const faultyMessage = errorResponse?.raw?.choices?.[0]?.message || {
     role: 'assistant',
     content: null,
-    tool_calls: errorResponse?.toolCalls
+    tool_calls: errorResponse?.toolCalls,
   };
 
   const combinedContent = `(No valid response was generated. The following error occurred: ${String(errorResponse?.content || 'Empty response')})`;
 
   // Add the assistant failed turn (with tool_calls if present)
-  conversationManager.addMessage(faultyMessage.role || 'assistant', combinedContent, faultyMessage.tool_calls);
+  conversationManager.addMessage(
+    faultyMessage.role || 'assistant',
+    combinedContent,
+    faultyMessage.tool_calls
+  );
 
   // Add a system instruction explicitly requiring natural language content
-  const systemInstruction = 'Your previous reply contained no natural-language content. Always include a clear explanation for the user alongside any tool calls. Provide a brief plan and explain your next action before calling tools.';
+  const systemInstruction =
+    'Your previous reply contained no natural-language content. Always include a clear explanation for the user alongside any tool calls. Provide a brief plan and explain your next action before calling tools.';
   conversationManager.addMessage('system', systemInstruction);
 }
 
@@ -65,6 +70,7 @@ export function appendToolFailureCorrection(conversationManager, errorResponse) 
 
   conversationManager.addMessage('assistant', assistantSummary);
 
-  const systemInstruction = 'Your last reply attempted to call a tool with invalid or malformed arguments. Provide corrected arguments if a tool call is still required, or respond in plain language without using tools.';
+  const systemInstruction =
+    'Your last reply attempted to call a tool with invalid or malformed arguments. Provide corrected arguments if a tool call is still required, or respond in plain language without using tools.';
   conversationManager.addMessage('system', systemInstruction);
 }

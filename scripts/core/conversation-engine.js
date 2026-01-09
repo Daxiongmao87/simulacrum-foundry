@@ -15,13 +15,12 @@ import {
   buildRetryLabel,
   getRetryDelayMs,
   delayWithSignal,
-  buildGenericFailureMessage
+  buildGenericFailureMessage,
 } from '../utils/retry-helpers.js';
 
 const MAX_PRE_TOOL_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [1000, 2000];
 const RETRY_STATUS_CALL_PREFIX = 'tool-retry';
-
 
 class ConversationEngine {
   constructor(conversationManager) {
@@ -41,10 +40,9 @@ class ConversationEngine {
     const { signal, onAssistantMessage, onToolResult } = options;
 
     // Get initial assistant response
-    let aiResponse = await SimulacrumCore.generateResponse(
-      this.conversationManager.getMessages(),
-      { signal }
-    );
+    let aiResponse = await SimulacrumCore.generateResponse(this.conversationManager.getMessages(), {
+      signal,
+    });
 
     // Pre-tool correction loop (bounded) - handles parse errors and tool call failures
     let attempt = 1;
@@ -69,10 +67,9 @@ class ConversationEngine {
         if (delayMs) {
           await delayWithSignal(delayMs, signal);
         }
-        aiResponse = await SimulacrumCore.generateResponse(
-          this.conversationManager.getMessages(),
-          { signal }
-        );
+        aiResponse = await SimulacrumCore.generateResponse(this.conversationManager.getMessages(), {
+          signal,
+        });
       } finally {
         emitProcessStatus('end', callId);
       }
@@ -99,7 +96,11 @@ class ConversationEngine {
     // If no tools, emit assistant and finish
     if (!Array.isArray(aiResponse.toolCalls) || aiResponse.toolCalls.length === 0) {
       if (onAssistantMessage && aiResponse?.content) {
-        onAssistantMessage({ role: 'assistant', content: aiResponse.content, display: aiResponse.display || aiResponse.content });
+        onAssistantMessage({
+          role: 'assistant',
+          content: aiResponse.content,
+          display: aiResponse.display || aiResponse.content,
+        });
       }
       return aiResponse;
     }
@@ -118,12 +119,16 @@ class ConversationEngine {
       getSystemPrompt: SimulacrumCore.getSystemPrompt.bind(SimulacrumCore),
       currentToolSupport,
       signal,
-      onToolResult: onToolResult || null
+      onToolResult: onToolResult || null,
     });
 
     // If loop produced a distinct final message and it wasn't already emitted by the loop handler, emit to UI
     if (finalResponse && finalResponse.content && onAssistantMessage && !finalResponse._emitted) {
-      onAssistantMessage({ role: 'assistant', content: finalResponse.content, display: finalResponse.display || finalResponse.content });
+      onAssistantMessage({
+        role: 'assistant',
+        content: finalResponse.content,
+        display: finalResponse.display || finalResponse.content,
+      });
     }
 
     return finalResponse;
@@ -132,10 +137,15 @@ class ConversationEngine {
   async _runToolFailureFallback(failedResponse, signal) {
     appendToolFailureCorrection(this.conversationManager, failedResponse);
 
-    const fallbackInstruction = 'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';
+    const fallbackInstruction =
+      'Tool calls are temporarily disabled. Provide a plain language response without using any tools.';
     const messages = this.conversationManager.getMessages();
     const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== 'system' || lastMessage.content !== fallbackInstruction) {
+    if (
+      !lastMessage ||
+      lastMessage.role !== 'system' ||
+      lastMessage.content !== fallbackInstruction
+    ) {
       this.conversationManager.addMessage('system', fallbackInstruction);
     }
 
@@ -154,21 +164,16 @@ class ConversationEngine {
     }
 
     const notice = 'Note: Tool functionality was temporarily unavailable for this response.';
-    const content = fallbackResponse.content
-      ? `${fallbackResponse.content}\n\n${notice}`
-      : notice;
-    const display = fallbackResponse.display
-      ? `${fallbackResponse.display}\n\n${notice}`
-      : content;
+    const content = fallbackResponse.content ? `${fallbackResponse.content}\n\n${notice}` : notice;
+    const display = fallbackResponse.display ? `${fallbackResponse.display}\n\n${notice}` : content;
 
     return {
       ...fallbackResponse,
       content,
       display,
-      toolCalls: []
+      toolCalls: [],
     };
   }
-
 }
 
 export { ConversationEngine };

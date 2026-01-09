@@ -22,17 +22,17 @@ export function mapFallbackArguments(toolName, originalArgs) {
         data: {
           name: originalArgs.document_name,
           content: originalArgs.content,
-          ...(originalArgs.folder && { folder: originalArgs.folder })
+          ...(originalArgs.folder && { folder: originalArgs.folder }),
         },
         // Preserve other args like process_label
         ...Object.fromEntries(
-          Object.entries(originalArgs).filter(([key]) => 
-            !['document_name', 'content', 'folder'].includes(key)
+          Object.entries(originalArgs).filter(
+            ([key]) => !['document_name', 'content', 'folder'].includes(key)
           )
-        )
+        ),
       };
     }
-    
+
     // Pattern 2: {name, description, type} → {documentType, data}
     if ('name' in originalArgs && 'type' in originalArgs) {
       return {
@@ -40,14 +40,14 @@ export function mapFallbackArguments(toolName, originalArgs) {
         data: {
           name: originalArgs.name,
           ...(originalArgs.description && { description: originalArgs.description }),
-          ...(originalArgs.img && { img: originalArgs.img })
+          ...(originalArgs.img && { img: originalArgs.img }),
         },
         // Preserve other args
         ...Object.fromEntries(
-          Object.entries(originalArgs).filter(([key]) => 
-            !['name', 'description', 'type', 'img'].includes(key)
+          Object.entries(originalArgs).filter(
+            ([key]) => !['name', 'description', 'type', 'img'].includes(key)
           )
-        )
+        ),
       };
     }
   }
@@ -64,6 +64,6 @@ export function getDefaultDocumentType() {
     const collection = game?.collections?.get(type);
     return collection !== undefined;
   });
-  
+
   return availableTypes[0] || null;
 }

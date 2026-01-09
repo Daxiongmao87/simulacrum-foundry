@@ -26,18 +26,18 @@ export class DocumentCreateTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          description: 'Type of document to create'
+          description: 'Type of document to create',
         },
         data: {
           type: 'object',
-          description: 'Document data (will be validated by FoundryVTT)'
+          description: 'Document data (will be validated by FoundryVTT)',
         },
         folder: {
           type: 'string',
-          description: 'Folder ID to create document in'
-        }
+          description: 'Folder ID to create document in',
+        },
       },
-      required: ['documentType', 'data']
+      required: ['documentType', 'data'],
     };
   }
 
@@ -62,7 +62,7 @@ export class DocumentCreateTool extends BaseTool {
       title: `Create ${documentType} Document`,
       details: `Creating ${documentType}: ${data.name || 'Unnamed'}`,
       availableFields: mockSchema.fields,
-      systemFields: mockSchema.systemFields
+      systemFields: mockSchema.systemFields,
     };
   }
 
@@ -113,7 +113,10 @@ export class DocumentCreateTool extends BaseTool {
         return {
           content: `Document type "${documentType}" not available in current system`,
           display: `❌ Unknown document type: ${documentType}`,
-          error: { message: `Document type "${documentType}" not available in current system`, type: 'UNKNOWN_DOCUMENT_TYPE' }
+          error: {
+            message: `Document type "${documentType}" not available in current system`,
+            type: 'UNKNOWN_DOCUMENT_TYPE',
+          },
         };
       }
 
@@ -142,7 +145,7 @@ export class DocumentCreateTool extends BaseTool {
         return {
           content: `Document creation failed`,
           display: `❌ Failed to create ${documentType} document`,
-          error: { message: 'Document creation failed', type: 'CREATE_FAILED' }
+          error: { message: 'Document creation failed', type: 'CREATE_FAILED' },
         };
       }
 
@@ -156,15 +159,14 @@ export class DocumentCreateTool extends BaseTool {
       const message = `Created ${documentType}: ${fullDocument.name || fullDocument._id}`;
       const contentPayload = {
         message,
-        document: fullDocument
+        document: fullDocument,
       };
 
       return {
         content: JSON.stringify(contentPayload, null, 2),
         display: `✅ Created **${fullDocument.name || fullDocument._id || fullDocument.id}** (${documentType})`,
-        document: fullDocument
+        document: fullDocument,
       };
-
     } catch (error) {
       return ValidationErrorHandler.createToolErrorResponse(
         error,
@@ -226,7 +228,6 @@ export class DocumentCreateTool extends BaseTool {
       // CHECK: Array provided for a MappingField?
       // MappingFields (like system.activities in dnd5e) require ID-keyed objects
       if (Array.isArray(value)) {
-
         // USE HELPER: Check full prototype chain for MappingField ancestry
         // (Fixes issue where 'ActivitiesField' subclass was not detected)
         if (this.#isMappingField(field)) {
@@ -234,7 +235,10 @@ export class DocumentCreateTool extends BaseTool {
           const obj = {};
           value.forEach(item => {
             // Use standard randomID if available, else simple fallback
-            const id = typeof foundry !== 'undefined' ? foundry.utils.randomID() : Math.random().toString(36).substring(2, 18);
+            const id =
+              typeof foundry !== 'undefined'
+                ? foundry.utils.randomID()
+                : Math.random().toString(36).substring(2, 18);
             obj[id] = item;
 
             // Recurse into the item if it has its own schema (e.g. Activity DataModel)
@@ -248,7 +252,11 @@ export class DocumentCreateTool extends BaseTool {
       }
 
       // Recurse for nested objects (SchemaField)
-      if (field.constructor.name === 'SchemaField' && typeof value === 'object' && !Array.isArray(value)) {
+      if (
+        field.constructor.name === 'SchemaField' &&
+        typeof value === 'object' &&
+        !Array.isArray(value)
+      ) {
         this.#reshapeDataFields(value, field); // SchemaField acts as schema
       }
     }
@@ -257,7 +265,7 @@ export class DocumentCreateTool extends BaseTool {
   /**
    * Helper to identify MappingField instances by checking prototype chain.
    * Handles subclasses like ActivitiesField.
-   * @param {DataField} field 
+   * @param {DataField} field
    * @returns {boolean}
    */
   #isMappingField(field) {
@@ -287,9 +295,9 @@ export class DocumentCreateTool extends BaseTool {
           documentType: 'SomeDocumentType',
           name: 'Example Name',
           data: {
-            content: '<p>Example content</p>'
-          }
-        }
+            content: '<p>Example content</p>',
+          },
+        },
       },
       {
         description: 'Create a typed document (example)',
@@ -300,10 +308,10 @@ export class DocumentCreateTool extends BaseTool {
             type: 'some-type',
             img: 'icons/example.png',
             system: {
-              details: { description: 'Example description' }
-            }
-          }
-        }
+              details: { description: 'Example description' },
+            },
+          },
+        },
       },
       {
         description: 'Create a document in a specific folder (example)',
@@ -314,10 +322,10 @@ export class DocumentCreateTool extends BaseTool {
           data: {
             type: 'some-type',
             img: 'icons/example.svg',
-            system: { uses: { value: 1, max: 1 } }
-          }
-        }
-      }
+            system: { uses: { value: 1, max: 1 } },
+          },
+        },
+      },
     ];
   }
 
@@ -326,10 +334,10 @@ export class DocumentCreateTool extends BaseTool {
    */
   getRequiredPermissions() {
     return {
-      'FILES_BROWSE': true,
-      'FILES_UPLOAD': true,
-      'DOCUMENT_CREATE': true,
-      [`ENTITY_CREATE`]: true
+      FILES_BROWSE: true,
+      FILES_UPLOAD: true,
+      DOCUMENT_CREATE: true,
+      [`ENTITY_CREATE`]: true,
     };
   }
 }

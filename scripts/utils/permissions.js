@@ -78,7 +78,7 @@ export class PermissionManager {
     // For players, creation is usually restricted unless specific permissions are granted.
     // Check if user has general creation permission using the user.can method
     // This will respect mock permission configurations in testing environments
-    return user.can && user.can('create') || false;
+    return (user.can && user.can('create')) || false;
   }
 
   /**

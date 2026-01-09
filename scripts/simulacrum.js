@@ -33,18 +33,18 @@ function registerAPISettings() {
     type: String,
     choices: {
       openai: 'OpenAI-compatible',
-      gemini: 'Gemini-compatible'
+      gemini: 'Gemini-compatible',
     },
     default: 'openai',
     restricted: true,
-    onChange: async (_value) => {
+    onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after provider change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after provider change', e);
       }
-    }
+    },
   });
 
   game.settings.register(MODULE_ID, 'apiKey', {
@@ -55,14 +55,14 @@ function registerAPISettings() {
     type: String,
     default: '',
     restricted: true,
-    onChange: async (_value) => {
+    onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after apiKey change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after apiKey change', e);
       }
-    }
+    },
   });
 
   game.settings.register(MODULE_ID, 'baseURL', {
@@ -73,14 +73,14 @@ function registerAPISettings() {
     type: String,
     default: 'http://localhost:11434/v1',
     restricted: true,
-    onChange: async (_value) => {
+    onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after baseURL change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after baseURL change', e);
       }
-    }
+    },
   });
 
   game.settings.register(MODULE_ID, 'model', {
@@ -91,14 +91,14 @@ function registerAPISettings() {
     type: String,
     default: 'gpt-3.5-turbo',
     restricted: true,
-    onChange: async (_value) => {
+    onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after model change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after model change', e);
       }
-    }
+    },
   });
 
   // Task-14: API Request Delay to prevent rate limiting
@@ -110,7 +110,7 @@ function registerAPISettings() {
     type: Number,
     default: 0,
     restricted: true,
-    range: { min: 0, max: 30, step: 0.5 }
+    range: { min: 0, max: 30, step: 0.5 },
   });
 }
 
@@ -140,7 +140,7 @@ Hooks.once('init', async () => {
       'modules/simulacrum/templates/simulacrum/sidebar.hbs',
       'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
       'modules/simulacrum/templates/simulacrum/sidebar-input.hbs',
-      'modules/simulacrum/templates/simulacrum/message.hbs'
+      'modules/simulacrum/templates/simulacrum/message.hbs',
     ];
     // Ensure loadTemplates exists in the Foundry environment
     if (typeof loadTemplates === 'function') {

@@ -10,31 +10,37 @@ class DocumentSearchTool extends BaseTool {
    * Create a new Document Search Tool
    */
   constructor() {
-    super('search_documents', 'Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.', {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search text - can be document names, content, or keywords.'
+    super(
+      'search_documents',
+      'Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.',
+      {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Search text - can be document names, content, or keywords.',
+          },
+          documentTypes: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Limit search to specific document types (optional - searches all types if omitted)',
+          },
+          fields: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Specific document fields to search in (optional - searches all fields if omitted)',
+          },
+          maxResults: {
+            type: 'number',
+            default: 20,
+            description: 'Maximum number of results to return (default: 20)',
+          },
         },
-        documentTypes: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Limit search to specific document types (optional - searches all types if omitted)'
-        },
-        fields: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Specific document fields to search in (optional - searches all fields if omitted)'
-        },
-        maxResults: {
-          type: 'number',
-          default: 20,
-          description: 'Maximum number of results to return (default: 20)'
-        }
-      },
-      required: ['query']
-    });
+        required: ['query'],
+      }
+    );
   }
 
   /**
@@ -48,7 +54,7 @@ class DocumentSearchTool extends BaseTool {
         query: params.query,
         types: params.documentTypes,
         fields: params.fields,
-        maxResults: params.maxResults
+        maxResults: params.maxResults,
       });
 
       // Ensure results are limited even if API returns more
@@ -56,13 +62,13 @@ class DocumentSearchTool extends BaseTool {
 
       return {
         content: 'Found ' + limitedResults.length + ' documents matching "' + params.query + '"',
-        display: this.formatSearchResults(limitedResults, params.query)
+        display: this.formatSearchResults(limitedResults, params.query),
       };
     } catch (error) {
       return {
         content: 'Failed to search documents: ' + error.message,
         display: '❌ Search failed: ' + error.message,
-        error: { message: error.message, type: 'SEARCH_FAILED' }
+        error: { message: error.message, type: 'SEARCH_FAILED' },
       };
     }
   }

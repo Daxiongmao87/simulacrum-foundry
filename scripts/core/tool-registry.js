@@ -48,7 +48,7 @@ export class ToolRegistry {
       tool: tool.name,
       category: options.category || 'general',
       dependencies: (options.dependencies || []).length,
-      permissions: (options.permissions || []).length
+      permissions: (options.permissions || []).length,
     };
   }
 
@@ -67,7 +67,7 @@ export class ToolRegistry {
         new ArtifactSearchTool(),
         new DocumentSchemaTool(),
         new ExecuteMacroTool(),
-        new ManageTaskTool()
+        new ManageTaskTool(),
       ];
 
       for (const t of tools) {
@@ -109,8 +109,8 @@ export class ToolRegistry {
 
     // Validate dependencies
     const dependencies = options.dependencies || [];
-    const unresolvedDeps = dependencies.filter(dep =>
-      !this.tools.has(dep) && !this.dependencies.has(dep)
+    const unresolvedDeps = dependencies.filter(
+      dep => !this.tools.has(dep) && !this.dependencies.has(dep)
     );
 
     if (unresolvedDeps.length > 0) {
@@ -126,7 +126,7 @@ export class ToolRegistry {
       permissions = [],
       version = '1.0.0',
       description = '',
-      tags = []
+      tags = [],
     } = options;
 
     return {
@@ -144,7 +144,7 @@ export class ToolRegistry {
       executionCount: 0,
       successCount: 0,
       failureCount: 0,
-      lastExecution: null
+      lastExecution: null,
     };
   }
 
@@ -232,10 +232,16 @@ export class ToolRegistry {
     // [{ type: 'function', function: { name, description, parameters } }]
     return Array.from(this.tools.values()).map(registration => {
       const tool = registration.tool;
-      const raw = tool.schema || (typeof tool.getParameterSchema === 'function' ? tool.getParameterSchema() : null) || {};
+      const raw =
+        tool.schema ||
+        (typeof tool.getParameterSchema === 'function' ? tool.getParameterSchema() : null) ||
+        {};
       let parameters = raw;
       if (!raw || typeof raw !== 'object' || raw.type !== 'object') {
-        const props = (raw && typeof raw === 'object' && raw.properties && typeof raw.properties === 'object') ? raw.properties : {};
+        const props =
+          raw && typeof raw === 'object' && raw.properties && typeof raw.properties === 'object'
+            ? raw.properties
+            : {};
         parameters = { type: 'object', properties: props };
       }
       return {
@@ -243,8 +249,8 @@ export class ToolRegistry {
         function: {
           name: tool.name,
           description: tool.description || '',
-          parameters
-        }
+          parameters,
+        },
       };
     });
   }
@@ -255,12 +261,7 @@ export class ToolRegistry {
    * @returns {Array<Object>}
    */
   listTools(options = {}) {
-    const {
-      category = null,
-      enabled = true,
-      tags = [],
-      sortBy = 'name'
-    } = options;
+    const { category = null, enabled = true, tags = [], sortBy = 'name' } = options;
 
     let tools = Array.from(this.tools.values());
 
@@ -273,9 +274,7 @@ export class ToolRegistry {
     }
 
     if (tags.length > 0) {
-      tools = tools.filter(tool =>
-        tags.some(tag => tool.tags.includes(tag))
-      );
+      tools = tools.filter(tool => tags.some(tag => tool.tags.includes(tag)));
     }
 
     // Sort tools by specified field
@@ -303,7 +302,7 @@ export class ToolRegistry {
       enabled: tool.enabled,
       executionCount: tool.executionCount,
       lastExecution: tool.lastExecution,
-      tags: tool.tags
+      tags: tool.tags,
     }));
   }
 
@@ -316,7 +315,7 @@ export class ToolRegistry {
       .sort()
       .map(category => ({
         name: category,
-        toolCount: this.categories.get(category).length
+        toolCount: this.categories.get(category).length,
       }));
   }
 
@@ -369,7 +368,7 @@ export class ToolRegistry {
         tool: name,
         executionId,
         result,
-        duration: Date.now() - registration.lastExecution.getTime()
+        duration: Date.now() - registration.lastExecution.getTime(),
       };
     } catch (error) {
       // Update failure stats
@@ -382,7 +381,7 @@ export class ToolRegistry {
       throw new ToolError(`${tool.name} execution failed: ${error.message}`, name, {
         executionId,
         context,
-        cause: error
+        cause: error,
       });
     }
   }
@@ -509,7 +508,7 @@ export class ToolRegistry {
       mostExecuted: tools
         .sort((a, b) => b.executionCount - a.executionCount)
         .slice(0, 5)
-        .map(t => ({ name: t.tool.name, count: t.executionCount }))
+        .map(t => ({ name: t.tool.name, count: t.executionCount })),
     };
   }
 

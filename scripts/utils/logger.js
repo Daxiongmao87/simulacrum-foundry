@@ -13,7 +13,7 @@ export class Logger {
     ERROR: 0,
     WARN: 1,
     INFO: 2,
-    DEBUG: 3
+    DEBUG: 3,
   };
 
   /**
@@ -27,15 +27,15 @@ export class Logger {
     this.prefix = `[Simulacrum:${component}]`;
   }
 
-
   static isDebugEnabled() {
     try {
       if (globalThis.CONFIG?.debug?.simulacrum === true) return true;
-    } catch { /* intentionally empty */ }
+    } catch {
+      /* intentionally empty */
+    }
     // Default to true during development; flip to false at release.
     return true;
   }
-
 
   /**
    * Log error message

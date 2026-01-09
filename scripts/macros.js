@@ -16,16 +16,16 @@ if (typeof SimulacrumCore !== 'undefined') {
     if (success) ui.notifications.info("Simulacrum conversation cleared.");
   });
 }
-    `.trim()
+    `.trim(),
   },
   {
     name: 'Simulacrum: Open Assistant',
     type: 'script',
     img: 'icons/tools/scribal/ink-quill-book-purple.webp',
-    command: `ui.sidebar.activateTab('simulacrum');`
+    command: `ui.sidebar.activateTab('simulacrum');`,
   },
   {
-    name: "Simulacrum: Reset Settings to Default",
+    name: 'Simulacrum: Reset Settings to Default',
     type: 'script',
     img: 'icons/magic/time/arrows-circling-green.webp',
     command: `
@@ -55,8 +55,8 @@ if (typeof SimulacrumCore !== 'undefined') {
     }
   }).render(true);
 }
-    `.trim()
-  }
+    `.trim(),
+  },
 ];
 
 export async function ensureSimulacrumMacros() {
@@ -74,12 +74,16 @@ export async function ensureSimulacrumMacros() {
     const existing = game.macros.some(m => m.name === def.name);
     if (!existing) {
       if (!folder) {
-        folder = await Folder.create({ name: 'Simulacrum Macros', type: 'Macro', color: '#8A2BE2' });
+        folder = await Folder.create({
+          name: 'Simulacrum Macros',
+          type: 'Macro',
+          color: '#8A2BE2',
+        });
       }
       try {
         await Macro.create({
           ...def,
-          folder: folder.id
+          folder: folder.id,
         });
         logger.info(`Created default macro: ${def.name}`);
       } catch (err) {

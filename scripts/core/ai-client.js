@@ -17,7 +17,7 @@ import { OpenAIProvider } from './providers/openai-provider.js';
 export { AIProvider, MockAIProvider, OpenAIProvider, GeminiProvider };
 
 export const AI_ERROR_CODES = Object.freeze({
-  TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE'
+  TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE',
 });
 
 /**
@@ -40,9 +40,8 @@ export class AIClient {
     this.maxTokens = config.maxTokens || 4096;
     // Fix: If contextLength is small (likely a message count setting),
     // default to a safe token limit (32k for Mistral).
-    this.contextLength = (config.contextLength && config.contextLength > 1000)
-      ? config.contextLength
-      : 32000;
+    this.contextLength =
+      config.contextLength && config.contextLength > 1000 ? config.contextLength : 32000;
     this.temperature = config.temperature;
     this.provider = config.provider || 'openai';
     this.providers = new Map();
@@ -119,7 +118,7 @@ export class AIClient {
       if (!msg.role) {
         throw new Error(`Message at index ${index} missing 'role' property`);
       }
-      // Content is optional for some roles in some APIs (e.g. assistant calls tool), 
+      // Content is optional for some roles in some APIs (e.g. assistant calls tool),
       // but generally we want to ensure it's at least present or handled.
       // For now, we'll just check it's not undefined if it's supposed to be there.
     });
@@ -147,17 +146,18 @@ export class AIClient {
         baseURL: this.baseURL,
         model: this.model,
         maxTokens: this.maxTokens,
-        temperature: this.temperature
+        temperature: this.temperature,
       });
 
       const MAX_GEMINI_RETRIES = 2;
       let lastResult;
 
       for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
-        lastResult = await geminiProvider.chat(
-          messages,
-          { tools, systemPrompt: options.systemPrompt, signal: options.signal }
-        );
+        lastResult = await geminiProvider.chat(messages, {
+          tools,
+          systemPrompt: options.systemPrompt,
+          signal: options.signal,
+        });
 
         // If success or unknown error, return. If TOOL_CALL_FAILURE, retry.
         if (!lastResult.errorCode) {
@@ -165,7 +165,10 @@ export class AIClient {
         }
 
         if (i < MAX_GEMINI_RETRIES && isDebugEnabled()) {
-          createLogger('AIClient').warn(`Gemini tool call failure (attempt ${i + 1}/${MAX_GEMINI_RETRIES + 1}), retrying...`, { errorCode: lastResult.errorCode });
+          createLogger('AIClient').warn(
+            `Gemini tool call failure (attempt ${i + 1}/${MAX_GEMINI_RETRIES + 1}), retrying...`,
+            { errorCode: lastResult.errorCode }
+          );
           await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Exponential-ish backoff
         }
       }
@@ -188,7 +191,9 @@ export class AIClient {
 
     if (dynamicMaxTokens < 1) {
       if (isDebugEnabled()) {
-        createLogger('AIDiagnostics').warn('Prompt is very close to the context limit. Setting max_tokens to a small value.');
+        createLogger('AIDiagnostics').warn(
+          'Prompt is very close to the context limit. Setting max_tokens to a small value.'
+        );
       }
       dynamicMaxTokens = 100;
     }
@@ -203,7 +208,7 @@ export class AIClient {
         maxTokens,
         messagesCount: messages.length,
         hasTools: !!tools,
-        toolCount: tools ? tools.length : 0
+        toolCount: tools ? tools.length : 0,
       });
     }
 
@@ -211,7 +216,7 @@ export class AIClient {
       model: this.model,
       messages,
       max_tokens: maxTokens,
-      temperature: typeof this.temperature === 'number' ? this.temperature : undefined
+      temperature: typeof this.temperature === 'number' ? this.temperature : undefined,
     };
 
     if (tools) {
@@ -220,7 +225,7 @@ export class AIClient {
     }
 
     let response;
-    const __inJest = (typeof process !== 'undefined') && process?.env && process.env.JEST_WORKER_ID;
+    const __inJest = typeof process !== 'undefined' && process?.env && process.env.JEST_WORKER_ID;
     const __retryEnabled = !__inJest;
     const MAX_RETRIES = 5;
     const INITIAL_DELAY_MS = 250;
@@ -229,7 +234,7 @@ export class AIClient {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const headers = {
         'Content-Type': 'application/json',
-        ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       };
 
       try {
@@ -242,13 +247,14 @@ export class AIClient {
         if (isDebugEnabled()) {
           const debugHeaders = { ...headers };
           if (debugHeaders.Authorization) {
-            debugHeaders.Authorization = debugHeaders.Authorization.substring(0, 15) + '...[MASKED]';
+            debugHeaders.Authorization =
+              debugHeaders.Authorization.substring(0, 15) + '...[MASKED]';
           }
           createLogger('AIClient').info('Sending API Request:', {
             url: url.toString(),
             headers: debugHeaders,
             hasApiKey: !!this.apiKey,
-            apiKeyLength: this.apiKey ? this.apiKey.length : 0
+            apiKeyLength: this.apiKey ? this.apiKey.length : 0,
           });
         }
 
@@ -261,21 +267,30 @@ export class AIClient {
             hasContent: !!m.content,
             hasToolCalls: !!(m.tool_calls && m.tool_calls.length),
             toolCallIds: (m.tool_calls || []).map(tc => tc.id),
-            toolCallId: m.tool_call_id || null
+            toolCallId: m.tool_call_id || null,
           }));
           createLogger('AIClient').info('Message structure before API call:', msgSummary);
         }
         // CRITICAL DEBUG: Always log for Mistral issue
-        console.log('[Simulacrum DEBUG] Messages being sent:', JSON.stringify(body.messages.map(m => ({
-          role: m.role,
-          content: m.content ? m.content.substring(0, 50) + '...' : null,
-          tool_calls: m.tool_calls ? m.tool_calls.map(tc => ({
-            id: tc.id,
-            type: tc.type,
-            name: tc.function?.name
-          })) : undefined,
-          tool_call_id: m.tool_call_id
-        })), null, 2));
+        console.log(
+          '[Simulacrum DEBUG] Messages being sent:',
+          JSON.stringify(
+            body.messages.map(m => ({
+              role: m.role,
+              content: m.content ? m.content.substring(0, 50) + '...' : null,
+              tool_calls: m.tool_calls
+                ? m.tool_calls.map(tc => ({
+                    id: tc.id,
+                    type: tc.type,
+                    name: tc.function?.name,
+                  }))
+                : undefined,
+              tool_call_id: m.tool_call_id,
+            })),
+            null,
+            2
+          )
+        );
 
         const stringifiedBody = JSON.stringify(body);
 
@@ -283,7 +298,7 @@ export class AIClient {
           method: 'POST',
           headers,
           body: stringifiedBody,
-          signal
+          signal,
         });
 
         if (response.ok) {
@@ -297,9 +312,13 @@ export class AIClient {
           const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
           try {
             if (isDebugEnabled()) {
-              createLogger('AIDiagnostics').info('Retrying API request', { attempt: attempt + 1, status, delay });
+              createLogger('AIDiagnostics').info('Retrying API request', {
+                attempt: attempt + 1,
+                status,
+                delay,
+              });
             }
-          } catch { }
+          } catch {}
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           break;
@@ -342,13 +361,13 @@ export class AIClient {
           value: msg.content,
           type: typeof msg.content,
           length: (msg.content || '').length,
-          isEmpty: !msg.content || msg.content.trim().length === 0
+          isEmpty: !msg.content || msg.content.trim().length === 0,
         },
         toolCalls: {
           count: (msg.tool_calls || []).length,
-          names: (msg.tool_calls || []).map(tc => tc?.function?.name).filter(Boolean)
+          names: (msg.tool_calls || []).map(tc => tc?.function?.name).filter(Boolean),
         },
-        finishReason: choice?.finish_reason
+        finishReason: choice?.finish_reason,
       });
     }
 
@@ -358,14 +377,16 @@ export class AIClient {
     const tool_calls = msg.tool_calls || [];
 
     return {
-      choices: [{
-        message: {
-          content,
-          tool_calls
-        }
-      }],
+      choices: [
+        {
+          message: {
+            content,
+            tool_calls,
+          },
+        },
+      ],
       model: data.model,
-      usage: data.usage
+      usage: data.usage,
     };
   }
 
@@ -385,10 +406,7 @@ export class AIClient {
       return this.chat(conversationMessages, tools, forwardedOptions);
     }
 
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...conversationMessages
-    ];
+    const messages = [{ role: 'system', content: systemPrompt }, ...conversationMessages];
     return this.chat(messages, tools, options);
   }
 
@@ -405,7 +423,9 @@ export class AIClient {
         throw new SimulacrumError(`AI API connection error: 401 - Connection error`);
       } else if (message.includes('500')) {
         // Extract just the error content, not the full message with status code
-        const errorPart = message.includes(' - ') ? message.split(' - ').slice(1).join(' - ') : message;
+        const errorPart = message.includes(' - ')
+          ? message.split(' - ').slice(1).join(' - ')
+          : message;
         throw new SimulacrumError(`AI API connection error: 500 - ${errorPart}`);
       }
       throw new SimulacrumError(`AI API connection error: ${message}`);
@@ -420,8 +440,8 @@ export class AIClient {
     const response = await fetch(`${this.baseURL}/models`, {
       method: 'GET',
       headers: {
-        ...(this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {})
-      }
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      },
     });
 
     if (!response.ok) {
@@ -446,7 +466,9 @@ export class AIClient {
   }
 
   // Provider-agnostic: Ollama validation same as OpenAI-compatible /v1
-  async validateOllama() { return this.validateOpenAI(); }
+  async validateOllama() {
+    return this.validateOpenAI();
+  }
 
   /**
    * Register a new AI provider
@@ -484,7 +506,7 @@ export class AIClient {
         const response = await provider.sendMessage(message, options.context || []);
         return {
           ...response,
-          provider: providerName
+          provider: providerName,
         };
       } catch (error) {
         throw new APIError(`AI request failed: ${error.message}`);
@@ -492,20 +514,18 @@ export class AIClient {
     }
 
     const contextMessages = Array.isArray(options.context) ? options.context : [];
-    const baseMessages = [
-      ...contextMessages,
-      { role: 'user', content: message }
-    ];
-    const raw = await this.chat(
-      baseMessages, options.tools || null, { provider: providerName, signal: options.signal }
-    );
+    const baseMessages = [...contextMessages, { role: 'user', content: message }];
+    const raw = await this.chat(baseMessages, options.tools || null, {
+      provider: providerName,
+      signal: options.signal,
+    });
     const normalized = normalizeAIResponse(raw);
     return {
       content: normalized.content,
       usage: normalized.usage || raw.usage,
       model: normalized.model || raw.model,
       provider: providerName,
-      raw
+      raw,
     };
   }
 
@@ -527,7 +547,7 @@ export class AIClient {
         const response = await provider.generateResponse(messages);
         return {
           ...response,
-          provider: providerName
+          provider: providerName,
         };
       } catch (error) {
         throw new APIError(`AI request failed: ${error.message}`);
@@ -537,7 +557,7 @@ export class AIClient {
     const raw = await this.chat(messages, options.tools || null, {
       provider: providerName,
       signal: options.signal,
-      systemPrompt: options.systemPrompt
+      systemPrompt: options.systemPrompt,
     });
     const normalized = normalizeAIResponse(raw);
     return {
@@ -546,7 +566,7 @@ export class AIClient {
       model: normalized.model || raw.model,
       provider: providerName,
       raw,
-      toolCalls: normalized.toolCalls
+      toolCalls: normalized.toolCalls,
     };
   }
 
@@ -568,7 +588,7 @@ export class AIClient {
   getAvailableProviders() {
     return Array.from(this.providers.entries()).map(([name, provider]) => ({
       name,
-      available: provider.isAvailable()
+      available: provider.isAvailable(),
     }));
   }
 

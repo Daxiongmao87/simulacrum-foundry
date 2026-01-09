@@ -9,14 +9,18 @@ import { toolRegistry } from './tool-registry.js';
 import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 import { DocumentAPI } from './document-api.js';
-import { normalizeAIResponse, parseInlineToolCall, sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
+import {
+  normalizeAIResponse,
+  parseInlineToolCall,
+  sanitizeMessagesForFallback,
+} from '../utils/ai-normalization.js';
 import { smartSliceMessages } from '../utils/message-utils.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { emitProcessCancelled } from './hook-manager.js';
 import {
   buildSystemPrompt,
   getDocumentTypesInfo as getDocTypesInfo,
-  getAvailableMacrosList as getMacros
+  getAvailableMacrosList as getMacros,
 } from './system-prompt-builder.js';
 
 class SimulacrumCore {
@@ -89,18 +93,21 @@ class SimulacrumCore {
       if (loaded && this.conversationManager.messages.length > 0) {
         if (isDebugEnabled()) this.logger.debug('Loaded conversation history');
       } else {
-        if (isDebugEnabled()) this.logger.debug('No saved conversation history found, starting fresh');
+        if (isDebugEnabled())
+          this.logger.debug('No saved conversation history found, starting fresh');
         // Task-06: Add welcome message to ConversationManager so it persists across reloads
-        const welcomeContent = game.i18n?.localize('SIMULACRUM.WelcomeMessage') ||
-          'Hello! I\'m your AI assistant for campaign document management. How can I help you today?';
+        const welcomeContent =
+          game.i18n?.localize('SIMULACRUM.WelcomeMessage') ||
+          "Hello! I'm your AI assistant for campaign document management. How can I help you today?";
         this.conversationManager.addMessage('assistant', welcomeContent);
         if (isDebugEnabled()) this.logger.debug('Added welcome message to conversation history');
       }
     } catch (error) {
       this.logger.warn('Failed to load conversation history:', error);
       // Start with welcome message on load failure
-      const welcomeContent = game.i18n?.localize('SIMULACRUM.WelcomeMessage') ||
-        'Hello! I\'m your AI assistant for campaign document management. How can I help you today?';
+      const welcomeContent =
+        game.i18n?.localize('SIMULACRUM.WelcomeMessage') ||
+        "Hello! I'm your AI assistant for campaign document management. How can I help you today?";
       this.conversationManager.addMessage('assistant', welcomeContent);
     }
 
@@ -137,7 +144,7 @@ class SimulacrumCore {
         model,
         contextLength,
         provider,
-        temperature
+        temperature,
       });
 
       // Validate connection
@@ -195,9 +202,13 @@ class SimulacrumCore {
           const toolNames = Array.isArray(tools)
             ? tools.map(t => t?.function?.name || t?.name).filter(Boolean)
             : [];
-          diag.info('tools', { count: toolNames.length, names: toolNames, fromOptions: options.tools !== undefined });
+          diag.info('tools', {
+            count: toolNames.length,
+            names: toolNames,
+            fromOptions: options.tools !== undefined,
+          });
         }
-      } catch { }
+      } catch {}
 
       // Get context length setting and limit conversation history
       const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
@@ -208,12 +219,13 @@ class SimulacrumCore {
       const useNativeTools = !legacyMode;
       const sendTools = useNativeTools && tools ? tools : null;
 
-      if (isDebugEnabled()) this.logger.debug('Chat request configuration:', {
-        legacyMode,
-        useNativeTools,
-        sendingTools: !!sendTools,
-        toolCount: tools?.length || 0
-      });
+      if (isDebugEnabled())
+        this.logger.debug('Chat request configuration:', {
+          legacyMode,
+          useNativeTools,
+          sendingTools: !!sendTools,
+          toolCount: tools?.length || 0,
+        });
 
       // Debug logging
       try {
@@ -221,10 +233,10 @@ class SimulacrumCore {
           createLogger('AIDiagnostics').info('chat_request', {
             legacyMode,
             useNativeTools,
-            sendingTools: !!sendTools
+            sendingTools: !!sendTools,
           });
         }
-      } catch { }
+      } catch {}
 
       // Check for cancellation before making request
       if (signal.aborted) {
@@ -232,27 +244,27 @@ class SimulacrumCore {
       }
 
       // Get system prompt (use provided or default)
-      const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
+      const systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
       const getSystemPromptFn = () => systemPrompt;
 
       const raw = useNativeTools
-        ? await this.aiClient.chatWithSystem(
-          limitedMessages, getSystemPromptFn, sendTools, { signal }
-        )
+        ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, {
+            signal,
+          })
         : await this.aiClient.chat(
-          sanitizeMessagesForFallback([
-            { role: 'system', content: systemPrompt }, ...limitedMessages
-          ]),
-          sendTools,
-          { signal }
-        );
+            sanitizeMessagesForFallback([
+              { role: 'system', content: systemPrompt },
+              ...limitedMessages,
+            ]),
+            sendTools,
+            { signal }
+          );
       if (raw == null) {
         throw new Error('Empty AI response');
       }
 
       // Normalize and return response
       return this._normalizeAIResponse(raw);
-
     } finally {
       // Clean up abort controller
       if (this.currentAbortController) {
@@ -265,9 +277,9 @@ class SimulacrumCore {
    * Normalize AI response into consistent format
    * @private
    */
-  static _normalizeAIResponse(raw) { return normalizeAIResponse(raw); }
-
-
+  static _normalizeAIResponse(raw) {
+    return normalizeAIResponse(raw);
+  }
 
   /**
    * Build a unique settings key for conversation persistence
@@ -297,8 +309,10 @@ class SimulacrumCore {
    * @deprecated Use conversationManager.getPersistenceKey() directly
    */
   static getPersistenceKey() {
-    return this.conversationManager?.getPersistenceKey()
-      || `conversationState:${game?.user?.id || 'unknown'}:${game?.world?.id || 'unknown'}`;
+    return (
+      this.conversationManager?.getPersistenceKey() ||
+      `conversationState:${game?.user?.id || 'unknown'}:${game?.world?.id || 'unknown'}`
+    );
   }
 
   /**
@@ -342,7 +356,7 @@ class SimulacrumCore {
     this.logger.debug(`Document ${operation}d`, {
       document: document.toJSON(),
       userId,
-      changes
+      changes,
     });
   }
 
@@ -371,8 +385,6 @@ class SimulacrumCore {
    * Build the ephemeral system prompt guiding tool usage.
    * Not persisted into conversation history.
    */
-
-
 
   /**
    * Parse a tool_call from a fenced JSON block in the assistant's content.

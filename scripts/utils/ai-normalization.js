@@ -78,13 +78,17 @@ function _cleanThinkTags(text) {
     if (isDebugEnabled() && text !== clean) {
       _logThinkTagStats(text.length, clean.length, text.includes('<think>'));
     }
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
   return clean;
 }
 
 function _logThinkTagStats(orig, clean, hasTags) {
   createLogger('AIDiagnostics').info('think_tag_filtered', {
-    originalLength: orig, cleanedLength: clean, hadThinkTags: hasTags
+    originalLength: orig,
+    cleanedLength: clean,
+    hadThinkTags: hasTags,
   });
 }
 
@@ -92,8 +96,11 @@ function _tryParseFallbackJson(block) {
   const obj = _tryParseJSON(block);
   if (!obj) {
     try {
-      if (isDebugEnabled()) createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
-    } catch { /* empty */ }
+      if (isDebugEnabled())
+        createLogger('AIDiagnostics').warn('fallback.parse.json_error', { content: block });
+    } catch {
+      /* empty */
+    }
   }
   return obj;
 }
@@ -116,16 +123,22 @@ function _attachProviderError(payload, source) {
 function _handleAlreadyNormalized(raw) {
   if (!raw.content || raw.content.trim().length === 0) {
     _logEmptyResponse('already-normalized', raw);
-    return _createErrorResponse('Empty response not allowed - please provide a meaningful response to the user.', raw);
+    return _createErrorResponse(
+      'Empty response not allowed - please provide a meaningful response to the user.',
+      raw
+    );
   }
 
-  return _attachProviderError({
-    content: raw.content,
-    display: raw.display ?? raw.content,
-    toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
-    model: raw.model,
-    usage: raw.usage
-  }, raw);
+  return _attachProviderError(
+    {
+      content: raw.content,
+      display: raw.display ?? raw.content,
+      toolCalls: raw.toolCalls ?? raw.tool_calls ?? [],
+      model: raw.model,
+      usage: raw.usage,
+    },
+    raw
+  );
 }
 
 function _handleGeminiFormat(raw) {
@@ -138,11 +151,13 @@ function _handleGeminiFormat(raw) {
     if (part?.functionCall) {
       const fc = part.functionCall;
       toolCalls.push({
-        id: fc?.name ? `gemini_${fc.name}_${toolCalls.length + 1}` : `gemini_call_${toolCalls.length + 1}`,
+        id: fc?.name
+          ? `gemini_${fc.name}_${toolCalls.length + 1}`
+          : `gemini_call_${toolCalls.length + 1}`,
         function: {
           name: fc?.name || 'unknown_function',
-          arguments: JSON.stringify(fc?.args ?? {})
-        }
+          arguments: JSON.stringify(fc?.args ?? {}),
+        },
       });
     } else if (typeof part?.text === 'string') {
       textSegments.push(part.text);
@@ -150,28 +165,37 @@ function _handleGeminiFormat(raw) {
   }
 
   const combinedText = textSegments.join('\n').trim();
-  return _attachProviderError({
-    content: combinedText,
-    display: combinedText,
-    toolCalls,
-    model: raw?.model,
-    usage: raw?.usage
-  }, raw);
+  return _attachProviderError(
+    {
+      content: combinedText,
+      display: combinedText,
+      toolCalls,
+      model: raw?.model,
+      usage: raw?.usage,
+    },
+    raw
+  );
 }
 
 function _handleResponsesAPIFormat(raw) {
   const parts = raw.output[0].content;
   const text = Array.isArray(parts)
-    ? parts.map(p => p?.text ?? '').filter(Boolean).join('\n')
+    ? parts
+        .map(p => p?.text ?? '')
+        .filter(Boolean)
+        .join('\n')
     : '';
 
-  return _attachProviderError({
-    content: text || '',
-    display: text || '',
-    toolCalls: [],
-    model: raw?.model,
-    usage: raw?.usage
-  }, raw);
+  return _attachProviderError(
+    {
+      content: text || '',
+      display: text || '',
+      toolCalls: [],
+      model: raw?.model,
+      usage: raw?.usage,
+    },
+    raw
+  );
 }
 
 function _handleOpenAIFormat(raw) {
@@ -179,7 +203,10 @@ function _handleOpenAIFormat(raw) {
 
   if ((!content || content.trim().length === 0) && (!toolCalls || toolCalls.length === 0)) {
     _logEmptyResponse('OpenAI-style', raw);
-    return _createErrorResponse('Empty response not allowed - please provide a meaningful response to the user.', raw);
+    return _createErrorResponse(
+      'Empty response not allowed - please provide a meaningful response to the user.',
+      raw
+    );
   }
 
   const normalized = {
@@ -187,7 +214,7 @@ function _handleOpenAIFormat(raw) {
     display: content,
     toolCalls,
     model: raw?.model,
-    usage: raw?.usage
+    usage: raw?.usage,
   };
 
   _applyInlineFallback(normalized);
@@ -202,10 +229,12 @@ function _extractOpenAIData(raw) {
   let toolCalls = msg.tool_calls || [];
 
   if ((!toolCalls || toolCalls.length === 0) && msg.function_call?.name) {
-    toolCalls = [{
-      id: msg.function_call.id,
-      function: { name: msg.function_call.name, arguments: msg.function_call.arguments }
-    }];
+    toolCalls = [
+      {
+        id: msg.function_call.id,
+        function: { name: msg.function_call.name, arguments: msg.function_call.arguments },
+      },
+    ];
   }
   return { content, toolCalls };
 }
@@ -217,13 +246,15 @@ function _applyInlineFallback(normalized) {
   if (!parseResult) return;
 
   if (parseResult.name) {
-    normalized.toolCalls = [{
-      id: `fallback_${Date.now()}`,
-      function: {
-        name: parseResult.name,
-        arguments: JSON.stringify(parseResult.arguments || {})
-      }
-    }];
+    normalized.toolCalls = [
+      {
+        id: `fallback_${Date.now()}`,
+        function: {
+          name: parseResult.name,
+          arguments: JSON.stringify(parseResult.arguments || {}),
+        },
+      },
+    ];
     normalized.content = parseResult.cleanedText;
     normalized.display = parseResult.cleanedText;
   } else if (parseResult.parseError) {
@@ -242,7 +273,7 @@ function _logEmptyResponse(type, raw) {
     logger.warn(`Empty content detected in ${type} response:`, {
       model: raw?.model,
       usage: raw?.usage,
-      rawKeys: Object.keys(raw || {})
+      rawKeys: Object.keys(raw || {}),
     });
   }
   {
@@ -252,13 +283,16 @@ function _logEmptyResponse(type, raw) {
 }
 
 function _createErrorResponse(message, raw) {
-  return _attachProviderError({
-    content: message,
-    display: message,
-    toolCalls: [],
-    model: raw?.model,
-    _parseError: true
-  }, raw);
+  return _attachProviderError(
+    {
+      content: message,
+      display: message,
+      toolCalls: [],
+      model: raw?.model,
+      _parseError: true,
+    },
+    raw
+  );
 }
 
 function _logToolCalls(toolCalls) {
@@ -270,7 +304,9 @@ function _logToolCalls(toolCalls) {
         : [];
       diag.info('tool_calls', { count: names.length, names });
     }
-  } catch { /* intentionally empty */ }
+  } catch {
+    /* intentionally empty */
+  }
 }
 
 function _buildJsonParseErrorMessage(parseResult) {
@@ -280,12 +316,14 @@ function _buildJsonParseErrorMessage(parseResult) {
     game.i18n.localize('SIMULACRUM.Errors.JSONParsingInstructions'),
     game.i18n.localize('SIMULACRUM.Errors.JSONFormatExample'),
     '',
-    game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content })
+    game.i18n.format('SIMULACRUM.Errors.ProblematicContent', { content: parseResult.content }),
   ].join('\n');
 }
 
 function _tryParseJSON(s) {
-  try { return JSON.parse(s); } catch (e) {
+  try {
+    return JSON.parse(s);
+  } catch (e) {
     try {
       const fixed = s
         .replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g, '["$1","$2"]')
@@ -294,7 +332,10 @@ function _tryParseJSON(s) {
         .replace(/("(?:[^"\\]|\\.)*?)"((?:[^"\\]|\\.)*)"(?:[^"\\]|\\.)*?"/g, function (match) {
           const quoteCount = (match.match(/"/g) || []).length;
           if (quoteCount % 2 !== 0 && quoteCount > 2) {
-            try { JSON.parse('{' + match + '}'); return match; } catch (e) {
+            try {
+              JSON.parse('{' + match + '}');
+              return match;
+            } catch (e) {
               return match.replace(/^"(.*)"$/, function (inner) {
                 return '"' + inner.slice(1, -1).replace(/([^\\])"/g, '$1\\"') + '"';
               });
@@ -332,14 +373,16 @@ function _extractToolCallFromObject(obj, cleanText, matchText) {
   return {
     name,
     arguments: args,
-    cleanedText
+    cleanedText,
   };
 }
 
 function _logFallbackError(type, data) {
   try {
     if (isDebugEnabled()) createLogger('AIDiagnostics').warn(`fallback.parse.${type}`, data);
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
 }
 
 function _validateToolName(name) {
@@ -350,15 +393,20 @@ function _validateToolName(name) {
       return false;
     }
     return true;
-  } catch (e) { return false; }
+  } catch (e) {
+    return false;
+  }
 }
 
 function _logFallbackSuccess(name, args) {
   try {
     if (isDebugEnabled()) {
       createLogger('AIDiagnostics').info('fallback.parse.success', {
-        name, argsKeys: Object.keys(args)
+        name,
+        argsKeys: Object.keys(args),
       });
     }
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
 }

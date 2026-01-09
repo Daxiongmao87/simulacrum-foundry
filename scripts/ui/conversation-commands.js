@@ -15,7 +15,7 @@ class ConversationCommands {
     return {
       clear: 'Clear conversation history',
       compress: 'Compress conversation history to save tokens',
-      stats: 'Show conversation statistics'
+      stats: 'Show conversation statistics',
     };
   }
 
@@ -52,23 +52,23 @@ class ConversationCommands {
       switch (command) {
         case 'clear':
           return this._executeClear(conversationManager);
-        
+
         case 'compress':
           return this._executeCompress(conversationManager);
-        
+
         case 'stats':
           return this._executeStats(conversationManager);
-        
+
         default:
           return {
             success: false,
-            message: `Unknown command: ${command}`
+            message: `Unknown command: ${command}`,
           };
       }
     } catch (error) {
       return {
         success: false,
-        message: `Error executing command: ${error.message}`
+        message: `Error executing command: ${error.message}`,
       };
     }
   }
@@ -81,7 +81,7 @@ class ConversationCommands {
    */
   static _executeClear(conversationManager) {
     conversationManager.clear();
-    
+
     // Clear UI if available
     if (typeof window !== 'undefined' && window.ui?.simulacrum?.clearMessages) {
       window.ui.simulacrum.clearMessages();
@@ -89,7 +89,7 @@ class ConversationCommands {
 
     return {
       success: true,
-      message: '✅ Conversation history cleared.'
+      message: '✅ Conversation history cleared.',
     };
   }
 
@@ -102,18 +102,18 @@ class ConversationCommands {
   static _executeCompress(conversationManager) {
     const beforeTokens = conversationManager.getSessionTokens();
     const beforeMessages = conversationManager.messages.length;
-    
+
     conversationManager.compressHistory();
-    
+
     const afterTokens = conversationManager.getSessionTokens();
     const afterMessages = conversationManager.messages.length;
-    
+
     const tokensSaved = beforeTokens - afterTokens;
     const messagesSaved = beforeMessages - afterMessages;
 
     return {
       success: true,
-      message: `✅ Conversation compressed. Saved ${tokensSaved} tokens and ${messagesSaved} messages.`
+      message: `✅ Conversation compressed. Saved ${tokensSaved} tokens and ${messagesSaved} messages.`,
     };
   }
 
@@ -128,20 +128,20 @@ class ConversationCommands {
     const maxTokens = conversationManager.maxTokens;
     const messageCount = conversationManager.messages.length;
     const tokenUsage = ((currentTokens / maxTokens) * 100).toFixed(1);
-    
+
     let message = '📊 **Conversation Statistics**\n';
     message += `• **Messages**: ${messageCount}\n`;
     message += `• **Tokens**: ${currentTokens} / ${maxTokens} (${tokenUsage}%)\n`;
     message += `• **User**: ${conversationManager.userId}\n`;
     message += `• **World**: ${conversationManager.worldId}`;
-    
+
     if (currentTokens > maxTokens * 0.8) {
       message += '\n⚠️ Warning: Token usage is high. Consider using `/compress`.';
     }
 
     return {
       success: true,
-      message
+      message,
     };
   }
 
@@ -153,21 +153,17 @@ class ConversationCommands {
    */
   static async handleConversationCommand(message, conversationManager) {
     const parsed = this.parseCommand(message);
-    
+
     if (!parsed) {
       return { success: false, isCommand: false };
     }
 
-    const result = await this.executeCommand(
-      parsed.command, 
-      parsed.args, 
-      conversationManager
-    );
+    const result = await this.executeCommand(parsed.command, parsed.args, conversationManager);
 
     return {
       success: result.success,
       isCommand: true,
-      message: result.message
+      message: result.message,
     };
   }
 
@@ -177,11 +173,11 @@ class ConversationCommands {
    */
   static getHelpText() {
     let help = '💬 **Conversation Commands**\n';
-    
+
     Object.entries(this.COMMANDS).forEach(([cmd, desc]) => {
       help += `• **/${cmd}** - ${desc}\n`;
     });
-    
+
     return help;
   }
 }

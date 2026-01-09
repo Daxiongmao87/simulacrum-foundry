@@ -8,7 +8,7 @@ import { SidebarEventHandlers } from './sidebar-event-handlers.js';
 import {
   syncMessagesFromCore,
   createWelcomeMessage,
-  processMessageForDisplay
+  processMessageForDisplay,
 } from './sidebar-state-syncer.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
@@ -21,30 +21,34 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   static tabName = 'simulacrum';
 
   /** @override */
-  static emittedEvents = Object.freeze(["render", "close", "position", "activate", "deactivate"]);
+  static emittedEvents = Object.freeze(['render', 'close', 'position', 'activate', 'deactivate']);
 
   static PARTS = {
     log: {
       template: 'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
-      templates: ['modules/simulacrum/templates/simulacrum/message.hbs', 'modules/simulacrum/templates/simulacrum/sidebar-notifications.hbs'],
-      scrollable: ['']
+      templates: [
+        'modules/simulacrum/templates/simulacrum/message.hbs',
+        'modules/simulacrum/templates/simulacrum/sidebar-notifications.hbs',
+      ],
+      scrollable: [''],
     },
     input: {
-      template: 'modules/simulacrum/templates/simulacrum/sidebar-input.hbs'
-    }
+      template: 'modules/simulacrum/templates/simulacrum/sidebar-input.hbs',
+    },
   };
 
   static DEFAULT_OPTIONS = {
-    classes: ["flexcol", "chat-sidebar"],
+    id: 'simulacrum',
+    classes: ['flexcol', 'chat-sidebar'],
     window: {
-      title: "SIMULACRUM.SidebarTab.Title"
+      title: 'SIMULACRUM.SidebarTab.Title',
     },
     actions: {
       sendMessage: SimulacrumSidebarTab.prototype._onSendMessage,
       clearChat: SimulacrumSidebarTab.prototype._onClearChat,
       jumpToBottom: SimulacrumSidebarTab.prototype._onJumpToBottom,
-      cancelProcess: SimulacrumSidebarTab.prototype._onCancelProcess
-    }
+      cancelProcess: SimulacrumSidebarTab.prototype._onCancelProcess,
+    },
   };
 
   /** Private fields */
@@ -73,7 +77,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   _render(optionsOrForce) {
-    const options = (typeof optionsOrForce === 'boolean') ? { force: optionsOrForce } : (optionsOrForce || {});
+    const options =
+      typeof optionsOrForce === 'boolean' ? { force: optionsOrForce } : optionsOrForce || {};
     return Promise.resolve(super.render(options));
   }
 
@@ -101,7 +106,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   async renderPopout() {
     const popout = await super.renderPopout();
     const originalClose = popout.close.bind(popout);
-    popout.close = async (options) => {
+    popout.close = async options => {
       this._popoutClosing = true;
       if (this.rendered) this.render();
       await originalClose(options);
@@ -125,8 +130,10 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     if (isDebugEnabled()) {
       this.logger.debug(
-        '_prepareContext processActive:', processActive,
-        'isThinking:', this.#isThinking
+        '_prepareContext processActive:',
+        processActive,
+        'isThinking:',
+        this.#isThinking
       );
     }
 
@@ -138,17 +145,22 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       isAtBottom: this.#isAtBottom,
       processActive,
       processLabel,
-      disableInput: !this.isPopout &&
+      disableInput:
+        !this.isPopout &&
         !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
-        !this._popoutClosing
+        !this._popoutClosing,
     });
   }
 
   _getProcessLabel() {
     let label = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
     if (!label && this.#isThinking) {
-      const thinkingWords = game.i18n?.translations?.SIMULACRUM?.ThinkingWords ||
-        ['Divining...', 'Scrying...', 'Weaving...', 'Conjuring...'];
+      const thinkingWords = game.i18n?.translations?.SIMULACRUM?.ThinkingWords || [
+        'Divining...',
+        'Scrying...',
+        'Weaving...',
+        'Conjuring...',
+      ];
       label = thinkingWords[this.#thinkingWordIndex % thinkingWords.length];
     }
     return label;
@@ -167,7 +179,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       if (cm) {
         this.messages = await syncMessagesFromCore(cm);
       }
-    } catch (_e) { /* ignore */ }
+    } catch (_e) {
+      /* ignore */
+    }
   }
 
   async _loadConversationHistoryOnInit() {
@@ -183,7 +197,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   _scrollToBottom() {
     if (!this.element) return;
-    const log = this.element[0]?.querySelector('.chat-scroll') ?? this.element.querySelector?.('.chat-scroll');
+    const log =
+      this.element[0]?.querySelector('.chat-scroll') ??
+      this.element.querySelector?.('.chat-scroll');
     if (log) {
       log.scrollTop = log.scrollHeight;
       this.#isAtBottom = true;
@@ -237,7 +253,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async addMessage(role, content, display = null) {
-    const processedDisplay = display || await processMessageForDisplay(content);
+    const processedDisplay = display || (await processMessageForDisplay(content));
 
     // Check for grouping
     if (this.messages.length > 0 && role === 'assistant') {
@@ -260,7 +276,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       timestamp: new Date(),
       user: role === 'user' ? game.user : undefined,
       id: foundry.utils.randomID(),
-      pending: false
+      pending: false,
     };
     this.messages.push(msg);
     this.#needsScroll = true;
@@ -325,10 +341,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (partId === 'log') {
       const scroll = element.querySelector('.chat-scroll');
       if (scroll) {
-        scroll.addEventListener('scroll', (_e) => {
-          const atBottom = Math.abs(
-            scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight
-          ) < 50;
+        scroll.addEventListener('scroll', _e => {
+          const atBottom =
+            Math.abs(scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight) < 50;
           this.#isAtBottom = atBottom;
         });
       }
@@ -337,7 +352,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       const form = element.querySelector('.chat-form');
       if (form && !form.dataset.simulacrumBound) {
         form.dataset.simulacrumBound = '1';
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', event => {
           event.preventDefault();
           const input = form.querySelector('textarea[name="message"]');
           if (input) this._onSendMessage(event, input);
@@ -347,7 +362,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       const input = element.querySelector('textarea[name="message"]');
       if (input && !input.dataset.simulacrumBound) {
         input.dataset.simulacrumBound = '1';
-        input.addEventListener('keydown', (e) => {
+        input.addEventListener('keydown', e => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             this._onSendMessage(e, input);

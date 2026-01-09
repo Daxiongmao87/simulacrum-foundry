@@ -24,7 +24,9 @@ export class ValidationErrorHandler {
         const allFailures = error.getAllFailures();
         validationDetails = this.processFoundryFailures(allFailures);
       } catch (e) {
-        console.warn('[ValidationErrorHandler] Failed to use getAllFailures(), falling back to message parsing');
+        console.warn(
+          '[ValidationErrorHandler] Failed to use getAllFailures(), falling back to message parsing'
+        );
         validationDetails = this.extractValidationDetails(error);
       }
     } else {
@@ -40,7 +42,7 @@ export class ValidationErrorHandler {
       originalError: error,
       details: validationDetails,
       suggestions,
-      aiContext: this.createAIContext(validationDetails, suggestions)
+      aiContext: this.createAIContext(validationDetails, suggestions),
     };
   }
 
@@ -58,7 +60,7 @@ export class ValidationErrorHandler {
         error: failure.message || 'Validation failed',
         invalidValue: failure.invalidValue,
         fallback: failure.fallback,
-        dropped: failure.dropped || false
+        dropped: failure.dropped || false,
       };
     }
 
@@ -105,7 +107,7 @@ export class ValidationErrorHandler {
         details[currentPath] = {
           field: currentPath,
           error: message,
-          indentLevel
+          indentLevel,
         };
       }
     }
@@ -146,7 +148,7 @@ export class ValidationErrorHandler {
       action: null,
       example: null,
       invalidValue: invalidValue,
-      suggestedValue: fallback
+      suggestedValue: fallback,
     };
 
     // Enhanced validation error patterns and suggestions
@@ -230,25 +232,30 @@ export class ValidationErrorHandler {
     const fieldCount = Object.keys(validationDetails).length;
 
     // Create detailed field-by-field guidance
-    const fieldGuidance = suggestions.map(s => {
-      let guidance = `- ${s.field}: ${s.action}`;
-      if (s.example) {
-        guidance += ` (example: ${s.example})`;
-      }
-      if (s.suggestedValue !== undefined) {
-        guidance += ` (suggested: ${JSON.stringify(s.suggestedValue)})`;
-      }
-      return guidance;
-    }).join('\n');
+    const fieldGuidance = suggestions
+      .map(s => {
+        let guidance = `- ${s.field}: ${s.action}`;
+        if (s.example) {
+          guidance += ` (example: ${s.example})`;
+        }
+        if (s.suggestedValue !== undefined) {
+          guidance += ` (suggested: ${JSON.stringify(s.suggestedValue)})`;
+        }
+        return guidance;
+      })
+      .join('\n');
 
     // Add specific instructions for common FoundryVTT patterns
     let instructions = '';
     const hasIdErrors = suggestions.some(s => s.issue.includes('16-character alphanumeric'));
-    const hasRequiredErrors = suggestions.some(s => s.issue.includes('required') || s.issue.includes('undefined'));
+    const hasRequiredErrors = suggestions.some(
+      s => s.issue.includes('required') || s.issue.includes('undefined')
+    );
     const hasChoiceErrors = suggestions.some(s => s.issue.includes('not a valid choice'));
 
     if (hasIdErrors) {
-      instructions += '\nFor ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
+      instructions +=
+        '\nFor ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
     }
     if (hasRequiredErrors) {
       instructions += '\nFor required fields: Ensure all mandatory fields have non-empty values.';
@@ -297,8 +304,8 @@ export class ValidationErrorHandler {
           suggestions: enhancedSuggestions,
           aiContext: enhancedContext,
           documentType: documentType,
-          operation: operation
-        }
+          operation: operation,
+        },
       };
     }
 
@@ -309,8 +316,8 @@ export class ValidationErrorHandler {
       display: `❌ Failed to ${operation} ${docRef}: ${error.message}`,
       error: {
         message: error.message,
-        type: `${operation.toUpperCase()}_FAILED`
-      }
+        type: `${operation.toUpperCase()}_FAILED`,
+      },
     };
   }
 
@@ -333,7 +340,7 @@ export class ValidationErrorHandler {
         ...suggestion,
         schemaAnalysis: schemaSuggestion,
         correctionMethod: schemaSuggestion.correctionMethod || suggestion.action,
-        schemaExample: schemaSuggestion.example || suggestion.example
+        schemaExample: schemaSuggestion.example || suggestion.example,
       };
     });
   }
@@ -349,21 +356,23 @@ export class ValidationErrorHandler {
     const fieldCount = Object.keys(validationDetails).length;
 
     // Create detailed field-by-field guidance with schema information
-    const fieldGuidance = enhancedSuggestions.map(s => {
-      let guidance = `- ${s.field}: ${s.correctionMethod || s.action}`;
+    const fieldGuidance = enhancedSuggestions
+      .map(s => {
+        let guidance = `- ${s.field}: ${s.correctionMethod || s.action}`;
 
-      if (s.schemaExample) {
-        guidance += ` (use: ${s.schemaExample})`;
-      } else if (s.example) {
-        guidance += ` (example: ${s.example})`;
-      }
+        if (s.schemaExample) {
+          guidance += ` (use: ${s.schemaExample})`;
+        } else if (s.example) {
+          guidance += ` (example: ${s.example})`;
+        }
 
-      if (s.schemaAnalysis?.fieldType) {
-        guidance += ` [${s.schemaAnalysis.fieldType}]`;
-      }
+        if (s.schemaAnalysis?.fieldType) {
+          guidance += ` [${s.schemaAnalysis.fieldType}]`;
+        }
 
-      return guidance;
-    }).join('\n');
+        return guidance;
+      })
+      .join('\n');
 
     // Add document-type specific instructions
     const instructions = this.getDocumentTypeInstructions(documentType, enhancedSuggestions);
@@ -382,11 +391,14 @@ export class ValidationErrorHandler {
 
     // Common FoundryVTT patterns
     const hasIdErrors = suggestions.some(s => s.issue.includes('16-character alphanumeric'));
-    const hasRequiredErrors = suggestions.some(s => s.issue.includes('required') || s.issue.includes('undefined'));
+    const hasRequiredErrors = suggestions.some(
+      s => s.issue.includes('required') || s.issue.includes('undefined')
+    );
     const hasChoiceErrors = suggestions.some(s => s.issue.includes('not a valid choice'));
 
     if (hasIdErrors) {
-      instructions += '\n• For ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
+      instructions +=
+        '\n• For ID fields: Use foundry.utils.randomID() to generate valid 16-character alphanumeric IDs.';
     }
     if (hasRequiredErrors) {
       instructions += '\n• For required fields: Ensure all mandatory fields have non-empty values.';
@@ -399,7 +411,8 @@ export class ValidationErrorHandler {
     switch (documentType) {
       case 'JournalEntry':
         if (suggestions.some(s => s.field.includes('pages'))) {
-          instructions += '\n• For JournalEntry pages: Each page needs name, type, and appropriate content fields.';
+          instructions +=
+            '\n• For JournalEntry pages: Each page needs name, type, and appropriate content fields.';
         }
         break;
       case 'Actor':

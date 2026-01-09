@@ -6,10 +6,10 @@ import { processMessageForDisplay } from './sidebar-state-syncer.js';
 // and will be defined later in simulacrum.js or a dedicated core file.
 // For now, we'll mock its existence or assume it's globally available in FoundryVTT context.
 const SimulacrumCore = window.SimulacrumCore || {
-  processMessage: async (message) => ({
+  processMessage: async message => ({
     display: `AI Core not initialized. Message: "${message}"`,
     content: `AI Core not initialized. Message: "${message}"`,
-  })
+  }),
 };
 
 /**
@@ -23,11 +23,11 @@ class ChatInterface {
    */
   static init() {
     const logger = createLogger('ChatInterface');
-    logger.info("Initializing Chat Interface...");
+    logger.info('Initializing Chat Interface...');
     // Register chat commands like /sim or /simulacrum
-    Hooks.on("chatCommandsReady", ChatInterface._registerChatCommands);
+    Hooks.on('chatCommandsReady', ChatInterface._registerChatCommands);
     // Hook into chat message rendering to display AI responses
-    Hooks.on("renderChatMessage", ChatInterface._onRenderChatMessage);
+    Hooks.on('renderChatMessage', ChatInterface._onRenderChatMessage);
   }
 
   /**
@@ -38,15 +38,14 @@ class ChatInterface {
   static _registerChatCommands(chatCommands) {
     const logger = createLogger('ChatInterface');
     chatCommands.register({
-      name: "sim",
-      alias: "simulacrum",
-      hint: "Interact with the Simulacrum AI Assistant.",
+      name: 'sim',
+      alias: 'simulacrum',
+      hint: 'Interact with the Simulacrum AI Assistant.',
       gmOnly: false,
-      handler: (chatlog, messageText) =>
-        ChatInterface.processChatCommand(messageText, game.user),
-      description: "Send a message to the Simulacrum AI Assistant."
+      handler: (chatlog, messageText) => ChatInterface.processChatCommand(messageText, game.user),
+      description: 'Send a message to the Simulacrum AI Assistant.',
     });
-    logger.info("Chat commands registered.");
+    logger.info('Chat commands registered.');
   }
 
   /**
@@ -70,8 +69,8 @@ class ChatInterface {
             user: user._id,
             content: commandResult.message,
             type: CONST.CHAT_MESSAGE_TYPES.OTHER,
-            speaker: { alias: "Simulacrum AI" },
-            flags: { simulacrum: { commandResponse: true, success: commandResult.success } }
+            speaker: { alias: 'Simulacrum AI' },
+            flags: { simulacrum: { commandResponse: true, success: commandResult.success } },
           });
           return;
         }
@@ -83,7 +82,7 @@ class ChatInterface {
         content: `**To Simulacrum:** ${messageText}`,
         type: CONST.CHAT_MESSAGE_TYPES.OTHER,
         speaker: ChatMessage.getSpeaker({ user: user }),
-        flags: { simulacrum: { userMessage: true } }
+        flags: { simulacrum: { userMessage: true } },
       });
 
       // Process the message with the AI core
@@ -91,7 +90,7 @@ class ChatInterface {
       await ChatInterface.displayResponse(response, user);
     } catch (error) {
       const logger = createLogger('ChatInterface');
-      logger.error("Error processing chat command:", error);
+      logger.error('Error processing chat command:', error);
       ChatInterface.displayErrorResponse(error, user);
     }
   }
@@ -109,8 +108,8 @@ class ChatInterface {
       user: user._id,
       content: processedDisplay,
       type: CONST.CHAT_MESSAGE_TYPES.OTHER,
-      speaker: { alias: "Simulacrum AI" }, // AI's speaker
-      flags: { simulacrum: { aiGenerated: true } }
+      speaker: { alias: 'Simulacrum AI' }, // AI's speaker
+      flags: { simulacrum: { aiGenerated: true } },
     });
   }
 
@@ -120,16 +119,17 @@ class ChatInterface {
    * @param {User} user - The FoundryVTT User to attribute the message to.
    */
   static displayErrorResponse(error, user) {
-    const errorMessage = error instanceof SimulacrumError ?
-      `Simulacrum Error (${error.type}): ${error.message}` :
-      `An unexpected error occurred: ${error.message}`;
+    const errorMessage =
+      error instanceof SimulacrumError
+        ? `Simulacrum Error (${error.type}): ${error.message}`
+        : `An unexpected error occurred: ${error.message}`;
 
     ChatMessage.create({
       user: user._id,
       content: `❌ **Simulacrum Error:** ${errorMessage}`,
       type: CONST.CHAT_MESSAGE_TYPES.OOC,
-      speaker: { alias: "Simulacrum AI" },
-      flags: { simulacrum: { aiError: true } }
+      speaker: { alias: 'Simulacrum AI' },
+      flags: { simulacrum: { aiError: true } },
     });
   }
 
@@ -143,13 +143,13 @@ class ChatInterface {
   static _onRenderChatMessage(message, html) {
     // Example: Add a specific class for AI-generated messages for styling
     if (message.flags?.simulacrum?.aiGenerated) {
-      html.addClass("simulacrum-ai-message");
+      html.addClass('simulacrum-ai-message');
     }
     if (message.flags?.simulacrum?.userMessage) {
-      html.addClass("simulacrum-user-message");
+      html.addClass('simulacrum-user-message');
     }
     if (message.flags?.simulacrum?.aiError) {
-      html.addClass("simulacrum-ai-error-message");
+      html.addClass('simulacrum-ai-error-message');
     }
   }
 }

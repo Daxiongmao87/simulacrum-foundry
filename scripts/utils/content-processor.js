@@ -7,7 +7,7 @@ import { createLogger } from './logger.js';
 
 /**
  * Transforms <think></think> tags into collapsible HTML details/summary elements
- * 
+ *
  * @param {string} content - The raw content containing think tags
  * @returns {string} Content with think tags transformed to collapsible spoilers
  */
@@ -37,7 +37,6 @@ export function transformThinkTags(content) {
     });
 
     return processedContent;
-
   } catch (error) {
     // Graceful fallback - return original content if transformation fails
     try {
@@ -51,7 +50,7 @@ export function transformThinkTags(content) {
 
 /**
  * Transforms a single think block content into collapsible HTML
- * 
+ *
  * @param {string} thinkContent - The content inside the think tags
  * @returns {string} HTML details/summary structure
  * @private
@@ -80,7 +79,7 @@ function transformThinkBlock(thinkContent) {
 
 /**
  * Check if content contains think tags (for performance optimization)
- * 
+ *
  * @param {string} content - Content to check
  * @returns {boolean} True if content contains think tags
  */

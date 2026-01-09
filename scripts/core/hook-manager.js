@@ -9,26 +9,26 @@
  * @enum {string}
  */
 export const SimulacrumHooks = Object.freeze({
-    // Process lifecycle hooks
-    PROCESS_STATUS: 'simulacrum:processStatus',
-    PROCESS_CANCELLED: 'simulacrum:processCancelled',
-    RETRY_STATUS: 'simulacrum:retryStatus',
+  // Process lifecycle hooks
+  PROCESS_STATUS: 'simulacrum:processStatus',
+  PROCESS_CANCELLED: 'simulacrum:processCancelled',
+  RETRY_STATUS: 'simulacrum:retryStatus',
 
-    // Document operation hooks
-    DOCUMENT_CHANGED: 'simulacrum:documentChanged',
+  // Document operation hooks
+  DOCUMENT_CHANGED: 'simulacrum:documentChanged',
 
-    // Conversation hooks
-    CONVERSATION_STARTED: 'simulacrum:conversationStarted',
-    CONVERSATION_CLEARED: 'simulacrum:conversationCleared',
+  // Conversation hooks
+  CONVERSATION_STARTED: 'simulacrum:conversationStarted',
+  CONVERSATION_CLEARED: 'simulacrum:conversationCleared',
 
-    // AI response hooks
-    AI_RESPONSE_RECEIVED: 'simulacrum:aiResponseReceived',
+  // AI response hooks
+  AI_RESPONSE_RECEIVED: 'simulacrum:aiResponseReceived',
 
-    // Tool execution hooks
-    TOOL_EXECUTED: 'simulacrum:toolExecuted',
+  // Tool execution hooks
+  TOOL_EXECUTED: 'simulacrum:toolExecuted',
 
-    // Error hooks
-    ERROR_OCCURRED: 'simulacrum:errorOccurred'
+  // Error hooks
+  ERROR_OCCURRED: 'simulacrum:errorOccurred',
 });
 
 /**
@@ -37,13 +37,13 @@ export const SimulacrumHooks = Object.freeze({
  * @param {any} payload - Hook payload
  */
 export function emitHook(hookName, payload) {
-    try {
-        if (typeof Hooks !== 'undefined' && typeof Hooks.call === 'function') {
-            Hooks.call(hookName, payload);
-        }
-    } catch (_e) {
-        // Silently ignore hook errors
+  try {
+    if (typeof Hooks !== 'undefined' && typeof Hooks.call === 'function') {
+      Hooks.call(hookName, payload);
     }
+  } catch (_e) {
+    // Silently ignore hook errors
+  }
 }
 
 /**
@@ -54,17 +54,18 @@ export function emitHook(hookName, payload) {
  * @param {string|null} [toolName] - Optional tool name
  */
 export function emitProcessStatus(state, callId, label = null, toolName = null) {
-    const payload = state === 'start'
-        ? { state, callId, label, toolName: toolName || 'process' }
-        : { state, callId };
-    emitHook(SimulacrumHooks.PROCESS_STATUS, payload);
+  const payload =
+    state === 'start'
+      ? { state, callId, label, toolName: toolName || 'process' }
+      : { state, callId };
+  emitHook(SimulacrumHooks.PROCESS_STATUS, payload);
 }
 
 /**
  * Emit process cancelled event
  */
 export function emitProcessCancelled() {
-    emitHook(SimulacrumHooks.PROCESS_CANCELLED, {});
+  emitHook(SimulacrumHooks.PROCESS_CANCELLED, {});
 }
 
 /**
@@ -74,10 +75,8 @@ export function emitProcessCancelled() {
  * @param {string|null} [label] - Optional label for retry attempt
  */
 export function emitRetryStatus(state, callId, label = null) {
-    const payload = state === 'start'
-        ? { state, callId, label }
-        : { state, callId };
-    emitHook(SimulacrumHooks.RETRY_STATUS, payload);
+  const payload = state === 'start' ? { state, callId, label } : { state, callId };
+  emitHook(SimulacrumHooks.RETRY_STATUS, payload);
 }
 
 /**
@@ -87,7 +86,7 @@ export function emitRetryStatus(state, callId, label = null) {
  * @param {Object} document - The document that changed
  */
 export function emitDocumentChanged(documentType, action, document) {
-    emitHook(SimulacrumHooks.DOCUMENT_CHANGED, { type: documentType, action, document });
+  emitHook(SimulacrumHooks.DOCUMENT_CHANGED, { type: documentType, action, document });
 }
 
 /**
@@ -97,7 +96,7 @@ export function emitDocumentChanged(documentType, action, document) {
  * @param {Object} result - Tool result
  */
 export function emitToolExecuted(toolName, params, result) {
-    emitHook(SimulacrumHooks.TOOL_EXECUTED, { toolName, params, result });
+  emitHook(SimulacrumHooks.TOOL_EXECUTED, { toolName, params, result });
 }
 
 /**
@@ -106,9 +105,9 @@ export function emitToolExecuted(toolName, params, result) {
  * @param {string} context - Context where error occurred
  */
 export function emitErrorOccurred(error, context) {
-    emitHook(SimulacrumHooks.ERROR_OCCURRED, {
-        message: error?.message || String(error),
-        context,
-        error
-    });
+  emitHook(SimulacrumHooks.ERROR_OCCURRED, {
+    message: error?.message || String(error),
+    context,
+    error,
+  });
 }

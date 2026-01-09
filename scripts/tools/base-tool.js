@@ -46,7 +46,9 @@ export class BaseTool {
   validateParams(params) {
     if (params.documentType) {
       if (!this.isValidDocumentType(params.documentType)) {
-        throw new SimulacrumError(`Document type "${params.documentType}" not available in current system`);
+        throw new SimulacrumError(
+          `Document type "${params.documentType}" not available in current system`
+        );
       }
     }
   }
@@ -95,7 +97,7 @@ export class BaseTool {
     return {
       name: this.name,
       description: this.description,
-      parameters: this.getParameterSchema()
+      parameters: this.getParameterSchema(),
     };
   }
 
@@ -107,7 +109,7 @@ export class BaseTool {
     return {
       type: 'object',
       properties: {},
-      required: []
+      required: [],
     };
   }
 
@@ -126,8 +128,8 @@ export class BaseTool {
         message: error.message,
         type: error.constructor.name,
         tool: this.name,
-        context: context
-      }
+        context: context,
+      },
     };
   }
 
@@ -140,7 +142,7 @@ export class BaseTool {
     return {
       success: true,
       data: data,
-      tool: this.name
+      tool: this.name,
     };
   }
 
@@ -165,11 +167,16 @@ export class BaseTool {
     const validationPromises = [];
 
     // Helper to collect promises
-    const collectPromises = (obj) => {
+    const collectPromises = obj => {
       for (const [key, value] of Object.entries(obj)) {
         // targeted keys: img, texture.src, valid image fields, or any key ending in .img/.src
         // Common Foundry image fields: img, src, texture.src, icon, banner
-        const isImageField = key === 'img' || key === 'src' || key === 'icon' || key.endsWith('.img') || key.endsWith('texture.src');
+        const isImageField =
+          key === 'img' ||
+          key === 'src' ||
+          key === 'icon' ||
+          key.endsWith('.img') ||
+          key.endsWith('texture.src');
 
         if (isImageField) {
           if (typeof value === 'string' && value.trim().length > 0) {
@@ -192,13 +199,17 @@ export class BaseTool {
 
   async #validateSingleUrl(key, url) {
     if (this.#isSimpleInvalidCheck(url)) {
-      throw new SimulacrumError(`Invalid image URL for field '${key}': '${url}'. Value must be a valid file path or URL, not a description.`);
+      throw new SimulacrumError(
+        `Invalid image URL for field '${key}': '${url}'. Value must be a valid file path or URL, not a description.`
+      );
     }
 
     // Perform network check
     const exists = await this.#checkUrlExists(url);
     if (!exists) {
-      throw new SimulacrumError(`Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_artifacts' tool to find a valid image path.`);
+      throw new SimulacrumError(
+        `Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_artifacts' tool to find a valid image path.`
+      );
     }
   }
 
@@ -209,7 +220,8 @@ export class BaseTool {
 
     const lower = url.toLowerCase();
     // Heuristic: reject "natural language" starts
-    if (lower.startsWith('image of') || lower.startsWith('picture of') || lower.startsWith('a ')) return true;
+    if (lower.startsWith('image of') || lower.startsWith('picture of') || lower.startsWith('a '))
+      return true;
 
     return false;
   }

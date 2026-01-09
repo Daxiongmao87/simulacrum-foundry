@@ -7,13 +7,17 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
-import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
+import {
+  sanitizeMessagesForFallback,
+  normalizeAIResponse,
+  parseInlineToolCall,
+} from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
   isToolCallFailure,
   buildRetryLabel,
   getRetryDelayMs,
-  delayWithSignal
+  delayWithSignal,
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus } from './hook-manager.js';
 
@@ -51,9 +55,11 @@ async function _runLoopIteration(context) {
     }
 
     // Process a single cycle of the loop
-    const cycleResult = await _processLoopCycle(
-      currentResponse, context, { toolFailureAttempts, repeatCount, REPEAT_LIMIT }
-    );
+    const cycleResult = await _processLoopCycle(currentResponse, context, {
+      toolFailureAttempts,
+      repeatCount,
+      REPEAT_LIMIT,
+    });
 
     // Handle cycle outcome
     if (cycleResult.action === 'return') return cycleResult.value;
@@ -140,7 +146,7 @@ async function _processLoopCycle(currentResponse, context, state) {
     // TODO: Ideally we should delay here before retrying or use specific API retry logic
     // For now, we treat it as a tool failure attempt to prevent infinite loops on broken APIs
 
-    // Construct a temporary error response to trigger retry logic in next cycle or falling back 
+    // Construct a temporary error response to trigger retry logic in next cycle or falling back
     // Since we can't get a valid response, we might need to manually trigger refusal handling logic
     // But _handleToolRefusal needs a response object.
 
@@ -165,7 +171,9 @@ async function _processLoopCycle(currentResponse, context, state) {
 
 async function _handleParseError(response, context, repeatCount, limit) {
   if (isDebugEnabled()) {
-    logger.info(`AI response parse error (retry ${repeatCount}/${limit})`, { content: response.content });
+    logger.info(`AI response parse error (retry ${repeatCount}/${limit})`, {
+      content: response.content,
+    });
   }
   appendEmptyContentCorrection(context.conversationManager, response);
   const messages = _getConversationMessages(context);
@@ -222,9 +230,10 @@ async function _executeToolCalls(toolCalls, context) {
       if (isSuccess) {
         try {
           await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
-        } catch (e) { logger.warn(`Post-verification failed: ${toolName}`, e); }
+        } catch (e) {
+          logger.warn(`Post-verification failed: ${toolName}`, e);
+        }
       }
-
     } catch (err) {
       console.log(`ToolLoopHandler caught error during tool execution: ${err.message}`);
       error = err;
@@ -244,7 +253,7 @@ async function _executeToolCalls(toolCalls, context) {
         role: 'tool',
         content: JSON.stringify(result),
         toolCallId: toolCall.id,
-        toolName
+        toolName,
       });
     }
   }
@@ -264,7 +273,8 @@ async function _getNextAIResponse(toolResults, context) {
 function _truncateInitialResult(result) {
   const MAX_OUTPUT_CHARS = 10000;
   if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
-    result.content = result.content.substring(0, MAX_OUTPUT_CHARS) +
+    result.content =
+      result.content.substring(0, MAX_OUTPUT_CHARS) +
       `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters.]`;
   }
 }
@@ -308,20 +318,26 @@ async function _chatWithAI(messages, systemPrompt, context) {
   const sysMsg = { role: 'system', content: systemPrompt };
   const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messages]);
 
-  const raw = currentToolSupport !== true
-    ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-    : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+  const raw =
+    currentToolSupport !== true
+      ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+      : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
 
   const normalized = normalizeAIResponse(raw);
 
   // Legacy fallback tool parsing
-  if (context.currentToolSupport !== true && (!normalized.toolCalls || !normalized.toolCalls.length)) {
+  if (
+    context.currentToolSupport !== true &&
+    (!normalized.toolCalls || !normalized.toolCalls.length)
+  ) {
     const parsed = parseInlineToolCall?.(normalized.content);
     if (parsed && parsed.name) {
-      normalized.toolCalls = [{
-        id: 'fallback_' + Date.now(),
-        function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments || {}) }
-      }];
+      normalized.toolCalls = [
+        {
+          id: 'fallback_' + Date.now(),
+          function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments || {}) },
+        },
+      ];
     }
   }
   return normalized;
@@ -346,7 +362,7 @@ function _notifyLegacyToolResults(toolResults, context) {
 function _logToolFailures(toolResults, retryCount, limit) {
   if (isDebugEnabled()) {
     logger.info(`Tool execution failures (retry ${retryCount}/${limit})`, {
-      failedCount: toolResults.filter(r => !r.success).length
+      failedCount: toolResults.filter(r => !r.success).length,
     });
   }
 }
@@ -359,9 +375,12 @@ async function _runToolFailureFallback(context) {
     context.conversationManager.addMessage('system', instruction);
   }
   const systemPrompt = await context.getSystemPrompt();
-  const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, { signal: context.signal });
+  const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, {
+    signal: context.signal,
+  });
   const fallback = normalizeAIResponse(raw);
-  const text = (fallback.content || '') + '\n\nNote: Tool functionality was temporarily unavailable.';
+  const text =
+    (fallback.content || '') + '\n\nNote: Tool functionality was temporarily unavailable.';
   return { ...fallback, content: text, display: text, toolCalls: [] };
 }
 
@@ -380,6 +399,6 @@ function _handleRepeatLimit(context, response, count, limit) {
     display: null,
     _toolLimitReachedError: true,
     toolCalls: [],
-    endTask: true
+    endTask: true,
   };
 }

@@ -23,7 +23,8 @@ class DocumentDeleteTool extends BaseTool {
       error.code = 'DOCUMENT_NOT_FOUND';
       throw error;
     }
-    const currentData = typeof currentDoc?.toObject === 'function' ? currentDoc.toObject() : currentDoc;
+    const currentData =
+      typeof currentDoc?.toObject === 'function' ? currentDoc.toObject() : currentDoc;
     documentReadRegistry.requireReadForModification(documentType, documentId, currentData);
     return currentDoc;
   }
@@ -37,14 +38,14 @@ class DocumentDeleteTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          description: 'Type of document to delete'
+          description: 'Type of document to delete',
         },
         documentId: {
           type: 'string',
-          description: 'ID of document to delete'
-        }
+          description: 'ID of document to delete',
+        },
       },
-      required: ['documentType', 'documentId']
+      required: ['documentType', 'documentId'],
     });
     this.requiresConfirmation = true;
   }
@@ -59,7 +60,7 @@ class DocumentDeleteTool extends BaseTool {
     return {
       type: 'delete',
       title: `Delete ${params.documentType} Document`,
-      details: `Permanently delete ${params.documentType} document with ID: ${params.documentId}`
+      details: `Permanently delete ${params.documentType} document with ID: ${params.documentId}`,
     };
   }
 
@@ -72,8 +73,11 @@ class DocumentDeleteTool extends BaseTool {
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
-        return this.#buildErrorResponse(params, 'UNKNOWN_DOCUMENT_TYPE',
-          `Document type "${params.documentType}" not available in current system`);
+        return this.#buildErrorResponse(
+          params,
+          'UNKNOWN_DOCUMENT_TYPE',
+          `Document type "${params.documentType}" not available in current system`
+        );
       }
 
       // Enforce read-before-delete
@@ -84,13 +88,22 @@ class DocumentDeleteTool extends BaseTool {
 
       return {
         content: `Deleted ${params.documentType}:${params.documentId}`,
-        display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`
+        display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`,
       };
     } catch (error) {
-      if (error.code === 'DOCUMENT_NOT_READ' || error.code === 'DOCUMENT_STALE' || error.code === 'DOCUMENT_NOT_FOUND') {
+      if (
+        error.code === 'DOCUMENT_NOT_READ' ||
+        error.code === 'DOCUMENT_STALE' ||
+        error.code === 'DOCUMENT_NOT_FOUND'
+      ) {
         return this.#buildErrorResponse(params, error.code, error.message);
       }
-      return ValidationErrorHandler.createToolErrorResponse(error, 'delete', params.documentType, params.documentId);
+      return ValidationErrorHandler.createToolErrorResponse(
+        error,
+        'delete',
+        params.documentType,
+        params.documentId
+      );
     }
   }
 
@@ -102,8 +115,8 @@ class DocumentDeleteTool extends BaseTool {
         message,
         type: code,
         documentType: params.documentType,
-        documentId: params.documentId
-      }
+        documentId: params.documentId,
+      },
     };
   }
 }

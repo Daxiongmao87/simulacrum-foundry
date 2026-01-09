@@ -122,7 +122,9 @@
   background: var(--background-color, var(--color-cool-5));
   border: 2px solid var(--border-color, var(--color-cool-4));
   font-family: var(--font-body);
-  transition: box-shadow 250ms, outline 250ms;
+  transition:
+    box-shadow 250ms,
+    outline 250ms;
 }
 
 #simulacrum-chat-message::placeholder {
@@ -153,7 +155,7 @@
   color: var(--color-text-light-primary);
 }
 
-.simulacrum-settings .form-group input[type="checkbox"] {
+.simulacrum-settings .form-group input[type='checkbox'] {
   width: auto;
   margin-right: 0.5rem;
 }
@@ -221,7 +223,7 @@
   text-align: right;
 }
 
-.simulacrum-settings .sheet-footer button[type="submit"] {
+.simulacrum-settings .sheet-footer button[type='submit'] {
   background: var(--color-success);
   color: white;
   border: none;
@@ -232,7 +234,7 @@
   transition: background-color 0.2s;
 }
 
-.simulacrum-settings .sheet-footer button[type="submit"]:hover {
+.simulacrum-settings .sheet-footer button[type='submit']:hover {
   background: var(--color-success-dark);
 }
 
@@ -293,7 +295,7 @@
 
 /* Add custom expand/collapse indicator */
 .simulacrum-thoughts summary::after {
-  content: "▶";
+  content: '▶';
   margin-left: auto;
   transition: transform 0.2s ease;
   font-size: 0.8em;
@@ -347,34 +349,35 @@
 /* ---------------------------------------- */
 
 @font-face {
-  font-family: "Dumbledor";
-  src: url("../assets/fonts/dumbledor.ttf") format("truetype");
+  font-family: 'Dumbledor';
+  src: url('../assets/fonts/dumbledor.ttf') format('truetype');
 }
-
 
 /* Default font for Simulacrum UI */
 #simulacrum {
-  font-family: "Roboto", sans-serif;
+  font-family: 'Roboto', sans-serif;
 }
 
-/* Header Fonts - Modesto Condensed */
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-header,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-header .title,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h1,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h2,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h3,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message h4 {
-  font-family: "Modesto Condensed", "Modesto", serif !important;
+/* Header Fonts - Modesto Condensed - Strictly Scoped to ID */
+#simulacrum .chat-message .message-header,
+#simulacrum .chat-message .message-header .title,
+#simulacrum .chat-message h1,
+#simulacrum .chat-message h2,
+#simulacrum .chat-message h3,
+#simulacrum .chat-message h4,
+.simulacrum-panel .chat-message h4 {
+  font-family: 'Modesto Condensed', 'Modesto', serif !important;
   letter-spacing: 0.05em;
 }
 
-/* Body Text Fonts - Roboto */
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content p,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content div,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content span,
-:is(#simulacrum, .simulacrum-sidebar-tab, .simulacrum-panel) .chat-message .message-content li {
-  font-family: "Roboto", sans-serif !important;
+/* Body Text Fonts - Roboto - Strictly Scoped to ID */
+#simulacrum .chat-message .message-content,
+#simulacrum .chat-message .message-content p,
+#simulacrum .chat-message .message-content div,
+#simulacrum .chat-message .message-content span,
+#simulacrum .chat-message .message-content li,
+.simulacrum-panel .chat-message .message-content {
+  font-family: 'Roboto', sans-serif !important;
   letter-spacing: normal;
 }
 
@@ -384,7 +387,7 @@
 
 /* Dark customized background for AI messages - Dark Indigo */
 .chat-message.simulacrum-chat-message {
-  background-color: #1A1625;
+  background-color: #1a1625;
   border: 1px solid #4b4a45;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -404,7 +407,7 @@
 .simulacrum-chat-message .message-header,
 .simulacrum-chat-message .message-content,
 .simulacrum-chat-message .message-header .title {
-  color: #FFF4C2;
+  color: #fff4c2;
   /* Very pale gold */
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
   /* Reverted radius to 5px, 50% opacity */
@@ -417,11 +420,10 @@
 .simulacrum-chat-message .message-sender,
 .simulacrum-chat-message .message-timestamp,
 .simulacrum-chat-message .message-header .title {
-  color: #FFF4C2;
+  color: #fff4c2;
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
 }
 
-/* Subtle texture overlay */
 /* Subtle texture overlay */
 .chat-message.simulacrum-chat-message::before {
   content: '';
@@ -439,10 +441,14 @@
   z-index: 0;
 }
 
+.chat-message.simulacrum-chat-message.process-status-message::before {
+  background-image: none;
+}
+
 /* Ensure links and icons are visible on dark background */
 .simulacrum-chat-message a.content-link,
 .simulacrum-chat-message a.inline-roll {
-  color: #FFD700;
+  color: #ffd700;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid #7a7971;
 }
@@ -450,6 +456,17 @@
 /* ---------------------------------------- */
 /*  Process Status Spinner Fix             */
 /* ---------------------------------------- */
+
+/* Ensure texture overlay is removed for process status message */
+:is(.chat-popout, #chat-log, .chat-log) .message.process-status-message {
+  background: none;
+  border: none;
+  color: #ffd79a;
+}
+
+:is(.chat-popout, #chat-log, .chat-log) .message.process-status-message::before {
+  background: none;
+}
 
 /* Fix spinner rotation center point by ensuring square dimensions */
 .simulacrum-process-spinner {
@@ -462,28 +479,43 @@
   box-sizing: border-box !important;
   /* Ensure the icon rotates around its center */
   transform-origin: center center !important;
-  /* Task-17: Violet color for spinner */
-  color: #8A2BE2 !important;
+  /* Warm gold color for spinner - matches label */
+  color: #ffd79a;
 }
 
 /* ---------------------------------------- */
 /*  Thinking Indicator Styling (Task-17)   */
 /* ---------------------------------------- */
 
-/* Process status container - transparent background */
-.process-status {
-  gap: 0.5rem;
+/* Process status message container - transparent, no border */
+/* High specificity to override Foundry's .chat-message styles */
+#simulacrum .chat-message.process-status-message,
+.simulacrum-sidebar-tab .chat-message.process-status-message {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+#simulacrum .chat-message.process-status-message .message-content,
+.simulacrum-sidebar-tab .chat-message.process-status-message .message-content {
+  text-align: left;
+  margin-top: -8px;
+}
+
+/* Process status container - clean inline layout */
+#simulacrum .process-status,
+.simulacrum-sidebar-tab .process-status {
+  font-size: 1.2em;
   align-items: center;
-  padding: 0.5rem;
   background: transparent;
-  border-radius: 4px;
   font-style: italic;
 }
 
-/* Thinking text - violet with drop shadow */
-.process-status .label {
-  color: #8A2BE2;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+/* Thinking text - warm gold to match established palette */
+#simulacrum .process-status .label,
+.simulacrum-sidebar-tab .process-status .label {
+  padding-left: 4px;
+  color: #ffd79a;
   font-weight: 500;
   /* Task-16: Smooth transition for word rotation */
   transition: opacity 0.2s ease-in-out;
@@ -494,31 +526,30 @@
 /* ---------------------------------------- */
 
 /* Sidebar Tab Styling - Correctly target the button element */
-#sidebar-tabs .ui-control.icon[data-tab="simulacrum"] {
-  background-color: #1A1625;
+#sidebar-tabs .ui-control.icon[data-tab='simulacrum'] {
+  background-color: #1a1625;
   border: 1px solid #4b4a45;
   border-radius: 4px;
   /* Icon styling directly on the button */
-  color: #FFF4C2;
+  color: #fff4c2;
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
   transition: all 0.3s ease;
 }
 
 /* Hover State */
-#sidebar-tabs .ui-control.icon[data-tab="simulacrum"]:hover {
-  border-color: #DAA520;
+#sidebar-tabs .ui-control.icon[data-tab='simulacrum']:hover {
+  border-color: #daa520;
   box-shadow: 0 0 5px rgba(218, 165, 32, 0.3);
 }
 
 /* Active State */
-#sidebar-tabs .ui-control.icon[data-tab="simulacrum"].active,
-#sidebar-tabs .ui-control.icon[data-tab="simulacrum"][aria-pressed="true"] {
-  color: #FFF4C2;
+#sidebar-tabs .ui-control.icon[data-tab='simulacrum'].active,
+#sidebar-tabs .ui-control.icon[data-tab='simulacrum'][aria-pressed='true'] {
+  color: #fff4c2;
   text-shadow: 0 0 8px rgba(218, 165, 32, 0.8);
-  background-color: #1A1625;
+  background-color: #1a1625;
   border-color: #665c3b;
 }
-
 
 /* ---------------------------------------- */
 /*  Code Block Whitespace Fix              */

@@ -19,27 +19,27 @@ export class DocumentReadTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          description: 'Type of document to read'
+          description: 'Type of document to read',
         },
         documentId: {
           type: 'string',
-          description: 'ID of document to read'
+          description: 'ID of document to read',
         },
         includeEmbedded: {
           type: 'boolean',
           default: true,
-          description: 'Include embedded documents (tokens, items, etc.)'
+          description: 'Include embedded documents (tokens, items, etc.)',
         },
         startLine: {
           type: 'integer',
-          description: 'Start line for pagination (1-indexed). Optional.'
+          description: 'Start line for pagination (1-indexed). Optional.',
         },
         endLine: {
           type: 'integer',
-          description: 'End line for pagination (inclusive). Optional.'
-        }
+          description: 'End line for pagination (inclusive). Optional.',
+        },
       },
-      required: ['documentType', 'documentId']
+      required: ['documentType', 'documentId'],
     };
   }
 
@@ -61,7 +61,11 @@ export class DocumentReadTool extends BaseTool {
       const { documentType, documentId } = parameters;
 
       if (!this.isValidDocumentType(documentType)) {
-        return this._createErrorResponse(documentType, 'DOCUMENT_TYPE_INVALID', `Document type "${documentType}" not available in current system`);
+        return this._createErrorResponse(
+          documentType,
+          'DOCUMENT_TYPE_INVALID',
+          `Document type "${documentType}" not available in current system`
+        );
       }
 
       const document = await this._fetchDocument(documentType, documentId);
@@ -78,11 +82,11 @@ export class DocumentReadTool extends BaseTool {
 
       return {
         content: `Read ${documentType}: ${documentName}\n\n${content}`,
-        display: `**${documentName}** (${documentType})`
+        display: `**${documentName}** (${documentType})`,
       };
-
     } catch (error) {
-      const isNotFound = error.message.includes('Document not found') || error.message.includes('not found');
+      const isNotFound =
+        error.message.includes('Document not found') || error.message.includes('not found');
       const code = isNotFound ? 'DOCUMENT_NOT_FOUND' : 'UNKNOWN_ERROR';
       return this._createErrorResponse(parameters.documentType, code, error.message);
     }
@@ -119,7 +123,7 @@ export class DocumentReadTool extends BaseTool {
     return {
       content: `Failed to read ${type} document: ${message}`,
       display: `❌ Error reading document: ${message}`,
-      error: { message, type: code }
+      error: { message, type: code },
     };
   }
 
@@ -203,15 +207,15 @@ export class DocumentReadTool extends BaseTool {
         description: 'Read a document by ID (example)',
         parameters: {
           documentType: 'SomeDocumentType',
-          id: 'DOCUMENT_ID_HERE'
-        }
+          id: 'DOCUMENT_ID_HERE',
+        },
       },
       {
         description: 'Read a document by name (example)',
         parameters: {
           documentType: 'SomeDocumentType',
-          name: 'Exact Name'
-        }
+          name: 'Exact Name',
+        },
       },
       {
         description: 'Read a document with specific fields only (example)',
@@ -219,9 +223,9 @@ export class DocumentReadTool extends BaseTool {
           documentType: 'SomeDocumentType',
           id: 'DOCUMENT_ID_HERE',
           fields: ['name', 'type', 'img', 'system'],
-          withContent: true
-        }
-      }
+          withContent: true,
+        },
+      },
     ];
   }
 
@@ -230,9 +234,9 @@ export class DocumentReadTool extends BaseTool {
    */
   getRequiredPermissions() {
     return {
-      'FILES_BROWSE': true,
-      'DOCUMENT_CREATE': false,
-      'DOCUMENT_READ': true
+      FILES_BROWSE: true,
+      DOCUMENT_CREATE: false,
+      DOCUMENT_READ: true,
     };
   }
 }

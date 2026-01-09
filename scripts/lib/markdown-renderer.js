@@ -10,10 +10,11 @@ const MARKDOWN_PATTERN = new RegExp(
 const IMAGE_TAG_PATTERN = /<img\b[^>]*>/gi;
 
 function resolveShowdownOptions() {
-  const foundryOptions = globalThis?.foundry?.constants?.SHOWDOWN_OPTIONS
-    ?? globalThis?.foundry?.common?.constants?.SHOWDOWN_OPTIONS
-    ?? globalThis?.SHOWDOWN_OPTIONS
-    ?? {};
+  const foundryOptions =
+    globalThis?.foundry?.constants?.SHOWDOWN_OPTIONS ??
+    globalThis?.foundry?.common?.constants?.SHOWDOWN_OPTIONS ??
+    globalThis?.SHOWDOWN_OPTIONS ??
+    {};
   return foundryOptions;
 }
 
@@ -66,7 +67,12 @@ export class MarkdownRenderer {
   }
 
   static async render(raw, options = {}) {
-    const { disable = false, allowHtml = true, stripImages: removeImages = false, force = false } = options;
+    const {
+      disable = false,
+      allowHtml = true,
+      stripImages: removeImages = false,
+      force = false,
+    } = options;
     const text = typeof raw === 'string' ? raw : String(raw ?? '');
 
     if (!text.trim()) return '';

@@ -10,15 +10,19 @@ class DocumentSchemaTool extends BaseTool {
    * Create a new Document Schema Tool
    */
   constructor() {
-    super('inspect_document_schema', 'Inspect schema for any document type.  Important for creating rich documents.', {
-      type: 'object',
-      properties: {
-        documentType: {
-          type: 'string',
-          description: 'Document type to get schema for (optional - returns all if omitted)'
-        }
+    super(
+      'inspect_document_schema',
+      'Inspect schema for any document type.  Important for creating rich documents.',
+      {
+        type: 'object',
+        properties: {
+          documentType: {
+            type: 'string',
+            description: 'Document type to get schema for (optional - returns all if omitted)',
+          },
+        },
       }
-    });
+    );
   }
 
   /**
@@ -32,14 +36,14 @@ class DocumentSchemaTool extends BaseTool {
       const schema = DocumentAPI.getDocumentSchema(params.documentType);
       return {
         content: `Schema for ${params.documentType}: ${JSON.stringify(schema)}`,
-        display: this.formatSchema(params.documentType, schema)
+        display: this.formatSchema(params.documentType, schema),
       };
     } else {
       // Get all available document types and their basic info
       const availableTypes = this.getAllDocumentTypes();
       return {
         content: `Available document types: ${JSON.stringify(availableTypes)}`,
-        display: this.formatAllDocumentTypes(availableTypes)
+        display: this.formatAllDocumentTypes(availableTypes),
       };
     }
   }
@@ -54,7 +58,7 @@ class DocumentSchemaTool extends BaseTool {
       .map(type => ({
         name: type,
         collection: game.collections.get(type)?.size || 0,
-        compendiums: game.packs.filter(p => p.documentName === type).length
+        compendiums: game.packs.filter(p => p.documentName === type).length,
       }));
   }
 
@@ -117,10 +121,14 @@ class DocumentSchemaTool extends BaseTool {
       return 'No document types found in current system';
     }
 
-    return '**Available Document Types**\n' +
-      types.map(type =>
-        `- ${type.name} (${type.collection} in world, ${type.compendiums} in compendiums)`
-      ).join('\n');
+    return (
+      '**Available Document Types**\n' +
+      types
+        .map(
+          type => `- ${type.name} (${type.collection} in world, ${type.compendiums} in compendiums)`
+        )
+        .join('\n')
+    );
   }
 }
 

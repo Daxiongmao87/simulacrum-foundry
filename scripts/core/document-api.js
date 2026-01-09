@@ -70,7 +70,9 @@ export class DocumentAPI {
 
       const elapsed = performance.now() - startTime;
       if (elapsed > 50) {
-        documentLogger.warn(`Schema discovery for "${documentType}" took ${elapsed.toFixed(2)}ms (exceeds 50ms threshold)`);
+        documentLogger.warn(
+          `Schema discovery for "${documentType}" took ${elapsed.toFixed(2)}ms (exceeds 50ms threshold)`
+        );
       }
 
       return schema;
@@ -103,7 +105,9 @@ export class DocumentAPI {
         if (parentClass.hierarchy) {
           const embeddedClass = parentClass.hierarchy[documentType];
           if (embeddedClass) {
-            documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.hierarchy`);
+            documentLogger.debug(
+              `Found embedded document "${documentType}" in ${parentType}.hierarchy`
+            );
             return embeddedClass;
           }
         }
@@ -121,18 +125,26 @@ export class DocumentAPI {
                   const field = schema.fields[collectionName];
                   if (field.model || field.element) {
                     const embeddedClass = field.model || field.element;
-                    documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.metadata.embedded`);
+                    documentLogger.debug(
+                      `Found embedded document "${documentType}" in ${parentType}.metadata.embedded`
+                    );
                     return embeddedClass;
                   }
                 }
               } catch (schemaError) {
-                documentLogger.debug(`Failed to extract embedded class from schema for "${documentType}":`, schemaError);
+                documentLogger.debug(
+                  `Failed to extract embedded class from schema for "${documentType}":`,
+                  schemaError
+                );
               }
             }
           }
         }
       } catch (error) {
-        documentLogger.debug(`Error searching parent type "${parentType}" for embedded document "${documentType}":`, error);
+        documentLogger.debug(
+          `Error searching parent type "${parentType}" for embedded document "${documentType}":`,
+          error
+        );
         continue;
       }
     }
@@ -146,11 +158,16 @@ export class DocumentAPI {
 
           const embeddedClass = parentClass.hierarchy[documentType];
           if (embeddedClass) {
-            documentLogger.debug(`Found embedded document "${documentType}" in game.documentTypes.${parentType}.hierarchy`);
+            documentLogger.debug(
+              `Found embedded document "${documentType}" in game.documentTypes.${parentType}.hierarchy`
+            );
             return embeddedClass;
           }
         } catch (error) {
-          documentLogger.debug(`Error searching game.documentTypes["${parentType}"] for "${documentType}":`, error);
+          documentLogger.debug(
+            `Error searching game.documentTypes["${parentType}"] for "${documentType}":`,
+            error
+          );
           continue;
         }
       }
@@ -202,16 +219,24 @@ export class DocumentAPI {
             // Check if the embedded document exists in this subtype's hierarchy
             const embeddedClass = subtypeDataModel.hierarchy[documentType];
             if (embeddedClass) {
-              documentLogger.debug(`Found embedded document "${documentType}" in ${parentType}.dataModels.${subtype}.hierarchy`);
+              documentLogger.debug(
+                `Found embedded document "${documentType}" in ${parentType}.dataModels.${subtype}.hierarchy`
+              );
               return embeddedClass;
             }
           } catch (subtypeError) {
-            documentLogger.debug(`Error searching ${parentType}.dataModels.${subtype} for "${documentType}":`, subtypeError);
+            documentLogger.debug(
+              `Error searching ${parentType}.dataModels.${subtype} for "${documentType}":`,
+              subtypeError
+            );
             continue;
           }
         }
       } catch (error) {
-        documentLogger.debug(`Error searching ${parentType}.dataModels for "${documentType}":`, error);
+        documentLogger.debug(
+          `Error searching ${parentType}.dataModels for "${documentType}":`,
+          error
+        );
         continue;
       }
     }
@@ -255,27 +280,38 @@ export class DocumentAPI {
               try {
                 const DocumentClass = documentCollection[className];
                 // Accept both function classes (real environment) and objects with documentName (test mocks)
-                if (!DocumentClass || (!DocumentClass.documentName)) {
+                if (!DocumentClass || !DocumentClass.documentName) {
                   continue;
                 }
 
                 // Check if this document class matches our search
                 if (DocumentClass.documentName === documentType) {
-                  documentLogger.debug(`Found embedded document "${documentType}" in ${namespace}.documents.${collectionName}.${className}`);
+                  documentLogger.debug(
+                    `Found embedded document "${documentType}" in ${namespace}.documents.${collectionName}.${className}`
+                  );
                   return DocumentClass;
                 }
               } catch (classError) {
-                documentLogger.debug(`Error searching ${namespace}.documents.${collectionName}.${className} for "${documentType}":`, classError);
+                documentLogger.debug(
+                  `Error searching ${namespace}.documents.${collectionName}.${className} for "${documentType}":`,
+                  classError
+                );
                 continue;
               }
             }
           } catch (collectionError) {
-            documentLogger.debug(`Error searching ${namespace}.documents.${collectionName} for "${documentType}":`, collectionError);
+            documentLogger.debug(
+              `Error searching ${namespace}.documents.${collectionName} for "${documentType}":`,
+              collectionError
+            );
             continue;
           }
         }
       } catch (namespaceError) {
-        documentLogger.debug(`Error searching ${namespace}.documents for "${documentType}":`, namespaceError);
+        documentLogger.debug(
+          `Error searching ${namespace}.documents for "${documentType}":`,
+          namespaceError
+        );
         continue;
       }
     }
@@ -401,7 +437,10 @@ export class DocumentAPI {
             );
           }
         } catch (systemError) {
-          documentLogger.debug(`Failed to extract system fields for "${documentType}":`, systemError);
+          documentLogger.debug(
+            `Failed to extract system fields for "${documentType}":`,
+            systemError
+          );
         }
       }
 
@@ -415,7 +454,7 @@ export class DocumentAPI {
           schema.embeddedSchemas[embeddedName] = {
             type: embeddedClass.documentName || embeddedName,
             isEmbedded: true,
-            note: 'Use inspect_document_schema on this type to see full details.'
+            note: 'Use inspect_document_schema on this type to see full details.',
           };
         }
       }
@@ -425,9 +464,11 @@ export class DocumentAPI {
         schema.relationships = this.getDocumentRelationships(documentClass);
         schema.references = this.getDocumentReferences(documentClass);
       } catch (relationError) {
-        documentLogger.debug(`Failed to extract relationships for "${documentType}":`, relationError);
+        documentLogger.debug(
+          `Failed to extract relationships for "${documentType}":`,
+          relationError
+        );
       }
-
     } catch (error) {
       documentLogger.error(`Schema field extraction failed for "${documentType}":`, error);
       throw error;
@@ -480,9 +521,8 @@ export class DocumentAPI {
         if (field.element || field.model) {
           fieldInfo.isCollection = true;
           const elementClass = field.element || field.model;
-          const elementId = elementClass?.name ||
-            elementClass?.documentName ||
-            String(elementClass);
+          const elementId =
+            elementClass?.name || elementClass?.documentName || String(elementClass);
 
           // Simplify: If it's a Document, just reference the type. Don't expand schema.
           if (elementClass?.documentName) {
@@ -588,7 +628,6 @@ export class DocumentAPI {
     return 'unknown';
   }
 
-
   /**
    * Identifies and returns relationships (embedded documents, references) for a given document class.
    * @param {typeof foundry.abstract.Document} documentClass The document class to analyze.
@@ -616,7 +655,8 @@ export class DocumentAPI {
         // This is a simplified check. In a real FoundryVTT environment,
         // you'd check for specific field types like ForeignDocumentField.
         // For now, we'll assume a convention or explicit marker if needed.
-        if (field.isDocumentReference) { // Example custom property for testing
+        if (field.isDocumentReference) {
+          // Example custom property for testing
           relationships[fieldName] = {
             type: 'reference',
             documentType: field.documentType || 'Unknown',
@@ -637,7 +677,11 @@ export class DocumentAPI {
    * @private
    */
   static getDocumentReferences(documentClass) {
-    try { return detectDocumentReferences(documentClass) || {}; } catch (_e) { return {}; }
+    try {
+      return detectDocumentReferences(documentClass) || {};
+    } catch (_e) {
+      return {};
+    }
   }
 
   /**
@@ -732,7 +776,11 @@ export class DocumentAPI {
       if (readPermissionChecked && error?.message === 'Permission denied') {
         throw error;
       }
-      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'READ')) {
+      if (
+        !game.user?.isGM &&
+        typeof doc.canUserModify === 'function' &&
+        !doc.canUserModify(game.user, 'READ')
+      ) {
         throw new Error('Permission denied');
       }
     }
@@ -767,7 +815,11 @@ export class DocumentAPI {
       if (readPermissionChecked && error?.message === 'Permission denied') {
         throw error;
       }
-      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'READ')) {
+      if (
+        !game.user?.isGM &&
+        typeof doc.canUserModify === 'function' &&
+        !doc.canUserModify(game.user, 'READ')
+      ) {
         throw new Error('Permission denied');
       }
     }
@@ -806,7 +858,7 @@ export class DocumentAPI {
         const validationOptions = {
           strict: true,
           fields: true,
-          joint: true
+          joint: true,
         };
         try {
           if (typeof documentClass.validate === 'function') {
@@ -860,7 +912,11 @@ export class DocumentAPI {
       if (updatePermissionChecked && error?.message === 'Permission denied') {
         throw error;
       }
-      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'UPDATE')) {
+      if (
+        !game.user?.isGM &&
+        typeof doc.canUserModify === 'function' &&
+        !doc.canUserModify(game.user, 'UPDATE')
+      ) {
         throw new Error('Permission denied');
       }
     }
@@ -872,7 +928,7 @@ export class DocumentAPI {
             changes: updates,
             strict: true,
             fields: true,
-            joint: false
+            joint: false,
           });
         }
       } catch (validationError) {
@@ -923,7 +979,11 @@ export class DocumentAPI {
       if (updatePermissionChecked && error?.message === 'Permission denied') {
         throw error;
       }
-      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'UPDATE')) {
+      if (
+        !game.user?.isGM &&
+        typeof doc.canUserModify === 'function' &&
+        !doc.canUserModify(game.user, 'UPDATE')
+      ) {
         throw new Error('Permission denied');
       }
     }
@@ -956,7 +1016,7 @@ export class DocumentAPI {
             const validationOptions = {
               strict: true,
               fields: true,
-              joint: true
+              joint: true,
             };
 
             const payloads = ops.map(op => op.data).filter(Boolean);
@@ -966,7 +1026,10 @@ export class DocumentAPI {
               try {
                 if (typeof embeddedDocumentClass.validate === 'function') {
                   embeddedDocumentClass.validate(payload, validationOptions);
-                } else if (embeddedDocumentClass.schema && typeof embeddedDocumentClass.schema.validate === 'function') {
+                } else if (
+                  embeddedDocumentClass.schema &&
+                  typeof embeddedDocumentClass.schema.validate === 'function'
+                ) {
                   embeddedDocumentClass.schema.validate(payload, validationOptions);
                 }
               } catch (validationError) {
@@ -1025,7 +1088,11 @@ export class DocumentAPI {
       if (deletePermissionChecked && error?.message === 'Permission denied') {
         throw error;
       }
-      if (!game.user?.isGM && typeof doc.canUserModify === 'function' && !doc.canUserModify(game.user, 'DELETE')) {
+      if (
+        !game.user?.isGM &&
+        typeof doc.canUserModify === 'function' &&
+        !doc.canUserModify(game.user, 'DELETE')
+      ) {
         throw new Error('Permission denied');
       }
     }
@@ -1065,17 +1132,25 @@ export class DocumentAPI {
       let readable = collection.contents;
       try {
         const { PermissionManager } = await import('../utils/permissions.js');
-        readable = await PermissionManager.filterByPermission(game.user, collection.contents, 'READ');
+        readable = await PermissionManager.filterByPermission(
+          game.user,
+          collection.contents,
+          'READ'
+        );
       } catch (error) {
         // Fallback permission filtering
-        readable = collection.contents.filter(doc =>
-          game.user?.isGM ||
-          (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
+        readable = collection.contents.filter(
+          doc =>
+            game.user?.isGM ||
+            (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
         );
       }
       for (const doc of readable) {
         const obj = doc.toObject();
-        const hay = fields.map(f => String(this.#get(obj, f) ?? '')).join(' ').toLowerCase();
+        const hay = fields
+          .map(f => String(this.#get(obj, f) ?? ''))
+          .join(' ')
+          .toLowerCase();
         if (hay.includes(q)) {
           results.push({ type: t, _id: obj._id, name: obj.name });
           if (results.length >= maxResults) return results;
@@ -1101,7 +1176,9 @@ export class DocumentAPI {
     const sheetExists = sheet && typeof sheet === 'object';
     const wasRendered = Boolean(sheetExists && sheet.rendered);
     const canClose = wasRendered && typeof sheet.close === 'function';
-    const shouldReopen = Boolean(options?.reopen && wasRendered && typeof sheet.render === 'function');
+    const shouldReopen = Boolean(
+      options?.reopen && wasRendered && typeof sheet.render === 'function'
+    );
 
     if (canClose) {
       try {
@@ -1139,7 +1216,10 @@ export class DocumentAPI {
     if (!doc) return;
     const sample = collection?.contents?.[0];
     if (sample) {
-      if (typeof doc.testUserPermission !== 'function' && typeof sample.testUserPermission === 'function') {
+      if (
+        typeof doc.testUserPermission !== 'function' &&
+        typeof sample.testUserPermission === 'function'
+      ) {
         doc.testUserPermission = sample.testUserPermission;
       }
       if (typeof doc.canUserModify !== 'function' && typeof sample.canUserModify === 'function') {

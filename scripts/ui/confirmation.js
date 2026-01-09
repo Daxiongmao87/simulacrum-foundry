@@ -36,8 +36,8 @@ class ConfirmationDialog {
         defaultYes: config.defaultYes,
         options: {
           classes: ['simulacrum-confirmation'],
-          width: 400
-        }
+          width: 400,
+        },
       });
     } catch (error) {
       const logger = createLogger('ConfirmationDialog');
@@ -67,20 +67,20 @@ class ConfirmationDialog {
         title: details.title,
         yes: '<i class="fa-solid fa-trash"></i> Delete',
         no: '<i class="fa-solid fa-times"></i> Cancel',
-        defaultYes: false
+        defaultYes: false,
       },
       update: {
         title: details.title,
         yes: '<i class="fa-solid fa-check"></i> Update',
         no: '<i class="fa-solid fa-times"></i> Cancel',
-        defaultYes: true
+        defaultYes: true,
       },
       create: {
         title: details.title,
         yes: '<i class="fa-solid fa-plus"></i> Create',
         no: '<i class="fa-solid fa-times"></i> Cancel',
-        defaultYes: true
-      }
+        defaultYes: true,
+      },
     };
 
     return configs[details.type] || configs.update;
@@ -117,7 +117,7 @@ class ConfirmationDialog {
     return this.confirm({
       type: defaultYes ? 'update' : 'delete',
       title,
-      details: message
+      details: message,
     });
   }
 
@@ -135,8 +135,8 @@ class ConfirmationDialog {
       no: false,
       options: {
         classes: ['simulacrum-error'],
-        width: 400
-      }
+        width: 400,
+      },
     });
   }
 
@@ -154,8 +154,8 @@ class ConfirmationDialog {
       no: false,
       options: {
         classes: ['simulacrum-info'],
-        width: 400
-      }
+        width: 400,
+      },
     });
   }
 }

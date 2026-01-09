@@ -10,24 +10,28 @@ class DocumentListTool extends BaseTool {
    * Create a new Document List Tool
    */
   constructor() {
-    super('list_documents', 'List documents of any type available in current system.  Use this as a broad search.', {
-      type: 'object',
-      properties: {
-        documentType: { 
-          type: 'string', 
-          description: 'Document type to list (optional - lists all types if omitted)'
+    super(
+      'list_documents',
+      'List documents of any type available in current system.  Use this as a broad search.',
+      {
+        type: 'object',
+        properties: {
+          documentType: {
+            type: 'string',
+            description: 'Document type to list (optional - lists all types if omitted)',
+          },
+          filters: {
+            type: 'object',
+            description: 'Filter criteria (name, folder, etc.)',
+          },
+          includeCompendiums: {
+            type: 'boolean',
+            default: false,
+            description: 'Include documents from compendium packs',
+          },
         },
-        filters: { 
-          type: 'object',
-          description: 'Filter criteria (name, folder, etc.)'
-        },
-        includeCompendiums: { 
-          type: 'boolean', 
-          default: false,
-          description: 'Include documents from compendium packs'
-        }
       }
-    });
+    );
   }
 
   /**
@@ -46,25 +50,25 @@ class DocumentListTool extends BaseTool {
       return {
         content: 'Document type "' + params.documentType + '" not available in current system',
         display: '❌ Unknown document type: ' + params.documentType,
-        error: { message: 'Invalid document type', type: 'UNKNOWN_DOCUMENT_TYPE' }
+        error: { message: 'Invalid document type', type: 'UNKNOWN_DOCUMENT_TYPE' },
       };
     }
 
     try {
-      const documents = await DocumentAPI.listDocuments(
-        params.documentType,
-        { filters: params.filters }
-      );
-      
+      const documents = await DocumentAPI.listDocuments(params.documentType, {
+        filters: params.filters,
+      });
+
       return {
-        content: 'Found ' + documents.length + ' ' + (params.documentType || 'total') + ' documents',
-        display: this.formatDocumentList(documents, params.documentType)
+        content:
+          'Found ' + documents.length + ' ' + (params.documentType || 'total') + ' documents',
+        display: this.formatDocumentList(documents, params.documentType),
       };
     } catch (error) {
       return {
         content: 'Failed to list documents: ' + error.message,
         display: '❌ Error listing documents: ' + error.message,
-        error: { message: error.message, type: 'LIST_FAILED' }
+        error: { message: error.message, type: 'LIST_FAILED' },
       };
     }
   }
@@ -76,11 +80,11 @@ class DocumentListTool extends BaseTool {
   listAllDocumentTypes() {
     try {
       const documentTypes = DocumentAPI.getAllDocumentTypes();
-      
+
       if (documentTypes.length === 0) {
         return {
           content: 'No document types available',
-          display: 'No document types available in current system'
+          display: 'No document types available in current system',
         };
       }
 
@@ -105,13 +109,13 @@ class DocumentListTool extends BaseTool {
 
       return {
         content: 'Available document types: ' + documentTypes.join(', '),
-        display: '**Available Document Types**\n' + typeInfo.join('\n')
+        display: '**Available Document Types**\n' + typeInfo.join('\n'),
       };
     } catch (error) {
       return {
         content: 'Failed to list document types: ' + error.message,
         display: '❌ Error listing document types: ' + error.message,
-        error: { message: error.message, type: 'LIST_TYPES_FAILED' }
+        error: { message: error.message, type: 'LIST_TYPES_FAILED' },
       };
     }
   }
@@ -135,8 +139,17 @@ class DocumentListTool extends BaseTool {
     });
 
     const docsToShow = formattedDocs.slice(0, 20);
-    const moreText = formattedDocs.length > 20 ? '\n... and ' + (formattedDocs.length - 20) + ' more' : '';
-    return '**' + documentType + ' Documents** (' + documents.length + ' total):\n' + docsToShow.join('\n') + moreText;
+    const moreText =
+      formattedDocs.length > 20 ? '\n... and ' + (formattedDocs.length - 20) + ' more' : '';
+    return (
+      '**' +
+      documentType +
+      ' Documents** (' +
+      documents.length +
+      ' total):\n' +
+      docsToShow.join('\n') +
+      moreText
+    );
   }
 
   /**

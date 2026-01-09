@@ -12,7 +12,7 @@ export const VALIDATION_CONFIG = {
   STRING_MAX_LENGTH: 10000,
   NAME_MAX_LENGTH: 255,
   ID_LENGTH: 16,
-  FOLDER_MAX_DEPTH: 3
+  FOLDER_MAX_DEPTH: 3,
 };
 
 /**
@@ -23,7 +23,7 @@ export const VALIDATION_CONTEXTS = {
   TOOL: 'tool',
   SYSTEM: 'system',
   NETWORK: 'network',
-  UI: 'ui'
+  UI: 'ui',
 };
 
 /**
@@ -52,7 +52,7 @@ export class ValidationResult {
       errorCount: this.errors.length,
       warningCount: this.warnings.length,
       errors: this.errors,
-      warnings: this.warnings
+      warnings: this.warnings,
     };
   }
 }
@@ -69,11 +69,11 @@ export const validators = {
    */
   string(value, options = {}) {
     const result = new ValidationResult();
-    
+
     if (!this._checkStringRequired(value, options.required, result)) {
       return result;
     }
-    
+
     if (value === null || value === undefined) {
       return result;
     }
@@ -81,7 +81,7 @@ export const validators = {
     const strValue = String(value);
     this._validateStringLength(strValue, options, result);
     this._validateStringPattern(strValue, options.pattern, result);
-    
+
     if (result.isValid) {
       result.data.value = strValue.trim();
     }
@@ -100,7 +100,7 @@ export const validators = {
   _validateStringLength(strValue, options, result) {
     const minLength = options.minLength || 0;
     const maxLength = options.maxLength || VALIDATION_CONFIG.STRING_MAX_LENGTH;
-    
+
     if (strValue.length < minLength) {
       result.addError('value', `Minimum length is ${minLength}`, strValue);
     }
@@ -122,10 +122,10 @@ export const validators = {
    * @returns {ValidationResult}
    */
   integer(value, options = {}) {
-    const { 
-      min = Number.MIN_SAFE_INTEGER, 
-      max = Number.MAX_SAFE_INTEGER, 
-      required = false 
+    const {
+      min = Number.MIN_SAFE_INTEGER,
+      max = Number.MAX_SAFE_INTEGER,
+      required = false,
     } = options;
     const result = new ValidationResult();
 
@@ -383,7 +383,7 @@ export const validators = {
     }
 
     return result;
-  }
+  },
 };
 
 /**
@@ -461,11 +461,11 @@ export class ValidationEngine {
   sanitizeHTML(html) {
     // Basic HTML sanitization - can be enhanced based on FoundryVTT's DOMPurify
     let sanitized = html;
-    
+
     // Remove script tags and event handlers
     sanitized = sanitized.replace(/<(script|style)[^>]*>(.|\n)*?<(\/\1|)>/gi, '');
     sanitized = sanitized.replace(/on\w+\s*=/gi, 'data-invalid=');
-    
+
     return sanitized;
   }
 
@@ -524,20 +524,20 @@ export const PREDEFINED_SCHEMAS = {
   document: {
     name: { type: 'string', required: true, minLength: 1, maxLength: 100 },
     type: { type: 'string', required: true, minLength: 1, maxLength: 50 },
-    id: { type: 'objectId', required: false }
+    id: { type: 'objectId', required: false },
   },
 
   pagination: {
     page: { type: 'integer', required: false, min: 1, default: 1 },
     limit: { type: 'integer', required: false, min: 1, max: 100, default: 50 },
-    sort: { type: 'string', required: false, default: 'name' }
+    sort: { type: 'string', required: false, default: 'name' },
   },
 
   search: {
     query: { type: 'string', required: true, minLength: 1, maxLength: 1000 },
     types: { type: 'array', required: false, itemValidator: validators.string },
-    includeContent: { type: 'boolean', required: false, default: false }
-  }
+    includeContent: { type: 'boolean', required: false, default: false },
+  },
 };
 
 /**
@@ -553,34 +553,37 @@ export class ValidationUtils {
   // eslint-disable-next-line complexity
   static validateParams(params, schema) {
     const result = new ValidationResult();
-    
+
     if (!schema || typeof schema !== 'object') {
       result.addError('schema', 'Invalid schema provided');
       return {
         valid: result.isValid,
-        errors: result.errors.map(error => error.message)
+        errors: result.errors.map(error => error.message),
       };
     }
-    
+
     // Handle JSON Schema format
     if (schema.type === 'object') {
       if (schema.required) {
         // Check required fields
         schema.required.forEach(field => {
-          if (!Object.prototype.hasOwnProperty.call(params, field) || 
-              params[field] === undefined || params[field] === null) {
+          if (
+            !Object.prototype.hasOwnProperty.call(params, field) ||
+            params[field] === undefined ||
+            params[field] === null
+          ) {
             result.addError(field, `Missing required parameter: ${field}`);
           }
         });
       }
-      
+
       if (schema.properties) {
         // Validate property types
         // eslint-disable-next-line complexity
         Object.keys(schema.properties).forEach(field => {
           const fieldSchema = schema.properties[field];
           const value = params[field];
-          
+
           // Only validate type if the field exists (null/undefined are handled by required check above)
           if (Object.prototype.hasOwnProperty.call(params, field)) {
             if (fieldSchema.type === 'string' && typeof value !== 'string') {
@@ -589,17 +592,20 @@ export class ValidationUtils {
               result.addError(field, `Parameter ${field} must be a number`);
             } else if (fieldSchema.type === 'boolean' && typeof value !== 'boolean') {
               result.addError(field, `Parameter ${field} must be a boolean`);
-            } else if (fieldSchema.type === 'object' && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+            } else if (
+              fieldSchema.type === 'object' &&
+              (typeof value !== 'object' || value === null || Array.isArray(value))
+            ) {
               result.addError(field, `Parameter ${field} must be an object`);
             }
           }
         });
       }
     }
-    
+
     return {
       valid: result.isValid,
-      errors: result.errors.map(error => error.message)
+      errors: result.errors.map(error => error.message),
     };
   }
 
@@ -611,16 +617,16 @@ export class ValidationUtils {
    */
   static validateDocumentData(data) {
     const result = new ValidationResult();
-    
+
     if (data === null || data === undefined) {
       result.addError('data', 'Document data must be an object');
     } else if (typeof data !== 'object' || Array.isArray(data)) {
       result.addError('data', 'Document data must be an object');
     }
-    
+
     return {
       valid: result.isValid,
-      errors: result.errors.map(error => error.message)
+      errors: result.errors.map(error => error.message),
     };
   }
 }
@@ -634,5 +640,5 @@ export default {
   ValidationUtils,
   PREDEFINED_SCHEMAS,
   VALIDATION_CONFIG,
-  VALIDATION_CONTEXTS
+  VALIDATION_CONTEXTS,
 };

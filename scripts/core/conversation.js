@@ -39,7 +39,7 @@ class ConversationManager {
       // This prevents API errors where tool calls are ignored due to missing schema fields.
       message.tool_calls = toolCalls.map(tc => ({
         type: 'function',
-        ...tc
+        ...tc,
       }));
     }
     if (toolCallId) {
@@ -61,7 +61,7 @@ class ConversationManager {
       const oldTokens = this._estimateTokens(this.messages[0]);
       this.messages[0].content += '\n\n' + additionalContent;
       const newTokens = this._estimateTokens(this.messages[0]);
-      this.sessionTokens += (newTokens - oldTokens);
+      this.sessionTokens += newTokens - oldTokens;
 
       // Trigger auto-save if callback is provided
       this._triggerStateChange();
@@ -148,14 +148,14 @@ class ConversationManager {
   _getTokenEstimator() {
     const adapter = this.tokenizer;
     return {
-      estimate: (text) => {
+      estimate: text => {
         try {
           return adapter.estimateMessageTokens({ role: 'system', content: String(text || '') });
         } catch (_e) {
           const str = String(text || '').trim();
-          return str ? (str.match(/\S+/g) || []).length : 0
+          return str ? (str.match(/\S+/g) || []).length : 0;
         }
-      }
+      },
     };
   }
 
@@ -200,7 +200,7 @@ class ConversationManager {
     const state = {
       messages: this.messages,
       sessionTokens: this.sessionTokens,
-      v: 1
+      v: 1,
     };
 
     // Prefer user flag when available (per-user scope)
@@ -215,7 +215,11 @@ class ConversationManager {
 
     // Fallback to module settings
     try {
-      if (typeof game !== 'undefined' && game?.settings && typeof game.settings.set === 'function') {
+      if (
+        typeof game !== 'undefined' &&
+        game?.settings &&
+        typeof game.settings.set === 'function'
+      ) {
         await game.settings.set('simulacrum', key, state);
         return true;
       }
@@ -246,7 +250,11 @@ class ConversationManager {
     // Fallback to module settings
     if (!state) {
       try {
-        if (typeof game !== 'undefined' && game?.settings && typeof game.settings.get === 'function') {
+        if (
+          typeof game !== 'undefined' &&
+          game?.settings &&
+          typeof game.settings.get === 'function'
+        ) {
           state = game.settings.get('simulacrum', key);
         }
       } catch (_e) {
@@ -304,8 +312,6 @@ class ConversationManager {
       this._saveInterval = null;
     }
   }
-
 }
-
 
 export { ConversationManager };

@@ -31,7 +31,7 @@ export class SchemaValidator {
         documentType,
         documentClass,
         schema,
-        fields: this.extractFieldInfo(schema)
+        fields: this.extractFieldInfo(schema),
       };
     } catch (error) {
       console.warn(`[SchemaValidator] Error getting schema for ${documentType}:`, error);
@@ -74,7 +74,7 @@ export class SchemaValidator {
       initial: field.initial,
       choices: null,
       validation: {},
-      suggestions: []
+      suggestions: [],
     };
 
     // Extract field-specific validation rules
@@ -131,7 +131,6 @@ export class SchemaValidator {
           analysis.suggestions.push('Array of embedded documents');
           break;
       }
-
     } catch (error) {
       console.warn(`[SchemaValidator] Error analyzing field ${fieldName}:`, error);
     }
@@ -156,7 +155,7 @@ export class SchemaValidator {
       schemaAvailable: !!schemaInfo,
       suggestions: [],
       example: null,
-      correctionMethod: null
+      correctionMethod: null,
     };
 
     if (!schemaInfo) {
@@ -176,7 +175,10 @@ export class SchemaValidator {
       if (error.includes('may not be undefined') && fieldInfo.required) {
         suggestion.correctionMethod = `Provide a value for required ${fieldInfo.type}`;
         suggestion.example = this.generateFieldExample(fieldInfo);
-      } else if (error.includes('16-character alphanumeric') && fieldInfo.type === 'DocumentIdField') {
+      } else if (
+        error.includes('16-character alphanumeric') &&
+        fieldInfo.type === 'DocumentIdField'
+      ) {
         suggestion.correctionMethod = 'Use foundry.utils.randomID()';
         suggestion.example = 'foundry.utils.randomID()';
       } else if (error.includes('not a valid choice') && fieldInfo.choices) {
@@ -233,7 +235,7 @@ export class SchemaValidator {
       schemaAvailable: false,
       suggestions: [],
       example: null,
-      correctionMethod: null
+      correctionMethod: null,
     };
 
     // Basic pattern matching for common errors
@@ -261,7 +263,7 @@ export class SchemaValidator {
       valid: true,
       errors: [],
       suggestions: [],
-      schemaAvailable: !!schemaInfo
+      schemaAvailable: !!schemaInfo,
     };
 
     if (!schemaInfo) {

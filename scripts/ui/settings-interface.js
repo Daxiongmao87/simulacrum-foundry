@@ -11,7 +11,6 @@ import { createLogger } from '../utils/logger.js';
  * Extends FoundryVTT's basic settings with API testing and advanced validation
  */
 export class SettingsInterface extends FormApplication {
-
   /**
    * Create settings interface instance
    * @param {Object} [options={}] - Application options
@@ -33,11 +32,9 @@ export class SettingsInterface extends FormApplication {
       title: 'Simulacrum AI Configuration',
       width: 600,
       height: 'auto',
-      tabs: [
-        { navSelector: '.tabs', contentSelector: '.content', initial: 'general' }
-      ],
+      tabs: [{ navSelector: '.tabs', contentSelector: '.content', initial: 'general' }],
       closeOnSubmit: false,
-      submitOnChange: false
+      submitOnChange: false,
     });
   }
 
@@ -62,7 +59,7 @@ export class SettingsInterface extends FormApplication {
       provider,
       providerIsOpenAI: provider === 'openai',
       providerIsGemini: provider === 'gemini',
-      testing: this.testing
+      testing: this.testing,
     };
   }
 
@@ -80,7 +77,10 @@ export class SettingsInterface extends FormApplication {
 
     const baseInput = html.find('input[name="baseURL"]');
     if (baseInput.length && !baseInput.attr('placeholder')) {
-      baseInput.attr('placeholder', this._getPlaceholderForProvider(this.currentProvider || 'openai'));
+      baseInput.attr(
+        'placeholder',
+        this._getPlaceholderForProvider(this.currentProvider || 'openai')
+      );
     }
 
     // API connection test button
@@ -144,7 +144,7 @@ export class SettingsInterface extends FormApplication {
       provider: formData.get('provider') || this.currentProvider || 'openai',
       apiKey: formData.get('apiKey'),
       baseURL: formData.get('baseURL'),
-      model: formData.get('model')
+      model: formData.get('model'),
     };
 
     if (typeof config.baseURL !== 'string' || !config.baseURL.trim()) {
@@ -191,7 +191,7 @@ export class SettingsInterface extends FormApplication {
       title: 'Reset to Defaults',
       content: '<p>Are you sure you want to reset all settings to their default values?</p>',
       yes: () => true,
-      no: () => false
+      no: () => false,
     });
 
     if (confirmed) {
@@ -303,7 +303,6 @@ export class SettingsInterface extends FormApplication {
       if (typeof SimulacrumCore !== 'undefined') {
         await SimulacrumCore.initializeAIClient();
       }
-
     } catch (error) {
       this.logger.error('Failed to save Simulacrum settings:', error);
       ui.notifications.error(`Failed to save settings: ${error.message}`);
@@ -328,9 +327,12 @@ export class SettingsInterface extends FormApplication {
     await game.settings.set('simulacrum', 'baseURL', formData.baseURL);
     await game.settings.set('simulacrum', 'model', formData.model);
 
-    if (formData.maxTokens) await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
-    if (formData.temperature) await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
-    if (formData.contextLength) await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
+    if (formData.maxTokens)
+      await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
+    if (formData.temperature)
+      await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
+    if (formData.contextLength)
+      await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
     if (formData.customSystemPrompt !== undefined) {
       await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
     }
@@ -351,7 +353,13 @@ export class SettingsInterface extends FormApplication {
  * Helper function that converts an input field for a setting into a textarea.
  * @param {Object} options Configuration options
  */
-function convertSettingToTextarea({ html, moduleId, settingKey, textareaStyle, repositionCallback }) {
+function convertSettingToTextarea({
+  html,
+  moduleId,
+  settingKey,
+  textareaStyle,
+  repositionCallback,
+}) {
   const fullSettingId = `${moduleId}.${settingKey}`;
 
   // Ensure html is a jQuery object for consistent API usage
@@ -362,8 +370,8 @@ function convertSettingToTextarea({ html, moduleId, settingKey, textareaStyle, r
   if (!settingDiv.length) return;
 
   // Get the original stored value from settings
-  let storedValue = game.settings.get(moduleId, settingKey) || "";
-  storedValue = storedValue.replace(/\\n/g, "\n");
+  let storedValue = game.settings.get(moduleId, settingKey) || '';
+  storedValue = storedValue.replace(/\\n/g, '\n');
 
   // Find the original input
   const inputEl = settingDiv.find(`input[name="${fullSettingId}"]`);
@@ -381,13 +389,13 @@ function convertSettingToTextarea({ html, moduleId, settingKey, textareaStyle, r
   inputEl.replaceWith(textarea);
 
   // When the textarea changes, properly escape newlines before saving
-  textarea.on("change", async (ev) => {
+  textarea.on('change', async ev => {
     const rawValue = ev.target.value;
-    const escaped = rawValue.replace(/\n/g, "\\n");
+    const escaped = rawValue.replace(/\n/g, '\\n');
     await game.settings.set(moduleId, settingKey, escaped);
   });
 
-  if (typeof repositionCallback === "function") {
+  if (typeof repositionCallback === 'function') {
     repositionCallback(settingDiv);
   }
 }
@@ -415,7 +423,7 @@ function _registerCoreSettings() {
     config: false,
     type: Number,
     default: 4096,
-    restricted: true
+    restricted: true,
   });
 
   game.settings.register('simulacrum', 'temperature', {
@@ -425,19 +433,19 @@ function _registerCoreSettings() {
     config: false,
     type: Number,
     default: 0.7,
-    restricted: true
+    restricted: true,
   });
 }
 
 function _registerLegacySettings() {
   game.settings.register('simulacrum', 'legacyMode', {
     name: 'Legacy Mode',
-    hint: 'Enable if your AI provider doesn\'t support OpenAI-style tool calling. Uses JSON block parsing instead.',
+    hint: "Enable if your AI provider doesn't support OpenAI-style tool calling. Uses JSON block parsing instead.",
     scope: 'world',
     config: true,
     type: Boolean,
     default: false,
-    restricted: true
+    restricted: true,
   });
 }
 
@@ -449,7 +457,7 @@ function _registerContextSettings() {
     config: true,
     type: Number,
     default: 20,
-    restricted: true
+    restricted: true,
   });
 }
 
@@ -461,15 +469,15 @@ function _registerStylingSettings() {
     config: true,
     type: String,
     choices: {
-      'Dumbledor': 'Dumbledor',
-      'Signika': 'Signika (Default)'
+      Dumbledor: 'Dumbledor',
+      Signika: 'Signika (Default)',
     },
     default: 'Dumbledor',
     onChange: value => {
       if (ui.sidebar?.tabs.simulacrum?.rendered) {
         ui.sidebar.tabs.simulacrum.element.css('font-family', `"${value}", "Signika", sans-serif`);
       }
-    }
+    },
   });
 
   game.settings.register('simulacrum', 'customSystemPrompt', {
@@ -479,7 +487,7 @@ function _registerStylingSettings() {
     config: true,
     type: String,
     default: '',
-    restricted: true
+    restricted: true,
   });
 }
 
@@ -487,22 +495,23 @@ function _registerStylingSettings() {
  * Register settings UI enhancements
  */
 export function registerSettingsEnhancements() {
-  Hooks.on("renderSettingsConfig", (app, html, _data) => {
+  Hooks.on('renderSettingsConfig', (app, html, _data) => {
     setTimeout(() => {
       try {
         _applyEnhancements(html);
       } catch (error) {
-        createLogger('SettingsInterface').error("Error in settings render:", error);
+        createLogger('SettingsInterface').error('Error in settings render:', error);
       }
     }, 100);
   });
 }
 
 function _applyEnhancements(html) {
-  const style = "width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;";
-  const callback = (settingDiv) => {
-    const notesEl = settingDiv.find("p.notes");
-    const formFieldsEl = settingDiv.find("div.form-fields");
+  const style =
+    'width: 518px; min-height: 80px; height: 120px; white-space: normal; word-wrap: break-word;';
+  const callback = settingDiv => {
+    const notesEl = settingDiv.find('p.notes');
+    const formFieldsEl = settingDiv.find('div.form-fields');
     if (notesEl.length && formFieldsEl.length) {
       notesEl.after(formFieldsEl);
     }
@@ -510,10 +519,10 @@ function _applyEnhancements(html) {
 
   convertSettingToTextarea({
     html,
-    moduleId: "simulacrum",
-    settingKey: "customSystemPrompt",
+    moduleId: 'simulacrum',
+    settingKey: 'customSystemPrompt',
     textareaStyle: style,
-    repositionCallback: callback
+    repositionCallback: callback,
   });
 
   html.find('a.item[data-tab="simulacrum"]').on('click', () => {
@@ -521,10 +530,10 @@ function _applyEnhancements(html) {
       if (html.find('div[data-setting-id="simulacrum.customSystemPrompt"] input').length) {
         convertSettingToTextarea({
           html,
-          moduleId: "simulacrum",
-          settingKey: "customSystemPrompt",
+          moduleId: 'simulacrum',
+          settingKey: 'customSystemPrompt',
           textareaStyle: style,
-          repositionCallback: callback
+          repositionCallback: callback,
         });
       }
     }, 500);

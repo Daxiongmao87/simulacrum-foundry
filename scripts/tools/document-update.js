@@ -30,40 +30,48 @@ class DocumentUpdateTool extends BaseTool {
   }
 
   constructor() {
-    super('update_document', 'Update documents of any type supported by current system.', {
-      type: 'object',
-      properties: {
-        documentType: {
-          type: 'string',
-          description: 'The type/class of document (Actor, Item, JournalEntry, etc.)'
-        },
-        documentId: {
-          type: 'string',
-          description: 'The ID of the document to update'
-        },
-        updates: {
-          type: 'object',
-          description: 'Object key/value document data to merge-update (dot notation supported)',
-          additionalProperties: true
-        },
-        operations: {
-          type: 'array',
-          description: 'Ordered list of operations for arrays/embedded collections',
-          items: {
+    super(
+      'update_document',
+      'Update documents of any type supported by current system.',
+      {
+        type: 'object',
+        properties: {
+          documentType: {
+            type: 'string',
+            description: 'The type/class of document (Actor, Item, JournalEntry, etc.)',
+          },
+          documentId: {
+            type: 'string',
+            description: 'The ID of the document to update',
+          },
+          updates: {
             type: 'object',
-            properties: {
-              action: { type: 'string', enum: ['insert', 'replace', 'delete'] },
-              path: { type: 'string', description: 'Path to array or embedded collection' },
-              index: { type: 'integer', description: 'Index for array operations' },
-              id: { type: 'string', description: 'ID for embedded collection operations' },
-              value: { type: 'object', description: 'Value to insert/replace (not needed for delete)' }
+            description: 'Object key/value document data to merge-update (dot notation supported)',
+            additionalProperties: true,
+          },
+          operations: {
+            type: 'array',
+            description: 'Ordered list of operations for arrays/embedded collections',
+            items: {
+              type: 'object',
+              properties: {
+                action: { type: 'string', enum: ['insert', 'replace', 'delete'] },
+                path: { type: 'string', description: 'Path to array or embedded collection' },
+                index: { type: 'integer', description: 'Index for array operations' },
+                id: { type: 'string', description: 'ID for embedded collection operations' },
+                value: {
+                  type: 'object',
+                  description: 'Value to insert/replace (not needed for delete)',
+                },
+              },
+              required: ['action', 'path'],
             },
-            required: ['action', 'path']
-          }
-        }
+          },
+        },
+        required: ['documentType', 'documentId'],
       },
-      required: ['documentType', 'documentId']
-    }, true);
+      true
+    );
     this.logger = createLogger('DocumentUpdateTool');
   }
 
@@ -80,7 +88,7 @@ class DocumentUpdateTool extends BaseTool {
             ${params.operations ? `<strong>Operations:</strong><pre>${JSON.stringify(params.operations, null, 2)}</pre>` : ''}
           </div>
         </div>
-      `
+      `,
     };
   }
 
@@ -135,16 +143,23 @@ class DocumentUpdateTool extends BaseTool {
           message: error.message,
           type: error.code,
           documentType: params.documentType,
-          documentId: params.documentId
-        }
+          documentId: params.documentId,
+        },
       };
     }
-    return ValidationErrorHandler.createToolErrorResponse(error, 'update', params.documentType, params.documentId);
+    return ValidationErrorHandler.createToolErrorResponse(
+      error,
+      'update',
+      params.documentType,
+      params.documentId
+    );
   }
 
   _validateBasicParams(params) {
     if (!this.isValidDocumentType(params.documentType)) {
-      throw new ToolValidationError(`Document type "${params.documentType}" not available in current system`);
+      throw new ToolValidationError(
+        `Document type "${params.documentType}" not available in current system`
+      );
     }
     if (typeof params.documentId !== 'string' || params.documentId === '') {
       throw new ToolValidationError('Parameter "documentId" must be a non-empty string');
@@ -155,30 +170,35 @@ class DocumentUpdateTool extends BaseTool {
     if (embeddedOperations.length) {
       if (isDebugEnabled()) this.logger.info('Applying embedded operations:', embeddedOperations);
       await DocumentAPI.applyEmbeddedOperations(
-        params.documentType, params.documentId, embeddedOperations
+        params.documentType,
+        params.documentId,
+        embeddedOperations
       );
     }
 
     if (Object.keys(updates).length) {
-      if (isDebugEnabled()) this.logger.info('Calling DocumentAPI.updateDocument() with updates:', updates);
-      await DocumentAPI.updateDocument(
-        params.documentType, params.documentId, updates
-      );
+      if (isDebugEnabled())
+        this.logger.info('Calling DocumentAPI.updateDocument() with updates:', updates);
+      await DocumentAPI.updateDocument(params.documentType, params.documentId, updates);
     }
   }
 
   async #buildSuccessResponse(params) {
-    const latestDocument = await DocumentAPI.getDocument(
-      params.documentType, params.documentId, { includeEmbedded: true }
-    );
+    const latestDocument = await DocumentAPI.getDocument(params.documentType, params.documentId, {
+      includeEmbedded: true,
+    });
     const id = latestDocument.name || latestDocument._id || latestDocument.id;
     return {
-      content: JSON.stringify({
-        message: `Updated ${params.documentType}:${params.documentId}`,
-        document: latestDocument
-      }, null, 2),
+      content: JSON.stringify(
+        {
+          message: `Updated ${params.documentType}:${params.documentId}`,
+          document: latestDocument,
+        },
+        null,
+        2
+      ),
       display: `✅ Updated **${id}** (${params.documentType})`,
-      document: latestDocument
+      document: latestDocument,
     };
   }
 
@@ -189,8 +209,8 @@ class DocumentUpdateTool extends BaseTool {
     let remainingUpdates = { ...flatUpdates };
     const embeddedState = new Map();
 
-    const requiresDocument = Object.keys(flatUpdates || {}).length ||
-      (Array.isArray(operations) && operations.length);
+    const requiresDocument =
+      Object.keys(flatUpdates || {}).length || (Array.isArray(operations) && operations.length);
 
     let workingDocument = {};
     let docInstance = null;
@@ -198,12 +218,16 @@ class DocumentUpdateTool extends BaseTool {
     if (requiresDocument) {
       if (isDebugEnabled()) this.logger.info('Fetching document for operations');
       const documentSnapshot = await DocumentAPI.getDocument(
-        params.documentType, params.documentId, { includeEmbedded: true }
+        params.documentType,
+        params.documentId,
+        { includeEmbedded: true }
       );
       workingDocument = DocumentUpdateLogic.cloneValue(documentSnapshot);
       docInstance = await DocumentAPI.getDocumentInstance(params.documentType, params.documentId);
       const extraction = DocumentUpdateLogic.extractEmbeddedFieldUpdates(
-        remainingUpdates, docInstance, embeddedState
+        remainingUpdates,
+        docInstance,
+        embeddedState
       );
       remainingUpdates = extraction.remainingUpdates;
       embeddedOperations.push(...extraction.embeddedOperations);
@@ -214,7 +238,11 @@ class DocumentUpdateTool extends BaseTool {
         throw new ToolValidationError('Parameter "operations" must be an array when provided');
       }
       const opResults = this.#processOperations({
-        operations, docInstance, workingDocument, embeddedState, embeddedOperations
+        operations,
+        docInstance,
+        workingDocument,
+        embeddedState,
+        embeddedOperations,
       });
       remainingUpdates = { ...remainingUpdates, ...opResults };
     }
@@ -223,7 +251,11 @@ class DocumentUpdateTool extends BaseTool {
   }
 
   #processOperations({
-    operations, docInstance, workingDocument, embeddedState, embeddedOperations
+    operations,
+    docInstance,
+    workingDocument,
+    embeddedState,
+    embeddedOperations,
   }) {
     const operationResults = {};
     for (let index = 0; index < operations.length; index += 1) {
@@ -236,7 +268,7 @@ class DocumentUpdateTool extends BaseTool {
           docInstance,
           collectionKey,
           operationIndex: index,
-          embeddedState
+          embeddedState,
         });
         embeddedOperations.push(embeddedOp);
       } else {
@@ -247,7 +279,9 @@ class DocumentUpdateTool extends BaseTool {
           );
         }
         const updatedArray = DocumentUpdateLogic.performArrayOperation(
-          currentValue, normalized, index
+          currentValue,
+          normalized,
+          index
         );
         this.#setValueAtPath(workingDocument, normalized.path, updatedArray);
         operationResults[normalized.path] = updatedArray;
@@ -288,9 +322,10 @@ class DocumentUpdateTool extends BaseTool {
   }
 
   #buildValidationErrorResponse(message, params) {
-    const docRef = params.documentType && params.documentId
-      ? `${params.documentType}:${params.documentId}`
-      : params.documentType || 'document';
+    const docRef =
+      params.documentType && params.documentId
+        ? `${params.documentType}:${params.documentId}`
+        : params.documentType || 'document';
 
     return {
       content: `Validation failed for update ${docRef}: ${message}`,
@@ -299,8 +334,8 @@ class DocumentUpdateTool extends BaseTool {
         message,
         type: 'VALIDATION_ERROR',
         documentType: params.documentType,
-        documentId: params.documentId
-      }
+        documentId: params.documentId,
+      },
     };
   }
 }

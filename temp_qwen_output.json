@@ -1,1 +1,95 @@
-[{"type":"system","subtype":"init","uuid":"2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9","session_id":"2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9","cwd":"/home/patrick/projects/simulacrum-foundry","tools":["task","list_directory","read_file","grep_search","glob","read_many_files","save_memory","todo_write","exit_plan_mode","web_fetch","web_search"],"mcp_servers":[{"name":"second-opinion","status":"disconnected"},{"name":"websource-browser","status":"disconnected"}],"model":"coder-model","permission_mode":"default","slash_commands":["compress","init","summary"],"qwen_code_version":"0.6.1","agents":["general-purpose"]},{"type":"assistant","uuid":"066cb462-f373-4013-9960-ce7e62c55a4b","session_id":"2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9","parent_tool_use_id":null,"message":{"id":"066cb462-f373-4013-9960-ce7e62c55a4b","type":"message","role":"assistant","model":"coder-model","content":[{"type":"text","text":"Hi! How can I help you with your Foundry VTT project today?"}],"stop_reason":null,"usage":{"input_tokens":11728,"output_tokens":16,"cache_read_input_tokens":11414,"total_tokens":11744}}},{"type":"result","subtype":"success","uuid":"20dd28a1-5468-4687-8af8-777107d91f1b","session_id":"2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9","is_error":false,"duration_ms":4213,"duration_api_ms":4101,"num_turns":1,"result":"Hi! How can I help you with your Foundry VTT project today?","usage":{"input_tokens":11728,"output_tokens":16,"cache_read_input_tokens":11414,"total_tokens":11744},"permission_denials":[],"stats":{"models":{"coder-model":{"api":{"totalRequests":1,"totalErrors":0,"totalLatencyMs":4076},"tokens":{"prompt":11728,"candidates":16,"total":11744,"cached":11414,"thoughts":0,"tool":0}}},"tools":{"totalCalls":0,"totalSuccess":0,"totalFail":0,"totalDurationMs":0,"totalDecisions":{"accept":0,"reject":0,"modify":0,"auto_accept":0},"byName":{}},"files":{"totalLinesAdded":0,"totalLinesRemoved":0}}}]
+[
+  {
+    "type": "system",
+    "subtype": "init",
+    "uuid": "2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9",
+    "session_id": "2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9",
+    "cwd": "/home/patrick/projects/simulacrum-foundry",
+    "tools": [
+      "task",
+      "list_directory",
+      "read_file",
+      "grep_search",
+      "glob",
+      "read_many_files",
+      "save_memory",
+      "todo_write",
+      "exit_plan_mode",
+      "web_fetch",
+      "web_search"
+    ],
+    "mcp_servers": [
+      { "name": "second-opinion", "status": "disconnected" },
+      { "name": "websource-browser", "status": "disconnected" }
+    ],
+    "model": "coder-model",
+    "permission_mode": "default",
+    "slash_commands": ["compress", "init", "summary"],
+    "qwen_code_version": "0.6.1",
+    "agents": ["general-purpose"]
+  },
+  {
+    "type": "assistant",
+    "uuid": "066cb462-f373-4013-9960-ce7e62c55a4b",
+    "session_id": "2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9",
+    "parent_tool_use_id": null,
+    "message": {
+      "id": "066cb462-f373-4013-9960-ce7e62c55a4b",
+      "type": "message",
+      "role": "assistant",
+      "model": "coder-model",
+      "content": [
+        { "type": "text", "text": "Hi! How can I help you with your Foundry VTT project today?" }
+      ],
+      "stop_reason": null,
+      "usage": {
+        "input_tokens": 11728,
+        "output_tokens": 16,
+        "cache_read_input_tokens": 11414,
+        "total_tokens": 11744
+      }
+    }
+  },
+  {
+    "type": "result",
+    "subtype": "success",
+    "uuid": "20dd28a1-5468-4687-8af8-777107d91f1b",
+    "session_id": "2ae135a4-a2fd-42e1-bf9c-7feb83f1b7c9",
+    "is_error": false,
+    "duration_ms": 4213,
+    "duration_api_ms": 4101,
+    "num_turns": 1,
+    "result": "Hi! How can I help you with your Foundry VTT project today?",
+    "usage": {
+      "input_tokens": 11728,
+      "output_tokens": 16,
+      "cache_read_input_tokens": 11414,
+      "total_tokens": 11744
+    },
+    "permission_denials": [],
+    "stats": {
+      "models": {
+        "coder-model": {
+          "api": { "totalRequests": 1, "totalErrors": 0, "totalLatencyMs": 4076 },
+          "tokens": {
+            "prompt": 11728,
+            "candidates": 16,
+            "total": 11744,
+            "cached": 11414,
+            "thoughts": 0,
+            "tool": 0
+          }
+        }
+      },
+      "tools": {
+        "totalCalls": 0,
+        "totalSuccess": 0,
+        "totalFail": 0,
+        "totalDurationMs": 0,
+        "totalDecisions": { "accept": 0, "reject": 0, "modify": 0, "auto_accept": 0 },
+        "byName": {}
+      },
+      "files": { "totalLinesAdded": 0, "totalLinesRemoved": 0 }
+    }
+  }
+]

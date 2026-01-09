@@ -40,7 +40,7 @@ class SimulacrumPanel extends Application {
 
     // Example: Handle chat input submission
     html.find('.simulacrum-chat-input button').on('click', this._onChatSubmit.bind(this));
-    html.find('.simulacrum-chat-input input').on('keydown', (event) => {
+    html.find('.simulacrum-chat-input input').on('keydown', event => {
       if (event.key === 'Enter') {
         this._onChatSubmit(event);
       }
@@ -67,7 +67,7 @@ class SimulacrumPanel extends Application {
 
     // Assuming SimulacrumCore is globally available or imported
     // For MVP, we'll just log and clear input.
-    this.logger.info("User input:", messageText);
+    this.logger.info('User input:', messageText);
 
     // Here, you would typically send the message to the AI core for processing
     // Example: await SimulacrumCore.processMessage(messageText, game.user, { ui: 'panel' });
@@ -100,8 +100,11 @@ class SimulacrumPanel extends Application {
       isGM: game.user.isGM,
       // messages: SimulacrumCore.getConversationHistory() // Example
       messages: [
-        { role: 'assistant', content: 'Hello! How can I assist you with your campaign documents today?' }
-      ]
+        {
+          role: 'assistant',
+          content: 'Hello! How can I assist you with your campaign documents today?',
+        },
+      ],
     };
   }
 }

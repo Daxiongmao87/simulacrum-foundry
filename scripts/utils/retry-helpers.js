@@ -11,7 +11,7 @@ import { AI_ERROR_CODES } from '../core/ai-client.js';
  * @returns {boolean}
  */
 export function isToolCallFailure(response) {
-    return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
+  return response?.errorCode === AI_ERROR_CODES.TOOL_CALL_FAILURE;
 }
 
 // Re-export emitProcessStatus from hook-manager for backward compatibility
@@ -24,7 +24,7 @@ export { emitProcessStatus } from '../core/hook-manager.js';
  * @returns {string}
  */
 export function buildRetryLabel(attempt, maxAttempts) {
-    return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
+  return `Retrying request (attempt ${attempt} of ${maxAttempts})...`;
 }
 
 /**
@@ -34,8 +34,8 @@ export function buildRetryLabel(attempt, maxAttempts) {
  * @returns {number}
  */
 export function getRetryDelayMs(previousAttemptIndex, delaySchedule = [1000, 2000]) {
-    if (previousAttemptIndex < 0) return 0;
-    return delaySchedule[Math.min(previousAttemptIndex, delaySchedule.length - 1)] || 0;
+  if (previousAttemptIndex < 0) return 0;
+  return delaySchedule[Math.min(previousAttemptIndex, delaySchedule.length - 1)] || 0;
 }
 
 /**
@@ -45,40 +45,40 @@ export function getRetryDelayMs(previousAttemptIndex, delaySchedule = [1000, 200
  * @returns {Promise<void>}
  */
 export function delayWithSignal(ms, signal) {
-    if (!ms) {
-        if (signal?.aborted) {
-            throw new Error('Process was cancelled');
-        }
-        return Promise.resolve();
+  if (!ms) {
+    if (signal?.aborted) {
+      throw new Error('Process was cancelled');
+    }
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Process was cancelled'));
+      return;
     }
 
-    return new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-            reject(new Error('Process was cancelled'));
-            return;
-        }
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
 
-        const timeoutId = setTimeout(() => {
-            cleanup();
-            resolve();
-        }, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('Process was cancelled'));
+    };
 
-        const onAbort = () => {
-            cleanup();
-            reject(new Error('Process was cancelled'));
-        };
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
 
-        const cleanup = () => {
-            clearTimeout(timeoutId);
-            if (signal) {
-                signal.removeEventListener('abort', onAbort);
-            }
-        };
-
-        if (signal) {
-            signal.addEventListener('abort', onAbort, { once: true });
-        }
-    });
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }
 
 /**
@@ -86,9 +86,10 @@ export function delayWithSignal(ms, signal) {
  * @returns {object}
  */
 export function buildGenericFailureMessage() {
-    return {
-        role: 'assistant',
-        content: 'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-        display: '❌ Unable to generate a proper response after multiple attempts.'
-    };
+  return {
+    role: 'assistant',
+    content:
+      'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
+    display: '❌ Unable to generate a proper response after multiple attempts.',
+  };
 }
