@@ -110,6 +110,7 @@ async function _processLoopCycle(currentResponse, context, state) {
   if (context.currentToolSupport === true && currentResponse.toolCalls.length > 0) {
     const content = currentResponse.content || null;
     context.conversationManager.addMessage('assistant', content, currentResponse.toolCalls);
+    await context.conversationManager.save();
   }
 
   // 4. Execute Tools
@@ -215,6 +216,7 @@ async function _executeToolCalls(toolCalls, context) {
 
       if (currentToolSupport === true) {
         conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+        await conversationManager.save();
       }
 
       if (isSuccess) {
@@ -230,6 +232,7 @@ async function _executeToolCalls(toolCalls, context) {
       result = { error: err.message, toolName, arguments: toolArgs };
       if (currentToolSupport === true) {
         conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+        await conversationManager.save();
       }
     }
 
