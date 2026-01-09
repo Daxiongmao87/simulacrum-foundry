@@ -405,20 +405,18 @@ export class DocumentAPI {
         }
       }
 
-      // Extract embedded document types with their schemas (recursive with cycle detection)
+      // Extract embedded document types (Simplified to prevent recursion loops)
       if (documentClass.hierarchy) {
         schema.embedded = Object.keys(documentClass.hierarchy);
+        // We do NOT recursively extract schemas here anymore.
+        // Nested documents should be inspected individually by the agent.
+        // This prevents "allocation size overflow" in complex systems.
         for (const [embeddedName, embeddedClass] of Object.entries(documentClass.hierarchy)) {
-          try {
-            schema.embeddedSchemas[embeddedName] = this.#extractDocumentSchema(
-              embeddedClass.documentName || embeddedName,
-              embeddedClass,
-              new Set(visited)
-            );
-          } catch (embeddedError) {
-            documentLogger.debug(`Failed to extract embedded schema for "${embeddedName}":`, embeddedError);
-            schema.embeddedSchemas[embeddedName] = { error: 'Failed to extract schema' };
-          }
+          schema.embeddedSchemas[embeddedName] = {
+            type: embeddedClass.documentName || embeddedName,
+            isEmbedded: true,
+            note: 'Use inspect_document_schema on this type to see full details.'
+          };
         }
       }
 
@@ -486,15 +484,20 @@ export class DocumentAPI {
             elementClass?.documentName ||
             String(elementClass);
 
-          if (!visited.has(elementId) && elementClass?.schema?.fields) {
+          // Simplify: If it's a Document, just reference the type. Don't expand schema.
+          if (elementClass?.documentName) {
+            fieldInfo.elementType = elementClass.documentName;
+            fieldInfo.isDocumentCollection = true;
+            fieldInfo.note = 'Use inspect_document_schema on this type for details.';
+          }
+          // Only expand if it's a DataModel (not a full Document) and we haven't visited it
+          else if (!visited.has(elementId) && elementClass?.schema?.fields) {
             const childVisited = new Set(visited);
             childVisited.add(elementId);
             fieldInfo.elementSchema = this.#extractFieldDetails(
               elementClass.schema.fields,
               childVisited
             );
-          } else if (elementClass?.documentName) {
-            fieldInfo.elementType = elementClass.documentName;
           } else if (visited.has(elementId)) {
             fieldInfo._cycleDetected = true;
           }
