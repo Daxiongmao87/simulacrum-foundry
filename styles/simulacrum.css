@@ -351,20 +351,6 @@
   src: url("../assets/fonts/dumbledor.ttf") format("truetype");
 }
 
-@font-face {
-  font-family: "Alice in Wonderland";
-  src: url("../assets/fonts/alice-in-wonderland.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Morris Roman Black";
-  src: url("../assets/fonts/morris-roman-black.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Wizzta";
-  src: url("../assets/fonts/wizzta.ttf") format("truetype");
-}
 
 /* Default font for Simulacrum UI */
 #simulacrum {

@@ -462,9 +462,6 @@ function _registerStylingSettings() {
     type: String,
     choices: {
       'Dumbledor': 'Dumbledor',
-      'Alice in Wonderland': 'Alice in Wonderland',
-      'Morris Roman Black': 'Morris Roman Black',
-      'Wizzta': 'Wizzta',
       'Signika': 'Signika (Default)'
     },
     default: 'Dumbledor',

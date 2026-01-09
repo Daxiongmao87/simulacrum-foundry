@@ -15,9 +15,16 @@ The following scripts are available in `package.json` to build, run, and test th
 *   `npm run format`: Format the codebase using Prettier.
 *   `npm run package:module`: Package the module for distribution.
 *   `npm run launch:foundry`: Launch a Foundry VTT instance for development.
-*   `npm run deploy:module`: Deploy the module to a Foundry VTT instance.
-*   `npm run build:foundry-image`: Build a Docker image for Foundry VTT.
 *   `npm run:foundry`: Run a Foundry VTT instance in a detached Docker container.
+
+## MCP Tools Workflow
+
+The following tools are available via MCP and should be used for standard development operations:
+
+1.  **Validation**: Use `read_architecture` **BEFORE** proposing significant implementation plans to ensure alignment with `docs/ARCHITECTURE.md`.
+2.  **Deployment**: Use `deploy_module` **IMMEDIATELY AFTER** any code or template changes to sync with the running Foundry instance.
+3.  **Distribution**: Use `package_module` to create a release-ready zip file.
+4.  **Testing**: Use `run_foundry` to launch a clean, detached Foundry VTT environment.
 
 ## Development Conventions
 

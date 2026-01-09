@@ -70,10 +70,9 @@ async function _runLoopIteration(context) {
     return _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
   }
 
-  // Ensure final output displayed
-  if (currentResponse.content && currentResponse.content.trim().length > 0) {
-    _notifyAssistantMessage(currentResponse, context);
-  }
+  // NOTE: We do NOT need to call _notifyAssistantMessage here.
+  // The content was already notified at the start of the final iteration (Line 50)
+  // or will be handled by the caller. Invoking it here causes duplicates.
 
   return currentResponse;
 }
@@ -103,6 +102,14 @@ async function _processLoopCycle(currentResponse, context, state) {
   if (!Array.isArray(currentResponse.toolCalls) || currentResponse.toolCalls.length === 0) {
     if (isDebugEnabled()) logger.debug('No tool calls in current AI response; terminating loop');
     return { action: 'break' };
+  }
+
+  // 3.5 FIX: Add assistant message with tool_calls to conversation BEFORE executing tools
+  // This ensures the tool result messages have a matching parent assistant message with IDs
+  // Required by Mistral and other strict APIs for tool_call_id validation
+  if (context.currentToolSupport === true && currentResponse.toolCalls.length > 0) {
+    const content = currentResponse.content || null;
+    context.conversationManager.addMessage('assistant', content, currentResponse.toolCalls);
   }
 
   // 4. Execute Tools
@@ -320,6 +327,8 @@ async function _chatWithAI(messages, systemPrompt, context) {
 function _notifyAssistantMessage(response, context) {
   if (context.onToolResult && !response._parseError) {
     context.onToolResult({ role: 'assistant', content: response.content });
+    // Flag as emitted to prevent duplication in ConversationEngine
+    response._emitted = true;
   }
 }
 

@@ -35,7 +35,12 @@ class ConversationManager {
   addMessage(role, content, toolCalls = null, toolCallId = null) {
     const message = { role, content };
     if (toolCalls) {
-      message.tool_calls = toolCalls;
+      // Fix: Ensure every tool call has the required 'type' property (default to 'function')
+      // This prevents API errors where tool calls are ignored due to missing schema fields.
+      message.tool_calls = toolCalls.map(tc => ({
+        type: 'function',
+        ...tc
+      }));
     }
     if (toolCallId) {
       message.tool_call_id = toolCallId;

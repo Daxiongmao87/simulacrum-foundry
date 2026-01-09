@@ -12,6 +12,7 @@ import { SimulacrumCore } from './core/simulacrum-core.js';
 import { registerSimulacrumSidebarTab } from './ui/sidebar-registration.js';
 import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
+import { BUILD_HASH, BUILD_TIME } from './build-info.js';
 
 const MODULE_ID = 'simulacrum';
 const MODULE_NAME = 'Simulacrum AI Assistant';
@@ -175,7 +176,8 @@ Hooks.once('ready', async () => {
   // Ensure default macros exist
   ensureSimulacrumMacros().catch(err => logger.error('Failed to ensure macros', err));
 
-  logger.info(`${MODULE_NAME} is ready!`);
+  const version = game.modules.get(MODULE_ID)?.version ?? 'unknown';
+  logger.info(`${MODULE_NAME} v${version} is ready! [build:${BUILD_HASH}]`);
 });
 
 // Basic error handling for the module's main script

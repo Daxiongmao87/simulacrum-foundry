@@ -55,7 +55,7 @@ class ChatHandler {
       }
 
       // API/Network errors: Show via FoundryVTT notification system, NOT in chat
-      if (global.ui?.notifications?.error) {
+      if (globalThis.ui?.notifications?.error) {
         ui.notifications.error(`Simulacrum: ${error.message}`, { permanent: false });
       } else {
         this.logger.error(`Simulacrum Error: ${error.message}`);
@@ -295,7 +295,8 @@ class ChatHandler {
   handleToolResult(toolResult, options = {}) {
     // Add tool result to conversation
     if (toolResult.role === 'tool') {
-      this.addMessageToConversation('tool', toolResult.content, null, toolResult.toolCallId);
+      // FIX: Do not add to conversation here, as tool-loop-handler already adds it internally.
+      // this.addMessageToConversation('tool', toolResult.content, null, toolResult.toolCallId);
 
       // Task-09: Format tool result with rich HTML display if it has a toolName
       if (toolResult.toolName && options.onAssistantMessage) {

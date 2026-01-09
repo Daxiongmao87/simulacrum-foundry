@@ -323,7 +323,8 @@ function _extractToolCallFromObject(obj, cleanText, matchText) {
     args = _tryParseJSON(args) || {};
   }
 
-  if (!_validateToolName(name)) return null;
+  // Log validation warning but don't block parsing - validation happens at execution time
+  _validateToolName(name);
 
   const cleanedText = cleanText.replace(matchText, '').trim();
   _logFallbackSuccess(name, args);

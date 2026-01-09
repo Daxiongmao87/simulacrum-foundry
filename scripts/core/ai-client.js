@@ -106,6 +106,26 @@ export class AIClient {
   }
 
   /**
+   * Validate message structure to prevent API errors
+   * @param {Array} messages - Array of message objects
+   * @private
+   */
+  _checkMessageStructure(messages) {
+    if (!Array.isArray(messages)) {
+      throw new Error('Messages must be an array');
+    }
+
+    messages.forEach((msg, index) => {
+      if (!msg.role) {
+        throw new Error(`Message at index ${index} missing 'role' property`);
+      }
+      // Content is optional for some roles in some APIs (e.g. assistant calls tool), 
+      // but generally we want to ensure it's at least present or handled.
+      // For now, we'll just check it's not undefined if it's supposed to be there.
+    });
+  }
+
+  /**
    * Chat with AI using OpenAI or Ollama API
    * @param {Array} messages - Array of message objects
    * @param {Array} tools - Optional tools for function calling
@@ -232,10 +252,28 @@ export class AIClient {
           });
         }
 
-        // Log full request body for WAF debugging
+        this._checkMessageStructure(body.messages);
+
+        // Debug: Log message structure for tool_call_id issues
+        if (isDebugEnabled()) {
+          const msgSummary = body.messages.map(m => ({
+            role: m.role,
+            hasContent: !!m.content,
+            hasToolCalls: !!(m.tool_calls && m.tool_calls.length),
+            toolCallIds: (m.tool_calls || []).map(tc => tc.id),
+            toolCallId: m.tool_call_id || null
+          }));
+          createLogger('AIClient').info('Message structure before API call:', msgSummary);
+        }
+        // CRITICAL DEBUG: Always log for Mistral issue
+        console.log('[Simulacrum DEBUG] Messages being sent:', JSON.stringify(body.messages.map(m => ({
+          role: m.role,
+          content: m.content ? m.content.substring(0, 50) + '...' : null,
+          tool_calls: m.tool_calls ? m.tool_calls.map(tc => ({ id: tc.id, type: tc.type, name: tc.function?.name })) : undefined,
+          tool_call_id: m.tool_call_id
+        })), null, 2));
+
         const stringifiedBody = JSON.stringify(body);
-        console.log('[Simulacrum] Request Body Preview:', stringifiedBody.substring(0, 500) + '...');
-        console.log('[Simulacrum] Full Request Body (Right-click to Copy):', body);
 
         response = await fetch(url.toString(), {
           method: 'POST',

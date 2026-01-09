@@ -16,12 +16,10 @@ class DocumentDeleteTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          required: true,
           description: 'Type of document to delete'
         },
         documentId: {
           type: 'string',
-          required: true,
           description: 'ID of document to delete'
         }
       },

@@ -15,7 +15,6 @@ class DocumentSearchTool extends BaseTool {
       properties: {
         query: {
           type: 'string',
-          required: true,
           description: 'Search text - can be document names, content, or keywords.'
         },
         documentTypes: {

@@ -88,3 +88,6 @@ AGENTS.md
 VISION.md
 # Agent working notes
 .agent/
+
+# MCP Configuration
+.mcp/

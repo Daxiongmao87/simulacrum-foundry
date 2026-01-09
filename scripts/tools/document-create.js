@@ -26,12 +26,10 @@ export class DocumentCreateTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          required: true,
           description: 'Type of document to create'
         },
         data: {
           type: 'object',
-          required: true,
           description: 'Document data (will be validated by FoundryVTT)'
         },
         folder: {

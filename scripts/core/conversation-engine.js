@@ -105,15 +105,10 @@ class ConversationEngine {
     }
 
     // With tools: delegate to tool loop (let the loop emit assistant/tool updates)
+    // Note: tool-loop-handler now handles adding assistant messages with tool_calls
     const tools = toolRegistry.getToolSchemas();
     const legacyMode = game?.settings?.get('simulacrum', 'legacyMode') ?? false;
     const currentToolSupport = !legacyMode;
-
-    // Fix: Ensure the assistant message invoking the tools is added to conversation history
-    // so that subsequent requests in the loop include it in the context.
-    if (currentToolSupport && aiResponse.toolCalls.length > 0) {
-      this.conversationManager.addMessage('assistant', aiResponse.content || '', aiResponse.toolCalls);
-    }
 
     const finalResponse = await processToolCallLoop({
       initialResponse: aiResponse,
@@ -126,8 +121,8 @@ class ConversationEngine {
       onToolResult: onToolResult || null
     });
 
-    // If loop produced a distinct final message, emit to UI
-    if (finalResponse && finalResponse.content && onAssistantMessage) {
+    // If loop produced a distinct final message and it wasn't already emitted by the loop handler, emit to UI
+    if (finalResponse && finalResponse.content && onAssistantMessage && !finalResponse._emitted) {
       onAssistantMessage({ role: 'assistant', content: finalResponse.content, display: finalResponse.display || finalResponse.content });
     }
 

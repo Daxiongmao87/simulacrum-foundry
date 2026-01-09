@@ -127,7 +127,7 @@ export async function buildSystemPrompt() {
     }
 
     // DEBUG: VERSION AND SECURITY CHECK (User Request)
-    const version = '0.1.8';
+    const version = '0.1.9';
     // Strict check: verify no HTML tags exist in the prompt
     // This regex matches <tag> or </tag> where tag is 1+ letters
     const tagRegex = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi;

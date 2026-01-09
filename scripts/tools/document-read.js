@@ -18,12 +18,10 @@ export class DocumentReadTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          required: true,
           description: 'Type of document to read'
         },
         documentId: {
           type: 'string',
-          required: true,
           description: 'ID of document to read'
         },
         includeEmbedded: {
