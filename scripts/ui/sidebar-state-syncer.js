@@ -5,6 +5,7 @@
 
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
+import { formatToolCallDisplay, groupConsecutiveMessages } from '../utils/message-utils.js';
 import { ChatHandler } from '../core/chat-handler.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -77,16 +78,39 @@ export async function syncMessagesFromCore(conversationManager) {
     }
 
     const filtered = conversationManager.messages.filter(
-        m => m && (m.role === 'user' || m.role === 'assistant')
+        m => m && (m.role === 'user' || m.role === 'assistant' || m.role === 'tool')
     );
 
     const messages = [];
+    const toolCallNames = new Map();
+
     for (const m of filtered) {
-        const message = await createDisplayMessage(m.role, m.content);
-        messages.push(message);
+        // Track tool call IDs from assistant messages to resolve names later
+        if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+            for (const tc of m.tool_calls) {
+                if (tc.id && (tc.function?.name || tc.name)) {
+                    toolCallNames.set(tc.id, tc.function?.name || tc.name);
+                }
+            }
+        }
+
+        if (m.role === 'tool') {
+            // Reconstruct tool result display
+            const toolName = toolCallNames.get(m.tool_call_id);
+            const displayHtml = formatToolCallDisplay(m, toolName);
+
+            // Display tool results as assistant messages (matching ChatHandler behavior)
+            const message = await createDisplayMessage('assistant', m.content, displayHtml);
+            messages.push(message);
+        } else {
+            // Normal message processing
+            const message = await createDisplayMessage(m.role, m.content);
+            messages.push(message);
+        }
     }
 
-    return messages;
+    // Apply grouping for consecutive assistant messages
+    return groupConsecutiveMessages(messages);
 }
 
 /**

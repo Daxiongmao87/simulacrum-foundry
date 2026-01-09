@@ -239,6 +239,20 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   async addMessage(role, content, display = null) {
     const processedDisplay = display || await processMessageForDisplay(content);
 
+    // Check for grouping
+    if (this.messages.length > 0 && role === 'assistant') {
+      const lastMsg = this.messages[this.messages.length - 1];
+      if (lastMsg.role === 'assistant') {
+        // Merge!
+        lastMsg.content += '\n\n' + content;
+        lastMsg.display = (lastMsg.display || lastMsg.content) + processedDisplay;
+        // Don't push a new message, just update UI
+        this.#needsScroll = true;
+        this.render({ parts: ['log'] });
+        return;
+      }
+    }
+
     const msg = {
       role,
       content,

@@ -75,3 +75,213 @@ export function smartSliceMessages(messages, limit) {
 
     return messages.slice(currentStart);
 }
+
+/**
+ * Format a tool call result as rich HTML with status icons
+ * @param {Object} toolResult - The tool result object/message
+ * @param {string} toolName - The name of the tool (must be provided as it might not be in the message)
+ * @returns {string} HTML string for display
+ */
+export function formatToolCallDisplay(toolResult, toolName = null) {
+    const isSuccess = !toolResult.isError && !toolResult.error;
+    const statusClass = isSuccess ? 'tool-success' : 'tool-failure';
+    const iconClass = isSuccess ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+
+    // Build action text from tool name
+    const effectiveToolName = toolName || toolResult.toolName || 'unknown';
+    const actionText = getToolActionText(effectiveToolName, toolResult);
+
+    // Extract document name if present in the result
+    const documentInfo = extractDocumentInfo(toolResult);
+    const documentHtml = documentInfo ? `<span class="tool-document">${documentInfo}</span>` : '';
+
+    // Specialized Macro Result Display
+    let resultHtml = '';
+    if (effectiveToolName === 'execute_macro' && isSuccess) {
+        resultHtml = formatMacroResult(toolResult);
+    } else if (isSuccess) {
+        // Generic tool result display if present in content JSON
+        resultHtml = extractToolDisplay(toolResult);
+    }
+
+    return `<div class="simulacrum-tool-call ${statusClass}">
+      <i class="${iconClass} tool-icon"></i>
+      <span class="tool-action">${actionText}</span>
+      ${documentHtml}
+      ${resultHtml}
+    </div>`;
+}
+
+/**
+ * Get human-readable action text for a tool
+ * @param {string} toolName - The tool name
+ * @param {Object} toolResult - The tool result for context
+ * @returns {string} Human-readable action text
+ */
+export function getToolActionText(toolName, toolResult) {
+    const toolActions = {
+        'document-create': 'Created',
+        'document-read': 'Read',
+        'document-update': 'Updated',
+        'document-delete': 'Deleted',
+        'document-list': 'Listed',
+        'document-search': 'Searched',
+        'document-schema': 'Retrieved schema for',
+        'execute_macro': 'Executed Macro'
+    };
+
+    const action = toolActions[toolName] || toolName.replace(/-/g, ' ');
+    const docType = toolResult.documentType || '';
+
+    return docType ? `${action} ${docType}` : action;
+}
+
+/**
+ * Extract document name/info from tool result for display
+ * @param {Object} toolResult - The tool result
+ * @returns {string|null} Document info or null
+ */
+export function extractDocumentInfo(toolResult) {
+    // Try to extract document name from the result content
+    const content = String(toolResult.content || '');
+
+    // Look for document name patterns
+    const nameMatch = content.match(/"name":\s*"([^"]+)"/);
+    if (nameMatch) {
+        return nameMatch[1];
+    }
+
+    // Look for "Created X" or similar success messages
+    const createdMatch = content.match(
+        /(?:Created|Updated|Deleted|Read)\s+(\w+)\s+(?:document\s+)?['"]([^'"]+)['"]/i
+    );
+    if (createdMatch) {
+        return createdMatch[2];
+    }
+
+    // Look for Macro execution message
+    const macroMatch = content.match(/executed macro:\s*([^"'}]+)/i);
+    if (macroMatch) {
+        return macroMatch[1].trim();
+    }
+
+    return null;
+}
+
+/**
+ * Format macro execution result
+ * @param {Object} toolResult
+ * @returns {string} HTML string
+ */
+// eslint-disable-next-line complexity
+export function formatMacroResult(toolResult) {
+    try {
+        // Content is JSON stringified result from tool
+        let contentObj;
+        try {
+            contentObj = JSON.parse(toolResult.content);
+        } catch {
+            // content might not be json
+            return '';
+        }
+
+        let macroResult = contentObj;
+
+        // Loop to unwrap nested JSON strings (max 3 levels to avoid infinite loops)
+        for (let i = 0; i < 3; i++) {
+            if (typeof macroResult === 'string') {
+                try {
+                    const parsed = JSON.parse(macroResult);
+                    if (parsed && typeof parsed === 'object') {
+                        macroResult = parsed;
+                    } else {
+                        break;
+                    }
+                } catch {
+                    break;
+                }
+                // eslint-disable-next-line max-depth
+            } else {
+                break;
+            }
+        }
+
+        if (macroResult && macroResult.result && macroResult.result.total !== undefined) {
+            let html = `<div class="tool-result"><strong>Roll Result:</strong> ${macroResult.result.total}</div>`;
+            if (macroResult.result.formula) {
+                html += `<div class="tool-result-detail"><small>Formula: ${macroResult.result.formula}</small></div>`;
+            }
+            return html;
+        } else if (macroResult && macroResult.result !== undefined) {
+            const resultStr = typeof macroResult.result === 'object'
+                ? JSON.stringify(macroResult.result, null, 2)
+                : String(macroResult.result);
+            return `<div class="tool-result"><strong>Result:</strong> ${resultStr}</div>`;
+        }
+    } catch (e) { /* ignore parse errors */ }
+    return '';
+}
+
+/**
+ * Extract generic display content from tool result if available
+ * @param {Object} toolResult
+ * @returns {string} HTML string
+ */
+export function extractToolDisplay(toolResult) {
+    try {
+        const content = toolResult.content || '';
+        // Check if content is a JSON string with a 'display' property
+        if (typeof content === 'string' && content.startsWith('{')) {
+            const parsed = JSON.parse(content);
+            if (parsed && typeof parsed === 'object' && parsed.display) {
+                // If the tool return includes a pre-formatted display string, use it
+                // Wrap in a div to ensure block formatting
+                return `<div class="tool-result-display">${parsed.display}</div>`;
+            }
+        }
+    } catch (e) { /* ignore */ }
+    return '';
+}
+
+/**
+ * Group consecutive messages from the same role (specifically assistant)
+ * @param {Array<Object>} messages - Array of message objects
+ * @returns {Array<Object>} Grouped messages
+ */
+export function groupConsecutiveMessages(messages) {
+    if (!messages || messages.length === 0) return [];
+
+    const grouped = [];
+    let currentGroup = null;
+
+    for (const msg of messages) {
+        // Only group 'assistant' messages for now, as requested
+        if (msg.role === 'assistant') {
+            if (currentGroup && currentGroup.role === 'assistant') {
+                // Merge into current group
+                // 1. Calculate new display BEFORE mutating content (Fix for JSON leak)
+                // Ensure we handle cases where display might be missing (fallback to content)
+                const currentDisplay = currentGroup.display || currentGroup.content;
+                const newDisplay = msg.display || msg.content;
+
+                // 2. Combine content (with newline)
+                currentGroup.content += '\n\n' + msg.content;
+
+                // 3. Set combined display
+                currentGroup.display = currentDisplay + newDisplay;
+                // 3. Keep original timestamp/id of the group starter
+            } else {
+                // Start a new assistant group
+                // Clone to avoid mutating original if needed, though mostly safe here
+                currentGroup = { ...msg };
+                grouped.push(currentGroup);
+            }
+        } else {
+            // Non-assistant message: push and reset group
+            grouped.push(msg);
+            currentGroup = null;
+        }
+    }
+
+    return grouped;
+}

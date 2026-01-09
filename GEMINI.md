@@ -14,7 +14,7 @@ The following scripts are available in `package.json` to build, run, and test th
 *   `npm run lint`: Lint the codebase using ESLint.
 *   `npm run format`: Format the codebase using Prettier.
 *   `npm run package:module`: Package the module for distribution.
-*   `npm run deploy:module`: Deploy the current module code to the remote Foundry VTT server via SSH.
+*   `mcp_projectTools_deploy_module`: Deploy the current module code to the remote Foundry VTT server via SSH.
 
 ## Deployment Workflow
 
@@ -33,9 +33,7 @@ Ensure you have SSH access to the remote server configured. The deployment scrip
 > You MUST run the deployment script after making ANY changes to code, styles, or templates.
 >
 > **Command:**
-> ```bash
-> npm run deploy:module
-> ```
+> mcp_projectTools_deploy_module
 
 ### 3. Verification
 After deployment, the Foundry VTT instance will automatically restart. Refresh your browser to see changes.
