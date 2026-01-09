@@ -8,8 +8,27 @@ import { ValidationErrorHandler } from '../utils/validation-errors.js';
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { DocumentUpdateLogic } from './document-update-logic.js';
 import { ToolValidationError } from '../utils/tool-validation-error.js';
+import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 class DocumentUpdateTool extends BaseTool {
+  /**
+   * Validate that the document has been read before modification
+   * @param {string} documentType - Document type
+   * @param {string} documentId - Document ID
+   * @throws {Error} If document not read or stale
+   */
+  async #enforceReadBeforeModify(documentType, documentId) {
+    const opts = { includeEmbedded: true };
+    const currentDoc = await DocumentAPI.getDocument(documentType, documentId, opts);
+    if (!currentDoc) {
+      const error = new Error(`Document ${documentType}:${documentId} not found`);
+      error.code = 'DOCUMENT_NOT_FOUND';
+      throw error;
+    }
+    const currentData = currentDoc?.toObject?.() ?? currentDoc;
+    documentReadRegistry.requireReadForModification(documentType, documentId, currentData);
+  }
+
   constructor() {
     super('update_document', 'Update documents of any type supported by current system.', {
       type: 'object',
@@ -81,6 +100,8 @@ class DocumentUpdateTool extends BaseTool {
 
     try {
       this._validateBasicParams(normalizedParams);
+      const { documentType, documentId } = normalizedParams;
+      await this.#enforceReadBeforeModify(documentType, documentId);
 
       if (normalizedParams.updates) this.validateImageUrls(normalizedParams.updates);
       if (normalizedParams.operations) this.validateImageUrls(normalizedParams.operations);
@@ -96,14 +117,29 @@ class DocumentUpdateTool extends BaseTool {
 
       return await this.#buildSuccessResponse(normalizedParams);
     } catch (error) {
-      if (isDebugEnabled()) this.logger.info('Caught error in execute():', error.name, error.message);
-      if (error instanceof ToolValidationError) {
-        return this.#buildValidationErrorResponse(error.message, normalizedParams);
-      }
-      return ValidationErrorHandler.createToolErrorResponse(
-        error, 'update', normalizedParams.documentType, normalizedParams.documentId
-      );
+      return this.#handleExecuteError(error, normalizedParams);
     }
+  }
+
+  #handleExecuteError(error, params) {
+    if (isDebugEnabled()) this.logger.info('Caught error in execute():', error.name, error.message);
+    if (error instanceof ToolValidationError) {
+      return this.#buildValidationErrorResponse(error.message, params);
+    }
+    const readErrors = ['DOCUMENT_NOT_READ', 'DOCUMENT_STALE', 'DOCUMENT_NOT_FOUND'];
+    if (readErrors.includes(error.code)) {
+      return {
+        content: error.message,
+        display: `❌ ${error.message}`,
+        error: {
+          message: error.message,
+          type: error.code,
+          documentType: params.documentType,
+          documentId: params.documentId
+        }
+      };
+    }
+    return ValidationErrorHandler.createToolErrorResponse(error, 'update', params.documentType, params.documentId);
   }
 
   _validateBasicParams(params) {

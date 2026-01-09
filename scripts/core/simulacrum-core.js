@@ -6,6 +6,7 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
 import { ConversationManager } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
+import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 import { DocumentAPI } from './document-api.js';
 import { normalizeAIResponse, parseInlineToolCall, sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
@@ -280,6 +281,8 @@ class SimulacrumCore {
         this.conversationManager.clear();
         await this.conversationManager.save();
       }
+      // Clear the document read registry since conversation context is reset
+      documentReadRegistry.clear();
       return true;
     } catch (_e) {
       return false;

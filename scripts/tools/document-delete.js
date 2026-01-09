@@ -5,8 +5,29 @@
 import { BaseTool } from './base-tool.js';
 import { DocumentAPI } from '../core/document-api.js';
 import { ValidationErrorHandler } from '../utils/validation-errors.js';
+import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 class DocumentDeleteTool extends BaseTool {
+  /**
+   * Validate that the document has been read before deletion
+   * @param {string} documentType - Document type
+   * @param {string} documentId - Document ID
+   * @returns {Promise<Object>} The current document if valid
+   * @throws {Error} If document not read or stale
+   */
+  async #enforceReadBeforeDelete(documentType, documentId) {
+    const { DocumentAPI } = await import('../core/document-api.js');
+    const currentDoc = await DocumentAPI.getDocument(documentType, documentId);
+    if (!currentDoc) {
+      const error = new Error(`Document ${documentType}:${documentId} not found`);
+      error.code = 'DOCUMENT_NOT_FOUND';
+      throw error;
+    }
+    const currentData = typeof currentDoc?.toObject === 'function' ? currentDoc.toObject() : currentDoc;
+    documentReadRegistry.requireReadForModification(documentType, documentId, currentData);
+    return currentDoc;
+  }
+
   /**
    * Create a new Document Delete Tool
    */
@@ -51,30 +72,39 @@ class DocumentDeleteTool extends BaseTool {
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
-        return {
-          content: `Document type "${params.documentType}" not available in current system`,
-          display: `❌ Unknown document type: ${params.documentType}`,
-          error: { message: `Document type "${params.documentType}" not available in current system`, type: 'UNKNOWN_DOCUMENT_TYPE' }
-        };
+        return this.#buildErrorResponse(params, 'UNKNOWN_DOCUMENT_TYPE',
+          `Document type "${params.documentType}" not available in current system`);
       }
 
-      await DocumentAPI.deleteDocument(
-        params.documentType,
-        params.documentId
-      );
+      // Enforce read-before-delete
+      await this.#enforceReadBeforeDelete(params.documentType, params.documentId);
+
+      await DocumentAPI.deleteDocument(params.documentType, params.documentId);
+      documentReadRegistry.unregister(params.documentType, params.documentId);
 
       return {
         content: `Deleted ${params.documentType}:${params.documentId}`,
         display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`
       };
     } catch (error) {
-      return ValidationErrorHandler.createToolErrorResponse(
-        error,
-        'delete',
-        params.documentType,
-        params.documentId
-      );
+      if (error.code === 'DOCUMENT_NOT_READ' || error.code === 'DOCUMENT_STALE' || error.code === 'DOCUMENT_NOT_FOUND') {
+        return this.#buildErrorResponse(params, error.code, error.message);
+      }
+      return ValidationErrorHandler.createToolErrorResponse(error, 'delete', params.documentType, params.documentId);
     }
+  }
+
+  #buildErrorResponse(params, code, message) {
+    return {
+      content: message,
+      display: `❌ ${message}`,
+      error: {
+        message,
+        type: code,
+        documentType: params.documentType,
+        documentId: params.documentId
+      }
+    };
   }
 }
 

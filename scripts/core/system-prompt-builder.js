@@ -97,20 +97,25 @@ export async function buildSystemPrompt() {
 
         basePrompt = [
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Intro_v2'),
+            game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.CriticalRules'),
+            game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.ResearchFirst'),
             documentTypesInfo,
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Instructions'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Format'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Warning'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.Action'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.DocumentSchema'),
+            game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.TaskTracking'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Legacy.EndTask'),
             toolSchemas
         ].join('\n\n');
     } else {
         basePrompt = [
             game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.Identity'),
+            game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.CriticalRules'),
             documentTypesInfo,
             game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.StrategicProtocol'),
+            game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.TaskManagement'),
             game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolOperatives'),
             `## Available Macros\nThe following macros are available for execution via the execute_macro tool:\n${macrosList}`,
             game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.CommunicationStyle_v2'),

@@ -5,6 +5,7 @@
 
 import { BaseTool } from './base-tool.js';
 import { createLogger } from '../utils/logger.js';
+import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 /**
  * Document Reading Tool
@@ -67,6 +68,10 @@ export class DocumentReadTool extends BaseTool {
       if (!document) {
         return this._createErrorResponse(documentType, 'DOCUMENT_NOT_FOUND', 'Document not found');
       }
+
+      // Register that this document has been read (for read-before-modify enforcement)
+      const data = typeof document?.toObject === 'function' ? document.toObject() : document;
+      documentReadRegistry.registerRead(documentType, documentId, data);
 
       const content = this._formatDocumentContent(document, documentId, parameters);
       const documentName = document?.name || documentId;

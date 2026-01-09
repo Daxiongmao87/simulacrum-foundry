@@ -7,7 +7,8 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SidebarEventHandlers } from './sidebar-event-handlers.js';
 import {
   syncMessagesFromCore,
-  createWelcomeMessage
+  createWelcomeMessage,
+  processMessageForDisplay
 } from './sidebar-state-syncer.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
@@ -230,10 +231,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async addMessage(role, content, display = null) {
+    const processedDisplay = display || await processMessageForDisplay(content);
+
     const msg = {
       role,
       content,
-      display: display || content,
+      display: processedDisplay,
       timestamp: new Date(),
       user: role === 'user' ? game.user : undefined,
       id: foundry.utils.randomID(),
