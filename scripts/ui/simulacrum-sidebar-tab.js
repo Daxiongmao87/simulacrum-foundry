@@ -64,6 +64,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     this._activeProcesses = new Map();
     this.chatHandler = null;
     this.logger = createLogger('SimulacrumSidebarTab');
+
+    // Sync when conversation is loaded (race condition fix)
+    Hooks.on('simulacrumConversationLoaded', async () => {
+      await this._syncFromCoreConversation();
+      if (this.rendered) this.render();
+    });
   }
 
   _render(optionsOrForce) {

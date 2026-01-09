@@ -110,6 +110,9 @@ class SimulacrumCore {
     // Set up periodic auto-save for extra reliability
     this._setupPeriodicSave();
 
+    // Signal that conversation is fully loaded
+    Hooks.callAll('simulacrumConversationLoaded', this.conversationManager);
+
     this.logger.info('Module initialized');
   }
 
