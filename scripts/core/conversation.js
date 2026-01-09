@@ -77,6 +77,13 @@ class ConversationManager {
     while (this.sessionTokens > this.maxTokens && this.messages.length > 1) {
       const removedMessage = this.messages.shift(); // Remove oldest message (after system message)
       this.sessionTokens -= this._estimateTokens(removedMessage);
+
+      // Fix: If the new head message is a 'tool' result, it is now an orphan.
+      // We must remove it as well. Repeat until the head is not a tool result.
+      while (this.messages.length > 0 && this.messages[0].role === 'tool') {
+        const removedOrphan = this.messages.shift();
+        this.sessionTokens -= this._estimateTokens(removedOrphan);
+      }
     }
     if (this.sessionTokens > this.maxTokens) {
       // If even after removing all but the last message, it's still too long, clear all but system message

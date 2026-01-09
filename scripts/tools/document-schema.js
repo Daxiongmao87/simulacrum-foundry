@@ -84,19 +84,26 @@ class DocumentSchemaTool extends BaseTool {
     output += `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}\n`;
 
     // Include nested field details in content for AI consumption
-    if (schema.systemFieldDetails && Object.keys(schema.systemFieldDetails).length > 0) {
-      output += `\n**System Field Structure** (key nested fields):\n`;
-      for (const [fieldName, details] of Object.entries(schema.systemFieldDetails)) {
-        if (details.isCollection || details.isMapping || details.nested) {
-          output += `- ${fieldName}: ${details.type}`;
-          if (details.isCollection) output += ' (collection)';
-          if (details.isMapping) output += ' (mapping)';
-          if (details.nested) output += ` with ${Object.keys(details.nested).length} nested fields`;
-          output += '\n';
-        }
-      }
+    output += this.formatSystemFields(schema);
+
+    return output;
+  }
+
+  formatSystemFields(schema) {
+    if (!schema.systemFieldDetails || Object.keys(schema.systemFieldDetails).length === 0) {
+      return '';
     }
 
+    let output = `\n**System Field Structure** (key nested fields):\n`;
+    for (const [fieldName, details] of Object.entries(schema.systemFieldDetails)) {
+      if (details.isCollection || details.isMapping || details.nested) {
+        output += `- ${fieldName}: ${details.type}`;
+        if (details.isCollection) output += ' (collection)';
+        if (details.isMapping) output += ' (mapping)';
+        if (details.nested) output += ` with ${Object.keys(details.nested).length} nested fields`;
+        output += '\n';
+      }
+    }
     return output;
   }
 

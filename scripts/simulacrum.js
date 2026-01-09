@@ -12,7 +12,7 @@ import { SimulacrumCore } from './core/simulacrum-core.js';
 import { registerSimulacrumSidebarTab } from './ui/sidebar-registration.js';
 import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
-import { BUILD_HASH, BUILD_TIME } from './build-info.js';
+import { BUILD_HASH } from './build-info.js';
 
 const MODULE_ID = 'simulacrum';
 const MODULE_NAME = 'Simulacrum AI Assistant';

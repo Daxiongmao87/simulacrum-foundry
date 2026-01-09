@@ -12,7 +12,6 @@
     "format": "prettier --write scripts/ tests/ *.json *.md",
     "format:check": "prettier --check scripts/ tests/ *.json *.md",
     "package:module": "node tools/package-module.js",
-    "deploy:module": "HASH=$(date +%s | sha256sum | cut -c1-8) && TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) && echo \"// Auto-generated build info - DO NOT EDIT MANUALLY\\nexport const BUILD_HASH = '$HASH';\\nexport const BUILD_TIME = '$TIMESTAMP';\" > scripts/build-info.js && npm run package:module && ZIP=$(ls -t dist/simulacrum-*.zip | head -n 1) && echo \"Deploying $ZIP (hash: $HASH) to remote...\" && scp \"$ZIP\" ${DEPLOY_HOST}:~/foundrydata/module.zip && ssh ${DEPLOY_HOST} \"mkdir -p ~/foundrydata/data/Data/modules/simulacrum && unzip -o ~/foundrydata/module.zip -d ~/foundrydata/data/Data/modules/simulacrum && rm ~/foundrydata/module.zip && systemctl --user restart foundryvtt2.service && echo 'Foundry VTT restarted. Deploy hash: $HASH'\"",
     "dead-code": "knip",
     "dead-code:fix": "knip --fix",
     "unused": "unimported"

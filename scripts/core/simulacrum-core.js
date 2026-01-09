@@ -8,7 +8,8 @@ import { ConversationManager } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
 
 import { DocumentAPI } from './document-api.js';
-import { sanitizeMessagesForFallback, normalizeAIResponse, parseInlineToolCall } from '../utils/ai-normalization.js';
+import { normalizeAIResponse, parseInlineToolCall, sanitizeMessagesForFallback } from '../utils/ai-normalization.js';
+import { smartSliceMessages } from '../utils/message-utils.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { emitProcessCancelled } from './hook-manager.js';
 import {
@@ -196,9 +197,7 @@ class SimulacrumCore {
 
       // Get context length setting and limit conversation history
       const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
-      const limitedMessages = messages.length > contextLength
-        ? messages.slice(-contextLength)
-        : messages;
+      const limitedMessages = smartSliceMessages(messages, contextLength);
 
       // Get AI response - use legacy mode setting to determine tool support
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');

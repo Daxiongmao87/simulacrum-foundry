@@ -16,6 +16,7 @@ import { DocumentSearchTool } from '../tools/document-search.js';
 import { ArtifactSearchTool } from '../tools/artifact-search.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { ExecuteMacroTool } from '../tools/execute-macro.js';
+import { ManageTaskTool } from '../tools/manage-task.js';
 import { DocumentAPI } from './document-api.js';
 
 /**
@@ -65,7 +66,8 @@ export class ToolRegistry {
         new DocumentSearchTool(),
         new ArtifactSearchTool(),
         new DocumentSchemaTool(),
-        new ExecuteMacroTool()
+        new ExecuteMacroTool(),
+        new ManageTaskTool()
       ];
 
       for (const t of tools) {

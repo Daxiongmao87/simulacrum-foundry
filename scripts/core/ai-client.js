@@ -269,7 +269,11 @@ export class AIClient {
         console.log('[Simulacrum DEBUG] Messages being sent:', JSON.stringify(body.messages.map(m => ({
           role: m.role,
           content: m.content ? m.content.substring(0, 50) + '...' : null,
-          tool_calls: m.tool_calls ? m.tool_calls.map(tc => ({ id: tc.id, type: tc.type, name: tc.function?.name })) : undefined,
+          tool_calls: m.tool_calls ? m.tool_calls.map(tc => ({
+            id: tc.id,
+            type: tc.type,
+            name: tc.function?.name
+          })) : undefined,
           tool_call_id: m.tool_call_id
         })), null, 2));
 

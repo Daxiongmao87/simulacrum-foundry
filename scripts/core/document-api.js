@@ -383,7 +383,10 @@ export class DocumentAPI {
       // Extract main schema fields with type information
       if (documentClass.schema?.fields) {
         schema.fields = Object.keys(documentClass.schema.fields);
-        schema.fieldDetails = this.#extractFieldDetails(documentClass.schema.fields, new Set(visited));
+        schema.fieldDetails = this.#extractFieldDetails(
+          documentClass.schema.fields,
+          new Set(visited)
+        );
       }
 
       // Extract system fields with full nested structure if present
@@ -392,7 +395,10 @@ export class DocumentAPI {
           const systemField = documentClass.schema.getField('system');
           if (systemField?.fields) {
             schema.systemFields = Object.keys(systemField.fields);
-            schema.systemFieldDetails = this.#extractFieldDetails(systemField.fields, new Set(visited));
+            schema.systemFieldDetails = this.#extractFieldDetails(
+              systemField.fields,
+              new Set(visited)
+            );
           }
         } catch (systemError) {
           documentLogger.debug(`Failed to extract system fields for "${documentType}":`, systemError);
@@ -476,12 +482,17 @@ export class DocumentAPI {
         if (field.element || field.model) {
           fieldInfo.isCollection = true;
           const elementClass = field.element || field.model;
-          const elementId = elementClass?.name || elementClass?.documentName || String(elementClass);
+          const elementId = elementClass?.name ||
+            elementClass?.documentName ||
+            String(elementClass);
 
           if (!visited.has(elementId) && elementClass?.schema?.fields) {
             const childVisited = new Set(visited);
             childVisited.add(elementId);
-            fieldInfo.elementSchema = this.#extractFieldDetails(elementClass.schema.fields, childVisited);
+            fieldInfo.elementSchema = this.#extractFieldDetails(
+              elementClass.schema.fields,
+              childVisited
+            );
           } else if (elementClass?.documentName) {
             fieldInfo.elementType = elementClass.documentName;
           } else if (visited.has(elementId)) {
@@ -508,7 +519,10 @@ export class DocumentAPI {
             if (!visited.has(modelId)) {
               const childVisited = new Set(visited);
               childVisited.add(modelId);
-              fieldInfo.valueSchema = this.#extractFieldDetails(field.model.schema.fields, childVisited);
+              fieldInfo.valueSchema = this.#extractFieldDetails(
+                field.model.schema.fields,
+                childVisited
+              );
             } else {
               fieldInfo._cycleDetected = true;
             }

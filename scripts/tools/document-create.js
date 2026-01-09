@@ -66,6 +66,39 @@ export class DocumentCreateTool extends BaseTool {
     };
   }
 
+  async _promoteSystemFields(documentType, data) {
+    try {
+      const { DocumentAPI } = await import('../core/document-api.js');
+      const schema = DocumentAPI.getDocumentSchema(documentType);
+
+      if (!schema?.systemFields || !Array.isArray(schema.systemFields)) return;
+
+      if (!data.system) data.system = {};
+
+      for (const field of schema.systemFields) {
+        this._migrateField(data, field, schema);
+      }
+    } catch (migrationError) {
+      // Ignoring migration errors
+    }
+  }
+
+  _migrateField(data, field, schema) {
+    // Skip if field not at root or already in system
+    if (data[field] === undefined || data.system[field] !== undefined) return;
+
+    const targetType = schema.systemFieldDetails?.[field]?.type;
+    const value = data[field];
+
+    if (typeof value === 'string' && (targetType === 'schema_field' || targetType === 'object')) {
+      data.system[field] = { value: value };
+    } else {
+      data.system[field] = value;
+    }
+
+    delete data[field];
+  }
+
   /**
    * Execute document creation
    * @param {Object} parameters - Creation parameters
@@ -86,6 +119,9 @@ export class DocumentCreateTool extends BaseTool {
 
       // Validate parameters
       this.validateParameters(parameters, this.schema);
+
+      // Generic Schema Migration (String -> Object promotion)
+      await this._promoteSystemFields(documentType, data);
 
       // Validate image URLs (Task-04)
       this.validateImageUrls(data);
@@ -150,7 +186,7 @@ export class DocumentCreateTool extends BaseTool {
 
     // 1. Get the relevant schema
     // If we are looking at 'system' data, we need the type-specific model
-    let schema = documentClass.schema;
+    const schema = documentClass.schema;
 
     // Attempt to handle system data reshaping
     if (data.system && typeof data.system === 'object') {
