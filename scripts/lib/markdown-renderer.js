@@ -37,13 +37,15 @@ export class MarkdownRenderer {
   }
 
   static #ensureConverter() {
-    if (MarkdownRenderer.#converter !== undefined) return MarkdownRenderer.#converter;
+    // Only return if we have a valid converter instance
+    if (MarkdownRenderer.#converter) return MarkdownRenderer.#converter;
 
     const showdown = globalThis?.window?.showdown;
     if (!showdown?.Converter) {
-      logger.warn('Showdown converter unavailable; leaving markdown unconverted');
-      MarkdownRenderer.#converter = null;
-      return MarkdownRenderer.#converter;
+      // Do not cache null/failure, allowing retry on next render attempt
+      // This prevents permanent breakage if accessed before Showdown library loads
+      logger.warn('Showdown converter unavailable (yet?); leaving markdown unconverted');
+      return null;
     }
 
     try {
@@ -56,24 +58,26 @@ export class MarkdownRenderer {
       MarkdownRenderer.#converter = new showdown.Converter();
     } catch (err) {
       logger.error('Failed to initialize Showdown converter', err);
-      MarkdownRenderer.#converter = null;
+      // Do not cache failure to allow recovery
+      return null;
     }
 
     return MarkdownRenderer.#converter;
   }
 
   static async render(raw, options = {}) {
-    const { disable = false, allowHtml = true, stripImages: removeImages = false } = options;
+    const { disable = false, allowHtml = true, stripImages: removeImages = false, force = false } = options;
     const text = typeof raw === 'string' ? raw : String(raw ?? '');
 
     if (!text.trim()) return '';
     if (disable) return text;
 
-    if (MarkdownRenderer.looksLikeHtml(text)) {
+    if (!force && MarkdownRenderer.looksLikeHtml(text)) {
       return allowHtml ? text : text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    if (!MarkdownRenderer.looksLikeMarkdown(text)) {
+    // If force is true, bypass the markdown detection heuristic
+    if (!force && !MarkdownRenderer.looksLikeMarkdown(text)) {
       return text;
     }
 

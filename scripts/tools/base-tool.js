@@ -159,27 +159,52 @@ export class BaseTool {
    * @param {Object} data - Data to validate
    * @throws {SimulacrumError} if invalid URL found
    */
-  validateImageUrls(data) {
+  async validateImageUrls(data) {
     if (!data || typeof data !== 'object') return;
 
-    for (const [key, value] of Object.entries(data)) {
-      // targeted keys: img, texture.src, valid image fields
-      if (key === 'img' || key === 'src' || key.endsWith('.img') || key.endsWith('texture.src')) {
-        if (typeof value === 'string' && value.trim().length > 0) {
-          if (this.#isInvalidImageUrl(value)) {
-            throw new SimulacrumError(`Invalid image URL for field '${key}': '${value}'. Value must be a valid file path or URL, not a description.`);
+    const validationPromises = [];
+
+    // Helper to collect promises
+    const collectPromises = (obj) => {
+      for (const [key, value] of Object.entries(obj)) {
+        // targeted keys: img, texture.src, valid image fields, or any key ending in .img/.src
+        // Common Foundry image fields: img, src, texture.src, icon, banner
+        const isImageField = key === 'img' || key === 'src' || key === 'icon' || key.endsWith('.img') || key.endsWith('texture.src');
+
+        if (isImageField) {
+          if (typeof value === 'string' && value.trim().length > 0) {
+            validationPromises.push(this.#validateSingleUrl(key, value));
           }
         }
+
+        if (typeof value === 'object' && value !== null) {
+          collectPromises(value);
+        }
       }
-      if (typeof value === 'object' && value !== null) {
-        this.validateImageUrls(value);
-      }
+    };
+
+    collectPromises(data);
+
+    if (validationPromises.length > 0) {
+      await Promise.all(validationPromises);
     }
   }
 
-  #isInvalidImageUrl(url) {
+  async #validateSingleUrl(key, url) {
+    if (this.#isSimpleInvalidCheck(url)) {
+      throw new SimulacrumError(`Invalid image URL for field '${key}': '${url}'. Value must be a valid file path or URL, not a description.`);
+    }
+
+    // Perform network check
+    const exists = await this.#checkUrlExists(url);
+    if (!exists) {
+      throw new SimulacrumError(`Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_artifacts' tool to find a valid image path.`);
+    }
+  }
+
+  #isSimpleInvalidCheck(url) {
     // Reject descriptions or obvious non-URLs
-    if (url.includes(' ') && !url.startsWith('http')) return true; // URLs encoded spaces? usually %20
+    if (url.includes(' ') && !url.startsWith('http')) return true; // URLs with spaces usually encoded
     if (url.length > 500) return true; // Too long
 
     const lower = url.toLowerCase();
@@ -187,5 +212,20 @@ export class BaseTool {
     if (lower.startsWith('image of') || lower.startsWith('picture of') || lower.startsWith('a ')) return true;
 
     return false;
+  }
+
+  async #checkUrlExists(url) {
+    try {
+      // In Foundry, relative paths are common. Fetch handles them relative to base.
+      // Use method: 'HEAD' to avoid downloading the whole image.
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.ok;
+    } catch (error) {
+      // Network error or other fetch failure -> treat as non-existent for safety
+      if (isDebugEnabled()) {
+        this.logger.warn(`Failed to check image URL '${url}':`, error);
+      }
+      return false;
+    }
   }
 }

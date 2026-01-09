@@ -103,8 +103,8 @@ class DocumentUpdateTool extends BaseTool {
       const { documentType, documentId } = normalizedParams;
       await this.#enforceReadBeforeModify(documentType, documentId);
 
-      if (normalizedParams.updates) this.validateImageUrls(normalizedParams.updates);
-      if (normalizedParams.operations) this.validateImageUrls(normalizedParams.operations);
+      if (normalizedParams.updates) await this.validateImageUrls(normalizedParams.updates);
+      if (normalizedParams.operations) await this.validateImageUrls(normalizedParams.operations);
 
       const plan = await this.#buildOperationPlan(normalizedParams);
       const { updates, embeddedOperations } = plan;

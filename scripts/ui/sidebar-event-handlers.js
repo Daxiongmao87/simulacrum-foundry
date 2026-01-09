@@ -5,6 +5,7 @@
 
 import { ConversationCommands } from './conversation-commands.js';
 import { createLogger } from '../utils/logger.js';
+import { processMessageForDisplay } from './sidebar-state-syncer.js';
 
 export class SidebarEventHandlers {
     static async handleSendMessage(app, event, target) {
@@ -55,7 +56,9 @@ export class SidebarEventHandlers {
 
             const onAssistantMessage = async (response) => {
                 if (response.content) {
-                    await app.addMessage('assistant', response.content, response.display);
+                    // Apply markdown rendering and enrichment before display
+                    const processedDisplay = await processMessageForDisplay(response.display || response.content);
+                    await app.addMessage('assistant', response.content, processedDisplay);
                 }
             };
 

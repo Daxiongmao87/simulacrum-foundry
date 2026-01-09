@@ -124,8 +124,8 @@ export class DocumentCreateTool extends BaseTool {
       await this._promoteSystemFields(documentType, data);
 
       // Validate image URLs (Task-04)
-      this.validateImageUrls(data);
-      if (parameters.folder) this.validateImageUrls({ folder: parameters.folder }); // unlikely but consistent
+      await this.validateImageUrls(data);
+      if (parameters.folder) await this.validateImageUrls({ folder: parameters.folder }); // unlikely but consistent
 
       // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
       const { DocumentAPI } = await import('../core/document-api.js');

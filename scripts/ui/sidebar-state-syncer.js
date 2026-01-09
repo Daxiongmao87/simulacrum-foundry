@@ -25,14 +25,14 @@ export async function processMessageForDisplay(content, _options = {}) {
         processedContent = transformThinkTags(processedContent);
     }
 
-    // Apply markdown rendering
+    // Apply markdown rendering first (Generates HTML structure)
     try {
-        processedContent = await MarkdownRenderer.render(processedContent);
+        processedContent = await MarkdownRenderer.render(processedContent, { force: true });
     } catch (err) {
         logger.warn('Markdown rendering failed; using original content', err);
     }
 
-    // Apply FoundryVTT HTML enrichment
+    // Apply FoundryVTT HTML enrichment second (Operates on TextNodes within HTML)
     try {
         const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
         processedContent = await TextEditorImpl.enrichHTML(processedContent, {

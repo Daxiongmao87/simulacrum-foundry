@@ -1,6 +1,7 @@
 import { SimulacrumError } from '../utils/errors.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { createLogger } from '../utils/logger.js';
+import { processMessageForDisplay } from './sidebar-state-syncer.js';
 // Assuming SimulacrumCore will be the main entry point for AI processing
 // and will be defined later in simulacrum.js or a dedicated core file.
 // For now, we'll mock its existence or assume it's globally available in FoundryVTT context.
@@ -41,7 +42,7 @@ class ChatInterface {
       alias: "simulacrum",
       hint: "Interact with the Simulacrum AI Assistant.",
       gmOnly: false,
-      handler: (chatlog, messageText) => 
+      handler: (chatlog, messageText) =>
         ChatInterface.processChatCommand(messageText, game.user),
       description: "Send a message to the Simulacrum AI Assistant."
     });
@@ -59,10 +60,10 @@ class ChatInterface {
       // Check if it's a conversation command first
       if (typeof SimulacrumCore !== 'undefined' && SimulacrumCore.conversationManager) {
         const commandResult = await ConversationCommands.handleConversationCommand(
-          messageText, 
+          messageText,
           SimulacrumCore.conversationManager
         );
-        
+
         if (commandResult.isCommand) {
           // Display command result directly in chat
           ChatMessage.create({
@@ -87,7 +88,7 @@ class ChatInterface {
 
       // Process the message with the AI core
       const response = await SimulacrumCore.processMessage(messageText, user);
-      ChatInterface.displayResponse(response, user);
+      await ChatInterface.displayResponse(response, user);
     } catch (error) {
       const logger = createLogger('ChatInterface');
       logger.error("Error processing chat command:", error);
@@ -100,10 +101,13 @@ class ChatInterface {
    * @param {object} response - The AI's response object (must contain a 'display' property).
    * @param {User} user - The FoundryVTT User to attribute the message to.
    */
-  static displayResponse(response, user) {
+  static async displayResponse(response, user) {
+    // Process markdown and enrichment before display
+    const processedDisplay = await processMessageForDisplay(response.display);
+
     ChatMessage.create({
       user: user._id,
-      content: response.display,
+      content: processedDisplay,
       type: CONST.CHAT_MESSAGE_TYPES.OTHER,
       speaker: { alias: "Simulacrum AI" }, // AI's speaker
       flags: { simulacrum: { aiGenerated: true } }
