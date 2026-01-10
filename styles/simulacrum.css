@@ -375,24 +375,28 @@
   font-size: 1.75em;
   margin: 0.3em 0;
   line-height: 1.2;
+  color: white;
 }
 
 #simulacrum .chat-message h2 {
   font-size: 1.5em;
   margin: 0.4em 0;
   line-height: 1.2;
+  color: white;
 }
 
 #simulacrum .chat-message h3 {
   font-size: 1.35em;
   margin: 0.5em 0;
   line-height: 1.2;
+  color: white;
 }
 
 #simulacrum .chat-message h4 {
   font-size: 1.25em;
   margin: 0.5em 0;
   line-height: 1.2;
+  color: white;
 }
 
 /* Body Text Fonts - Roboto - Strictly Scoped to ID */
