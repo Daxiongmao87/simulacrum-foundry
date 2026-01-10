@@ -30,6 +30,10 @@ export class DocumentReadTool extends BaseTool {
           default: true,
           description: 'Include embedded documents (tokens, items, etc.)',
         },
+        pack: {
+          type: 'string',
+          description: 'Compendium Pack ID if reading from a compendium (e.g. "dnd5e.monsters")',
+        },
         startLine: {
           type: 'integer',
           description: 'Start line for pagination (1-indexed). Optional.',
@@ -58,9 +62,9 @@ export class DocumentReadTool extends BaseTool {
   async execute(parameters) {
     try {
       this.validateParameters(parameters, this.schema);
-      const { documentType, documentId } = parameters;
+      const { documentType, documentId, pack } = parameters;
 
-      if (!this.isValidDocumentType(documentType)) {
+      if (!this.isValidDocumentType(documentType) && !pack) {
         return this._createErrorResponse(
           documentType,
           'DOCUMENT_TYPE_INVALID',
@@ -68,7 +72,7 @@ export class DocumentReadTool extends BaseTool {
         );
       }
 
-      const document = await this._fetchDocument(documentType, documentId);
+      const document = await this._fetchDocument(documentType, documentId, { pack });
       if (!document) {
         return this._createErrorResponse(documentType, 'DOCUMENT_NOT_FOUND', 'Document not found');
       }
@@ -92,9 +96,9 @@ export class DocumentReadTool extends BaseTool {
     }
   }
 
-  async _fetchDocument(type, id) {
+  async _fetchDocument(type, id, options = {}) {
     const { DocumentAPI } = await import('../core/document-api.js');
-    return DocumentAPI.getDocument(type, id);
+    return DocumentAPI.getDocument(type, id, options);
   }
 
   _formatDocumentContent(document, id, params) {

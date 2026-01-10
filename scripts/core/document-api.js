@@ -45,6 +45,31 @@ export class DocumentAPI {
   }
 
   /**
+   * Lists available Compendium Packs, optionally filtered by document type.
+   * @param {string} [documentType] Optional document type to filter by (e.g. "Actor", "Item").
+   * @returns {object[]} Array of pack objects { id, title, documentName, count }.
+   */
+  static listPacks(documentType) {
+    if (!game?.packs) return [];
+
+    // Convert Map to Array
+    const packs = Array.from(game.packs);
+
+    // Filter if type specified
+    const filtered = documentType
+      ? packs.filter(p => p.documentName === documentType)
+      : packs;
+
+    // Map to simplified objects
+    return filtered.map(p => ({
+      id: p.metadata.id, // e.g., "dnd5e.heroes"
+      title: p.metadata.title || p.title,
+      documentName: p.documentName,
+      count: p.index.size // Note: index size is O(1), efficient
+    }));
+  }
+
+  /**
    * Retrieves the schema for a given document type, including fields, embedded documents,
    * relationships, and references. Supports both top-level and embedded document types.
    * @param {string} documentType The name of the document type.
@@ -695,7 +720,53 @@ export class DocumentAPI {
    * @returns {Promise<object[]>} Array of plain document objects
    */
   static async listDocuments(documentType, options = {}) {
-    const { limit, sort, filters = {}, permission = 'READ' } = options;
+    const { limit, sort, filters = {}, permission = 'READ', pack } = options;
+
+    // SCENARIO 1: List documents from a specific Compendium Pack
+    if (pack) {
+      const packObj = game.packs.get(pack);
+      if (!packObj) throw new Error(`Unknown compendium pack: ${pack}`);
+
+      // If documentType is provided, verify it matches
+      if (documentType && packObj.documentName !== documentType) {
+        throw new Error(`Pack '${pack}' contains '${packObj.documentName}', not '${documentType}'`);
+      }
+
+      // Get index (lightweight) or full documents (heavy)
+      // For listing, index is preferred, but index doesn't have all fields.
+      // However, typical list operations just need name/id/img.
+      const index = await packObj.getIndex();
+
+      // Convert to array
+      let docs = Array.from(index);
+
+      // Filter
+      if (filters && Object.keys(filters).length) {
+        docs = docs.filter(doc => {
+          return Object.entries(filters).every(([k, v]) => {
+            const val = this.#get(doc, k);
+            if (v == null) return true;
+            return String(val).toLowerCase().includes(String(v).toLowerCase());
+          });
+        });
+      }
+
+      // Sort
+      if (sort && typeof sort === 'object') {
+        const [[key, dir]] = Object.entries(sort);
+        const factor = dir === 'desc' ? -1 : 1;
+        docs.sort((a, b) => {
+          const av = this.#get(a, key);
+          const bv = this.#get(b, key);
+          return av > bv ? factor : av < bv ? -factor : 0;
+        });
+      }
+
+      const sliced = typeof limit === 'number' ? docs.slice(0, limit) : docs;
+      return sliced;
+    }
+
+    // SCENARIO 2: List documents from World Collection
     const collection = this.#resolveCollection(documentType);
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
 
@@ -758,7 +829,30 @@ export class DocumentAPI {
    * @returns {Promise<object>} Plain document object
    */
   static async getDocument(documentType, id, options = {}) {
-    const { includeEmbedded = false } = options;
+    const { includeEmbedded = false, pack } = options;
+
+    // SCENARIO 1: Get document from Compendium Pack
+    if (pack) {
+      const packObj = game.packs.get(pack);
+      if (!packObj) throw new Error(`Unknown compendium pack: ${pack}`);
+
+      // If documentType is provided, verify it matches
+      if (documentType && packObj.documentName !== documentType) {
+        throw new Error(`Pack '${pack}' contains '${packObj.documentName}', not '${documentType}'`);
+      }
+
+      const doc = await packObj.getDocument(id);
+      if (!doc) throw new Error(`Document not found in pack '${pack}': ${id}`);
+
+      const obj = doc.toObject();
+      // Compendium documents do not check standard User permissions in the same way (usually observer/owner only matters for edit)
+      // READ access to compendiums is generally open if the pack is visible.
+      // We assume if game.packs.get() returned it and user can see it, they can read it.
+
+      return obj;
+    }
+
+    // SCENARIO 2: Get document from World Collection
     const collection = this.#resolveCollection(documentType);
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);

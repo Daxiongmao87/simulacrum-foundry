@@ -27,7 +27,11 @@ class DocumentListTool extends BaseTool {
           includeCompendiums: {
             type: 'boolean',
             default: false,
-            description: 'Include documents from compendium packs',
+            description: 'Include documents from compendium packs (Only if supported by implementation, prefer using "pack" param)',
+          },
+          pack: {
+            type: 'string',
+            description: 'Specific Compendium Pack ID to list documents from (e.g. "dnd5e.monsters")',
           },
         },
       }
@@ -45,8 +49,18 @@ class DocumentListTool extends BaseTool {
       return this.listAllDocumentTypes();
     }
 
-    // Validate document type exists in current system
-    if (params.documentType && !this.isValidDocumentType(params.documentType)) {
+    // If documentType is "Compendium", list available packs
+    if (params.documentType === 'Compendium') {
+      const packs = DocumentAPI.listPacks();
+      return {
+        content: `Found ${packs.length} Compendium Packs`,
+        display: this.formatPackList(packs)
+      };
+    }
+
+    // Validate document type exists in current system (unless reading from a pack, which might have its own types)
+    // Actually, even in packs, types should be valid.
+    if (params.documentType && !this.isValidDocumentType(params.documentType) && !params.pack) {
       return {
         content: 'Document type "' + params.documentType + '" not available in current system',
         display: '❌ Unknown document type: ' + params.documentType,
@@ -57,6 +71,7 @@ class DocumentListTool extends BaseTool {
     try {
       const documents = await DocumentAPI.listDocuments(params.documentType, {
         filters: params.filters,
+        pack: params.pack
       });
 
       return {
@@ -167,6 +182,21 @@ class DocumentListTool extends BaseTool {
       grouped[type].push(doc);
     });
     return grouped;
+  }
+
+  /**
+   * Format pack list for display
+   * @param {Array} packs - Packs to format
+   * @returns {string} Formatted pack list
+   */
+  formatPackList(packs) {
+    if (packs.length === 0) return 'No Compendium Packs found.';
+
+    const lines = packs.map(p => {
+      return `- **${p.title}** (${p.id}) [${p.documentName}, ${p.count} docs]`;
+    });
+
+    return '**Available Compendium Packs**:\n' + lines.join('\n');
   }
 }
 
