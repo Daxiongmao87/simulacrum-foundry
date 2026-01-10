@@ -9,7 +9,7 @@
       "url": "https://github.com/yourusername"
     }
   ],
-  "version": "0.1.13",
+  "version": "0.1.18",
   "compatibility": {
     "minimum": "13.0.0",
     "verified": "13.331",
@@ -21,8 +21,12 @@
     "conflicts": [],
     "flags": {}
   },
-  "esmodules": ["scripts/simulacrum.js"],
-  "styles": ["styles/simulacrum.css"],
+  "esmodules": [
+    "scripts/simulacrum.js"
+  ],
+  "styles": [
+    "styles/simulacrum.css"
+  ],
   "languages": [
     {
       "lang": "en",

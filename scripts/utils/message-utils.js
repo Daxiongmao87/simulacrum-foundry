@@ -145,21 +145,20 @@ export function formatToolCallDisplay(toolResult, toolName = null, preRenderedCo
  * @returns {string} Human-readable action text
  */
 export function getToolActionText(toolName, toolResult) {
-  const toolActions = {
-    'document-create': 'Created',
-    'document-read': 'Read',
-    'document-update': 'Updated',
-    'document-delete': 'Deleted',
-    'document-list': 'Listed',
-    'document-search': 'Searched',
-    'document-schema': 'Retrieved schema for',
-    execute_macro: 'Executed Macro',
-  };
+  // Try to get localized tool name from en.json
+  const locKey = `SIMULACRUM.Tools.${toolName}`;
+  let action = game.i18n.localize(locKey);
 
-  const action = toolActions[toolName] || toolName.replace(/-/g, ' ');
+  // If localization key not found, game.i18n.localize returns the key itself
+  // In that case, fall back to formatting the tool name
+  if (action === locKey) {
+    action = toolName
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
   const docType = toolResult.documentType || '';
-
-  return docType ? `${action} ${docType}` : action;
+  return docType ? `${action}: ${docType}` : action;
 }
 
 /**

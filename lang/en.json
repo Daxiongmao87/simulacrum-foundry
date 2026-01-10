@@ -47,6 +47,19 @@
       },
       "CustomInstructions": "Additional instructions: {customPrompt}"
     },
+    "Tools": {
+      "document_create": "Create Document",
+      "document_read": "Read Document",
+      "document_update": "Update Document",
+      "document_delete": "Delete Document",
+      "document_list": "List Documents",
+      "document_search": "Search Documents",
+      "document_schema": "Inspect Schema",
+      "search_assets": "Search Assets",
+      "execute_macro": "Execute Macro",
+      "manage_task": "Manage Task",
+      "run_javascript": "Run Script"
+    },
     "ToolStatus": {
       "Creating": "Creating",
       "Reading": "Reading",
