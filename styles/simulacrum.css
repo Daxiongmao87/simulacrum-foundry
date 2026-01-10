@@ -370,6 +370,31 @@
   letter-spacing: 0.05em;
 }
 
+/* Header Sizing - Subdued for Sidebar */
+#simulacrum .chat-message h1 {
+  font-size: 1.75em;
+  margin: 0.3em 0;
+  line-height: 1.2;
+}
+
+#simulacrum .chat-message h2 {
+  font-size: 1.5em;
+  margin: 0.4em 0;
+  line-height: 1.2;
+}
+
+#simulacrum .chat-message h3 {
+  font-size: 1.35em;
+  margin: 0.5em 0;
+  line-height: 1.2;
+}
+
+#simulacrum .chat-message h4 {
+  font-size: 1.25em;
+  margin: 0.5em 0;
+  line-height: 1.2;
+}
+
 /* Body Text Fonts - Roboto - Strictly Scoped to ID */
 #simulacrum .chat-message .message-content,
 #simulacrum .chat-message .message-content p,
