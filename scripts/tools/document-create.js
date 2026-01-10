@@ -5,6 +5,7 @@
 
 import { BaseTool } from './base-tool.js';
 import { ValidationErrorHandler } from '../utils/validation-errors.js';
+import { documentReadRegistry } from '../utils/document-read-registry.js';
 
 /**
  * Validation schema for document creation parameters
@@ -155,6 +156,15 @@ export class DocumentCreateTool extends BaseTool {
         document.id || document._id,
         { includeEmbedded: true }
       );
+
+      // Register the read so the AI can immediately edit it if needed
+      if (fullDocument) {
+        documentReadRegistry.registerRead(
+          documentType,
+          fullDocument.id || fullDocument._id,
+          fullDocument
+        );
+      }
 
       const message = `Created ${documentType}: ${fullDocument.name || fullDocument._id}`;
       const contentPayload = {
