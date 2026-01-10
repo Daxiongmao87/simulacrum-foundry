@@ -594,7 +594,8 @@
 /* Individual tool call indicator */
 .simulacrum-tool-call {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.35rem 0.5rem;
   margin: 0.25rem 0;
@@ -625,6 +626,7 @@
 .simulacrum-tool-call .tool-action {
   font-weight: 500;
   color: var(--color-text-dark-secondary);
+  white-space: nowrap;
 }
 
 /* Document link styling */
@@ -636,4 +638,11 @@
 /* Dark theme adjustments */
 .dark .simulacrum-tool-call {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Tool Result Display - Force new line */
+.simulacrum-tool-call .tool-result-display {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 4px;
 }
