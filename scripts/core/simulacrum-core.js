@@ -80,10 +80,11 @@ class SimulacrumCore {
     await this.initializeAIClient();
 
     // Initialize conversation manager with auto-save callback
+    const tokenLimit = game.settings.get('simulacrum', 'tokenLimit') || 32000;
     this.conversationManager = new ConversationManager(
       game.user.id,
       game.world.id,
-      32000,
+      tokenLimit,
       null,
       () => this.saveConversationState() // Auto-save callback
     );
@@ -208,7 +209,7 @@ class SimulacrumCore {
             fromOptions: options.tools !== undefined,
           });
         }
-      } catch {}
+      } catch { }
 
       // Get context length setting and limit conversation history
       const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
@@ -236,7 +237,7 @@ class SimulacrumCore {
             sendingTools: !!sendTools,
           });
         }
-      } catch {}
+      } catch { }
 
       // Check for cancellation before making request
       if (signal.aborted) {
@@ -249,16 +250,16 @@ class SimulacrumCore {
 
       const raw = useNativeTools
         ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, {
-            signal,
-          })
+          signal,
+        })
         : await this.aiClient.chat(
-            sanitizeMessagesForFallback([
-              { role: 'system', content: systemPrompt },
-              ...limitedMessages,
-            ]),
-            sendTools,
-            { signal }
-          );
+          sanitizeMessagesForFallback([
+            { role: 'system', content: systemPrompt },
+            ...limitedMessages,
+          ]),
+          sendTools,
+          { signal }
+        );
       if (raw == null) {
         throw new Error('Empty AI response');
       }

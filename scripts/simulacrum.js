@@ -101,16 +101,32 @@ function registerAPISettings() {
     },
   });
 
-  // Task-14: API Request Delay to prevent rate limiting
-  game.settings.register(MODULE_ID, 'apiRequestDelay', {
-    name: 'API Request Delay',
-    hint: 'Delay in seconds between API requests to prevent rate limiting (0-30 seconds, default 0).',
+  game.settings.register(MODULE_ID, 'tokenLimit', {
+    name: 'Token Limit',
+    hint: 'The maximum context window size (tokens) for the AI model. Defaults to 32000.',
     scope: 'world',
     config: true,
     type: Number,
-    default: 0,
+    default: 32000,
     restricted: true,
-    range: { min: 0, max: 30, step: 0.5 },
+    onChange: async _value => {
+      try {
+        await SimulacrumCore.initializeAIClient();
+        createLogger('Module').info('AI client reinitialized after tokenLimit change');
+      } catch (e) {
+        createLogger('Module').warn('Failed to reinitialize AI after tokenLimit change', e);
+      }
+    },
+  });
+
+  game.settings.register(MODULE_ID, 'apiRequestDelay', {
+    name: 'API Request Delay',
+    hint: 'Delay in milliseconds between API requests to prevent rate limiting (default 500ms).',
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: 500,
+    restricted: true,
   });
 }
 

@@ -20,7 +20,21 @@ class ConversationManager {
     this.worldId = worldId;
     this.messages = [];
     this.sessionTokens = 0;
-    this.maxTokens = maxTokens;
+    this.sessionTokens = 0;
+
+    // Configurable token limit support
+    let configuredMax = maxTokens;
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        const limit = game.settings.get('simulacrum', 'tokenLimit');
+        if (limit && limit > 0) {
+          configuredMax = limit;
+        }
+      }
+    } catch {
+      // Ignore settings access errors
+    }
+    this.maxTokens = configuredMax;
     this.tokenizer = tokenizer || defaultTokenizer; // Pluggable adapter
     this.onStateChange = onStateChange; // Auto-save callback
   }

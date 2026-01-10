@@ -42,6 +42,18 @@ export class AIClient {
     // default to a safe token limit (32k for Mistral).
     this.contextLength =
       config.contextLength && config.contextLength > 1000 ? config.contextLength : 32000;
+
+    // Override contextLength with configured tokenLimit if available
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        const configuredLimit = game.settings.get('simulacrum', 'tokenLimit');
+        if (configuredLimit && configuredLimit > 0) {
+          this.contextLength = configuredLimit;
+        }
+      }
+    } catch {
+      // Ignore settings access errors (e.g. during tests)
+    }
     this.temperature = config.temperature;
     this.provider = config.provider || 'openai';
     this.providers = new Map();
@@ -96,7 +108,8 @@ export class AIClient {
     }
 
     if (delay > 0) {
-      const delayMs = Math.min(delay, 30) * 1000; // Cap at 30 seconds
+      // Delay is now in milliseconds directly
+      const delayMs = delay;
       if (isDebugEnabled()) {
         createLogger('AIClient').debug(`Applying API request delay: ${delayMs}ms`);
       }
@@ -280,10 +293,10 @@ export class AIClient {
               content: m.content ? m.content.substring(0, 50) + '...' : null,
               tool_calls: m.tool_calls
                 ? m.tool_calls.map(tc => ({
-                    id: tc.id,
-                    type: tc.type,
-                    name: tc.function?.name,
-                  }))
+                  id: tc.id,
+                  type: tc.type,
+                  name: tc.function?.name,
+                }))
                 : undefined,
               tool_call_id: m.tool_call_id,
             })),
@@ -318,7 +331,7 @@ export class AIClient {
                 delay,
               });
             }
-          } catch {}
+          } catch { }
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           break;
