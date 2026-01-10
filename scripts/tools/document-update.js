@@ -21,7 +21,7 @@ class DocumentUpdateTool extends BaseTool {
     const opts = { includeEmbedded: true };
     const currentDoc = await DocumentAPI.getDocument(documentType, documentId, opts);
     if (!currentDoc) {
-      const error = new Error(`Document ${documentType}:${documentId} not found`);
+      const error = new Error(`Document @UUID[${documentType}.${documentId}] not found`);
       error.code = 'DOCUMENT_NOT_FOUND';
       throw error;
     }
@@ -191,7 +191,7 @@ class DocumentUpdateTool extends BaseTool {
     return {
       content: JSON.stringify(
         {
-          message: `Updated ${params.documentType}:${params.documentId}`,
+          message: `Updated @UUID[${params.documentType}.${params.documentId}]`,
           document: latestDocument,
         },
         null,
@@ -324,7 +324,7 @@ class DocumentUpdateTool extends BaseTool {
   #buildValidationErrorResponse(message, params) {
     const docRef =
       params.documentType && params.documentId
-        ? `${params.documentType}:${params.documentId}`
+        ? `@UUID[${params.documentType}.${params.documentId}]`
         : params.documentType || 'document';
 
     return {

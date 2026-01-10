@@ -166,7 +166,7 @@ export class DocumentCreateTool extends BaseTool {
         );
       }
 
-      const message = `Created ${documentType}: ${fullDocument.name || fullDocument._id}`;
+      const message = `Created @UUID[${documentType}.${fullDocument._id || fullDocument.id}]{${fullDocument.name || fullDocument._id}}`;
       const contentPayload = {
         message,
         document: fullDocument,

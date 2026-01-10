@@ -857,7 +857,7 @@ export class DocumentAPI {
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);
     this.#ensurePermissionFns(doc, collection);
-    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+    if (!doc) throw new Error(`Document not found: @UUID[${documentType}.${id}]`);
 
     let readPermissionChecked = false;
     try {
@@ -896,7 +896,7 @@ export class DocumentAPI {
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);
     this.#ensurePermissionFns(doc, collection);
-    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+    if (!doc) throw new Error(`Document not found: @UUID[${documentType}.${id}]`);
 
     let readPermissionChecked = false;
     try {
@@ -993,7 +993,7 @@ export class DocumentAPI {
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);
     this.#ensurePermissionFns(doc, collection);
-    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+    if (!doc) throw new Error(`Document not found: @UUID[${documentType}.${id}]`);
 
     let updatePermissionChecked = false;
     try {
@@ -1060,7 +1060,7 @@ export class DocumentAPI {
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);
     this.#ensurePermissionFns(doc, collection);
-    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+    if (!doc) throw new Error(`Document not found: @UUID[${documentType}.${id}]`);
 
     let updatePermissionChecked = false;
     try {
@@ -1169,7 +1169,7 @@ export class DocumentAPI {
     if (!collection) throw new Error(`Unknown document type: ${documentType}`);
     const doc = collection.get(id);
     this.#ensurePermissionFns(doc, collection);
-    if (!doc) throw new Error(`Document not found: ${documentType}/${id}`);
+    if (!doc) throw new Error(`Document not found: @UUID[${documentType}.${id}]`);
 
     let deletePermissionChecked = false;
     try {

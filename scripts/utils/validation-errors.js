@@ -279,7 +279,7 @@ export class ValidationErrorHandler {
     const validationError = this.parseFoundryValidationError(error);
 
     if (validationError) {
-      const docRef = documentId ? `${documentType}:${documentId}` : documentType;
+      const docRef = documentId ? `@UUID[${documentType}.${documentId}]` : documentType;
 
       // Enhance suggestions with schema-aware analysis
       const enhancedSuggestions = this.enhanceWithSchemaAnalysis(
@@ -310,7 +310,7 @@ export class ValidationErrorHandler {
     }
 
     // Fallback for non-validation errors
-    const docRef = documentId ? `${documentType}:${documentId}` : documentType;
+    const docRef = documentId ? `@UUID[${documentType}.${documentId}]` : documentType;
     return {
       content: `Failed to ${operation} ${docRef}: ${error.message}`,
       display: `❌ Failed to ${operation} ${docRef}: ${error.message}`,
