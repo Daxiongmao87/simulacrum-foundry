@@ -81,7 +81,34 @@ export function smartSliceMessages(messages, limit) {
  * @param {string} toolName - The name of the tool (must be provided as it might not be in the message)
  * @returns {string} HTML string for display
  */
-export function formatToolCallDisplay(toolResult, toolName = null) {
+/**
+ * Extracts just the raw display content string from a tool result, without wrapping it in HTML.
+ * @param {object} toolResult - The tool result object
+ * @returns {string|null} The raw string content or null if not found
+ */
+export function getToolDisplayContent(toolResult) {
+  const isSuccess = !toolResult.isError && !toolResult.error;
+  if (!isSuccess) return null;
+
+  try {
+    const content = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+    if (content && typeof content.display === 'string' && content.display.trim().length > 0) {
+      return content.display;
+    }
+  } catch (e) {
+    // Not valid JSON or no display
+  }
+  return null;
+}
+
+/**
+ * Format a tool call result as rich HTML with status icons
+ * @param {Object} toolResult - The tool result object/message
+ * @param {string} toolName - The name of the tool (must be provided as it might not be in the message)
+ * @param {string} [preRenderedContent=null] - Optional pre-rendered HTML content to use instead of raw extraction
+ * @returns {string} HTML string for display
+ */
+export function formatToolCallDisplay(toolResult, toolName = null, preRenderedContent = null) {
   const isSuccess = !toolResult.isError && !toolResult.error;
   const statusClass = isSuccess ? 'tool-success' : 'tool-failure';
   const iconClass = isSuccess ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
@@ -99,16 +126,16 @@ export function formatToolCallDisplay(toolResult, toolName = null) {
   if (effectiveToolName === 'execute_macro' && isSuccess) {
     resultHtml = formatMacroResult(toolResult);
   } else if (isSuccess) {
-    // Generic tool result display if present in content JSON
-    resultHtml = extractToolDisplay(toolResult);
+    // If pre-rendered content is provided, use it directly (it's already HTML)
+    if (preRenderedContent) {
+      resultHtml = `<div class="tool-result-display">${preRenderedContent}</div>`;
+    } else {
+      // Generic tool result display if present in content JSON
+      resultHtml = extractToolDisplay(toolResult);
+    }
   }
 
-  return `<div class="simulacrum-tool-call ${statusClass}">
-      <i class="${iconClass} tool-icon"></i>
-      <span class="tool-action">${actionText}</span>
-      ${documentHtml}
-      ${resultHtml}
-    </div>`;
+  return `<div class="simulacrum-tool-call ${statusClass}"><i class="${iconClass} tool-icon"></i><span class="tool-action">${actionText}</span>${documentHtml}${resultHtml}</div>`;
 }
 
 /**

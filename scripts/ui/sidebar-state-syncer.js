@@ -5,7 +5,7 @@
 
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
-import { formatToolCallDisplay, groupConsecutiveMessages } from '../utils/message-utils.js';
+import { formatToolCallDisplay, groupConsecutiveMessages, getToolDisplayContent } from '../utils/message-utils.js';
 import { ChatHandler } from '../core/chat-handler.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -27,7 +27,7 @@ export async function processMessageForDisplay(content, _options = {}) {
 
   // Apply markdown rendering first (Generates HTML structure)
   try {
-    processedContent = await MarkdownRenderer.render(processedContent, { force: true });
+    processedContent = await MarkdownRenderer.render(processedContent);
   } catch (err) {
     logger.warn('Markdown rendering failed; using original content', err);
   }
@@ -97,7 +97,18 @@ export async function syncMessagesFromCore(conversationManager) {
     if (m.role === 'tool') {
       // Reconstruct tool result display
       const toolName = toolCallNames.get(m.tool_call_id);
-      const displayHtml = formatToolCallDisplay(m, toolName);
+
+      let preRendered = null;
+      const rawDisplayContent = getToolDisplayContent(m);
+      if (rawDisplayContent) {
+        try {
+          preRendered = await MarkdownRenderer.render(rawDisplayContent);
+        } catch (e) {
+          logger.warn('Failed to pre-render tool content', e);
+        }
+      }
+
+      const displayHtml = formatToolCallDisplay(m, toolName, preRendered);
 
       // Display tool results as assistant messages (matching ChatHandler behavior)
       const message = await createDisplayMessage('assistant', m.content, displayHtml);
