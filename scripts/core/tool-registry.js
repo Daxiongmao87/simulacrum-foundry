@@ -13,7 +13,7 @@ import { DocumentUpdateTool } from '../tools/document-update.js';
 import { DocumentDeleteTool } from '../tools/document-delete.js';
 import { DocumentListTool } from '../tools/document-list.js';
 import { DocumentSearchTool } from '../tools/document-search.js';
-import { ArtifactSearchTool } from '../tools/artifact-search.js';
+import { AssetSearchTool } from '../tools/asset-search.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { ManageTaskTool } from '../tools/manage-task.js';
@@ -64,7 +64,7 @@ export class ToolRegistry {
         new DocumentDeleteTool(),
         new DocumentListTool(),
         new DocumentSearchTool(),
-        new ArtifactSearchTool(),
+        new AssetSearchTool(),
         new DocumentSchemaTool(),
         new ExecuteMacroTool(),
         new ManageTaskTool(),

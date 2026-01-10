@@ -86,9 +86,28 @@ class DocumentSearchTool extends BaseTool {
 
     const formattedResults = results.map(doc => {
       const name = doc.name || doc.title || doc._id || 'Untitled';
-      const id = doc._id || 'Unknown ID';
+      const id = doc.id || doc._id || 'Unknown ID';
       const type = doc.type || 'Unknown';
-      return '- **' + name + '** (ID: ' + id + ', Type: ' + type + ')';
+      let uuid = doc.uuid;
+
+      // Construct UUID if missing
+      if (!uuid) {
+        if (doc.pack) {
+          uuid = `Compendium.${doc.pack}.${id}`;
+        } else {
+          const docType = doc.documentName || (doc.constructor?.documentName) || type;
+          // Basic heuristic if documentName isn't available on the result object
+          if (docType) {
+            uuid = `${docType}.${id}`;
+          }
+        }
+      }
+
+      if (uuid) {
+        return `- @UUID[${uuid}]{${name}} (${type})`;
+      } else {
+        return '- **' + name + '** (ID: ' + id + ', Type: ' + type + ')';
+      }
     });
 
     return '**Search Results for "' + query + '"**\n' + formattedResults.join('\n');

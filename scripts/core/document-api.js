@@ -1219,35 +1219,73 @@ export class DocumentAPI {
     const searchTypes = Array.isArray(types) && types.length ? types : this.getAllDocumentTypes();
     const results = [];
     const q = String(query || '').toLowerCase();
+
+    // Helper to check match
+    const isMatch = (obj) => {
+      const hay = fields
+        .map(f => String(DocumentAPI.#get(obj, f) ?? ''))
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    };
+
     for (const t of searchTypes) {
+      if (results.length >= maxResults) break;
+
+      // 1. Search World Collection
       const collection = this.#resolveCollection(t);
-      if (!collection) continue;
-      // Permission: READ
-      let readable = collection.contents;
-      try {
-        const { PermissionManager } = await import('../utils/permissions.js');
-        readable = await PermissionManager.filterByPermission(
-          game.user,
-          collection.contents,
-          'READ'
-        );
-      } catch (error) {
-        // Fallback permission filtering
-        readable = collection.contents.filter(
-          doc =>
-            game.user?.isGM ||
-            (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
-        );
+      if (collection) {
+        // Permission: READ
+        let readable = [];
+        try {
+          const { PermissionManager } = await import('../utils/permissions.js');
+          readable = await PermissionManager.filterByPermission(
+            game.user,
+            collection.contents,
+            'READ'
+          );
+        } catch (error) {
+          // Fallback
+          readable = collection.contents.filter(
+            doc =>
+              game.user?.isGM ||
+              (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
+          );
+        }
+
+        for (const doc of readable) {
+          const obj = doc.toObject();
+          if (isMatch(obj)) {
+            results.push({ type: t, _id: obj._id, name: obj.name, uuid: doc.uuid });
+            if (results.length >= maxResults) break;
+          }
+        }
       }
-      for (const doc of readable) {
-        const obj = doc.toObject();
-        const hay = fields
-          .map(f => String(this.#get(obj, f) ?? ''))
-          .join(' ')
-          .toLowerCase();
-        if (hay.includes(q)) {
-          results.push({ type: t, _id: obj._id, name: obj.name });
-          if (results.length >= maxResults) return results;
+
+      if (results.length >= maxResults) break;
+
+      // 2. Search Compendium Packs
+      // Only search packs that contain this document type
+      const packs = game.packs.filter(p => p.documentName === t);
+      for (const pack of packs) {
+        if (results.length >= maxResults) break;
+        // Check pack visibility/permission (User can generally read visible packs)
+        if (!pack.testUserPermission(game.user, "READ")) continue;
+
+        // Use index for speed
+        const index = await pack.getIndex({ fields });
+        for (const idx of index) {
+          // idx is a plain object with fields
+          if (isMatch(idx)) {
+            results.push({
+              type: t,
+              _id: idx._id,
+              name: idx.name,
+              pack: pack.collection,
+              uuid: idx.uuid // Index usually has uuid
+            });
+            if (results.length >= maxResults) break;
+          }
         }
       }
     }

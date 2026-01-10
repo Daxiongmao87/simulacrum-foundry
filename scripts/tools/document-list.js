@@ -146,11 +146,32 @@ class DocumentListTool extends BaseTool {
       return 'No ' + (documentType || '') + ' documents found';
     }
 
-    // Format each document with its name and ID
+    // Format each document with its name and UUID
     const formattedDocs = documents.map(doc => {
       const name = doc.name || 'Unnamed';
-      const id = doc._id || 'Unknown ID';
-      return name + ' (' + id + ')';
+      const id = doc.id || doc._id || 'Unknown ID';
+      let uuid = doc.uuid;
+
+      // Construct UUID if missing (e.g. from plain objects)
+      if (!uuid) {
+        if (doc.pack) {
+          uuid = `Compendium.${doc.pack}.${id}`;
+        } else {
+          // Document types in Foundry are generally the constructor name
+          // But here we likely have the type name passed in params or need to guess
+          const type = doc.documentName || documentType;
+          if (type) {
+            uuid = `${type}.${id}`;
+          }
+        }
+      }
+
+      // Fallback if we still can't determine UUID
+      if (uuid) {
+        return `@UUID[${uuid}]{${name}}`;
+      } else {
+        return `${name} (${id})`;
+      }
     });
 
     const docsToShow = formattedDocs.slice(0, 20);

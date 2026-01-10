@@ -208,7 +208,7 @@ export class BaseTool {
     const exists = await this.#checkUrlExists(url);
     if (!exists) {
       throw new SimulacrumError(
-        `Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_artifacts' tool to find a valid image path.`
+        `Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_assets' tool to find a valid image path.`
       );
     }
   }
