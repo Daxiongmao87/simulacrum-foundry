@@ -448,7 +448,7 @@
 .simulacrum-chat-message .message-content> :not(table),
 .simulacrum-chat-message .message-header .title,
 .simulacrum-chat-message .message-content i,
-.simulacrum-chat-message div.message-content {
+.simulacrum-chat-message div.message-content> :not(table) {
   color: #fff4c2;
   /* Very pale gold */
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);

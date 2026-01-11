@@ -191,7 +191,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   async _postRender(_context, options) {
     if (this.#needsScroll || options.isFirstRender) {
-      this._scrollToBottom();
+      await this._scrollToBottom({ waitImages: options.isFirstRender });
       this.#needsScroll = false;
     } else {
       // Ensure button visibility is correct even if we didn't scroll to bottom
@@ -200,15 +200,44 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
   }
 
-  _scrollToBottom() {
+  /** @inheritDoc */
+  _onActivate() {
+    super._onActivate?.();
+    this._scrollToBottom();
+  }
+
+  /**
+   * Scroll the chat log to the bottom.
+   * @param {object} [options]
+   * @param {boolean} [options.waitImages=false] Wait for images to load before scrolling.
+   */
+  async _scrollToBottom({ waitImages = false } = {}) {
     if (!this.element) return;
     const log =
       this.element[0]?.querySelector('.chat-scroll') ??
       this.element.querySelector?.('.chat-scroll');
     if (log) {
+      if (waitImages) await this.constructor.waitForImages(log);
       log.scrollTop = log.scrollHeight;
       this._updateJumpToBottomVisibility(log);
     }
+  }
+
+  /**
+   * Wait for all images in an element to load.
+   * @param {HTMLElement} element The container element.
+   * @returns {Promise<void>}
+   */
+  static async waitForImages(element) {
+    const images = element.querySelectorAll('img');
+    const promises = Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    });
+    await Promise.all(promises);
   }
 
   _updateJumpToBottomVisibility(log) {
