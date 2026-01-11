@@ -103,8 +103,17 @@ export async function syncMessagesFromCore(conversationManager) {
       if (rawDisplayContent) {
         try {
           preRendered = await MarkdownRenderer.render(rawDisplayContent);
+
+          // Task-Fix: Explicitly enrich the content since processMessageForDisplay (which usually does it)
+          // is skipped when providing a direct 'display' value.
+          const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+          preRendered = await TextEditorImpl.enrichHTML(preRendered, {
+            secrets: game.user?.isGM ?? false,
+            documents: true,
+            async: true,
+          });
         } catch (e) {
-          logger.warn('Failed to pre-render tool content', e);
+          logger.warn('Failed to pre-render or enrich tool content', e);
         }
       }
 

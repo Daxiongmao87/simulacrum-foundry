@@ -1,6 +1,7 @@
 /* eslint-disable max-depth, no-unreachable */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
-import { formatToolCallDisplay } from '../utils/message-utils.js';
+import { formatToolCallDisplay, getToolDisplayContent } from '../utils/message-utils.js';
+import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 /**
  * ChatHandler - Single source of truth for all chat conversation flow
  * Orchestrates between AI, tools, conversation state, and UI
@@ -316,7 +317,7 @@ class ChatHandler {
    * Handle individual tool results during execution
    * Task-09: Enhanced to format tool results with status icons
    */
-  handleToolResult(toolResult, options = {}) {
+  async handleToolResult(toolResult, options = {}) {
     // Add tool result to conversation
     if (toolResult.role === 'tool') {
       // FIX: Do not add to conversation here, as tool-loop-handler already adds it internally.
@@ -324,7 +325,32 @@ class ChatHandler {
 
       // Task-09: Format tool result with rich HTML display if it has a toolName
       if (toolResult.toolName && options.onAssistantMessage) {
-        const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName);
+        let preRendered = null;
+        try {
+          // Task-Fix: Unwrap content if it's JSON to prevent leaking raw JSON string.
+          // Prioritize 'display' property using shared utility.
+          // CRITICAL: Always render valid Markdown, even if 'display' property is used, as tools return Markdown.
+          // Use force: true to ensure mixed HTML/Markdown (like @UUID which might look like tags?) is processed.
+          const rawDisplay = getToolDisplayContent(toolResult);
+          if (rawDisplay) {
+            preRendered = await MarkdownRenderer.render(rawDisplay, { force: true });
+          } else {
+            // Fallback: Unwrap 'content' property if JSON, otherwise use raw string.
+            let contentToRender = toolResult.content;
+            try {
+              if (typeof contentToRender === 'string' && contentToRender.trim().startsWith('{')) {
+                const parsed = JSON.parse(contentToRender);
+                if (parsed && parsed.content) contentToRender = parsed.content;
+              }
+            } catch (e) { /* ignore parse error, use raw string */ }
+
+            preRendered = await MarkdownRenderer.render(contentToRender);
+          }
+        } catch (e) {
+          this.logger.warn('Failed to pre-render tool content', e);
+        }
+
+        const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered);
         // Display as assistant message with tool indicator
         this.addMessageToUI(
           {
