@@ -34,8 +34,11 @@ class ChatHandler {
         signal: options.signal,
         onAssistantMessage: msg => {
           // Mirror previous behavior: add to conversation and UI when appropriate
-          if (msg?.role === 'assistant' && msg?.content) {
-            this.addMessageToConversation('assistant', msg.content);
+          // Support ephemeral messages (display only) by checking for either content or display
+          if (msg?.role === 'assistant' && (msg?.content || msg?.display)) {
+            if (msg.content) {
+              this.addMessageToConversation('assistant', msg.content);
+            }
             this.addMessageToUI(
               { role: 'assistant', content: msg.content, display: msg.display || msg.content },
               options

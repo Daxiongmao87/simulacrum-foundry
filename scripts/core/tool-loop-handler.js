@@ -43,7 +43,12 @@ export async function processToolCallLoop(options) {
 
 async function _runLoopIteration(context) {
   let currentResponse = context.initialResponse;
-  const REPEAT_LIMIT = 5;
+
+  // Get limit from settings (default 100). -1 or 0 means infinite.
+  const configuredLimit = game?.settings?.get('simulacrum', 'toolLoopLimit') ?? 100;
+  const isInfinite = configuredLimit <= 0;
+  const REPEAT_LIMIT = isInfinite ? Number.MAX_SAFE_INTEGER : configuredLimit;
+
   let repeatCount = 0;
   let toolFailureAttempts = 0;
 
@@ -199,7 +204,7 @@ async function _handleToolRefusal(response, context, attempts) {
   }
 }
 
-// eslint-disable-next-line complexity
+// eslint-disable-next-line complexity, max-lines-per-function
 async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
   const results = [];
@@ -222,8 +227,31 @@ async function _executeToolCalls(toolCalls, context) {
 
       isSuccess = !result.error;
 
+      // Context Compaction: Store large outputs in buffer, inject reference
+      let resultForConversation = result;
+      const resultStr = JSON.stringify(result);
+      const TOKEN_THRESHOLD = 1000; // ~4000 chars
+      const estimatedTokens = Math.ceil(resultStr.length / 4);
+
+      if (estimatedTokens > TOKEN_THRESHOLD && conversationManager.toolOutputBuffer) {
+        // Store full output in buffer
+        conversationManager.toolOutputBuffer.set(toolCall.id, resultStr);
+
+        // Create compact reference
+        const lines = resultStr.split('\n');
+        const preview = lines.slice(0, 5).join('\n');
+
+        resultForConversation = {
+          _compacted: true,
+          total_lines: lines.length,
+          total_chars: resultStr.length,
+          preview: preview.substring(0, 500),
+          access: `Use read_tool_output(tool_call_id="${toolCall.id}", start_line, end_line) to read full content`,
+        };
+      }
+
       if (currentToolSupport === true) {
-        conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+        conversationManager.addMessage('tool', JSON.stringify(resultForConversation), null, toolCall.id);
         await conversationManager.save();
       }
 
@@ -262,7 +290,20 @@ async function _executeToolCalls(toolCalls, context) {
 
 // eslint-disable-next-line no-unused-vars
 async function _getNextAIResponse(toolResults, context) {
-  const { getSystemPrompt } = context;
+  const { getSystemPrompt, conversationManager, aiClient } = context;
+
+  // Context Compaction: Trigger before next AI call
+  if (conversationManager && aiClient) {
+    try {
+      const compacted = await conversationManager.compactHistory(aiClient);
+      if (compacted && isDebugEnabled()) {
+        logger.debug('Conversation history compacted during tool loop');
+      }
+    } catch (err) {
+      logger.warn('Compaction failed during tool loop:', err);
+    }
+  }
+
   const messages = _getConversationMessages(context);
   const systemPrompt = await getSystemPrompt();
   return _chatWithAI(messages, systemPrompt, context);

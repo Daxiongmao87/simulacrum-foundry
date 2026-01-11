@@ -43,7 +43,7 @@ if (typeof SimulacrumCore !== 'undefined') {
                 model: 'gpt-3.5-turbo',
                 maxTokens: 4096,
                 temperature: 0.7,
-                contextLength: 20
+
              };
              for (const [k, v] of Object.entries(defaults)) {
                 await game.settings.set('simulacrum', k, v);

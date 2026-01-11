@@ -54,7 +54,7 @@ export class SettingsInterface extends FormApplication {
       model: game.settings.get('simulacrum', 'model'),
       maxTokens: game.settings.get('simulacrum', 'maxTokens') || 4096,
       temperature: game.settings.get('simulacrum', 'temperature') || 0.7,
-      contextLength: game.settings.get('simulacrum', 'contextLength') || 20,
+
       customSystemPrompt: game.settings.get('simulacrum', 'customSystemPrompt') || '',
       provider,
       providerIsOpenAI: provider === 'openai',
@@ -212,7 +212,7 @@ export class SettingsInterface extends FormApplication {
       form.querySelector('input[name="model"]').value = 'gpt-3.5-turbo';
       form.querySelector('input[name="maxTokens"]').value = '4096';
       form.querySelector('input[name="temperature"]').value = '0.7';
-      form.querySelector('input[name="contextLength"]').value = '20';
+
       form.querySelector('textarea[name="customSystemPrompt"]').value = '';
 
       ui.notifications.info('Settings reset to defaults');
@@ -331,8 +331,7 @@ export class SettingsInterface extends FormApplication {
       await game.settings.set('simulacrum', 'maxTokens', parseInt(formData.maxTokens));
     if (formData.temperature)
       await game.settings.set('simulacrum', 'temperature', parseFloat(formData.temperature));
-    if (formData.contextLength)
-      await game.settings.set('simulacrum', 'contextLength', parseInt(formData.contextLength));
+
     if (formData.customSystemPrompt !== undefined) {
       await game.settings.set('simulacrum', 'customSystemPrompt', formData.customSystemPrompt);
     }
@@ -450,15 +449,6 @@ function _registerLegacySettings() {
 }
 
 function _registerContextSettings() {
-  game.settings.register('simulacrum', 'contextLength', {
-    name: 'Context Length',
-    hint: 'Maximum number of messages to include in conversation context.',
-    scope: 'world',
-    config: true,
-    type: Number,
-    default: 20,
-    restricted: true,
-  });
 }
 
 function _registerStylingSettings() {

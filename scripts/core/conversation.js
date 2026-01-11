@@ -18,9 +18,13 @@ class ConversationManager {
   constructor(userId, worldId, maxTokens = 32000, tokenizer = null, onStateChange = null) {
     this.userId = userId;
     this.worldId = worldId;
-    this.messages = [];
+    this.messages = []; // Backward compatibility - synced from activeMessages
     this.sessionTokens = 0;
-    this.sessionTokens = 0;
+
+    // Tiered Context Architecture (Context Compaction)
+    this.rollingSummary = ''; // Tier 2: Compressed history summary
+    this.activeMessages = []; // Tier 3: Recent messages in full fidelity
+    this.toolOutputBuffer = new Map(); // Store full tool outputs for indexed access
 
     // Configurable token limit support
     let configuredMax = maxTokens;
@@ -59,7 +63,10 @@ class ConversationManager {
     if (toolCallId) {
       message.tool_call_id = toolCallId;
     }
-    this.messages.push(message);
+
+    // Add to activeMessages (Tier 3) and sync to messages for backward compatibility
+    this.activeMessages.push(message);
+    this.messages = [...this.activeMessages]; // Sync for external consumers
     this.sessionTokens += this._estimateTokens(message);
 
     // Trigger auto-save if callback is provided
@@ -83,28 +90,143 @@ class ConversationManager {
   }
 
   /**
-   * Compresses the conversation history if it exceeds the maximum token limit.
-   * This is a simplified version for MVP, a real implementation would use a more sophisticated algorithm.
+   * Calculate the compaction threshold based on model context window
+   * @returns {number} Token threshold for triggering compaction
+   * @private
+   */
+  _getCompactionThreshold() {
+    const contextWindow = this.maxTokens;
+    const contextTarget = Math.floor(contextWindow * 0.33); // 33% for working memory
+    const compactionPromptSize = 500; // Overhead for summarization prompt
+    return contextWindow - contextTarget - compactionPromptSize;
+  }
+
+  /**
+   * Build the prompt for AI summarization
+   * @param {Array} messages - Messages to summarize
+   * @returns {string} Summarization prompt
+   * @private
+   */
+  _buildSummarizationPrompt(messages) {
+    const currentSaga = this.rollingSummary
+      ? `Current Summary:\n${this.rollingSummary}\n\n`
+      : '';
+
+    const newContent = messages
+      .map(m => `[${m.role}]: ${m.content?.substring(0, 500) || '[tool call]'}`)
+      .join('\n');
+
+    return `${currentSaga}Update the summary with these new events. Preserve proper nouns, document IDs, and key decisions. Be concise.\n\nNew Events:\n${newContent}`;
+  }
+
+  /**
+   * Recalculate total token count from activeMessages and rollingSummary
+   * @private
+   */
+  _recalculateTokens() {
+    const messageTokens = this.activeMessages.reduce(
+      (acc, msg) => acc + this._estimateTokens(msg),
+      0
+    );
+    const summaryTokens = this.rollingSummary
+      ? Math.ceil(this.rollingSummary.length / 4)
+      : 0;
+    this.sessionTokens = messageTokens + summaryTokens;
+  }
+
+  /**
+   * Compact history using AI-driven summarization
+   * @param {object} aiClient - AI client for summarization calls
+   * @returns {Promise<boolean>} Whether compaction occurred
+   */
+  async compactHistory(aiClient) {
+    const threshold = this._getCompactionThreshold();
+    const currentTokens = this.sessionTokens;
+
+    if (currentTokens <= threshold) {
+      return false; // No compaction needed
+    }
+
+    // Extract oldest messages to compact (keep system message)
+    // Extract oldest messages to compact (keep system message)
+    const systemMsg =
+      this.activeMessages[0]?.role === 'system' ? this.activeMessages[0] : null;
+    const startIdx = systemMsg ? 1 : 0;
+
+    // Define initial chunk size
+    let chunkEnd = startIdx + 5;
+
+    // Boundary Check: prevent stranding a tool message as an orphan
+    // If the message that would become the new head (at chunkEnd) is a 'tool' message,
+    // we must include it in the compaction batch (consume it).
+    // We implicitly assume that if we are compacting the parent Assistant message,
+    // we must also compact its children Tool messages.
+    while (
+      chunkEnd < this.activeMessages.length &&
+      this.activeMessages[chunkEnd].role === 'tool'
+    ) {
+      chunkEnd++;
+    }
+
+    const messagesToCompact = this.activeMessages.slice(startIdx, chunkEnd);
+
+    if (messagesToCompact.length === 0) {
+      return false;
+    }
+
+    // Build summarization prompt
+    const prompt = this._buildSummarizationPrompt(messagesToCompact);
+
+    try {
+      const response = await aiClient.chat(
+        [{ role: 'user', content: prompt }],
+        null,
+        { maxTokens: 500, isBackground: true }
+      );
+
+      const newSummary = response?.choices?.[0]?.message?.content || '';
+      if (newSummary) {
+        this.rollingSummary = newSummary;
+
+        // 4. Update state: remove compacted messages, keep system + summary + remaining
+        this.activeMessages = [
+          ...this.activeMessages.slice(0, startIdx),
+          ...this.activeMessages.slice(chunkEnd),
+        ];
+
+        // Sync messages array for backward compatibility
+        this.messages = [...this.activeMessages];
+
+        this._recalculateTokens();
+        this._triggerStateChange();
+        return true;
+      }
+    } catch (error) {
+      console.warn('[ConversationManager] Compaction failed:', error);
+    }
+
+    return false;
+  }
+
+  /**
+   * Legacy compressHistory - now delegates to simple truncation fallback
+   * For synchronous fallback when AI-driven compaction cannot be used
    */
   compressHistory() {
-    // For MVP, a simple truncation strategy. A more advanced approach would summarize old messages.
-    while (this.sessionTokens > this.maxTokens && this.messages.length > 1) {
-      const removedMessage = this.messages.shift(); // Remove oldest message (after system message)
+    // Simple truncation fallback for backward compatibility
+    while (this.sessionTokens > this.maxTokens && this.activeMessages.length > 1) {
+      const removedMessage = this.activeMessages.shift();
       this.sessionTokens -= this._estimateTokens(removedMessage);
 
       // Fix: If the new head message is a 'tool' result, it is now an orphan.
-      // We must remove it as well. Repeat until the head is not a tool result.
-      while (this.messages.length > 0 && this.messages[0].role === 'tool') {
-        const removedOrphan = this.messages.shift();
+      while (this.activeMessages.length > 0 && this.activeMessages[0].role === 'tool') {
+        const removedOrphan = this.activeMessages.shift();
         this.sessionTokens -= this._estimateTokens(removedOrphan);
       }
     }
-    if (this.sessionTokens > this.maxTokens) {
-      // If even after removing all but the last message, it's still too long, clear all but system message
-      const systemMessage = this.messages.shift();
-      this.messages = [systemMessage];
-      this.sessionTokens = this._estimateTokens(systemMessage);
-    }
+
+    // Sync messages array
+    this.messages = [...this.activeMessages];
 
     // Trigger auto-save if callback is provided
     this._triggerStateChange();
@@ -115,6 +237,9 @@ class ConversationManager {
    */
   clear() {
     this.messages = [];
+    this.activeMessages = [];
+    this.rollingSummary = '';
+    this.toolOutputBuffer.clear();
     this.sessionTokens = 0;
 
     // Trigger auto-save if callback is provided
@@ -122,11 +247,30 @@ class ConversationManager {
   }
 
   /**
-   * Returns the current conversation history.
+   * Returns the synthesized message array for AI consumption.
+   * Injects rollingSummary as a system message if present.
    * @returns {Array<object>} The array of messages.
    */
   getMessages() {
-    return this.messages;
+    if (!this.rollingSummary) {
+      return this.activeMessages;
+    }
+
+    // Find system message position
+    const systemIdx = this.activeMessages.findIndex(m => m.role === 'system');
+    const insertIdx = systemIdx >= 0 ? systemIdx + 1 : 0;
+
+    // Inject summary after system message
+    const summaryMsg = {
+      role: 'system',
+      content: `### PREVIOUS CONVERSATION SUMMARY\n${this.rollingSummary}`,
+    };
+
+    return [
+      ...this.activeMessages.slice(0, insertIdx),
+      summaryMsg,
+      ...this.activeMessages.slice(insertIdx),
+    ];
   }
 
   /**
@@ -212,9 +356,11 @@ class ConversationManager {
   async save() {
     const key = this.getPersistenceKey();
     const state = {
-      messages: this.messages,
+      activeMessages: this.activeMessages,
+      rollingSummary: this.rollingSummary,
+      toolOutputBuffer: Array.from(this.toolOutputBuffer.entries()),
       sessionTokens: this.sessionTokens,
-      v: 1,
+      v: 2,
     };
 
     // Prefer user flag when available (per-user scope)
@@ -278,9 +424,24 @@ class ConversationManager {
 
     if (!state) return false;
 
-    // Validate and apply
-    this.messages = Array.isArray(state.messages) ? state.messages : [];
-    this.sessionTokens = Number.isFinite(state.sessionTokens) ? state.sessionTokens : 0;
+    // Handle schema versions
+    if (state.v === 2) {
+      // v2: Tiered context architecture
+      this.activeMessages = Array.isArray(state.activeMessages) ? state.activeMessages : [];
+      this.rollingSummary = typeof state.rollingSummary === 'string' ? state.rollingSummary : '';
+      this.toolOutputBuffer = new Map(state.toolOutputBuffer || []);
+      this.sessionTokens = Number.isFinite(state.sessionTokens) ? state.sessionTokens : 0;
+      // Sync messages for backward compatibility
+      this.messages = [...this.activeMessages];
+    } else {
+      // v1 or legacy: Migrate - treat all messages as active
+      this.activeMessages = Array.isArray(state.messages) ? state.messages : [];
+      this.rollingSummary = '';
+      this.toolOutputBuffer = new Map();
+      this.sessionTokens = Number.isFinite(state.sessionTokens) ? state.sessionTokens : 0;
+      this.messages = [...this.activeMessages];
+    }
+
     return true;
   }
 

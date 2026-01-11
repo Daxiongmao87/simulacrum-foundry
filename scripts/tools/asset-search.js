@@ -52,7 +52,7 @@ export class AssetSearchTool extends BaseTool {
         const lowerQuery = query.toLowerCase();
 
         try {
-            let results = [];
+            const results = [];
 
             // Define roots to search
             const roots = [];

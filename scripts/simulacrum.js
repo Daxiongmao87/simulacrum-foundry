@@ -128,6 +128,16 @@ function registerAPISettings() {
     default: 500,
     restricted: true,
   });
+
+  game.settings.register(MODULE_ID, 'toolLoopLimit', {
+    name: 'Autonomous Tool Loop Limit',
+    hint: 'Maximum number of consecutive tool steps the AI can take autonomously. Set to 0 for infinite (no limit). Default is 100.',
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: 100,
+    restricted: true,
+  });
 }
 
 Hooks.once('init', async () => {

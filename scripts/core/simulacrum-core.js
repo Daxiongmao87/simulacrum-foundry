@@ -14,7 +14,7 @@ import {
   parseInlineToolCall,
   sanitizeMessagesForFallback,
 } from '../utils/ai-normalization.js';
-import { smartSliceMessages } from '../utils/message-utils.js';
+import { smartSliceMessages, formatToolCallDisplay } from '../utils/message-utils.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { emitProcessCancelled } from './hook-manager.js';
 import {
@@ -132,7 +132,6 @@ class SimulacrumCore {
       const apiKey = game.settings.get('simulacrum', 'apiKey');
       const baseURL = game.settings.get('simulacrum', 'baseURL');
       const model = game.settings.get('simulacrum', 'model');
-      const contextLength = game.settings.get('simulacrum', 'contextLength');
       const temperature = game.settings.get('simulacrum', 'temperature');
       const provider = game.settings.get('simulacrum', 'provider') || 'openai';
 
@@ -143,7 +142,6 @@ class SimulacrumCore {
         apiKey,
         baseURL,
         model,
-        contextLength,
         provider,
         temperature,
       });
@@ -212,8 +210,44 @@ class SimulacrumCore {
       } catch { }
 
       // Get context length setting and limit conversation history
-      const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
-      const limitedMessages = smartSliceMessages(messages, contextLength);
+      // const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
+
+      // Trigger compaction if approaching token limit (Context Compaction feature)
+      if (this.conversationManager && this.aiClient) {
+        try {
+          const compacted = await this.conversationManager.compactHistory(this.aiClient);
+          if (compacted) {
+            if (isDebugEnabled()) {
+              this.logger.debug('Conversation history compacted via rollingSummary');
+            }
+            // UX: Show compaction as a simulated tool call
+            if (options.onAssistantMessage) {
+              const displayHtml = formatToolCallDisplay(
+                {
+                  toolName: 'optimize_memory',
+                  content: JSON.stringify({
+                    display: 'Compacted conversation history into working memory summary.',
+                  }),
+                  isError: false,
+                },
+                'optimize_memory'
+              );
+              options.onAssistantMessage({
+                role: 'assistant',
+                content: 'System Event: Conversation history compacted to rolling summary.', // Persist to history
+                display: displayHtml,
+              });
+            }
+          }
+        } catch (compactionError) {
+          // Non-fatal: log and continue with uncompacted history
+          this.logger.warn('Compaction failed, continuing with full history:', compactionError);
+        }
+      }
+
+      // Legacy capping removed in favor of Tiered Context Compaction
+      // const limitedMessages = smartSliceMessages(messages, contextLength);
+      const limitedMessages = messages;
 
       // Get AI response - use legacy mode setting to determine tool support
       const legacyMode = game.settings.get('simulacrum', 'legacyMode');

@@ -42,6 +42,7 @@ class ConversationEngine {
     // Get initial assistant response
     let aiResponse = await SimulacrumCore.generateResponse(this.conversationManager.getMessages(), {
       signal,
+      onAssistantMessage,
     });
 
     // Pre-tool correction loop (bounded) - handles parse errors and tool call failures

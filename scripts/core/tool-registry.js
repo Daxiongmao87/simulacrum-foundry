@@ -18,6 +18,7 @@ import { DocumentSchemaTool } from '../tools/document-schema.js';
 import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { ManageTaskTool } from '../tools/manage-task.js';
 import { RunJavascriptTool } from '../tools/run-javascript.js';
+import { ReadToolOutputTool } from '../tools/read-tool-output.js';
 import { DocumentAPI } from './document-api.js';
 
 /**
@@ -70,6 +71,7 @@ export class ToolRegistry {
         new ExecuteMacroTool(),
         new ManageTaskTool(),
         new RunJavascriptTool(),
+        new ReadToolOutputTool(),
       ];
 
       for (const t of tools) {

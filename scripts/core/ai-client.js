@@ -38,10 +38,7 @@ export class AIClient {
     this.baseURL = config.baseURL;
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
-    // Fix: If contextLength is small (likely a message count setting),
-    // default to a safe token limit (32k for Mistral).
-    this.contextLength =
-      config.contextLength && config.contextLength > 1000 ? config.contextLength : 32000;
+    this.contextLength = 32000;
 
     // Override contextLength with configured tokenLimit if available
     try {
@@ -211,7 +208,12 @@ export class AIClient {
       dynamicMaxTokens = 100;
     }
 
-    const configuredMax = typeof this.maxTokens === 'number' ? this.maxTokens : dynamicMaxTokens;
+    const configuredMax =
+      typeof options.maxTokens === 'number'
+        ? options.maxTokens
+        : typeof this.maxTokens === 'number'
+          ? this.maxTokens
+          : dynamicMaxTokens;
     const maxTokens = Math.min(dynamicMaxTokens, configuredMax);
 
     if (isDebugEnabled()) {
@@ -222,6 +224,7 @@ export class AIClient {
         messagesCount: messages.length,
         hasTools: !!tools,
         toolCount: tools ? tools.length : 0,
+        isBackground: !!options.isBackground,
       });
     }
 
