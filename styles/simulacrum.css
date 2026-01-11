@@ -433,9 +433,12 @@
 /* Pale gold text for header and content */
 /* Pale gold text for header and content */
 /* Removed gradient text to fix readability/outline issues */
+/* Pale gold text for header and content */
+/* Removed gradient text to fix readability/outline issues */
 .simulacrum-chat-message .message-header,
-.simulacrum-chat-message .message-content,
-.simulacrum-chat-message .message-header .title {
+.simulacrum-chat-message .message-content> :not(table),
+.simulacrum-chat-message .message-header .title,
+.simulacrum-chat-message .message-content i {
   color: #fff4c2;
   /* Very pale gold */
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
