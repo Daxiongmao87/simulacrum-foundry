@@ -20,6 +20,15 @@
   gap: 8px;
 }
 
+#sidebar-content #simulacrum .chat-log {
+  direction: ltr;
+  max-width: var(--sidebar-width);
+}
+
+#sidebar-content #simulacrum .chat-scroll {
+  direction: rtl;
+}
+
 /* Privacy Buttons */
 #simulacrum-chat-controls section {
   display: flex;
@@ -677,4 +686,18 @@
   flex-basis: 100%;
   width: 100%;
   margin-top: 4px;
+}
+
+/* ---------------------------------------- */
+/*  Jump to Bottom Button Styling (Fix)    */
+/* ---------------------------------------- */
+
+#simulacrum .chat-form {
+  position: relative;
+}
+
+/* Scrolled state mask */
+.chat-sidebar .chat-scroll.scrolled {
+  mask-image: linear-gradient(to bottom, black 95%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 95%, transparent);
 }

@@ -178,6 +178,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       }
       if (cm) {
         this.messages = await syncMessagesFromCore(cm);
+        this.#needsScroll = true;
       }
     } catch (_e) {
       /* ignore */
@@ -188,10 +189,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     return this._syncFromCoreConversation();
   }
 
-  async _postRender(_context, _options) {
-    if (this.#needsScroll) {
+  async _postRender(_context, options) {
+    if (this.#needsScroll || options.isFirstRender) {
       this._scrollToBottom();
       this.#needsScroll = false;
+    } else {
+      // Ensure button visibility is correct even if we didn't scroll to bottom
+      const log = this.element[0]?.querySelector('.chat-scroll') ?? this.element.querySelector?.('.chat-scroll');
+      if (log) this._updateJumpToBottomVisibility(log);
     }
   }
 
@@ -202,7 +207,24 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       this.element.querySelector?.('.chat-scroll');
     if (log) {
       log.scrollTop = log.scrollHeight;
-      this.#isAtBottom = true;
+      this._updateJumpToBottomVisibility(log);
+    }
+  }
+
+  _updateJumpToBottomVisibility(log) {
+    if (!log) return;
+    const dist = log.scrollHeight - log.scrollTop - log.clientHeight;
+    const atBottom = dist < 32;
+    this.#isAtBottom = atBottom;
+
+    // Toggle 'scrolled' class when there is content below (i.e. not at bottom)
+    log.classList.toggle('scrolled', !atBottom);
+
+    if (this.#inputElement) {
+      const btn = this.#inputElement.querySelector('.jump-to-bottom');
+      if (btn) {
+        btn.toggleAttribute('hidden', atBottom);
+      }
     }
   }
 
@@ -337,18 +359,23 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   _attachPartListeners(partId, element, options) {
     super._attachPartListeners?.(partId, element, options);
+    // console.log(`Simulacrum | _attachPartListeners`, partId, element);
+
     // Delegate to Handler if possible, or keep simple logic here
     if (partId === 'log') {
-      const scroll = element.querySelector('.chat-scroll');
+      // FIX: .chat-scroll is the ROOT element of 'log' part, so querySelector fails
+      const scroll = element.classList.contains('chat-scroll') ? element : element.querySelector('.chat-scroll');
+
+      // console.log('Simulacrum | Attaching log listeners. Scroll element found:', !!scroll);
+
       if (scroll) {
         scroll.addEventListener('scroll', _e => {
-          const atBottom =
-            Math.abs(scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight) < 50;
-          this.#isAtBottom = atBottom;
+          this._updateJumpToBottomVisibility(scroll);
         });
       }
     }
     if (partId === 'input') {
+      this.#inputElement = element;
       const form = element.querySelector('.chat-form');
       if (form && !form.dataset.simulacrumBound) {
         form.dataset.simulacrumBound = '1';
