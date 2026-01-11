@@ -190,9 +190,18 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async _postRender(_context, options) {
+    // Only attempt scroll if the tab is currently active. If not active, scrolling a hidden
+    // element will fail silently. Keep #needsScroll = true so _onActivate can try again.
+    const isTabActive = ui.sidebar?.tabGroups?.primary === this.constructor.tabName;
+
     if (this.#needsScroll || options.isFirstRender) {
-      await this._scrollToBottom({ waitImages: options.isFirstRender });
-      this.#needsScroll = false;
+      if (isTabActive) {
+        await this._scrollToBottom({ waitImages: options.isFirstRender });
+        this.#needsScroll = false;
+      } else {
+        // Tab is not active. Set the flag so _onActivate will scroll when the tab becomes visible.
+        this.#needsScroll = true;
+      }
     } else {
       // Ensure button visibility is correct even if we didn't scroll to bottom
       const log = this.element[0]?.querySelector('.chat-scroll') ?? this.element.querySelector?.('.chat-scroll');
@@ -201,9 +210,20 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   /** @inheritDoc */
-  _onActivate() {
+  async _onActivate() {
     super._onActivate?.();
-    this._scrollToBottom();
+    // Only scroll if there's a pending scroll request (from messages added while inactive)
+    if (this.#needsScroll) {
+      // Yield to the browser to ensure layout update (display: none -> block) is processed
+      // before we try to set scrollTop. Double rAF ensures we are in the next paint frame.
+      await new Promise(resolve => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(resolve);
+        });
+      });
+      await this._scrollToBottom({ waitImages: true });
+      this.#needsScroll = false;
+    }
   }
 
   /**
