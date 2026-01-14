@@ -1,0 +1,36 @@
+{
+  "name": "simulacrum",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An AI-powered assistant for FoundryVTT campaign document management",
+  "main": "scripts/simulacrum.js",
+  "scripts": {
+    "lint": "eslint scripts/ --fix",
+    "lint:check": "eslint scripts/",
+    "lint:json": "eslint . --ext .json --fix",
+    "lint:json:check": "eslint . --ext .json",
+    "format": "prettier --write scripts/ *.json *.md",
+    "format:check": "prettier --check scripts/ *.json *.md",
+    "package:module": "node tools/package-module.js",
+    "build:packs": "node tools/build-packs.js",
+    "dead-code": "knip",
+    "dead-code:fix": "knip --fix",
+    "unused": "unimported"
+  },
+  "devDependencies": {
+    "@foundryvtt/foundryvtt-cli": "^3.0.2",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-jsonc": "^2.20.1",
+    "unimported": "^1.31.0"
+  },
+  "keywords": [
+    "foundryvtt",
+    "ai",
+    "assistant",
+    "campaign",
+    "documents"
+  ],
+  "author": "Daxiongmao87",
+  "license": "MIT"
+}

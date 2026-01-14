@@ -1,0 +1,107 @@
+# Reference materials (not part of project)
+reference/
+
+# Development guidance files (local only)
+CLAUDE.md
+
+# Specification documents (development-only)
+specs/
+
+# Build outputs
+dist/
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Foundry local secrets (license, creds)
+/.foundry.env.json
+/.foundry-data/
+/.foundry-cache/
+vendor/foundry/*.zip
+vendor/foundry/*.ZIP
+
+# Additional IDE files
+*.swp
+*.swo
+*~
+
+# Additional OS generated files
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Additional logs
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Additional temporary folders
+tmp/
+temp/
+
+# ESLint cache
+.eslintcache
+
+# Diagram files
+*.puml
+
+# High-level architecture and vision documents
+architecture-overview.txt
+AGENTS.md
+GEMINI.md
+VISION.md
+deploy_module.sh
+deploy_package.sh
+# Agent working notes
+.agent/
+
+# AI Tool Working Directories
+.gemini/
+.claude/
+.qwen/
+
+# MCP Configuration
+.mcp/
+
+# Agent temp/dev files
+temp_qwen_output.json
+memory_event_log.json
+vector_store.json
+

@@ -1,0 +1,22 @@
+{{!-- Simulacrum Sidebar Notifications Template - FoundryVTT Structure --}}
+<div id="simulacrum-notifications" class="faded-ui flexcol">
+    <div class="overflow">
+        <ol class="chat-log plain themed theme-light"></ol>
+    </div>
+</div>
+
+<textarea id="simulacrum-chat-message" class="chat-input" name="message" autocomplete="off"
+          placeholder="{{ localize 'SIMULACRUM.InputPlaceholder' }}" aria-label="{{ localize 'SIMULACRUM.Chat' }}"></textarea>
+
+<div id="simulacrum-controls">
+    <div id="simulacrum-privacy" class="split-button">
+    </div>
+
+    {{!-- Control Buttons --}}
+    {{#if user.isGM}}
+    <div class="control-buttons">
+        <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip
+                aria-label="{{ localize 'SIMULACRUM.ClearChat' }}" data-action="clearChat"></button>
+    </div>
+    {{/if}}
+</div>

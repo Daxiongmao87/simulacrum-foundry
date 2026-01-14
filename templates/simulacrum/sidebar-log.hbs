@@ -1,0 +1,39 @@
+{{!-- Simulacrum Sidebar Chat Log Template - EXACT FoundryVTT Structure --}}
+<div class="chat-scroll" data-application-part="log">
+  <ol class="chat-log plain themed theme-light">
+    {{!-- GM-Only Access Gate --}}
+    {{#if accessDenied}}
+    <li class="chat-message message flexcol access-denied-message">
+      <div class="message-content">
+        <p class="access-denied-text"><i class="fa-solid fa-lock"></i> {{accessDeniedMessage}}</p>
+      </div>
+    </li>
+    {{else}}
+    {{#each messages}}
+    {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
+    {{/each}}
+
+    {{!-- Pending tool confirmations --}}
+    {{#each pendingConfirmations}}
+    <li class="chat-message message flexcol tool-confirmation-message" data-tool-call-id="{{this.toolCallId}}">
+      <div class="message-content">
+        {{> "modules/simulacrum/templates/simulacrum/tool-confirmation.hbs" this}}
+      </div>
+    </li>
+    {{/each}}
+
+    {{!-- Process status shown inline in chat log while agent is working --}}
+    {{#if processActive}}
+    <li class="chat-message message flexcol process-status-message{{#if processIsRetrying}} retry-warning{{/if}}">
+      <div class="message-content">
+        <div class="process-status">
+          <i
+            class="fa-solid fa-circle-notch fa-spin simulacrum-process-spinner{{#if processIsRetrying}} retry-icon{{/if}}"></i>
+          <span class="label">{{processLabel}}</span>
+        </div>
+      </div>
+    </li>
+    {{/if}}
+    {{/if}}
+  </ol>
+</div>

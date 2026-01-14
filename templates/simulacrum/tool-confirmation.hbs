@@ -1,0 +1,45 @@
+<div class="simulacrum-tool-confirmation" data-tool="{{toolName}}" data-tool-call-id="{{toolCallId}}">
+    <div class="tool-confirmation-header">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span class="tool-confirmation-title">{{localize "SIMULACRUM.ToolConfirmation.Title"}}</span>
+    </div>
+    <div class="tool-confirmation-body">
+        <div class="tool-info">
+            <strong class="tool-name">{{displayName}}</strong>
+            <span class="wants-to">{{localize "SIMULACRUM.ToolConfirmation.WantsToExecute"}}</span>
+        </div>
+        {{#if justification}}
+        <div class="tool-justification">
+            <p><strong>Reason:</strong> {{justification}}</p>
+        </div>
+        {{/if}}
+        <div class="tool-explainer">
+            {{explainerText}}
+        </div>
+        {{#if toolArgs}}
+        <details class="tool-args-details">
+            <summary>Parameters</summary>
+            <pre class="tool-args">{{toolArgs}}</pre>
+        </details>
+        {{/if}}
+    </div>
+    <div class="tool-confirmation-buttons">
+        <button type="button" class="confirm-btn allow" data-action="allow" title="Execute this tool once">
+            <i class="fa-solid fa-check"></i>
+            {{localize "SIMULACRUM.ToolConfirmation.Allow"}}
+        </button>
+        <button type="button" class="confirm-btn deny" data-action="deny" title="Deny this execution">
+            <i class="fa-solid fa-times"></i>
+            {{localize "SIMULACRUM.ToolConfirmation.Deny"}}
+        </button>
+        <button type="button" class="confirm-btn always" data-action="always"
+            title="Always allow this tool without asking">
+            <i class="fa-solid fa-check-double"></i>
+            {{localize "SIMULACRUM.ToolConfirmation.AlwaysAllow"}}
+        </button>
+        <button type="button" class="confirm-btn blacklist" data-action="blacklist" title="Never allow this tool">
+            <i class="fa-solid fa-ban"></i>
+            {{localize "SIMULACRUM.ToolConfirmation.Blacklist"}}
+        </button>
+    </div>
+</div>

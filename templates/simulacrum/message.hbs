@@ -1,0 +1,41 @@
+{{!-- Simulacrum Message Template - EXACT FoundryVTT Structure --}}
+<li class="chat-message message flexcol dnd5e2 simulacrum-chat-message simulacrum-role-{{role}}"
+  data-message-id="{{id}}" {{#if borderColor}}style="border-color:{{borderColor}}" {{/if}}>
+  <header class="message-header flexrow">
+    <h4 class="message-sender">
+      <a class="avatar">
+        {{#if (eq role 'user')}}
+        <img src="{{user.avatar}}" alt="{{user.name}}">
+        {{else}}
+        <img src="modules/simulacrum/assets/simulacrum-avatar.png" alt="Simulacrum AI">
+        {{/if}}
+      </a>
+      <span class="name-stacked">
+        <span class="title">
+          {{#if (eq role 'user')}}
+          {{user.name}}
+          {{else}}
+          {{localize "SIMULACRUM.AIName"}}
+          {{/if}}
+        </span>
+        <span class="subtitle"></span>
+      </span>
+    </h4>
+    <span class="message-metadata">
+      <time class="message-timestamp">{{#if timestampLabel}}{{timestampLabel}}{{else}}{{formatTime
+        timestamp}}{{/if}}</time>
+      {{#if canDelete}}
+      <a aria-label="{{localize 'Delete'}}" class="message-delete" data-action="deleteMessage">
+        <i class="fa-solid fa-trash" inert></i>
+      </a>
+      {{/if}}
+    </span>
+  </header>
+  <div class="message-content">
+    {{#if display}}
+    {{{display}}}
+    {{else}}
+    {{{content}}}
+    {{/if}}
+  </div>
+</li>

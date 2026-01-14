@@ -1,0 +1,35 @@
+<div id="simulacrum-message-queue" class="simulacrum-queue-container">
+    {{#if messages.length}}
+    <div class="queue-header">
+        <span class="queue-title"><i class="fas fa-hourglass-half"></i> Messages Queued during Analysis</span>
+        <span class="queue-count">{{messages.length}}</span>
+    </div>
+
+    <div class="queue-list">
+        {{#each messages}}
+        <div class="simulacrum-queued-message" data-id="{{this.id}}">
+            <div class="message-content">{{this.content}}</div>
+            <div class="message-actions">
+                <button type="button" class="queue-action force" data-action="force" title="Force Send (Cancels AI)">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+                <button type="button" class="queue-action cancel" data-action="cancel" title="Discard">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        {{/each}}
+    </div>
+
+    {{#if (gt messages.length 1)}}
+    <div class="queue-batch-actions">
+        <button type="button" class="batch-action force-all" data-action="force-all">
+            <i class="fas fa-shipping-fast"></i> Send All
+        </button>
+        <button type="button" class="batch-action cancel-all" data-action="cancel-all">
+            <i class="fas fa-trash"></i> Discard All
+        </button>
+    </div>
+    {{/if}}
+    {{/if}}
+</div>

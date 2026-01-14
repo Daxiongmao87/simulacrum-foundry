@@ -1,0 +1,27 @@
+{{!-- Simulacrum Sidebar Input Form Template - EXACT FoundryVTT Structure --}}
+<form class="chat-form {{#if disableInput}}hidden{{/if}}" data-application-part="input">
+
+    {{!-- Jump to Bottom --}}
+    {{!-- Jump to Bottom --}}
+    <button type="button" class="ui-control jump-to-bottom" data-tooltip
+        aria-label="{{localize 'CHAT.JumpToBottom'}}" data-action="jumpToBottom" {{#if
+        isAtBottom}}hidden{{/if}}>
+        <i class="fa-solid fa-arrow-down"></i>
+    </button>
+
+    <div id="simulacrum-chat-controls" class="chat-controls">
+        <div class="control-buttons">
+            {{#if processActive}}
+            <button type="button" class="ui-control icon fa-solid fa-stop" data-tooltip
+                aria-label="Cancel Agent Process" data-action="cancelProcess"></button>
+            {{else}}
+            <button type="button" class="ui-control icon fa-solid fa-trash" data-tooltip aria-label="Clear Chat Log"
+                data-action="clearChat"></button>
+            {{/if}}
+        </div>
+    </div>
+
+
+    <textarea id="simulacrum-chat-message" class="chat-input" name="message" autocomplete="off"
+        placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat"></textarea>
+</form>

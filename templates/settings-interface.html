@@ -1,0 +1,85 @@
+<form class="simulacrum-settings">
+  <nav class="sheet-tabs tabs" data-group="primary">
+    <a class="item" data-tab="general">General</a>
+    <a class="item" data-tab="advanced">Advanced</a>
+  </nav>
+
+  <section class="sheet-body">
+    <!-- General Settings Tab -->
+    <div class="tab" data-tab="general">
+      <div class="form-group">
+        <label for="provider">Provider</label>
+        <select name="provider" id="provider">
+          <option value="openai" {{#if providerIsOpenAI}}selected{{/if}}>OpenAI-compatible</option>
+          <option value="gemini" {{#if providerIsGemini}}selected{{/if}}>Gemini</option>
+        </select>
+        <p class="hint">Choose the API compatibility mode for your AI endpoint.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="apiKey">API Key</label>
+        <input type="password" name="apiKey" value="{{apiKey}}" placeholder="Enter your API key">
+        <p class="hint">Optional API key; sent as Authorization only if provided</p>
+      </div>
+
+      <div class="form-group">
+        <label for="baseURL">Base URL</label>
+        <input type="url" name="baseURL" value="{{baseURL}}" placeholder="{{baseURLPlaceholder}}">
+        <p class="hint">OpenAI-compatible example: `https://api.openai.com/v1` · Gemini example:
+          `https://generativelanguage.googleapis.com/v1beta`</p>
+      </div>
+
+      <div class="form-group">
+        <label for="model">Model</label>
+        <input type="text" name="model" value="{{model}}" placeholder="gpt-3.5-turbo">
+        <p class="hint">AI model to use for responses</p>
+      </div>
+
+      <div class="form-group connection-test">
+        <button type="button" class="test-connection" {{#if testing}}disabled{{/if}}>
+          {{#if testing}}Testing...{{else}}Test Connection{{/if}}
+        </button>
+        <p class="hint">Test your API configuration</p>
+      </div>
+    </div>
+
+    <!-- Advanced Settings Tab -->
+    <div class="tab" data-tab="advanced">
+      <div class="form-group">
+        <label for="maxTokens">Maximum Tokens</label>
+        <input type="number" name="maxTokens" value="{{maxTokens}}" min="100" max="32000" step="100">
+        <p class="hint">Maximum number of tokens for AI responses (100-32000)</p>
+      </div>
+
+      <div class="form-group">
+        <label for="temperature">Response Temperature</label>
+        <input type="number" name="temperature" value="{{temperature}}" min="0" max="2" step="0.1">
+        <p class="hint">Controls creativity/randomness in responses (0.0 = deterministic, 2.0 = very creative)</p>
+      </div>
+
+      <div class="form-group">
+        <label for="contextLength">Context Length</label>
+        <input type="number" name="contextLength" value="{{contextLength}}" min="5" max="100" step="1">
+        <p class="hint">Maximum number of messages to include in conversation context (5-100)</p>
+      </div>
+
+      <div class="form-group">
+        <label for="customSystemPrompt">Custom System Prompt</label>
+        <textarea name="customSystemPrompt" rows="4"
+          placeholder="Enter additional instructions for the AI...">{{customSystemPrompt}}</textarea>
+        <p class="hint">Additional instructions that will be appended to the system prompt</p>
+      </div>
+
+      <div class="form-group">
+        <button type="button" class="reset-defaults">Reset to Defaults</button>
+        <p class="hint">Reset all settings to their default values</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="sheet-footer">
+    <button type="submit" name="submit">
+      <i class="fas fa-save"></i> Save Configuration
+    </button>
+  </footer>
+</form>

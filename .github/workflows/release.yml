@@ -1,0 +1,110 @@
+# FoundryVTT Module Release Workflow
+# Triggered when a version tag is pushed (e.g., 1.0.0)
+# Creates a GitHub release with module.json and module.zip
+
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'  # Matches version tags like 1.0.0, 2.1.3
+
+env:
+  MODULE_ID: simulacrum
+  
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Update module.json version
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          REPO_URL="https://github.com/${{ github.repository }}"
+          
+          # Update version, manifest, and download URLs
+          jq --arg ver "$VERSION" \
+             --arg manifest "${REPO_URL}/releases/download/${VERSION}/module.json" \
+             --arg download "${REPO_URL}/releases/download/${VERSION}/${MODULE_ID}.zip" \
+             '.version = $ver | .manifest = $manifest | .download = $download' \
+             module.json > module.json.tmp && mv module.json.tmp module.json
+          
+          echo "Updated module.json:"
+          cat module.json | jq '.version, .manifest, .download'
+
+      - name: Build compendium packs
+        run: npm run build:packs
+
+      - name: Create module zip
+        run: |
+          # Create a clean directory for packaging
+          mkdir -p dist/${{ env.MODULE_ID }}
+          
+          # Copy module files (exclude dev-only files)
+          cp -r assets dist/${{ env.MODULE_ID }}/
+          cp -r lang dist/${{ env.MODULE_ID }}/
+          cp -r packs dist/${{ env.MODULE_ID }}/
+          cp -r scripts dist/${{ env.MODULE_ID }}/
+          cp -r styles dist/${{ env.MODULE_ID }}/
+          cp -r templates dist/${{ env.MODULE_ID }}/
+          cp module.json dist/${{ env.MODULE_ID }}/
+          cp README.md dist/${{ env.MODULE_ID }}/
+          cp LICENSE dist/${{ env.MODULE_ID }}/ 2>/dev/null || true
+          
+          # Create zip
+          cd dist
+          zip -r ${{ env.MODULE_ID }}.zip ${{ env.MODULE_ID }}
+          
+          # Move assets for release
+          mv ${{ env.MODULE_ID }}.zip ../
+          cp ${{ env.MODULE_ID }}/module.json ../module.json.release
+          cd ..
+          mv module.json.release module.json
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from $PREV_TAG to ${{ steps.version.outputs.version }}"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD)
+          else
+            echo "No previous tag found, including all commits"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s (%h)")
+          fi
+          
+          # Write to file for multi-line output
+          echo "$CHANGELOG" > changelog.txt
+          echo "changelog_file=changelog.txt" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          body_path: changelog.txt
+          files: |
+            module.json
+            ${{ env.MODULE_ID }}.zip
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

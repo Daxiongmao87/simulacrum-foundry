@@ -1,0 +1,17 @@
+{
+  "entry": ["scripts/simulacrum.js", "scripts/**/*.js", "tests/**/*.js"],
+  "project": ["scripts/**/*.js", "tests/**/*.js"],
+  "ignore": [
+    "node_modules/**",
+    ".foundry-data/**",
+    "coverage/**",
+    "docs/**",
+    "examples/**",
+    "reference/**",
+    "specs/**",
+    "tools/**",
+    "*.md"
+  ],
+  "ignoreDependencies": ["@types/*", "foundry-vtt-types"],
+  "includeEntryExports": true
+}

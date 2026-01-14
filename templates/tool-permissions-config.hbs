@@ -1,0 +1,64 @@
+{{!-- Tool Permissions Configuration - Main Form Content --}}
+<div class="scrollable" style="max-height: 500px; overflow-y: scroll;">
+    <p class="hint">{{localize "SIMULACRUM.Settings.ToolPermissions.Hint"}}</p>
+
+    {{!-- Trust All Toggle --}}
+    <div class="form-group">
+        <label>
+            <i class="fa-solid fa-shield-exclamation" inert></i>
+            {{localize "SIMULACRUM.Settings.TrustAllTools"}}
+        </label>
+        <div class="form-fields">
+            <input type="checkbox" name="trustAllTools" {{#if trustAllEnabled}}checked{{/if}}>
+        </div>
+        {{#if trustAllEnabled}}
+        <p class="hint" style="color: var(--color-level-error);">
+            <i class="fa-solid fa-triangle-exclamation" inert></i> {{trustAllWarning}}
+        </p>
+        {{else}}
+        <p class="hint">{{localize "SIMULACRUM.Settings.TrustAllToolsHint"}}</p>
+        {{/if}}
+    </div>
+
+    <fieldset>
+        <legend>{{labels.destructiveTools}}</legend>
+
+        {{#each staticTools}}
+        <div class="form-group">
+            <label>{{displayName}}</label>
+            <div class="form-fields">
+                <select name="permission_{{toolName}}" {{#if ../trustAllEnabled}}disabled{{/if}}>
+                    <option value="ask" {{#if isAsk}}selected{{/if}}>{{lookup ../permissionChoices "ask"}}</option>
+                    <option value="allow" {{#if isAllow}}selected{{/if}}>{{lookup ../permissionChoices "allow"}}
+                    </option>
+                    <option value="deny" {{#if isDeny}}selected{{/if}}>{{lookup ../permissionChoices "deny"}}</option>
+                </select>
+            </div>
+            <p class="hint">{{explainer}}</p>
+        </div>
+        {{/each}}
+    </fieldset>
+
+    <fieldset>
+        <legend>{{labels.macroTools}}</legend>
+
+        {{#if hasMacroTools}}
+        {{#each macroTools}}
+        <div class="form-group">
+            <label>{{displayName}}</label>
+            <div class="form-fields">
+                <select name="permission_{{toolName}}" {{#if ../trustAllEnabled}}disabled{{/if}}>
+                    <option value="ask" {{#if isAsk}}selected{{/if}}>{{lookup ../permissionChoices "ask"}}</option>
+                    <option value="allow" {{#if isAllow}}selected{{/if}}>{{lookup ../permissionChoices "allow"}}
+                    </option>
+                    <option value="deny" {{#if isDeny}}selected{{/if}}>{{lookup ../permissionChoices "deny"}}</option>
+                </select>
+            </div>
+            <p class="hint">{{explainer}}</p>
+        </div>
+        {{/each}}
+        {{else}}
+        <p class="hint">{{labels.noMacroTools}}</p>
+        {{/if}}
+    </fieldset>
+</div>
