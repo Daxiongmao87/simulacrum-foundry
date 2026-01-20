@@ -1,5 +1,0 @@
-2026/01/13-16:04:20.565182 732e40bfd6c0 Delete type=3 #1
-2026/01/13-16:04:20.568120 732e337fe6c0 Level-0 table #5: started
-2026/01/13-16:04:20.609347 732e337fe6c0 Level-0 table #5: 1326 bytes OK
-2026/01/13-16:04:20.741978 732e337fe6c0 Delete type=0 #3
-2026/01/13-16:04:20.742089 732e337fe6c0 Manual compaction at level-0 from '!macros!SimulacrumExTool' @ 72057594037927935 : 1 .. '!macros!SimulacrumExTool' @ 0 : 0; will stop at (end)

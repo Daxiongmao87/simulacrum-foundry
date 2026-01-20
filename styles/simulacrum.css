@@ -1082,6 +1082,10 @@
 
 /* Tool Permissions Configuration - Uses standard Foundry form classes */
 /* Relies on 'standard-form' class for system theme compatibility */
+#simulacrum-tool-permissions>section:nth-child(3) {
+  overflow-y: scroll;
+}
+
 /* ---------------------------------------- */
 /*  Tool Justification Styling             */
 /* ---------------------------------------- */

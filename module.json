@@ -33,14 +33,7 @@
       "path": "lang/en.json"
     }
   ],
-  "packs": [
-    {
-      "name": "simulacrum-tools",
-      "label": "Simulacrum Tools",
-      "path": "packs/simulacrum-tools",
-      "type": "Macro"
-    }
-  ],
+  "packs": [],
   "socket": false,
   "manifest": "https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/module.json",
   "download": "https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/simulacrum.zip",
