@@ -87,6 +87,7 @@ architecture-overview.txt
 AGENTS.md
 GEMINI.md
 VISION.md
+QWEN.md
 deploy_module.sh
 deploy_package.sh
 # Agent working notes
