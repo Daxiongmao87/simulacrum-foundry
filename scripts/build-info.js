@@ -1,3 +1,3 @@
 // Auto-generated build info - DO NOT EDIT MANUALLY
-export const BUILD_HASH = '27f1d8d3';
-export const BUILD_TIME = '2026-01-20T17:47:31Z';
+export const BUILD_HASH = 'c244a3bf';
+export const BUILD_TIME = '2026-01-22T19:58:37Z';
