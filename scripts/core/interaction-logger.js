@@ -280,7 +280,7 @@ class InteractionLogger {
      */
     downloadAsFile() {
         const jsonData = this.export();
-        const dateStr = new Date().toISOString().slice(0, 10);
+        const dateStr = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
         const filename = `simulacrum-log-${dateStr}.json`;
 
         // Implementation matches foundry.utils.saveDataToFile

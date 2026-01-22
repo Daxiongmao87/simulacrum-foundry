@@ -21,6 +21,7 @@ import {
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus } from './hook-manager.js';
 import { toolPermissionManager, PermissionState } from './tool-permission-manager.js';
+import { interactionLogger } from './interaction-logger.js';
 
 const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
@@ -338,6 +339,10 @@ async function _executeToolCalls(toolCalls, context) {
 
     try {
       const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
+      const executionStart = Date.now();
+
+      // Log tool call before execution
+      interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
 
       // Permission check for destructive tools
       // Permission check for destructive tools
@@ -482,6 +487,10 @@ async function _executeToolCalls(toolCalls, context) {
 
     const resultObj = { toolCall, toolName, result, success: isSuccess, error };
     results.push(resultObj);
+
+    // Log tool result with execution duration
+    const durationMs = typeof executionStart !== 'undefined' ? Date.now() - executionStart : 0;
+    interactionLogger.logToolResult(toolCall.id, result, isSuccess, durationMs);
 
     if (onToolResult) {
       onToolResult({

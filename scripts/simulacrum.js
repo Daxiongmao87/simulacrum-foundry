@@ -15,6 +15,7 @@ import { registerSimulacrumSidebarTab } from './ui/sidebar-registration.js';
 import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/settings-interface.js';
 import { createLogger } from './utils/logger.js';
 import { BUILD_HASH } from './build-info.js';
+import { InteractionLogDownloader } from './core/interaction-logger.js';
 
 
 const MODULE_ID = 'simulacrum';
@@ -141,6 +142,16 @@ function registerAPISettings() {
     default: 100,
     restricted: true,
   });
+
+  // Download Interaction Log button - uses registerMenu for a button in settings
+  game.settings.registerMenu(MODULE_ID, 'downloadInteractionLog', {
+    name: 'Download Interaction Log',
+    label: 'Download Log',
+    hint: 'Download all agent interactions (messages, tool calls, results) as a JSON file for debugging.',
+    icon: 'fas fa-download',
+    type: InteractionLogDownloader,
+    restricted: false,
+  });
 }
 
 Hooks.once('init', async () => {
@@ -249,6 +260,10 @@ Hooks.once('ready', async () => {
 
   // Ensure default macros exist
   ensureSimulacrumMacros().catch(err => logger.error('Failed to ensure macros', err));
+
+  // Initialize interaction logger (loads persisted entries)
+  const { interactionLogger } = await import('./core/interaction-logger.js');
+  await interactionLogger.initialize();
 
   const version = game.modules.get(MODULE_ID)?.version ?? 'unknown';
   logger.info(`${MODULE_NAME} v${version} is ready! [build:${BUILD_HASH}]`);

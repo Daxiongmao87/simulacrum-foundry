@@ -8,6 +8,7 @@
  */
 import { defaultTokenizer } from '../utils/tokenizer.js';
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
+import { interactionLogger } from './interaction-logger.js';
 
 const logger = createLogger('Conversation');
 
@@ -78,6 +79,9 @@ class ConversationManager {
     if (toolCallId) {
       message.tool_call_id = toolCallId;
     }
+
+    // Log interaction if enabled
+    interactionLogger.logMessage(message, { toolCalls, toolCallId, metadata });
 
     // Add to activeMessages (Tier 3) and sync to messages for backward compatibility
     this.activeMessages.push(message);

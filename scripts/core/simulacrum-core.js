@@ -348,6 +348,9 @@ class SimulacrumCore {
       }
       // Clear the document read registry since conversation context is reset
       documentReadRegistry.clear();
+      // Clear interaction log when conversation is cleared
+      const { interactionLogger } = await import('./interaction-logger.js');
+      await interactionLogger.clear();
       return true;
     } catch (_e) {
       return false;
