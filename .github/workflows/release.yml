@@ -108,3 +108,11 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to Foundry VTT
+        env:
+          FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+        run: |
+          npx @ghost-fvtt/foundry-publish \
+            --manifestPath module.json \
+            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/module.json"
