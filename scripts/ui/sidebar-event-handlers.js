@@ -100,7 +100,7 @@ export class SidebarEventHandlers {
     } catch (_e) {
       /* ignore */
     }
-    app.clearMessages();
+    await app.clearMessages();
     await app.addMessage('assistant', game.i18n.localize('SIMULACRUM.WelcomeMessage'));
   }
 

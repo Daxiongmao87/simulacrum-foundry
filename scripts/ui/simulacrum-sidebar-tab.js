@@ -638,9 +638,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
   }
 
-  clearMessages() {
+  async clearMessages() {
     this.messages = [];
-    this.render({ parts: ['log'] });
+    await this.render({ parts: ['log'] });
   }
 
   markAtBottom(atBottom) {
