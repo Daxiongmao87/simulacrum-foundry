@@ -106,3 +106,4 @@ temp_qwen_output.json
 memory_event_log.json
 vector_store.json
 
+workspace/

@@ -129,6 +129,7 @@ class ConversationEngine {
         role: 'assistant',
         content: finalResponse.content,
         display: finalResponse.display || finalResponse.content,
+        _fromToolLoop: true, // Signal that this was already added to conversation by tool-loop-handler
       });
     }
 

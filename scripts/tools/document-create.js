@@ -128,6 +128,26 @@ export class DocumentCreateTool extends BaseTool {
       // Validate parameters
       this.validateParameters(parameters, this.schema);
 
+      // Validate unknown fields - catch fields that would be silently ignored
+      const { SchemaValidator } = await import('../utils/schema-validator.js');
+      const unknownFieldsResult = SchemaValidator.validateUnknownFields(documentType, data);
+      if (!unknownFieldsResult.valid && unknownFieldsResult.unknownFields.length > 0) {
+        // Build the full schema response including embedded document schemas
+        const { DocumentAPI } = await import('../core/document-api.js');
+        const schemaResponse = await this.#buildSchemaResponse(documentType, unknownFieldsResult, DocumentAPI);
+        
+        return {
+          content: schemaResponse.message,
+          display: `❌ Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}`,
+          error: {
+            message: schemaResponse.message,
+            type: 'UNKNOWN_FIELDS',
+            unknownFields: unknownFieldsResult.unknownFields,
+            schema: schemaResponse.schema,
+          },
+        };
+      }
+
       // Generic Schema Migration (String -> Object promotion)
       await this._promoteSystemFields(documentType, data);
 
@@ -333,6 +353,137 @@ export class DocumentCreateTool extends BaseTool {
     }
 
     return false;
+  }
+
+  /**
+   * Build a corrected example based on the agent's incorrect input
+   * @param {string} documentType - The document type
+   * @param {Object} unknownFieldsResult - Result from validateUnknownFields
+   * @param {Object} DocumentAPI - The DocumentAPI module
+   * @returns {Object} Schema response with message and schema object
+   * @private
+   */
+  async #buildSchemaResponse(documentType, unknownFieldsResult, DocumentAPI) {
+    const schema = DocumentAPI.getDocumentSchema(documentType);
+    const embeddedSchemas = {};
+    
+    // Get schemas for all embedded document types
+    if (schema?.embeddedSchemas) {
+      for (const [fieldName, embeddedInfo] of Object.entries(schema.embeddedSchemas)) {
+        // Get the actual embedded document type from the schema
+        const embeddedType = schema.fieldDetails?.[fieldName]?.elementType;
+        if (embeddedType) {
+          const embeddedSchema = DocumentAPI.getDocumentSchema(embeddedType);
+          if (embeddedSchema) {
+            embeddedSchemas[fieldName] = {
+              documentType: embeddedType,
+              fields: embeddedSchema.fields,
+              fieldDetails: embeddedSchema.fieldDetails,
+            };
+          }
+        }
+      }
+    }
+
+    // Build a compact but complete schema message
+    let message = `❌ Document creation rejected: Unknown fields would be silently discarded.\n\n`;
+    message += `Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}\n\n`;
+    message += `--- ${documentType} Schema ---\n`;
+    message += `Valid top-level fields: ${schema?.fields?.join(', ') || 'none'}\n`;
+    
+    if (schema?.embedded?.length > 0) {
+      message += `\nEmbedded document fields: ${schema.embedded.join(', ')}\n`;
+      
+      // Include the embedded document schemas
+      for (const [fieldName, embeddedSchema] of Object.entries(embeddedSchemas)) {
+        message += `\n--- ${embeddedSchema.documentType} Schema (for "${fieldName}" array) ---\n`;
+        message += `Fields: ${embeddedSchema.fields?.join(', ') || 'none'}\n`;
+        
+        // Include field details for key fields
+        if (embeddedSchema.fieldDetails) {
+          const keyFields = ['name', 'type', 'text', 'content', 'system'];
+          for (const key of keyFields) {
+            const details = embeddedSchema.fieldDetails[key];
+            if (details) {
+              message += `  ${key}: ${details.type}`;
+              if (details.required) message += ' (required)';
+              if (details.choices) message += ` [${details.choices.join('|')}]`;
+              if (details.nested) message += ` { ${Object.keys(details.nested).join(', ')} }`;
+              message += '\n';
+            }
+          }
+        }
+      }
+    }
+
+    if (schema?.systemFields?.length > 0) {
+      message += `\nSystem fields (inside "system"): ${schema.systemFields.join(', ')}\n`;
+    }
+
+    // Add specific guidance for the unknown fields
+    message += `\n--- Guidance ---\n`;
+    for (const suggestion of unknownFieldsResult.suggestions) {
+      message += `• ${suggestion}\n`;
+    }
+
+    return {
+      message,
+      schema: {
+        documentType,
+        fields: schema?.fields,
+        fieldDetails: schema?.fieldDetails,
+        embedded: schema?.embedded,
+        embeddedSchemas,
+        systemFields: schema?.systemFields,
+      },
+    };
+  }
+
+  /**
+   * Format document schema for inclusion in error messages.
+   * Provides enough detail for the AI to self-correct without a separate schema tool call.
+   * @param {string} documentType - The document type
+   * @param {Object} schema - The schema from DocumentAPI.getDocumentSchema
+   * @returns {string} Formatted schema information
+   * @private
+   */
+  #formatSchemaForError(documentType, schema) {
+    if (!schema) return '';
+
+    let output = `--- ${documentType} Schema Reference ---\n`;
+    output += `Top-level fields: ${schema.fields?.join(', ') || 'none'}\n`;
+    
+    if (schema.systemFields?.length > 0) {
+      output += `System fields (inside "system"): ${schema.systemFields.join(', ')}\n`;
+    }
+
+    if (schema.embedded?.length > 0) {
+      output += `Embedded documents: ${schema.embedded.join(', ')}\n`;
+      // Add hints for common embedded collections
+      if (schema.embedded.includes('JournalEntryPage')) {
+        output += `  → JournalEntryPage goes in "pages" array: pages: [{ name: "...", type: "text", text: { content: "..." } }]\n`;
+      }
+      if (schema.embedded.includes('ActiveEffect')) {
+        output += `  → ActiveEffect goes in "effects" array\n`;
+      }
+      if (schema.embedded.includes('Item')) {
+        output += `  → Item goes in "items" array (for Actors)\n`;
+      }
+    }
+
+    if (schema.systemFieldDetails && Object.keys(schema.systemFieldDetails).length > 0) {
+      output += `Key system field structure:\n`;
+      for (const [fieldName, details] of Object.entries(schema.systemFieldDetails)) {
+        if (details.isCollection || details.isMapping || details.nested) {
+          output += `  - system.${fieldName}: ${details.type}`;
+          if (details.isCollection) output += ' (collection)';
+          if (details.isMapping) output += ' (mapping - use object with ID keys)';
+          output += '\n';
+        }
+      }
+    }
+
+    return output;
   }
 
   /**

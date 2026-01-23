@@ -376,8 +376,43 @@ export class ValidationErrorHandler {
 
     // Add document-type specific instructions
     const instructions = this.getDocumentTypeInstructions(documentType, enhancedSuggestions);
+    
+    // Include schema reference to help AI self-correct
+    const schemaRef = this.getSchemaReference(documentType);
 
-    return `FoundryVTT ${documentType} validation failed on ${fieldCount} field(s). Required fixes:\n${fieldGuidance}${instructions}\n\nPlease retry with corrected field values.`;
+    return `FoundryVTT ${documentType} validation failed on ${fieldCount} field(s). Required fixes:\n${fieldGuidance}${instructions}${schemaRef}\n\nPlease retry with corrected field values.`;
+  }
+
+  /**
+   * Get a compact schema reference for error context
+   * @param {string} documentType - The document type
+   * @returns {string} Schema reference string
+   */
+  static getSchemaReference(documentType) {
+    try {
+      const schemaInfo = SchemaValidator.getDocumentSchema(documentType);
+      if (!schemaInfo || !schemaInfo.fields) return '';
+
+      const fields = Object.keys(schemaInfo.fields);
+      const topLevelFields = fields.slice(0, 15); // Limit to avoid huge output
+      const hasMore = fields.length > 15;
+
+      let ref = `\n\n--- ${documentType} Schema Reference ---\n`;
+      ref += `Top-level fields: ${topLevelFields.join(', ')}${hasMore ? '...' : ''}\n`;
+
+      // Include embedded document hints
+      const embeddedFields = fields.filter(f => {
+        const fieldInfo = schemaInfo.fields[f];
+        return fieldInfo?.type === 'EmbeddedCollectionField';
+      });
+      if (embeddedFields.length > 0) {
+        ref += `Embedded collections: ${embeddedFields.join(', ')}\n`;
+      }
+
+      return ref;
+    } catch (e) {
+      return '';
+    }
   }
 
   /**

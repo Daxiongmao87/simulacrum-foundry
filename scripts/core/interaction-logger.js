@@ -157,7 +157,11 @@ class InteractionLogger {
     logMessage(message, context = {}) {
         if (!this.enabled) return;
 
-        const { toolCalls, toolCallId, metadata } = context;
+        // Skip 'tool' role messages - they are logged via logToolResult() with richer metadata
+        // (success, durationMs). Logging here would cause duplicates.
+        if (message.role === 'tool') return;
+
+        const { toolCalls, metadata } = context;
         const baseEntry = {
             id: this._generateId(),
             timestamp: new Date().toISOString(),
@@ -171,11 +175,6 @@ class InteractionLogger {
                 hasToolCalls: Boolean(toolCalls && toolCalls.length > 0),
                 toolCallCount: toolCalls?.length || 0,
                 ...(metadata?.provider_metadata ? { provider_metadata: metadata.provider_metadata } : {}),
-            };
-        } else if (message.role === 'tool') {
-            baseEntry.type = EntryType.TOOL_RESULT;
-            baseEntry.metadata = {
-                toolCallId: toolCallId || null,
             };
         } else if (message.role === 'system') {
             baseEntry.type = EntryType.SYSTEM;

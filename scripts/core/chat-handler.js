@@ -34,10 +34,12 @@ class ChatHandler {
       const finalResponse = await engine.processTurn({
         signal: options.signal,
         onAssistantMessage: msg => {
-          // Mirror previous behavior: add to conversation and UI when appropriate
           // Support ephemeral messages (display only) by checking for either content or display
           if (msg?.role === 'assistant' && (msg?.content || msg?.display)) {
-            if (msg.content) {
+            // Only add to conversation if this is NOT a tool-call response.
+            // Messages with tool calls are already added by tool-loop-handler before execution.
+            // Adding here would cause duplicate log entries.
+            if (msg.content && !msg.toolCalls && !msg._fromToolLoop) {
               this.addMessageToConversation('assistant', msg.content);
             }
             this.addMessageToUI(

@@ -284,4 +284,104 @@ export class SchemaValidator {
 
     return result;
   }
+
+  /**
+   * Validate that provided data fields exist in the document schema.
+   * Detects unknown/extraneous fields that would be silently ignored by Foundry.
+   * @param {string} documentType - The document type
+   * @param {Object} data - The document data to validate
+   * @returns {Object} Validation result with unknown fields and suggestions
+   */
+  static validateUnknownFields(documentType, data) {
+    const schemaInfo = this.getDocumentSchema(documentType);
+    const result = {
+      valid: true,
+      unknownFields: [],
+      validFields: [],
+      suggestions: [],
+      schemaAvailable: !!schemaInfo,
+    };
+
+    if (!schemaInfo || !data || typeof data !== 'object') {
+      return result;
+    }
+
+    const schemaFields = new Set(Object.keys(schemaInfo.fields));
+    
+    // Common meta-fields that Foundry accepts but may not be in schema.fields
+    const metaFields = new Set(['_id', 'type', 'sort', 'ownership', 'flags', '_stats']);
+
+    for (const fieldName of Object.keys(data)) {
+      if (schemaFields.has(fieldName) || metaFields.has(fieldName)) {
+        result.validFields.push(fieldName);
+      } else {
+        result.unknownFields.push(fieldName);
+      }
+    }
+
+    if (result.unknownFields.length > 0) {
+      result.valid = false;
+      
+      // Build helpful suggestions
+      const availableFieldsList = Array.from(schemaFields).sort().join(', ');
+      result.suggestions.push(
+        `Unknown fields will be ignored: ${result.unknownFields.join(', ')}`
+      );
+      result.suggestions.push(
+        `Valid top-level fields for ${documentType}: ${availableFieldsList}`
+      );
+
+      // Check for common mistakes and provide specific guidance
+      for (const unknownField of result.unknownFields) {
+        const hint = this.#getFieldMigrationHint(documentType, unknownField, schemaInfo);
+        if (hint) {
+          result.suggestions.push(hint);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get migration hints for commonly misplaced fields
+   * @param {string} documentType - The document type
+   * @param {string} fieldName - The unknown field name
+   * @param {Object} schemaInfo - The schema info object
+   * @returns {string|null} Migration hint or null
+   * @private
+   */
+  static #getFieldMigrationHint(documentType, fieldName, schemaInfo) {
+    // Check if the field exists in system schema instead
+    const systemFields = schemaInfo.fields?.system;
+    if (systemFields) {
+      // Try to access nested system field info
+      try {
+        const systemSchema = systemFields.model?.schema?.fields || 
+                            systemFields.fields || 
+                            {};
+        if (Object.keys(systemSchema).includes(fieldName)) {
+          return `Field "${fieldName}" should be inside "system": { "${fieldName}": ... }`;
+        }
+      } catch (e) {
+        // Ignore schema traversal errors
+      }
+    }
+
+    // Check for embedded collection fields that need special handling
+    if (schemaInfo.fields?.pages && fieldName === 'content') {
+      return `Field "content" is not valid for ${documentType}. Content should be placed in "pages" array as JournalEntryPage embedded documents. Example: pages: [{ name: "Page 1", type: "text", text: { content: "<p>Your content here</p>" } }]`;
+    }
+
+    // Check for common field name variations
+    const similarFields = Array.from(Object.keys(schemaInfo.fields)).filter(f => 
+      f.toLowerCase().includes(fieldName.toLowerCase()) ||
+      fieldName.toLowerCase().includes(f.toLowerCase())
+    );
+    if (similarFields.length > 0) {
+      return `Did you mean one of these fields? ${similarFields.join(', ')}`;
+    }
+
+    return null;
+  }
 }
