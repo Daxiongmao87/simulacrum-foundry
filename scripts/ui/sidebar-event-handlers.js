@@ -62,7 +62,7 @@ export class SidebarEventHandlers {
           const processedDisplay = await processMessageForDisplay(
             response.display || response.content
           );
-          await app.addMessage('assistant', response.content, processedDisplay);
+          await app.addMessage('assistant', response.content, processedDisplay, response.noGroup);
         }
       };
 

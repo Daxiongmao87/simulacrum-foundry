@@ -8,6 +8,17 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
 import { normalizeAIResponse } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
+import {
+  delayWithSignal,
+  createAbortError,
+  isAbortError,
+  throwIfAborted,
+  isRetryableError,
+  calculateRetryDelay,
+  executeRetryDelay,
+  buildConnectionRetryLabel,
+  DEFAULT_RETRY_CONFIG,
+} from '../utils/retry-helpers.js';
 // Import providers
 import { AIProvider } from './providers/base-provider.js';
 import { GeminiProvider } from './providers/gemini-provider.js';
@@ -273,11 +284,13 @@ export class AIClient {
       // Validate and repair message structure (critical for strict APIs like Gemini 1.5)
       const safeMessages = this._checkMessageStructure(messages);
 
-      const MAX_GEMINI_RETRIES = 5; // Aligned with OpenAI retries
-      const INITIAL_DELAY_MS = 250;
+      const { maxRetries: MAX_GEMINI_RETRIES, initialDelayMs: INITIAL_DELAY_MS } = DEFAULT_RETRY_CONFIG;
       let lastResult;
 
       for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
+        // Check for cancellation at the start of each iteration
+        throwIfAborted(options.signal);
+
         try {
           if (isDebugEnabled()) {
             createLogger('AIClient').info(`Sending Gemini Request (Attempt ${i + 1})`);
@@ -296,28 +309,31 @@ export class AIClient {
 
           // If TOOL_CALL_FAILURE (model logic error), retry with backoff
           if (i < MAX_GEMINI_RETRIES) {
-            const delay = INITIAL_DELAY_MS * Math.pow(2, i);
+            const delay = calculateRetryDelay(i, INITIAL_DELAY_MS, false);
             if (isDebugEnabled()) {
               createLogger('AIClient').warn(
                 `Gemini tool call failure (attempt ${i + 1}/${MAX_GEMINI_RETRIES + 1}), retrying...`,
                 { errorCode: lastResult.errorCode }
               );
             }
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await delayWithSignal(delay, options.signal);
             continue;
           }
         } catch (error) {
-          // Network error handling (429, 5xx)
-          const isRetryable = error.message.includes('429') || error.message.includes('500') || error.message.includes('503') || error.message.includes('fetch failed');
+          // Check for abort error first - do NOT retry if user cancelled
+          if (isAbortError(error, options.signal)) {
+            throw createAbortError();
+          }
 
-          if (i < MAX_GEMINI_RETRIES && isRetryable) {
-            const delay = INITIAL_DELAY_MS * Math.pow(2, i) + Math.random() * 100;
+          // Network error handling (429, 5xx)
+          if (i < MAX_GEMINI_RETRIES && isRetryableError(error)) {
+            const delay = calculateRetryDelay(i, INITIAL_DELAY_MS, true);
             const retryCallId = `api-retry-gemini-${Date.now()}`;
-            emitRetryStatus('start', retryCallId, `Connection Error, Retrying (${i + 2}/${MAX_GEMINI_RETRIES + 1})...`);
+            emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(i + 2, MAX_GEMINI_RETRIES + 1));
             if (isDebugEnabled()) {
               createLogger('AIDiagnostics').info('Retrying Gemini network error', { attempt: i + 1, error: error.message, delay });
             }
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await executeRetryDelay(delay, options.signal, retryCallId);
             emitRetryStatus('end', retryCallId);
             continue;
           }
@@ -394,11 +410,13 @@ export class AIClient {
     let response;
     const __inJest = typeof process !== 'undefined' && process?.env && process.env.JEST_WORKER_ID;
     const __retryEnabled = !__inJest;
-    const MAX_RETRIES = 5;
-    const INITIAL_DELAY_MS = 250;
+    const { maxRetries: MAX_RETRIES, initialDelayMs: INITIAL_DELAY_MS } = DEFAULT_RETRY_CONFIG;
     const signal = options.signal;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Check for cancellation at the start of each iteration
+      throwIfAborted(signal);
+
       const headers = {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -439,7 +457,6 @@ export class AIClient {
           }));
           createLogger('AIClient').info('Message structure before API call:', msgSummary);
         }
-        // Debug message structure logging is already handled above via isDebugEnabled() check
 
         const stringifiedBody = JSON.stringify(body);
 
@@ -455,34 +472,37 @@ export class AIClient {
         }
 
         const status = response.status;
-        const shouldRetry = __retryEnabled && (status === 429 || status >= 500);
+        const shouldRetry = __retryEnabled && isRetryableError(null, status);
 
         if (shouldRetry && attempt < MAX_RETRIES) {
-          const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
+          const delay = calculateRetryDelay(attempt, INITIAL_DELAY_MS, true);
           const retryCallId = `api-retry-openai-${Date.now()}`;
-          emitRetryStatus('start', retryCallId, `Connection Error, Retrying (${attempt + 2}/${MAX_RETRIES + 1})...`);
-          try {
-            if (isDebugEnabled()) {
-              createLogger('AIDiagnostics').info('Retrying API request', {
-                attempt: attempt + 1,
-                status,
-                delay,
-              });
-            }
-          } catch { }
-          await new Promise(resolve => setTimeout(resolve, delay));
+          emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1));
+          if (isDebugEnabled()) {
+            createLogger('AIDiagnostics').info('Retrying API request', {
+              attempt: attempt + 1,
+              status,
+              delay,
+            });
+          }
+          await executeRetryDelay(delay, signal, retryCallId);
           emitRetryStatus('end', retryCallId);
         } else {
           break;
         }
       } catch (error) {
+        // Check for abort error first - do NOT retry if user cancelled
+        if (isAbortError(error, signal)) {
+          throw createAbortError();
+        }
+
         if (attempt >= MAX_RETRIES) {
           throw new Error(`Failed to fetch after ${MAX_RETRIES + 1} attempts: ${error.message}`);
         }
-        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
+        const delay = calculateRetryDelay(attempt, INITIAL_DELAY_MS, true);
         const retryCallId = `api-retry-fetch-${Date.now()}`;
-        emitRetryStatus('start', retryCallId, `Connection Error, Retrying (${attempt + 2}/${MAX_RETRIES + 1})...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1));
+        await executeRetryDelay(delay, signal, retryCallId);
         emitRetryStatus('end', retryCallId);
       }
     }

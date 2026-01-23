@@ -7,7 +7,6 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SidebarEventHandlers } from './sidebar-event-handlers.js';
 import {
   syncMessagesFromCore,
-  createWelcomeMessage,
   processMessageForDisplay,
 } from './sidebar-state-syncer.js';
 import { formatPendingToolCall } from '../utils/message-utils.js';
@@ -216,7 +215,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     return foundry.utils.mergeObject(context, {
       messages: this.messages,
-      welcomeMessage: this.messages.length === 0 ? createWelcomeMessage() : null,
       isGM: game.user.isGM,
       user: game.user,
       isAtBottom: this.#isAtBottom,
@@ -431,11 +429,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     return this.chatHandler;
   }
 
-  async addMessage(role, content, display = null) {
+  async addMessage(role, content, display = null, noGroup = false) {
     const processedDisplay = display || (await processMessageForDisplay(content));
 
-    // Check for grouping
-    if (this.messages.length > 0 && role === 'assistant') {
+    // Check for grouping (skip if noGroup flag is set)
+    if (!noGroup && this.messages.length > 0 && role === 'assistant') {
       const lastMsg = this.messages[this.messages.length - 1];
       if (lastMsg.role === 'assistant') {
         // Merge!

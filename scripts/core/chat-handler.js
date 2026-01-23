@@ -55,15 +55,23 @@ class ChatHandler {
     } catch (error) {
       this.logger.error('Error processing user message', error);
 
-      // Handle cancellation specially
+      // Handle cancellation specially - do NOT invoke onError for cancellation
+      // because we don't want to rollback the user's message
       if (error.name === 'AbortError' || error.message === 'Process was cancelled') {
         const cancelMessage = {
           role: 'assistant',
           content: 'Process cancelled by user',
           display: '🛑 Process cancelled',
+          noGroup: true, // Prevent grouping with previous assistant messages
         };
         this.addMessageToUI(cancelMessage, options);
         return cancelMessage;
+      }
+
+      // Invoke onError callback to restore user's message to input field
+      // This is for ACTUAL errors (not cancellation) where we want to allow retry
+      if (options.onError) {
+        options.onError({ originalMessage: message, error });
       }
 
       // Check for 503 Service Unavailable or other API connection issues
