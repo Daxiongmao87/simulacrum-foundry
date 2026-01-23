@@ -437,10 +437,14 @@ class ChatHandler {
   }
 
   /**
-   * Clear conversation history
+   * Clear conversation history and interaction log
    */
   async clearConversation() {
     this.conversationManager.clear();
+    await this.conversationManager.save();
+    // Clear the interaction log when conversation is cleared
+    const { interactionLogger } = await import('./interaction-logger.js');
+    await interactionLogger.clear();
   }
 }
 

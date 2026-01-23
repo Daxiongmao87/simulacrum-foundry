@@ -204,8 +204,6 @@ Hooks.once('init', async () => {
   logger.info('Settings registered');
 });
 
-import { ensureSimulacrumMacros } from './macros.js';
-
 Hooks.once('ready', async () => {
   // GM-ONLY ACCESS GATE: Non-GM users cannot use Simulacrum
   // This is a security measure until complete permissions-based implementation is ready.
@@ -257,9 +255,6 @@ Hooks.once('ready', async () => {
   if (module) {
     module.api.macroToolManager = macroToolManager;
   }
-
-  // Ensure default macros exist
-  ensureSimulacrumMacros().catch(err => logger.error('Failed to ensure macros', err));
 
   // Initialize interaction logger (loads persisted entries)
   const { interactionLogger } = await import('./core/interaction-logger.js');
