@@ -1,24 +1,14 @@
-{{!-- Simulacrum Message Template - EXACT FoundryVTT Structure --}}
-<li class="chat-message message flexcol dnd5e2 simulacrum-chat-message simulacrum-role-{{role}}"
+{{!-- Simulacrum Message Template - System-Agnostic Structure --}}
+<li class="chat-message message flexcol simulacrum-chat-message simulacrum-role-{{role}}"
   data-message-id="{{id}}" {{#if borderColor}}style="border-color:{{borderColor}}" {{/if}}>
   <header class="message-header flexrow">
     <h4 class="message-sender">
-      <a class="avatar">
+      <span class="title">
         {{#if (eq role 'user')}}
-        <img src="{{user.avatar}}" alt="{{user.name}}">
+        {{user.name}}
         {{else}}
-        <img src="modules/simulacrum/assets/simulacrum-avatar.png" alt="Simulacrum AI">
+        {{localize "SIMULACRUM.AIName"}}
         {{/if}}
-      </a>
-      <span class="name-stacked">
-        <span class="title">
-          {{#if (eq role 'user')}}
-          {{user.name}}
-          {{else}}
-          {{localize "SIMULACRUM.AIName"}}
-          {{/if}}
-        </span>
-        <span class="subtitle"></span>
       </span>
     </h4>
     <span class="message-metadata">
