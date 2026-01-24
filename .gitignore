@@ -44,6 +44,16 @@ coverage/
 vendor/foundry/*.zip
 vendor/foundry/*.ZIP
 
+# E2E Test Instance (auto-created, nuked after tests)
+.foundry-test/
+
+# E2E Test Artifacts
+tests/e2e/.env.test
+tests/e2e/reports/
+tests/e2e/screenshots/
+tests/e2e/test-results/
+tests/e2e/setup/.test-state.json
+
 # Additional IDE files
 *.swp
 *.swo
@@ -106,4 +116,4 @@ temp_qwen_output.json
 memory_event_log.json
 vector_store.json
 
-workspace/
+workspace/.foundry-test-data/
