@@ -70,12 +70,17 @@ function buildProjects(systemIds) {
         // System-specific tests (only matching system)
         `systems/${systemId}/**/*.spec.js`,
       ],
+      // Per-test setup can take a while (extracting, starting server, installing system)
+      timeout: 180000, // 3 minutes per test
       use: {
         ...devices['Desktop Chrome'],
         // Foundry requires minimum 1366x768 resolution
         viewport: { width: 1920, height: 1080 },
         // Pass system ID to tests via custom fixture
         systemId,
+        // Action/navigation timeouts
+        actionTimeout: 30000,
+        navigationTimeout: 60000,
       },
       // Set metadata for this project
       metadata: {
@@ -106,12 +111,16 @@ console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
 /**
  * Playwright configuration for Simulacrum Foundry VTT E2E tests.
  * 
- * Test lifecycle:
- * 1. globalSetup: Unzips Foundry, packages module, deploys, launches server
- *    - Installs ALL systems from TEST_SYSTEM_IDS
- *    - Creates a test world for EACH system
- * 2. Tests run against live Foundry instance, iterating per system
- * 3. globalTeardown: Nukes the unzipped Foundry instance for clean slate
+ * Test lifecycle (Per-Test Isolation Architecture):
+ * 1. globalSetup: Validates Foundry zip, license key, caches systems (ONE TIME)
+ * 2. EACH TEST (via fixtures):
+ *    - Extracts fresh Foundry to unique temp directory
+ *    - Starts Foundry on unique port (30000 + workerIndex)
+ *    - Installs system from cache
+ *    - Creates fresh world
+ *    - Runs test
+ *    - Kills server and deletes all temp data
+ * 3. globalTeardown: Cleans orphaned processes/directories (FAILSAFE)
  * 
  * Multi-System Support:
  * - Set TEST_SYSTEM_IDS=dnd5e,pf2e,... in .env.test
@@ -123,8 +132,8 @@ console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
 export default defineConfig({
   testDir: './specs',
   
-  /* Run tests in files in parallel */
-  fullyParallel: false, // Sequential for Foundry - single server instance
+  /* Run tests in parallel - each test gets isolated Foundry instance */
+  fullyParallel: true,
   
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
@@ -132,16 +141,19 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   
-  /* Single worker - Foundry can only run one instance at a time */
-  workers: 1,
+  /* Multiple workers OK - each test gets own Foundry on unique port */
+  workers: process.env.CI ? 2 : 4,
   
-  /* Reporter to use - using list only to avoid HTML server blocking terminal */
-  reporter: 'list',
+  /* Reporter to use - line for minimal output */
+  reporter: 'line',
   
   /* Shared settings for all the projects below */
   use: {
-    /* Base URL for Foundry instance */
-    baseURL: process.env.FOUNDRY_URL || 'http://localhost:30000',
+    /* NO baseURL - each test has dynamic port via fixtures */
+    // baseURL is set dynamically by the gamePage fixture
+    
+    /* Clear storage state for reproducibility - no cached cookies/localStorage */
+    storageState: undefined,
     
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',

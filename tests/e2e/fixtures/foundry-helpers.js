@@ -12,12 +12,47 @@
 import { expect } from '@playwright/test';
 
 /**
+ * Remove any tour overlays or tooltips that might intercept clicks
+ * Based on Foundry v13 Tour class implementation:
+ * - .tour-overlay = blocks input
+ * - .tour-fadeout = fade element
+ * - Tour.activeTour.exit() = proper API to exit tour
+ * @param {import('@playwright/test').Page} page
+ */
+async function dismissTourOverlay(page) {
+  await page.evaluate(() => {
+    // Remove tour overlay elements directly (v13 class names)
+    document.querySelectorAll('.tour-overlay, .tour-fadeout').forEach(el => el.remove());
+    
+    // Use Foundry v13 Tour API to exit any active tour
+    try {
+      // @ts-ignore - Foundry v13 Tour class
+      if (typeof Tour !== 'undefined' && Tour.activeTour && typeof Tour.activeTour.exit === 'function') {
+        // @ts-ignore
+        Tour.activeTour.exit();
+      }
+    } catch (e) { /* ignore */ }
+    
+    // Also remove any tooltip that might be showing
+    try {
+      // @ts-ignore
+      if (typeof game !== 'undefined' && game.tooltip) {
+        // @ts-ignore
+        game.tooltip.deactivate();
+      }
+    } catch (e) { /* ignore */ }
+  });
+}
+
+/**
  * Login to Foundry VTT setup screen
  * @param {import('@playwright/test').Page} page
  * @param {string} adminKey - The admin password/key
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function loginAsAdmin(page, adminKey) {
-  await page.goto('/setup');
+export async function loginAsAdmin(page, adminKey, baseUrl = '') {
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
+  await page.goto(setupUrl);
   
   // Wait for the page to load
   await page.waitForLoadState('networkidle');
@@ -52,12 +87,14 @@ export async function loginAsAdmin(page, adminKey) {
  * Install a game system via Foundry's UI
  * @param {import('@playwright/test').Page} page
  * @param {string} systemId - The system ID to install (e.g., 'dnd5e', 'pf2e')
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function installSystem(page, systemId) {
+export async function installSystem(page, systemId, baseUrl = '') {
   console.log(`[helper] Installing system via UI: ${systemId}`);
   
   // Navigate to setup page
-  await page.goto('/setup');
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
+  await page.goto(setupUrl);
   await page.waitForLoadState('networkidle');
   
   // Click on Game Systems tab
@@ -126,12 +163,14 @@ export async function installSystem(page, systemId) {
  * @param {string} worldId - The world ID
  * @param {string} worldTitle - The world display title
  * @param {string} systemId - The system ID to use
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function createWorld(page, worldId, worldTitle, systemId) {
+export async function createWorld(page, worldId, worldTitle, systemId, baseUrl = '') {
   console.log(`[helper] Creating world via UI: ${worldId} (${systemId})`);
   
   // Navigate to setup page
-  await page.goto('/setup');
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
+  await page.goto(setupUrl);
   await page.waitForLoadState('networkidle');
   
   // Click on Worlds tab
@@ -191,12 +230,14 @@ export async function createWorld(page, worldId, worldTitle, systemId) {
  * @param {import('@playwright/test').Page} page
  * @param {string} worldId - The world to configure
  * @param {string} moduleId - The module to enable
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function enableModuleInWorld(page, worldId, moduleId) {
+export async function enableModuleInWorld(page, worldId, moduleId, baseUrl = '') {
   console.log(`[helper] Enabling module ${moduleId} in world ${worldId}`);
   
   // Navigate to setup page
-  await page.goto('/setup');
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
+  await page.goto(setupUrl);
   await page.waitForLoadState('networkidle');
   
   // Click on Worlds tab
@@ -241,8 +282,9 @@ export async function enableModuleInWorld(page, worldId, moduleId) {
  * Launch a specific world
  * @param {import('@playwright/test').Page} page
  * @param {string} worldId - The world ID to launch
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function launchWorld(page, worldId) {
+export async function launchWorld(page, worldId, baseUrl = '') {
   // Check current URL first - if we're already on /join, world is already running
   const currentUrl = page.url();
   console.log(`[helper] launchWorld: Current URL is ${currentUrl}`);
@@ -252,7 +294,8 @@ export async function launchWorld(page, worldId) {
     return; // World is already running, no need to launch
   }
   
-  await page.goto('/setup');
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
+  await page.goto(setupUrl);
   await page.waitForLoadState('networkidle');
   
   // Debug: Log current URL after navigation
@@ -265,26 +308,36 @@ export async function launchWorld(page, worldId) {
     return;
   }
   
+  // AGGRESSIVELY dismiss tour overlay (this blocks clicks!)
+  await dismissTourOverlay(page);
+  
   // Handle consent dialog or tour if present
   const consentNo = page.locator('button:has-text("No"), button:has-text("Disagree")');
   if (await consentNo.isVisible({ timeout: 500 }).catch(() => false)) {
     await consentNo.click();
-    await page.waitForTimeout(500);
+    // Wait for dialog to disappear
+    await consentNo.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
   }
   await page.keyboard.press('Escape'); // Dismiss any tour overlay
+  await dismissTourOverlay(page); // Make SURE it's gone
   
   // Make sure we're on the Worlds tab
   const worldsTab = page.locator('[data-tab="worlds"]').first();
   console.log(`[helper] Looking for Worlds tab...`);
   if (await worldsTab.isVisible({ timeout: 2000 }).catch(() => false)) {
     console.log(`[helper] Clicking Worlds tab...`);
-    await worldsTab.click();
+    await dismissTourOverlay(page);
+    await worldsTab.click({ force: true }); // Force click past overlays
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    // Wait for worlds section to be visible
+    await page.locator('section[data-tab="worlds"], .worlds-list, [data-package-id]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
   } else {
     console.log(`[helper] Worlds tab not found, checking current state...`);
     await page.screenshot({ path: `/tmp/foundry-no-worlds-tab-${worldId}.png`, fullPage: true });
   }
+  
+  // Dismiss tour again before interacting with world card
+  await dismissTourOverlay(page);
   
   // Find the world card - try multiple selectors for different Foundry versions
   const worldCardSelectors = [
@@ -312,47 +365,116 @@ export async function launchWorld(page, worldId) {
     throw new Error(`World ${worldId} not found in setup page`);
   }
   
-  // Click the world card to select it
-  await worldCard.click();
-  await page.waitForTimeout(500);
+  // Dismiss any overlays before interacting
+  await dismissTourOverlay(page);
   
-  // Take a debug screenshot before looking for launch button
-  await page.screenshot({ path: `/tmp/foundry-before-launch-${worldId}.png`, fullPage: true });
+  // Debug: Log the world card HTML structure
+  const cardHtml = await worldCard.innerHTML().catch(() => 'Could not get HTML');
+  console.log(`[helper] World card HTML (first 500 chars): ${cardHtml.substring(0, 500)}`);
   
-  // Find and click the Launch button - try multiple selectors
-  // In Foundry v13, it's an <a> element with data-action="worldLaunch"
-  const launchSelectors = [
-    '[data-action="worldLaunch"]',           // v13 - anchor with data-action
-    'a[data-action="worldLaunch"]',          // v13 - explicit anchor
-    'a.control.play',                        // v13 - play control link
-    'button[data-action="worldLaunch"]',     // fallback button variant
-    'button:has-text("Launch World")',
-    'button:has-text("Launch")',
-    '.launch-button',
-    'footer button:has-text("Launch")'
-  ];
+  // First try to find the launch button within the world card (Tiles/Gallery view)
+  // In these views, the play button may only appear on hover or may be hidden until interaction
+  await worldCard.hover();
+  await page.waitForTimeout(500); // Wait for hover animation
   
-  let launchButton = null;
-  for (const selector of launchSelectors) {
-    const btn = page.locator(selector).first();
-    if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
-      console.log(`[helper] Found launch button with selector: ${selector}`);
-      launchButton = btn;
-      break;
+  let launchButton = worldCard.locator('[data-action="worldLaunch"], a.control.play').first();
+  let buttonFound = await launchButton.isVisible({ timeout: 3000 }).catch(() => false);
+  
+  // Check if button exists in DOM (even if not visible)
+  const buttonExists = await worldCard.locator('[data-action="worldLaunch"], a.control.play').count();
+  console.log(`[helper] Launch buttons within card: ${buttonExists}, visible: ${buttonFound}`);
+  
+  // If button exists, ALWAYS use JavaScript click since Playwright clicks are unreliable
+  // even when the button reports as visible
+  let worldLaunchTriggered = false;
+  if (buttonExists > 0) {
+    console.log(`[helper] Button exists, using JavaScript click (always more reliable)...`);
+    try {
+      // Use JavaScript click which bypasses visibility checks entirely
+      const clicked = await page.evaluate(() => {
+        const btn = document.querySelector('[data-action="worldLaunch"]');
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      });
+      if (clicked) {
+        console.log(`[helper] JavaScript click on launch button succeeded`);
+        worldLaunchTriggered = true;
+      } else {
+        console.log(`[helper] JavaScript click failed - button not found in DOM`);
+      }
+    } catch (e) {
+      console.log(`[helper] JavaScript click failed: ${e.message}`);
     }
   }
   
-  if (!launchButton) {
-    // Maybe the world card itself has a launch action?
-    // Or try double-clicking the card
-    console.log(`[helper] No launch button found, trying double-click on world card...`);
-    await worldCard.dblclick();
-  } else {
-    await launchButton.click();
+  // If button not found in card, try Details view approach
+  if (!worldLaunchTriggered) {
+    // Click the card to potentially reveal the button
+    // This handles Details view where selection may be needed
+    console.log(`[helper] Launch button not found in card, clicking card to select...`);
+    await worldCard.click({ force: true });
+    await page.waitForTimeout(1000); // Wait for selection animation
+    
+    // Wait for launch button to appear after selecting world
+    await page.locator('[data-action="worldLaunch"], button:has-text("Launch")').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  }
+
+  // Take a debug screenshot before looking for launch button
+  await page.screenshot({ path: `/tmp/foundry-before-launch-${worldId}.png`, fullPage: true });
+  
+  // Dismiss tour overlay one more time before clicking launch
+  await dismissTourOverlay(page);
+  
+  // Only search for and click launch button if we haven't already triggered the launch
+  if (!worldLaunchTriggered) {
+    // Find and click the Launch button - try multiple selectors
+    // In Foundry v13, it's an <a> element with data-action="worldLaunch"
+    const launchSelectors = [
+      '[data-action="worldLaunch"]',           // v13 - anchor with data-action
+      'a[data-action="worldLaunch"]',          // v13 - explicit anchor
+      'a.control.play',                        // v13 - play control link
+      'button[data-action="worldLaunch"]',     // fallback button variant
+      'button:has-text("Launch World")',
+      'button:has-text("Launch")',
+      '.launch-button',
+      'footer button:has-text("Launch")'
+    ];
+    
+    launchButton = null;
+    for (const selector of launchSelectors) {
+      const btn = page.locator(selector).first();
+      // Increase timeout to 2s per selector to handle slow rendering
+      if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        console.log(`[helper] Found launch button with selector: ${selector}`);
+        launchButton = btn;
+        break;
+      }
+    }
+  }
+  
+  // Final tour dismissal
+  await dismissTourOverlay(page);
+  
+  // Only click if we haven't already triggered the launch via force click
+  if (!worldLaunchTriggered) {
+    if (!launchButton || !(await launchButton.isVisible({ timeout: 1000 }).catch(() => false))) {
+      // Maybe the world card itself has a launch action?
+      // Or try double-clicking the card
+      console.log(`[helper] No launch button found or not visible, trying double-click on world card...`);
+      await worldCard.dblclick({ force: true }); // Force past any overlays
+    } else {
+      console.log(`[helper] Clicking launch button...`);
+      await launchButton.click({ force: true }); // Force past any overlays
+    }
   }
   
   // Wait for redirect to join page (not /game - that happens after joining)
-  await page.waitForURL(/join/, { timeout: 60000 });
+  // World loading can take 3-4 minutes for database connections, especially with dnd5e
+  // loading 22 compendium databases + world data + package migrations
+  await page.waitForURL(/join/, { timeout: 240000 });
   await page.waitForLoadState('networkidle');
   console.log(`[helper] World ${worldId} launched, now on join page`);
 }
@@ -614,6 +736,9 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
     // Foundry v13 uses form-footer.hbs which has a submit button with type="submit"
     const footer = moduleManagementDialog.locator('footer.form-footer');
     
+    // Dismiss any Tour overlay that might be blocking the Save button
+    await dismissTourOverlay(page);
+    
     // Take screenshot before clicking save
     await page.screenshot({ path: '/tmp/module-before-save.png' });
     
@@ -669,6 +794,7 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
         console.log(`[helper] Reloading page to activate module...`);
         await page.reload({ waitUntil: 'networkidle' });
         await waitForFoundryReady(page);
+        await dismissTourOverlay(page); // Tour reappears after reload
       } else {
         console.log(`[helper] Dialog didn't close, trying form submit via JavaScript...`);
         // Try submitting the form directly
@@ -684,6 +810,7 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
         // Force reload anyway
         await page.reload({ waitUntil: 'networkidle' });
         await waitForFoundryReady(page);
+        await dismissTourOverlay(page); // Tour reappears after reload
       }
     } else {
       console.log(`[helper] No submit button found in footer`);
@@ -790,11 +917,15 @@ export async function waitForFoundryReady(page) {
 
 /**
  * Return to setup screen (exit the current world)
- * This ensures a clean state between tests.
+ * NOTE: With per-test isolation, this is rarely needed as each test 
+ * has its own Foundry instance that gets destroyed after the test.
  * @param {import('@playwright/test').Page} page
+ * @param {string} [baseUrl] - Optional base URL (e.g., 'http://localhost:30001')
  */
-export async function returnToSetup(page) {
+export async function returnToSetup(page, baseUrl = '') {
   console.log('[helper] Returning to setup screen...');
+  
+  const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
   
   // Check if we're even in a world (game object exists and is ready)
   const inWorld = await page.evaluate(() => {
@@ -804,7 +935,7 @@ export async function returnToSetup(page) {
   
   if (!inWorld) {
     // Already not in a world, just navigate to setup
-    await page.goto('/setup');
+    await page.goto(setupUrl);
     await page.waitForLoadState('networkidle');
     console.log('[helper] Was not in world, navigated to /setup');
     return;
@@ -834,7 +965,7 @@ export async function returnToSetup(page) {
     
     // Fallback: force navigate to setup
     try {
-      await page.goto('/setup', { waitUntil: 'networkidle' });
+      await page.goto(setupUrl, { waitUntil: 'networkidle' });
       console.log('[helper] Fallback: navigated directly to /setup');
     } catch (navErr) {
       // Navigation interrupted - check if we're at setup now

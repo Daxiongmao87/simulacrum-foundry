@@ -54,6 +54,12 @@ tests/e2e/screenshots/
 tests/e2e/test-results/
 tests/e2e/setup/.test-state.json
 
+# Additional test-related directories and files
+.foundry-system-cache/
+test-results/
+workspace/
+nohup.out
+
 # Additional IDE files
 *.swp
 *.swo

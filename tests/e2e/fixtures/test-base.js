@@ -1,49 +1,65 @@
 /**
  * Base Test Fixtures for Simulacrum E2E Tests
  * 
- * Provides extended Playwright test with Foundry-specific fixtures:
- * - Authenticated page
- * - World-launched page (per-system)
- * - Simulacrum-ready page
+ * ARCHITECTURE: Each test gets completely isolated state:
+ * - Fresh Foundry extraction
+ * - Clean data directory
+ * - Own Foundry server instance
+ * - Fresh browser context (no cookies/storage from other tests)
  * 
- * Multi-System Support:
- * - Each test project runs against a specific game system
- * - The `systemId` fixture provides the current system being tested
- * - The `worldId` fixture returns the world for the current system
+ * This is slower but CORRECT. Tests must be independent.
  */
 
 import { test as base, expect } from '@playwright/test';
 import * as helpers from './foundry-helpers.js';
+import * as foundrySetup from './foundry-setup.js';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const STATE_FILE = join(__dirname, '../setup/.test-state.json');
 
 /**
- * Load test state from global setup
+ * Load environment from .env.test
  */
-function loadTestState() {
-  if (!existsSync(STATE_FILE)) {
-    return null;
+function loadEnv() {
+  const envPath = join(__dirname, '../.env.test');
+  if (!existsSync(envPath)) {
+    throw new Error('Missing tests/e2e/.env.test - copy from .env.test.example');
   }
-  try {
-    return JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
-  } catch {
-    return null;
+  
+  const content = readFileSync(envPath, 'utf-8');
+  const env = {};
+  
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+    
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1).trim();
+    
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    
+    env[key] = value;
   }
+  
+  return env;
 }
 
 /**
- * Extended test fixtures
+ * Extended test fixtures - each test is fully isolated
  */
 export const test = base.extend({
   /**
    * Current system ID being tested (from project config)
    */
   systemId: async ({}, use, testInfo) => {
-    // Get system ID from project metadata or use options
     const systemId = testInfo.project.use?.systemId || 
                      testInfo.project.metadata?.systemId ||
                      process.env.TEST_SYSTEM_ID || 
@@ -52,73 +68,128 @@ export const test = base.extend({
   },
   
   /**
-   * Admin key from environment
+   * Environment configuration
    */
-  adminKey: async ({}, use) => {
-    const state = loadTestState();
-    const key = state?.env?.FOUNDRY_ADMIN_KEY || 
-                process.env.FOUNDRY_ADMIN_KEY || 
-                'test-admin-key';
-    await use(key);
+  testEnv: async ({}, use) => {
+    const env = loadEnv();
+    await use(env);
   },
   
   /**
-   * World ID for the current system being tested
+   * CORE FIXTURE: Isolated Foundry server per test
+   * 
+   * This fixture:
+   * 1. Extracts fresh Foundry to unique directory
+   * 2. Creates clean data directory
+   * 3. Deploys module
+   * 4. Starts Foundry server
+   * 5. Installs required system (from cache if available)
+   * 6. Creates test world
+   * 7. Yields server info to test
+   * 8. On teardown: kills server, deletes all directories
    */
-  worldId: async ({ systemId }, use) => {
-    const state = loadTestState();
+  foundryServer: [async ({ systemId, testEnv }, use, testInfo) => {
+    const testId = `test-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    console.log(`[fixture] Starting isolated Foundry for: ${testId}`);
     
-    // Look up world ID from the worlds map
-    let worldId;
-    if (state?.worlds && state.worlds[systemId]) {
-      worldId = state.worlds[systemId];
-    } else {
-      // Fallback to environment variable or default
-      worldId = process.env.TEST_WORLD_ID || 'simulacrum-test-world';
+    let serverInfo = null;
+    
+    try {
+      // Setup isolated Foundry instance
+      serverInfo = await foundrySetup.setupIsolatedFoundry({
+        testId,
+        systemId,
+        adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
+        licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
+        port: 30000 + (testInfo.parallelIndex || 0), // Unique port per worker
+      });
       
-      // For multi-system, append system ID
-      const systemIds = (process.env.TEST_SYSTEM_IDS || '').split(',').filter(Boolean);
-      if (systemIds.length > 1) {
-        worldId = `${worldId}-${systemId}`;
+      console.log(`[fixture] Foundry ready at ${serverInfo.baseUrl}`);
+      
+      await use(serverInfo);
+      
+    } finally {
+      // ALWAYS clean up, even if test fails
+      console.log(`[fixture] Tearing down isolated Foundry for: ${testId}`);
+      if (serverInfo) {
+        await foundrySetup.teardownIsolatedFoundry(serverInfo);
       }
     }
+  }, { timeout: 180000 }], // 3 minutes for fixture setup
+  
+  /**
+   * World ID for the current test
+   */
+  worldId: async ({ foundryServer }, use) => {
+    await use(foundryServer.worldId);
+  },
+  
+  /**
+   * Fresh browser context with baseURL set from foundryServer
+   */
+  isolatedContext: async ({ browser, foundryServer }, use) => {
+    // Create brand new context - no cookies, no storage from other tests
+    // Set baseURL so relative navigation works (e.g., page.goto('/'))
+    // IMPORTANT: Must set viewport explicitly - Foundry requires 1366x768 minimum
+    const context = await browser.newContext({
+      storageState: undefined, // Explicitly no stored state
+      baseURL: foundryServer.baseUrl,
+      viewport: { width: 1920, height: 1080 },
+    });
     
-    await use(worldId);
+    await use(context);
+    
+    // Clean up context
+    await context.close();
   },
   
   /**
-   * All system IDs being tested
+   * Override default page to use dynamic baseUrl from foundryServer
+   * This is the basic unauthenticated page.
    */
-  allSystemIds: async ({}, use) => {
-    const state = loadTestState();
-    const systemIds = state?.systemIds || 
-                      (process.env.TEST_SYSTEM_IDS || 'dnd5e').split(',').filter(Boolean);
-    await use(systemIds);
-  },
-  
-  /**
-   * Page that has authenticated as admin
-   */
-  adminPage: async ({ page, adminKey }, use) => {
-    await helpers.loginAsAdmin(page, adminKey);
+  page: async ({ foundryServer, isolatedContext }, use) => {
+    const page = await isolatedContext.newPage();
+    
+    // Set baseURL for relative navigation
+    // We can't set baseURL on context after creation, so we'll use a workaround
+    // Tests using page.goto('/') will need to use foundryServer.baseUrl
+    // For convenience, navigate to the server immediately
+    await page.goto(foundryServer.baseUrl);
+    
     await use(page);
   },
   
   /**
-   * Page with world launched and ready (for current system)
-   * 
-   * IMPORTANT: This fixture performs a complete reset after each test.
-   * The world is exited and returned to setup, ensuring each test starts
-   * with a clean, freshly-launched world.
+   * Authenticated admin page (at /setup, NOT in a world)
    */
-  gamePage: async ({ page, adminKey, worldId, systemId }, use, testInfo) => {
-    console.log(`[fixture] Setting up gamePage for system: ${systemId}, world: ${worldId}`);
+  adminPage: async ({ foundryServer, isolatedContext }, use) => {
+    const page = await isolatedContext.newPage();
+    
+    console.log(`[fixture] Creating adminPage for ${foundryServer.baseUrl}`);
     
     // Login as admin
-    await helpers.loginAsAdmin(page, adminKey);
+    await helpers.loginAsAdmin(page, foundryServer.adminKey, foundryServer.baseUrl);
     
-    // Launch the test world for this system
-    await helpers.launchWorld(page, worldId);
+    // Navigate to setup (admin should already be here after login)
+    await page.goto(`${foundryServer.baseUrl}/setup`);
+    await page.waitForLoadState('networkidle');
+    
+    await use(page);
+  },
+  
+  /**
+   * Page within isolated context, connected to isolated server, inside a world
+   */
+  gamePage: [async ({ foundryServer, isolatedContext }, use) => {
+    const page = await isolatedContext.newPage();
+    
+    console.log(`[fixture] Navigating to ${foundryServer.baseUrl}`);
+    
+    // Login as admin
+    await helpers.loginAsAdmin(page, foundryServer.adminKey, foundryServer.baseUrl);
+    
+    // Launch the test world (pass baseUrl for navigation)
+    await helpers.launchWorld(page, foundryServer.worldId, foundryServer.baseUrl);
     
     // Join as Gamemaster
     await helpers.joinAsUser(page, 'Gamemaster');
@@ -128,15 +199,13 @@ export const test = base.extend({
     
     await use(page);
     
-    // === TEARDOWN: Complete reset after each test ===
-    console.log(`[fixture] Tearing down gamePage - returning to setup for clean state`);
-    await helpers.returnToSetup(page);
-  },
+    // Page cleanup handled by isolatedContext teardown
+  }, { timeout: 300000 }], // 5 minutes for world launch and join (world loading can take 3-4 min with dnd5e)
   
   /**
    * Page with Simulacrum module confirmed active
    */
-  simulacrumPage: async ({ gamePage }, use) => {
+  simulacrumPage: [async ({ gamePage }, use) => {
     // Debug: Log module state
     const moduleDebug = await gamePage.evaluate(() => {
       // @ts-ignore
@@ -174,7 +243,7 @@ export const test = base.extend({
     expect(isActive).toBe(true);
     
     await use(gamePage);
-  },
+  }, { timeout: 300000 }], // 5 minutes for module enable via UI (reload + verification)
   
   /**
    * Helper functions available in tests

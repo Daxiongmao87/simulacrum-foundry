@@ -1,168 +1,78 @@
 /**
- * Playwright Global Teardown
+ * Playwright Global Teardown - MINIMAL
  * 
- * Executes AFTER all tests complete:
- * 1. Kills the Foundry server process
- * 2. Nukes the entire .foundry-test/ directory for clean slate
- * 3. Cleans up any temporary files
+ * Per-test cleanup is handled by fixtures.
+ * This just does final cleanup of any orphaned resources.
  */
 
-import { existsSync, rmSync, readFileSync } from 'fs';
+import { existsSync, rmSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
-const STATE_FILE = join(__dirname, '.test-state.json');
-const FOUNDRY_TEST_DIR = join(ROOT, '.foundry-test');
-// Data directory is separate from application directory (Foundry restriction)
-const FOUNDRY_DATA_DIR = join(ROOT, '.foundry-test-data');
 
 /**
- * Kill a process by PID
- */
-function killProcess(pid) {
-  if (!pid) return;
-  
-  try {
-    // Send SIGTERM first
-    process.kill(pid, 'SIGTERM');
-    console.log(`[teardown] Sent SIGTERM to PID ${pid}`);
-    
-    // Give it a moment to gracefully shutdown
-    execSync('sleep 2');
-    
-    // Check if still running and force kill
-    try {
-      process.kill(pid, 0); // Test if process exists
-      process.kill(pid, 'SIGKILL');
-      console.log(`[teardown] Sent SIGKILL to PID ${pid}`);
-    } catch {
-      // Process already dead - good
-    }
-  } catch (err) {
-    // Process might already be dead
-    if (err.code !== 'ESRCH') {
-      console.warn(`[teardown] Warning: Failed to kill PID ${pid}: ${err.message}`);
-    }
-  }
-}
-
-/**
- * Kill any stray Foundry processes
- */
-function killStrayFoundryProcesses() {
-  try {
-    // Find any node processes running Foundry
-    const result = execSync(
-      "pgrep -f 'main.mjs|main.js' | grep -v $$",
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
-    ).trim();
-    
-    if (result) {
-      const pids = result.split('\n').filter(Boolean);
-      for (const pid of pids) {
-        killProcess(parseInt(pid, 10));
-      }
-    }
-  } catch {
-    // No matching processes found - that's fine
-  }
-}
-
-/**
- * Remove the test Foundry directory
- */
-function cleanupFoundryDirectory() {
-  // Clean up application directory
-  if (existsSync(FOUNDRY_TEST_DIR)) {
-    console.log(`[teardown] Removing ${FOUNDRY_TEST_DIR}...`);
-    
-    try {
-      rmSync(FOUNDRY_TEST_DIR, { recursive: true, force: true, maxRetries: 3 });
-      console.log('[teardown] Test directory removed.');
-    } catch (err) {
-      console.error(`[teardown] Failed to remove directory: ${err.message}`);
-      
-      // Try with shell command as fallback
-      try {
-        execSync(`rm -rf "${FOUNDRY_TEST_DIR}"`, { stdio: 'inherit' });
-        console.log('[teardown] Test directory removed via shell.');
-      } catch {
-        console.error('[teardown] WARNING: Could not remove test directory.');
-      }
-    }
-  } else {
-    console.log('[teardown] No test directory to clean up.');
-  }
-  
-  // Clean up data directory (separate from application)
-  if (existsSync(FOUNDRY_DATA_DIR)) {
-    console.log(`[teardown] Removing ${FOUNDRY_DATA_DIR}...`);
-    
-    try {
-      rmSync(FOUNDRY_DATA_DIR, { recursive: true, force: true, maxRetries: 3 });
-      console.log('[teardown] Data directory removed.');
-    } catch (err) {
-      console.error(`[teardown] Failed to remove data directory: ${err.message}`);
-      
-      try {
-        execSync(`rm -rf "${FOUNDRY_DATA_DIR}"`, { stdio: 'inherit' });
-        console.log('[teardown] Data directory removed via shell.');
-      } catch {
-        console.error('[teardown] WARNING: Could not remove data directory.');
-      }
-    }
-  }
-}
-
-/**
- * Remove state file
- */
-function cleanupStateFile() {
-  if (existsSync(STATE_FILE)) {
-    rmSync(STATE_FILE, { force: true });
-  }
-}
-
-/**
- * Main teardown function
+ * Global Teardown - Clean up orphaned test directories
  */
 export default async function globalTeardown() {
-  console.log('='.repeat(60));
+  console.log('============================================================');
   console.log('[teardown] Simulacrum E2E Test Teardown');
-  console.log('='.repeat(60));
+  console.log('============================================================');
   
-  // Load state from setup
-  let state = null;
-  if (existsSync(STATE_FILE)) {
-    try {
-      state = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
-    } catch {
-      console.warn('[teardown] Could not read state file');
+  // Kill any orphaned Foundry processes on test ports
+  try {
+    console.log('[teardown] Checking for orphaned Foundry processes...');
+    const lsofOutput = execSync('lsof -i :30000-30010 -t 2>/dev/null || true', { encoding: 'utf-8' });
+    const pids = lsofOutput.trim().split('\n').filter(Boolean);
+    
+    for (const pid of pids) {
+      try {
+        console.log(`[teardown] Killing orphaned process: ${pid}`);
+        process.kill(parseInt(pid, 10), 'SIGKILL');
+      } catch (e) {
+        // Process may already be dead
+      }
+    }
+  } catch (e) {
+    // lsof may not be available or no processes found
+  }
+  
+  // Clean up any orphaned test directories
+  console.log('[teardown] Cleaning up orphaned test directories...');
+  try {
+    const rootContents = readdirSync(ROOT);
+    for (const item of rootContents) {
+      if (item.startsWith('.foundry-test-') || item.startsWith('.foundry-data-')) {
+        const itemPath = join(ROOT, item);
+        console.log(`[teardown] Removing orphaned directory: ${item}`);
+        try {
+          rmSync(itemPath, { recursive: true, force: true });
+        } catch (e) {
+          console.warn(`[teardown] Failed to remove ${item}: ${e.message}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[teardown] Error scanning for orphaned directories: ${e.message}`);
+  }
+  
+  // Also clean up legacy single test directories if they exist
+  const legacyDirs = ['.foundry-test', '.foundry-test-data'];
+  for (const dir of legacyDirs) {
+    const dirPath = join(ROOT, dir);
+    if (existsSync(dirPath)) {
+      console.log(`[teardown] Removing legacy directory: ${dir}`);
+      try {
+        rmSync(dirPath, { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`[teardown] Failed to remove ${dir}: ${e.message}`);
+      }
     }
   }
   
-  // Kill the Foundry process
-  if (state?.pid) {
-    console.log(`[teardown] Stopping Foundry server (PID: ${state.pid})...`);
-    killProcess(state.pid);
-  }
-  
-  // Kill any stray processes just in case
-  killStrayFoundryProcesses();
-  
-  // Wait a moment for processes to die
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // Remove the test directory
-  cleanupFoundryDirectory();
-  
-  // Remove state file
-  cleanupStateFile();
-  
-  console.log('='.repeat(60));
-  console.log('[teardown] Cleanup complete!');
-  console.log('='.repeat(60));
+  console.log('============================================================');
+  console.log('[teardown] Cleanup complete');
+  console.log('============================================================');
 }
