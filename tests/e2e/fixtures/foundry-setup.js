@@ -17,12 +17,96 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, cpSync } fr
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
+import { 
+  pollUntil, 
+  pollForElement, 
+  pollUntilGone, 
+  pollForServer, 
+  waitForUiSettle,
+  dismissBlockingDialog 
+} from './poll-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
 const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
 const MODULE_DIST_DIR = join(ROOT, 'dist');
+
+/**
+ * Dismiss the "Allow Sharing Usage Data" dialog that appears after TOS acceptance.
+ * This dialog appears on first /setup load in Foundry v13.
+ * 
+ * HTML structure (from Foundry v13.351):
+ * <dialog class="application dialog">
+ *   <h1 class="window-title">Allow Sharing Usage Data</h1>
+ *   <button data-action="no"><span>Decline Sharing</span></button>
+ * </dialog>
+ * 
+ * @param {import('@playwright/test').Page} page - Playwright page
+ * @param {string} [logPrefix='setup'] - Prefix for log messages
+ */
+async function dismissUsageDataDialog(page, logPrefix = 'setup') {
+  // Primary selector: exact match for the decline button
+  const declineBtn = page.locator('button[data-action="no"]:has-text("Decline Sharing")');
+  
+  // Fallback selectors in case Foundry changes slightly
+  const fallbackSelectors = [
+    'dialog.application button[data-action="no"]',
+    'dialog button:has-text("Decline Sharing")',
+    '.dialog button[data-action="no"]',
+  ];
+  
+  // Try primary selector first
+  if (await declineBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    console.log(`[${logPrefix}] Dismissing "Allow Sharing Usage Data" dialog`);
+    await declineBtn.click();
+    // Wait for dialog to disappear using polling
+    await pollUntilGone(page, 'button[data-action="no"]:has-text("Decline Sharing")', { timeout: 3000 }).catch(() => {});
+    return true;
+  }
+  
+  // Try fallback selectors
+  for (const selector of fallbackSelectors) {
+    const btn = page.locator(selector);
+    if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
+      console.log(`[${logPrefix}] Dismissing usage dialog via fallback: ${selector}`);
+      await btn.click();
+      // Wait for dialog to disappear using polling
+      await pollUntilGone(page, selector, { timeout: 2000 }).catch(() => {});
+      return true;
+    }
+  }
+  
+  return false; // No dialog found
+}
+
+/**
+ * Dismiss tour overlays that block UI interactions.
+ * Foundry v13 shows various tours (e.g., "Backups Overview") that intercept clicks.
+ * 
+ * @param {import('@playwright/test').Page} page - Playwright page
+ */
+async function dismissTourOverlay(page) {
+  await page.evaluate(() => {
+    // Remove tour overlay elements directly (v13 class names)
+    document.querySelectorAll('.tour-overlay, .tour-fadeout, .tour').forEach(el => el.remove());
+    
+    // Use Foundry v13 Tour API to exit any active tour
+    try {
+      // @ts-ignore - Foundry v13 Tour class
+      if (typeof Tour !== 'undefined' && Tour.activeTour && typeof Tour.activeTour.exit === 'function') {
+        // @ts-ignore
+        Tour.activeTour.exit();
+      }
+    } catch (e) { /* ignore */ }
+  });
+  
+  // Also try pressing Escape to dismiss tour
+  await page.keyboard.press('Escape');
+  
+  // Poll until tour overlay is gone
+  await pollUntilGone(page, '.tour-overlay, .tour', { timeout: 2000 }).catch(() => {});
+}
 
 /**
  * Find the Foundry zip file
@@ -44,6 +128,28 @@ function findFoundryZip() {
 }
 
 /**
+ * Get the base path for test directories.
+ * Uses tmpfs if TEST_TMPFS_PATH is set for faster I/O.
+ * @returns {string} Base path for test directories
+ */
+function getTestBasePath() {
+  const tmpfsPath = process.env.TEST_TMPFS_PATH;
+  if (tmpfsPath && existsSync(tmpfsPath)) {
+    // Verify it's writable
+    try {
+      const testFile = join(tmpfsPath, `.foundry-test-write-check-${Date.now()}`);
+      writeFileSync(testFile, 'test');
+      rmSync(testFile);
+      console.log(`[setup] Using tmpfs path: ${tmpfsPath}`);
+      return tmpfsPath;
+    } catch (e) {
+      console.warn(`[setup] tmpfs path ${tmpfsPath} not writable, falling back to project dir`);
+    }
+  }
+  return ROOT;
+}
+
+/**
  * Setup an isolated Foundry instance for a single test
  * 
  * @param {Object} options
@@ -57,9 +163,12 @@ function findFoundryZip() {
 export async function setupIsolatedFoundry(options) {
   const { testId, systemId, adminKey, licenseKey, port } = options;
   
+  // Get base path (tmpfs or project dir)
+  const basePath = getTestBasePath();
+  
   // Unique directories for this test
-  const testDir = join(ROOT, `.foundry-test-${testId}`);
-  const dataDir = join(ROOT, `.foundry-data-${testId}`);
+  const testDir = join(basePath, `.foundry-test-${testId}`);
+  const dataDir = join(basePath, `.foundry-data-${testId}`);
   const userDataDir = join(dataDir, 'Data');
   const modulesDir = join(userDataDir, 'modules');
   const worldsDir = join(userDataDir, 'worlds');
@@ -67,6 +176,9 @@ export async function setupIsolatedFoundry(options) {
   const configDir = join(dataDir, 'Config');
   
   console.log(`[setup:${testId}] Creating isolated Foundry instance`);
+  if (basePath !== ROOT) {
+    console.log(`[setup:${testId}] Using tmpfs: ${basePath}`);
+  }
   
   // 1. Clean any existing directories
   if (existsSync(testDir)) {
@@ -127,8 +239,18 @@ export async function setupIsolatedFoundry(options) {
   console.log(`[setup:${testId}] Pre-cleanup: ensuring port ${port} is free...`);
   try {
     execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
-    // Wait a moment for the port to be released
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Poll until port is free rather than fixed wait
+    await pollUntil(
+      async () => {
+        try {
+          const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
+          return !result.trim(); // Return true when port is free (no output)
+        } catch (e) {
+          return true; // If ss fails, assume port is free
+        }
+      },
+      { timeout: 5000, pollInterval: 100 }
+    ).catch(() => {}); // Ignore timeout - we'll check again below
   } catch (e) {
     // Ignore errors - port may already be free
   }
@@ -204,18 +326,13 @@ export async function setupIsolatedFoundry(options) {
       }
     }
     
-    // Dismiss any consent/usage data dialogs
-    const consentDialog = page.locator('dialog, .dialog, [role="dialog"]');
-    const declineSharingBtn = page.locator('button:has-text("Decline Sharing"), button:has-text("Decline"), button:has-text("No")');
-    if (await declineSharingBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      console.log(`[setup:${testId}] Dismissing consent/usage dialog`);
-      await declineSharingBtn.click();
-      await page.waitForTimeout(500);
-    }
+    // Dismiss "Allow Sharing Usage Data" dialog - appears after TOS on first /setup load
+    // Uses exact selector from Foundry v13: button[data-action="no"] with text "Decline Sharing"
+    await dismissUsageDataDialog(page, testId);
     
-    // Dismiss tour if present
+    // Dismiss tour if present - use polling to wait for tour to disappear
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
+    await pollUntilGone(page, '.tour-overlay', { timeout: 2000 }).catch(() => {});
     
     // Install system if not cached
     if (!existsSync(join(systemsDir, systemId))) {
@@ -274,10 +391,16 @@ export async function teardownIsolatedFoundry(serverInfo) {
   try {
     if (serverProcess && !serverProcess.killed) {
       serverProcess.kill('SIGTERM');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (!serverProcess.killed) {
-        serverProcess.kill('SIGKILL');
-      }
+      // Poll until process is killed rather than fixed wait
+      await pollUntil(
+        async () => serverProcess.killed,
+        { timeout: 3000, pollInterval: 100 }
+      ).catch(() => {
+        // Process didn't terminate gracefully, force kill
+        if (!serverProcess.killed) {
+          serverProcess.kill('SIGKILL');
+        }
+      });
     }
   } catch (e) {
     console.log(`[teardown:${testId}] Error stopping server: ${e.message}`);
@@ -297,19 +420,22 @@ export async function teardownIsolatedFoundry(serverInfo) {
     // Port may already be free
   }
   
-  // Wait for port to be free
-  for (let i = 0; i < 10; i++) {
-    try {
-      const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-      if (!result.trim()) {
-        console.log(`[teardown:${testId}] Port ${port} is now free`);
-        break;
+  // Wait for port to be free using polling
+  await pollUntil(
+    async () => {
+      try {
+        const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
+        return !result.trim(); // Return true when port is free
+      } catch (e) {
+        return true; // If ss fails, assume port is free
       }
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (e) {
-      break; // If ss fails, assume port is free
-    }
-  }
+    },
+    { timeout: 5000, pollInterval: 200 }
+  ).then(() => {
+    console.log(`[teardown:${testId}] Port ${port} is now free`);
+  }).catch(() => {
+    console.log(`[teardown:${testId}] Warning: Port ${port} may still be in use`);
+  });
   
   // Delete directories
   console.log(`[teardown:${testId}] Cleaning up directories...`);
@@ -333,24 +459,10 @@ export async function teardownIsolatedFoundry(serverInfo) {
 }
 
 /**
- * Wait for server to respond
+ * Wait for server to respond using polling utility
  */
 async function waitForServer(baseUrl, timeout) {
-  const start = Date.now();
-  
-  while (Date.now() - start < timeout) {
-    try {
-      const response = await fetch(baseUrl, { method: 'HEAD' });
-      if (response.ok || response.status === 302) {
-        return;
-      }
-    } catch (e) {
-      // Server not ready yet
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  
-  throw new Error(`Server at ${baseUrl} did not start within ${timeout}ms`);
+  await pollForServer(baseUrl, { timeout, pollInterval: 300 });
 }
 
 /**
@@ -367,7 +479,7 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
   if (await declineSharingBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     console.log(`[install] Dismissing consent dialog`);
     await declineSharingBtn.click();
-    await page.waitForTimeout(500);
+    await pollUntilGone(page, 'button:has-text("Decline Sharing")', { timeout: 2000 }).catch(() => {});
   }
   
   // Dismiss tour overlay if present
@@ -376,13 +488,15 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
     console.log(`[install] Dismissing tour overlay`);
     // Try multiple methods to dismiss tour
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
-    // Try clicking end tour button
-    const endTourBtn = page.locator('button:has-text("End Tour"), button:has-text("Skip"), .tour-end');
-    if (await endTourBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      await endTourBtn.click();
-    }
-    await page.waitForTimeout(500);
+    // Poll for overlay to disappear
+    await pollUntilGone(page, '.tour-overlay', { timeout: 1000 }).catch(async () => {
+      // Try clicking end tour button if overlay persists
+      const endTourBtn = page.locator('button:has-text("End Tour"), button:has-text("Skip"), .tour-end');
+      if (await endTourBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+        await endTourBtn.click();
+      }
+    });
+    await pollUntilGone(page, '.tour-overlay, .tour', { timeout: 1000 }).catch(() => {});
   }
   
   // If tour is still blocking, remove it forcefully via JS
@@ -419,7 +533,8 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
   console.log(`[install] Clicking Install System button...`);
   const installBtn = page.locator('section[data-tab="systems"] button[data-action="installPackage"]');
   await installBtn.click();
-  await page.waitForTimeout(1000);
+  // Wait for install dialog to appear using polling
+  await pollForElement(page, 'input[name="manifestURL"], #install-package-manifestUrl', { timeout: 5000 });
   
   // Use manifest URL
   const manifestUrls = {
@@ -434,55 +549,51 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
   
   const manifestInput = page.locator('input[name="manifestURL"], #install-package-manifestUrl');
   await manifestInput.fill(manifestUrl);
-  await page.waitForTimeout(500);
+  await waitForUiSettle(page, 300); // Brief settle for input
   
   // Click install
   console.log(`[install] Clicking Install button in dialog...`);
   const dialogInstallBtn = page.locator('#install-package footer button:has-text("Install")');
   await dialogInstallBtn.click({ force: true });
   
-  // Wait a bit for installation to start
+  // Wait for installation - poll for installed system to appear rather than fixed wait
   console.log(`[setup] Waiting for ${systemId} to install (this may take a while)...`);
-  await page.waitForTimeout(3000); // Give it 3 seconds to start downloading
   
-  // Wait for installation by checking for progress/completion
-  // The install package dialog should close when done OR show completion
-  const progressBar = page.locator('.progress-bar, .install-progress, [data-progress]');
-  
-  for (let i = 0; i < 180; i++) { // 3 minute timeout (180 * 1000ms)
-    // Check if we see the installed system now (installation completed)
-    // Navigate to setup and check systems tab
-    try {
-      await page.goto(`${baseUrl}/setup`);
-      await page.waitForLoadState('networkidle');
-      
-      // Dismiss any overlays
-      await page.evaluate(() => {
-        const overlay = document.querySelector('.tour-overlay');
-        if (overlay) overlay.remove();
-      });
-      
-      // Try to click systems tab
-      const sysTab = page.locator('[data-tab="systems"]').first();
-      if (await sysTab.isVisible({ timeout: 500 }).catch(() => false)) {
-        await sysTab.click({ force: true });
-        await page.waitForTimeout(500);
+  // Poll for system installation with 3 minute timeout
+  await pollUntil(
+    async () => {
+      try {
+        await page.goto(`${baseUrl}/setup`);
+        await page.waitForLoadState('networkidle');
         
-        // Check if installed
-        const installed = page.locator(`[data-package-id="${systemId}"]`);
-        if (await installed.isVisible({ timeout: 2000 }).catch(() => false)) {
-          console.log(`[install] System ${systemId} installed successfully`);
-          return;
+        // Dismiss any overlays
+        await page.evaluate(() => {
+          const overlay = document.querySelector('.tour-overlay');
+          if (overlay) overlay.remove();
+        });
+        
+        // Try to click systems tab
+        const sysTab = page.locator('[data-tab="systems"]').first();
+        if (await sysTab.isVisible({ timeout: 500 }).catch(() => false)) {
+          await sysTab.click({ force: true });
+          await waitForUiSettle(page, 300);
+          
+          // Check if installed
+          const installed = page.locator(`[data-package-id="${systemId}"]`);
+          if (await installed.isVisible({ timeout: 1000 }).catch(() => false)) {
+            return true;
+          }
         }
+        return false;
+      } catch (e) {
+        console.log(`[install] Error during check: ${e.message}`);
+        return false;
       }
-    } catch (e) {
-      console.log(`[install] Error during check (iteration ${i}): ${e.message}`);
-    }
-    
-    await page.waitForTimeout(1000);
-  }
+    },
+    { timeout: 180000, pollInterval: 1000 } // 3 minute timeout, check every second
+  );
   
-  throw new Error(`System ${systemId} installation timed out after 3 minutes`);
+  console.log(`[install] System ${systemId} installed successfully`);
 }
 
 /**
@@ -492,6 +603,12 @@ async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
   await page.goto(`${baseUrl}/setup`);
   await page.waitForLoadState('networkidle');
   
+  // Dismiss usage data dialog if it appears (can appear on any /setup load)
+  await dismissUsageDataDialog(page, 'createWorld');
+  
+  // Dismiss any tour overlay that may block interactions
+  await dismissTourOverlay(page);
+  
   // Authenticate if needed
   const adminKeyInput = page.locator('input[name="adminKey"], input[name="adminPassword"]');
   if (await adminKeyInput.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -500,15 +617,25 @@ async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
     await page.waitForLoadState('networkidle');
   }
   
+  // Dismiss usage data dialog again (can appear after auth)
+  await dismissUsageDataDialog(page, 'createWorld');
+  
+  // Dismiss any tour overlay again (can reappear after auth)
+  await dismissTourOverlay(page);
+  
   // Click Worlds tab
   const worldsTab = page.locator('[data-action="tab"][data-tab="worlds"], [data-tab="worlds"]').first();
   await worldsTab.click({ force: true });
   await page.waitForLoadState('networkidle');
   
+  // Dismiss tour overlay before clicking Create World (tour blocks button clicks)
+  await dismissTourOverlay(page);
+  
   // Click Create World button
   const createBtn = page.locator('button[data-action="worldCreate"]');
   await createBtn.click();
-  await page.waitForTimeout(1000);
+  // Wait for create world dialog to appear
+  await pollForElement(page, 'input[name="title"]', { timeout: 5000 });
   
   // Fill world form
   const titleInput = page.locator('input[name="title"]');

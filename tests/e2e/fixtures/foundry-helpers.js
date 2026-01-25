@@ -10,6 +10,12 @@
  */
 
 import { expect } from '@playwright/test';
+import { 
+  pollUntil, 
+  pollForElement, 
+  pollUntilGone, 
+  waitForUiSettle 
+} from './poll-utils.js';
 
 /**
  * Remove any tour overlays or tooltips that might intercept clicks
@@ -121,7 +127,8 @@ export async function installSystem(page, systemId, baseUrl = '') {
   // Search for the system
   const searchInput = dialog.locator('input[name="search"], input[type="search"], input.filter');
   await searchInput.fill(systemId);
-  await page.waitForTimeout(1000); // Allow search to filter
+  // Poll for search results to filter
+  await pollForElement(page, `[data-package-id="${systemId}"], li:has-text("${systemId}")`, { timeout: 5000 }).catch(() => {});
   
   // Find and click the system in results
   const systemEntry = dialog.locator(`[data-package-id="${systemId}"], li:has-text("${systemId}")`).first();
@@ -137,9 +144,8 @@ export async function installSystem(page, systemId, baseUrl = '') {
   const installSystemBtn = systemEntry.locator('button:has-text("Install"), button.install');
   await installSystemBtn.click();
   
-  // Wait for installation to complete (this can take a while)
+  // Wait for installation to complete using polling
   console.log(`[helper] Waiting for ${systemId} installation...`);
-  await page.waitForTimeout(2000); // Give it time to start
   
   // Wait for the dialog to close or show success
   // Installation typically closes the dialog or shows a notification
@@ -213,13 +219,13 @@ export async function createWorld(page, worldId, worldTitle, systemId, baseUrl =
   const submitButton = dialog.locator('button[type="submit"], button:has-text("Create")');
   await submitButton.click();
   
-  // Wait for world to be created
-  await page.waitForTimeout(2000);
+  // Wait for world to be created using polling
+  await pollForElement(page, `[data-package-id="${worldId}"]`, { timeout: 10000 });
   await page.waitForLoadState('networkidle');
   
   // Verify world was created
   const newWorld = page.locator(`[data-package-id="${worldId}"]`);
-  await expect(newWorld).toBeVisible({ timeout: 10000 });
+  await expect(newWorld).toBeVisible({ timeout: 5000 });
   
   console.log(`[helper] World ${worldId} created successfully`);
   return worldId;
@@ -368,21 +374,38 @@ export async function launchWorld(page, worldId, baseUrl = '') {
   // Dismiss any overlays before interacting
   await dismissTourOverlay(page);
   
+  // Wait for tour overlay to be fully gone using polling
+  await pollUntilGone(page, '.tour-overlay', { timeout: 3000 }).catch(async () => {
+    // If still visible after polling, try dismissing again
+    console.log(`[helper] Tour overlay persists, attempting additional dismissal...`);
+    await dismissTourOverlay(page);
+  });
+  
   // Debug: Log the world card HTML structure
   const cardHtml = await worldCard.innerHTML().catch(() => 'Could not get HTML');
   console.log(`[helper] World card HTML (first 500 chars): ${cardHtml.substring(0, 500)}`);
   
-  // First try to find the launch button within the world card (Tiles/Gallery view)
-  // In these views, the play button may only appear on hover or may be hidden until interaction
-  await worldCard.hover();
-  await page.waitForTimeout(500); // Wait for hover animation
-  
+  // First check if launch button exists in DOM
   let launchButton = worldCard.locator('[data-action="worldLaunch"], a.control.play').first();
-  let buttonFound = await launchButton.isVisible({ timeout: 3000 }).catch(() => false);
-  
-  // Check if button exists in DOM (even if not visible)
   const buttonExists = await worldCard.locator('[data-action="worldLaunch"], a.control.play').count();
-  console.log(`[helper] Launch buttons within card: ${buttonExists}, visible: ${buttonFound}`);
+  console.log(`[helper] Launch buttons within card: ${buttonExists}`);
+  
+  // If button doesn't exist yet, try hover (but use JS to avoid overlay issues)
+  if (buttonExists === 0) {
+    console.log('[helper] Button not visible, triggering hover via JavaScript...');
+    await page.evaluate((selector) => {
+      const card = document.querySelector(selector);
+      if (card) {
+        card.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+        card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      }
+    }, `[data-package-id="${worldId}"]`);
+    // Poll for button to appear after hover
+    await pollForElement(page, '[data-action="worldLaunch"], a.control.play', { timeout: 2000 }).catch(() => {});
+  }
+  
+  let buttonFound = await launchButton.isVisible({ timeout: 3000 }).catch(() => false);
+  console.log(`[helper] Launch button visible: ${buttonFound}`);
   
   // If button exists, ALWAYS use JavaScript click since Playwright clicks are unreliable
   // even when the button reports as visible
@@ -416,10 +439,8 @@ export async function launchWorld(page, worldId, baseUrl = '') {
     // This handles Details view where selection may be needed
     console.log(`[helper] Launch button not found in card, clicking card to select...`);
     await worldCard.click({ force: true });
-    await page.waitForTimeout(1000); // Wait for selection animation
-    
-    // Wait for launch button to appear after selecting world
-    await page.locator('[data-action="worldLaunch"], button:has-text("Launch")').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    // Poll for launch button to appear after selection
+    await pollForElement(page, '[data-action="worldLaunch"], button:has-text("Launch")', { timeout: 5000 }).catch(() => {});
   }
 
   // Take a debug screenshot before looking for launch button
@@ -612,12 +633,10 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
       const mm = new foundry.applications.sidebar.apps.ModuleManagement();
       // Await the render promise to ensure dialog is fully rendered
       await mm.render({ force: true });
-      // Wait a bit for DOM to settle
-      await new Promise(r => setTimeout(r, 500));
     });
     
-    // Additional wait for DOM to be queryable
-    await page.waitForTimeout(500);
+    // Poll for dialog to appear rather than fixed wait
+    await pollForElement(page, '#module-management', { timeout: 5000 }).catch(() => {});
     
     // Find the Module Management dialog - it has id="module-management"
     const moduleManagementDialog = page.locator('#module-management');
@@ -702,7 +721,7 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
             input.click(); // Native click which properly triggers all events
           }
         }, moduleId);
-        await page.waitForTimeout(500); // Allow UI to react
+        await waitForUiSettle(page, 300); // Brief settle for UI update
         
         // Verify the checkbox is now checked
         const nowChecked = await checkbox.isChecked();
@@ -759,35 +778,40 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
       });
       console.log(`[helper] Save button clicked`);
       
-      // Wait for the Module Management dialog to close or for confirmation
+      // Wait for the Module Management dialog to close or for confirmation using polling
       let dialogClosed = false;
-      for (let i = 0; i < 20; i++) {
-        await page.waitForTimeout(500);
-        
-        // Check if Module Management dialog is still visible
-        const stillVisible = await moduleManagementDialog.isVisible({ timeout: 100 }).catch(() => false);
-        if (!stillVisible) {
-          console.log(`[helper] Module Management dialog closed`);
-          dialogClosed = true;
-          break;
-        }
-        
-        // Check for confirmation dialog
-        const confirmDialog = page.locator('.dialog.app:visible, .dialog-content');
-        const confirmVisible = await confirmDialog.isVisible({ timeout: 100 }).catch(() => false);
-        if (confirmVisible) {
-          console.log(`[helper] Found confirmation dialog`);
-          const confirmBtn = page.locator('.dialog button:has-text("Yes"), .dialog button:has-text("Reload"), .dialog button[data-button="yes"]').first();
-          if (await confirmBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-            console.log(`[helper] Clicking confirmation button...`);
-            await confirmBtn.click();
-            await page.waitForLoadState('networkidle', { timeout: 60000 });
-            await waitForFoundryReady(page);
+      
+      await pollUntil(
+        async () => {
+          // Check if Module Management dialog is still visible
+          const stillVisible = await moduleManagementDialog.isVisible({ timeout: 100 }).catch(() => false);
+          if (!stillVisible) {
+            console.log(`[helper] Module Management dialog closed`);
             dialogClosed = true;
-            break;
+            return true;
           }
-        }
-      }
+          
+          // Check for confirmation dialog
+          const confirmDialog = page.locator('.dialog.app:visible, .dialog-content');
+          const confirmVisible = await confirmDialog.isVisible({ timeout: 100 }).catch(() => false);
+          if (confirmVisible) {
+            console.log(`[helper] Found confirmation dialog`);
+            const confirmBtn = page.locator('.dialog button:has-text("Yes"), .dialog button:has-text("Reload"), .dialog button[data-button="yes"]').first();
+            if (await confirmBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+              console.log(`[helper] Clicking confirmation button...`);
+              await confirmBtn.click();
+              await page.waitForLoadState('networkidle', { timeout: 60000 });
+              await waitForFoundryReady(page);
+              dialogClosed = true;
+              return true;
+            }
+          }
+          return false;
+        },
+        { timeout: 10000, pollInterval: 300 }
+      ).catch(() => {
+        console.log(`[helper] Polling for dialog close timed out`);
+      });
       
       if (dialogClosed) {
         // Force a page reload to ensure module is activated
@@ -805,7 +829,8 @@ export async function enableModuleViaUI(page, moduleId = 'simulacrum') {
             form.requestSubmit();
           }
         });
-        await page.waitForTimeout(2000);
+        // Poll for form to process rather than fixed wait
+        await waitForUiSettle(page, 500);
         
         // Force reload anyway
         await page.reload({ waitUntil: 'networkidle' });
@@ -913,6 +938,9 @@ export async function waitForFoundryReady(page) {
            // @ts-ignore
            ui.sidebar !== undefined;
   }, { timeout: 60000 });
+  
+  // Dismiss any tour overlays that appear on first game load
+  await dismissTourOverlay(page);
 }
 
 /**
