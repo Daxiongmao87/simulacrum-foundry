@@ -4,16 +4,32 @@ End-to-end testing infrastructure for the Simulacrum Foundry VTT module using [P
 
 ## Overview
 
-This E2E test suite provides comprehensive testing of Simulacrum within an actual Foundry VTT instance. Each test run:
+This E2E test suite provides comprehensive testing of Simulacrum within an actual Foundry VTT instance using **per-test isolation** - each test gets its own Foundry server instance for complete independence.
 
-1. **Unzips** a fresh Foundry VTT installation
-2. **Packages** the current Simulacrum module
-3. **Deploys** the module to the test instance
-4. **Launches** the Foundry server
-5. **Uses Playwright** to install game systems via Foundry's UI (just like a real user!)
-6. **Uses Playwright** to create test worlds via Foundry's UI
-7. **Runs** all E2E tests against EACH system (automatic iteration)
-8. **Tears down** the entire test instance for a clean slate
+### Test Lifecycle
+
+**Global Setup (runs once):**
+1. Validates Foundry zip exists in `vendor/foundry/`
+2. Validates license key in `.env.test`
+3. Packages the Simulacrum module
+4. Pre-caches game systems to `.foundry-system-cache/` (avoids re-downloading per test)
+
+**Per-Test Setup (via fixtures):**
+1. Extracts fresh Foundry to `.foundry-test-{testId}/`
+2. Creates clean data directory `.foundry-data-{testId}/`
+3. Copies cached system and module files
+4. Starts Foundry server on unique port (`30000 + workerIndex`)
+5. Uses Playwright to handle license/EULA and create test world
+6. Launches world, joins as Gamemaster
+7. Verifies/enables Simulacrum module
+
+**Per-Test Teardown:**
+1. Kills server process
+2. Deletes `.foundry-test-{testId}/` and `.foundry-data-{testId}/`
+
+**Global Teardown:**
+1. Kills any orphaned processes on ports 30000-30010
+2. Cleans up any orphaned test directories
 
 ## Multi-System Testing
 
@@ -38,14 +54,15 @@ No manifest URLs needed - systems are installed via Foundry's UI using the syste
 
 ### How It Works
 
-1. **Global Setup** uses Playwright to:
-   - Navigate to Foundry's Setup page
-   - Go to Game Systems → Install System
-   - Search for each system by ID and click Install
-   - Create a world for each system via the Create World dialog
-2. **Playwright** generates a separate project for each system (e.g., `chromium-dnd5e`, `chromium-pf2e`)
-3. **Tests** run against each system independently
-4. **Reports** show results per system
+1. **Global Setup** pre-caches each system by:
+   - Starting a temporary Foundry server
+   - Using Playwright to install systems via Foundry's UI
+   - Copying installed systems to `.foundry-system-cache/`
+   - Killing the temporary server
+2. **Per-Test Fixtures** copy from the cache (fast local copy vs slow download)
+3. **Playwright** generates a separate project for each system (e.g., `chromium-dnd5e`, `chromium-pf2e`)
+4. **Tests** run against each system independently with full isolation
+5. **Reports** show results per system
 
 ### Accessing System in Tests
 
@@ -151,11 +168,12 @@ tests/e2e/
 ├── README.md               # This file
 │
 ├── setup/
-│   ├── global-setup.js     # Pre-test: Extract Foundry, deploy module, launch
-│   └── global-teardown.js  # Post-test: Kill server, cleanup
+│   ├── global-setup.js     # One-time: validate, package module, cache systems
+│   └── global-teardown.js  # Failsafe: kill orphaned processes, clean orphaned dirs
 │
 ├── fixtures/
 │   ├── foundry-helpers.js  # Foundry interaction utilities
+│   ├── foundry-setup.js    # Per-test server lifecycle (extract, start, teardown)
 │   └── test-base.js        # Extended test fixtures
 │
 ├── specs/
@@ -206,14 +224,18 @@ test('my test', async ({ simulacrumPage, foundry }) => {
 
 ### Available Fixtures
 
-| Fixture | Description |
-|---------|-------------|
-| `adminKey` | Admin password from env |
-| `worldId` | Test world ID from env |
-| `adminPage` | Page authenticated as admin |
-| `gamePage` | Page with world launched |
-| `simulacrumPage` | Page with Simulacrum verified active |
-| `foundry` | Helper functions object |
+| Fixture | Timeout | Description |
+|---------|---------|-------------|
+| `systemId` | — | Current system being tested (from project config) |
+| `testEnv` | — | Environment variables from `.env.test` |
+| `foundryServer` | 180s | **Core fixture**: Isolated Foundry server per test |
+| `worldId` | — | World ID from `foundryServer` |
+| `isolatedContext` | — | Fresh browser context with `baseURL` set |
+| `page` | — | Basic unauthenticated page |
+| `adminPage` | — | Authenticated page at `/setup` |
+| `gamePage` | 300s | Page inside the test world as Gamemaster |
+| `simulacrumPage` | 300s | `gamePage` with Simulacrum module verified active |
+| `foundry` | — | Helper functions from `foundry-helpers.js` |
 
 ### Helper Functions
 
@@ -337,22 +359,26 @@ If tests fail to clean up properly:
 # Kill any stray Foundry processes
 pkill -f "main.mjs"
 
-# Remove test directory manually
-rm -rf .foundry-test/
+# Force-kill processes on test ports
+fuser -k 30000-30010/tcp 2>/dev/null || true
+
+# Remove orphaned test directories (per-test isolation pattern)
+rm -rf .foundry-test-* .foundry-data-*
+
+# Run global teardown manually
+node -e "import('./tests/e2e/setup/global-teardown.js').then(m => m.default())"
 ```
 
 ## Environment Variables Reference
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FOUNDRY_LICENSE_KEY` | Yes* | - | Foundry license key |
+| `FOUNDRY_LICENSE_KEY` | Yes | — | Foundry license key (required) |
 | `FOUNDRY_ADMIN_KEY` | No | `test-admin-key` | Admin password |
-| `FOUNDRY_PORT` | No | `30000` | Server port |
-| `FOUNDRY_HOSTNAME` | No | `localhost` | Server hostname |
-| `DEBUG_FOUNDRY` | No | `false` | Show server output |
+| `DEBUG_FOUNDRY` | No | `false` | Show Foundry server output |
 | `TEST_SYSTEM_IDS` | No | `dnd5e` | Comma-separated system IDs to test |
-| `TEST_WORLD_ID` | No | `simulacrum-test-world` | Base world ID (system appended for multi) |
+| `TEST_WORLD_ID` | No | `simulacrum-test-world` | Base world ID (test ID appended per test) |
+
+**Note:** `FOUNDRY_PORT` and `FOUNDRY_HOSTNAME` in `.env.test.example` are not used by the per-test isolation system. Each test automatically uses port `30000 + workerIndex` for parallel execution.
 
 Systems are installed via Foundry's UI - any system available in Foundry's package browser works.
-
-*Required for full functionality; tests may partially work without it.
