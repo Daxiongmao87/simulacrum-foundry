@@ -8,11 +8,11 @@
       "url": "https://github.com/Daxiongmao87"
     }
   ],
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibility": {
-    "minimum": "13.0.0",
+    "minimum": 13,
     "verified": "13.331",
-    "maximum": "14"
+    "maximum": 14
   },
   "relationships": {
     "systems": [],

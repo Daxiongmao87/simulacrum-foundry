@@ -434,22 +434,22 @@ async function _executeToolCalls(toolCalls, context) {
       const execution = await toolRegistry.executeTool(toolName, parsedArgs);
       result = execution.result;
 
-      _truncateInitialResult(result);
-
       isSuccess = !result.error;
 
       // Context Compaction: Store large outputs in buffer, inject reference
+      // IMPORTANT: Store BEFORE truncation so read_tool_output can access full content
       let resultForConversation = result;
       const resultStr = JSON.stringify(result);
       const TOKEN_THRESHOLD = 1000; // ~4000 chars
       const estimatedTokens = Math.ceil(resultStr.length / 4);
 
       if (toolName !== 'read_tool_output' && estimatedTokens > TOKEN_THRESHOLD && conversationManager.toolOutputBuffer) {
-        // Store full output in buffer
-        conversationManager.toolOutputBuffer.set(toolCall.id, resultStr);
+        // Store the FULL content before truncation (preserves newlines for pagination)
+        const contentToStore = typeof result.content === 'string' ? result.content : resultStr;
+        conversationManager.toolOutputBuffer.set(toolCall.id, contentToStore);
 
         // Create compact reference
-        const lines = resultStr.split('\n');
+        const lines = contentToStore.split('\n');
         const preview = lines.slice(0, 5).join('\n');
 
         resultForConversation = {
@@ -460,6 +460,9 @@ async function _executeToolCalls(toolCalls, context) {
           preview: preview.substring(0, 500),
           access: `Use read_tool_output(tool_call_id="${toolCall.id}", start_line, end_line) to read full content`,
         };
+      } else {
+        // For smaller outputs not stored in buffer, truncate for conversation context
+        _truncateInitialResult(result, toolName);
       }
 
       if (currentToolSupport === true) {
@@ -568,12 +571,20 @@ async function _getNextAIResponse(toolResults, context) {
 
 // --- Utilities ---
 
-function _truncateInitialResult(result) {
+function _truncateInitialResult(result, toolName) {
   const MAX_OUTPUT_CHARS = 10000;
   if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
+    const truncatedContent = result.content.substring(0, MAX_OUTPUT_CHARS);
+    const lineCount = truncatedContent.split('\n').length;
+    
+    // Add pagination hint for read_document tool
+    const paginationHint = toolName === 'read_document'
+      ? ` Use startLine/endLine parameters to read specific sections (e.g., if search found match at line 500, use startLine: 480, endLine: 520).`
+      : '';
+    
     result.content =
-      result.content.substring(0, MAX_OUTPUT_CHARS) +
-      `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters.]`;
+      truncatedContent +
+      `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters, showing ~${lineCount} lines.${paginationHint}]`;
   }
 }
 
