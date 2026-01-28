@@ -113,6 +113,14 @@ jobs:
         env:
           FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
         run: |
-          npx @ghost-fvtt/foundry-publish \
+          OUTPUT=$(npx @ghost-fvtt/foundry-publish \
             --manifestPath module.json \
-            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/module.json"
+            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/module.json" 2>&1) || {
+            if echo "$OUTPUT" | grep -q "already exists"; then
+              echo "Version already published to Foundry VTT, skipping"
+              exit 0
+            else
+              echo "$OUTPUT"
+              exit 1
+            fi
+          }
