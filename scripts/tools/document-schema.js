@@ -35,14 +35,14 @@ class DocumentSchemaTool extends BaseTool {
       // Get specific document type schema
       const schema = DocumentAPI.getDocumentSchema(params.documentType);
       return {
-        content: `Schema for ${params.documentType}: ${JSON.stringify(schema)}`,
+        content: `Schema for ${params.documentType}:\n${JSON.stringify(schema, null, 2)}`,
         display: this.formatSchema(params.documentType, schema),
       };
     } else {
       // Get all available document types and their basic info
       const availableTypes = this.getAllDocumentTypes();
       return {
-        content: `Available document types: ${JSON.stringify(availableTypes)}`,
+        content: `Available document types:\n${JSON.stringify(availableTypes, null, 2)}`,
         display: this.formatAllDocumentTypes(availableTypes),
       };
     }

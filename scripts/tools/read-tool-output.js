@@ -89,12 +89,23 @@ export class ReadToolOutputTool extends BaseTool {
         // Clamp end_line to actual line count
         const effectiveEndLine = Math.min(end_line, totalLines);
         const slice = lines.slice(start_line - 1, effectiveEndLine);
+        
+        // Limit output size to prevent context overflow
+        const MAX_OUTPUT_CHARS = 10000;
+        let content = slice.join('\n');
+        let wasTruncated = false;
+        
+        if (content.length > MAX_OUTPUT_CHARS) {
+            content = content.substring(0, MAX_OUTPUT_CHARS);
+            wasTruncated = true;
+        }
 
         return this.createSuccessResponse({
-            content: slice.join('\n'),
+            content: content,
             total_lines: totalLines,
             showing: `${start_line}-${effectiveEndLine}`,
             has_more: effectiveEndLine < totalLines,
+            truncated: wasTruncated ? `Output truncated at ${MAX_OUTPUT_CHARS} chars. Request smaller line ranges.` : undefined,
         });
     }
 }

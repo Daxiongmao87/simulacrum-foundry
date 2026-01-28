@@ -461,7 +461,7 @@ async function _executeToolCalls(toolCalls, context) {
           access: `Use read_tool_output(tool_call_id="${toolCall.id}", start_line, end_line) to read full content`,
         };
       } else {
-        // For smaller outputs not stored in buffer, truncate for conversation context
+        // For smaller outputs AND read_tool_output results, truncate for conversation context
         _truncateInitialResult(result, toolName);
       }
 
