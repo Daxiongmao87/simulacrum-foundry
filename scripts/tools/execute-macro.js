@@ -7,12 +7,12 @@ import { BaseTool } from './base-tool.js';
  */
 export class ExecuteMacroTool extends BaseTool {
   constructor() {
-    super('execute_macro', 'Executes a FoundryVTT Macro by name or UUID.', {
+    super('execute_macro', 'Executes a FoundryVTT Macro by name or UUID. Provide either name or uuid (uuid is more precise).', {
       type: 'object',
       properties: {
         name: {
           type: 'string',
-          description: 'The name of the macro to execute',
+          description: 'The name of the macro to execute (use uuid instead if possible for precision)',
         },
         uuid: {
           type: 'string',
@@ -24,7 +24,6 @@ export class ExecuteMacroTool extends BaseTool {
             'Optional arguments to pass to the macro (accessed via `scope` or arguments in the macro code)',
         },
       },
-      oneOf: [{ required: ['name'] }, { required: ['uuid'] }],
     });
   }
 
