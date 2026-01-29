@@ -1071,11 +1071,21 @@ export class DocumentAPI {
         return created?.toObject ? created.toObject() : created;
       } catch (createError) {
         // Re-throw validation errors to be handled by the calling tool
-        if (createError.name === 'DataModelValidationError') {
+        // Check by name OR by message pattern OR by getAllFailures method
+        const isValidationError = createError.name === 'DataModelValidationError' ||
+          (createError.message && (
+            createError.message.includes('validation errors:') ||
+            createError.message.includes('Validation failed')
+          )) ||
+          (createError.getAllFailures && typeof createError.getAllFailures === 'function');
+        
+        if (isValidationError) {
           throw createError;
         }
-        // Handle other creation errors
-        throw new Error(`Document creation failed: ${createError.message}`);
+        // Handle other creation errors - preserve the original error for better debugging
+        const wrappedError = new Error(`Document creation failed: ${createError.message}`);
+        wrappedError.originalError = createError;
+        throw wrappedError;
       }
     }
     // Mock-friendly fallback: synthesize created object
@@ -1163,10 +1173,20 @@ export class DocumentAPI {
       try {
         await doc.update(updates);
       } catch (updateError) {
-        if (updateError.name === 'DataModelValidationError') {
+        // Check by name OR by message pattern OR by getAllFailures method
+        const isValidationError = updateError.name === 'DataModelValidationError' ||
+          (updateError.message && (
+            updateError.message.includes('validation errors:') ||
+            updateError.message.includes('Validation failed')
+          )) ||
+          (updateError.getAllFailures && typeof updateError.getAllFailures === 'function');
+        
+        if (isValidationError) {
           throw updateError;
         }
-        throw new Error(`Document update failed: ${updateError.message}`);
+        const wrappedError = new Error(`Document update failed: ${updateError.message}`);
+        wrappedError.originalError = updateError;
+        throw wrappedError;
       }
 
       const obj = doc.toObject();
@@ -1342,10 +1362,20 @@ export class DocumentAPI {
       try {
         await doc.delete();
       } catch (deleteError) {
-        if (deleteError.name === 'DataModelValidationError') {
+        // Check by name OR by message pattern OR by getAllFailures method
+        const isValidationError = deleteError.name === 'DataModelValidationError' ||
+          (deleteError.message && (
+            deleteError.message.includes('validation errors:') ||
+            deleteError.message.includes('Validation failed')
+          )) ||
+          (deleteError.getAllFailures && typeof deleteError.getAllFailures === 'function');
+        
+        if (isValidationError) {
           throw deleteError;
         }
-        throw new Error(`Document deletion failed: ${deleteError.message}`);
+        const wrappedError = new Error(`Document deletion failed: ${deleteError.message}`);
+        wrappedError.originalError = deleteError;
+        throw wrappedError;
       }
       return true;
     };

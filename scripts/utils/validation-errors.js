@@ -15,7 +15,20 @@ export class ValidationErrorHandler {
    * @returns {Object|null} Structured validation error details or null if not a validation error
    */
   static parseFoundryValidationError(error) {
-    if (error.name !== 'DataModelValidationError') {
+    // Check for DataModelValidationError by name
+    const isDataModelValidationError = error.name === 'DataModelValidationError';
+    
+    // Also check for validation errors by message pattern (some systems wrap errors)
+    const hasValidationPattern = error.message && (
+      error.message.includes('validation errors:') ||
+      error.message.includes('Validation failed') ||
+      error.message.includes('validation failed')
+    );
+    
+    // Check for Foundry's getAllFailures method (definitive sign of validation error)
+    const hasGetAllFailures = error.getAllFailures && typeof error.getAllFailures === 'function';
+    
+    if (!isDataModelValidationError && !hasValidationPattern && !hasGetAllFailures) {
       return null;
     }
 

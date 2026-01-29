@@ -193,17 +193,38 @@ export class DocumentCreateTool extends BaseTool {
           };
         }
 
-        // Create directly in pack
-        document = await documentClass.create(data, { pack: parameters.pack });
+        // Create directly in pack - wrap in try/catch to capture validation errors
+        // that Foundry might throw during creation
+        try {
+          document = await documentClass.create(data, { pack: parameters.pack });
+        } catch (packCreateError) {
+          // Re-throw to be handled by the outer catch block with ValidationErrorHandler
+          throw packCreateError;
+        }
       } else {
         document = await DocumentAPI.createDocument(documentType, data);
       }
 
       if (!document) {
+        // Foundry sometimes returns null/undefined on validation failure instead of throwing
+        // This can happen when strict validation fails during document instantiation
+        // Try to provide more context by attempting a validation
+        try {
+          const testDoc = new documentClass(data);
+          testDoc.validate({ strict: true, fields: true, joint: true });
+        } catch (validationError) {
+          // Found the actual error - rethrow to be handled by ValidationErrorHandler
+          throw validationError;
+        }
+        // If validation passes but still got null, return generic error
         return {
-          content: `Document creation failed`,
+          content: `Document creation failed. The document could not be created. Check that all required fields are provided and all values are valid for the ${documentType} document type.`,
           display: `Failed to create ${documentType} document`,
-          error: { message: 'Document creation failed', type: 'CREATE_FAILED' },
+          error: { 
+            message: 'Document creation failed - no document returned',
+            type: 'CREATE_FAILED',
+            hint: 'Check browser console for additional Foundry validation errors'
+          },
         };
       }
 
