@@ -12,7 +12,7 @@ class DocumentSchemaTool extends BaseTool {
   constructor() {
     super(
       'inspect_document_schema',
-      'Inspect schema for any document type.  Important for creating rich documents.',
+      'Inspect schema for any document type. Returns a Normalized JSON Schema with $defs for efficiency.',
       {
         type: 'object',
         properties: {
@@ -75,39 +75,31 @@ class DocumentSchemaTool extends BaseTool {
 
     let output = `**${documentType} Schema**\n`;
     output += `Fields: ${schema.fields.join(', ')}\n`;
-    output += `System Fields: ${schema.systemFields.join(', ')}\n`;
+
+    // Condensed system fields output
+    if (schema.systemFields && schema.systemFields.length > 0) {
+      if (schema.systemFields[0] === '$ref') {
+        output += `System Data: Reference to ${schema.systemFieldDetails.$ref}\n`;
+      } else {
+        output += `System Fields: ${schema.systemFields.join(', ')}\n`;
+      }
+    }
 
     // Show embedded documents with hint
-    if (schema.embedded.length > 0) {
+    if (schema.embedded && schema.embedded.length > 0) {
       output += `Embedded Documents: ${schema.embedded.join(', ')} (use inspect_document_schema to view their schemas)\n`;
-    } else {
-      output += `Embedded Documents: None\n`;
     }
 
     // Show relationships
-    output += `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}\n`;
-
-    // Include nested field details in content for AI consumption
-    output += this.formatSystemFields(schema);
-
-    return output;
-  }
-
-  formatSystemFields(schema) {
-    if (!schema.systemFieldDetails || Object.keys(schema.systemFieldDetails).length === 0) {
-      return '';
+    if (schema.relationships) {
+      output += `Relationships: ${Object.keys(schema.relationships).join(', ') || 'None'}\n`;
     }
 
-    let output = `\n**System Field Structure** (key nested fields):\n`;
-    for (const [fieldName, details] of Object.entries(schema.systemFieldDetails)) {
-      if (details.isCollection || details.isMapping || details.nested) {
-        output += `- ${fieldName}: ${details.type}`;
-        if (details.isCollection) output += ' (collection)';
-        if (details.isMapping) output += ' (mapping)';
-        if (details.nested) output += ` with ${Object.keys(details.nested).length} nested fields`;
-        output += '\n';
-      }
+    // Definitions Stats
+    if (schema.definitions) {
+      output += `\n**Schema Definitions**: ${Object.keys(schema.definitions).length} shared models defined.\n`;
     }
+
     return output;
   }
 

@@ -412,70 +412,108 @@ export class DocumentAPI {
 
   /**
    * Extracts and formats the schema information from a document class.
-   * Recursively discovers nested schemas for full structure awareness.
-   * Uses cycle detection to prevent infinite loops instead of arbitrary depth limits.
+   * Uses Schema Normalization ($defs) to prevent JSON explosion from shared data models.
    * @param {string} documentType The document type name.
    * @param {object} documentClass The document class to extract schema from.
-   * @param {Set} [visited] Set of visited class references to detect cycles.
-   * @returns {object} The formatted schema object.
+   * @param {Set} [visited] DEPRECATED - used for legacy cycle detection, now replaced by definition map
+   * @returns {object} The formatted schema object with $defs.
    * @private
    */
-  static #extractDocumentSchema(documentType, documentClass, visited = new Set()) {
+  static #extractDocumentSchema(documentType, documentClass) {
+    // Registry for shared definitions (DataModels)
+    const definitions = {};
+    const definitionMap = new Map(); // Object -> RefName mapping
+
+    /**
+     * Helper to get or create a definition for a DataModel
+     */
+    const getRef = (modelClass, baseName) => {
+      const id = modelClass;
+      if (definitionMap.has(id)) {
+        return `#/definitions/${definitionMap.get(id)}`;
+      }
+
+      // Generate unique name
+      let refName = baseName || modelClass.name || 'UnknownModel';
+      let counter = 1;
+      while (definitions[refName]) {
+        refName = `${baseName || modelClass.name}_${counter++}`;
+      }
+
+      // Reserve name to prevent cycles during recursion
+      definitionMap.set(id, refName);
+
+      // Extract definition
+      try {
+        const schema = { fields: [], fieldDetails: {} };
+        if (modelClass.schema?.fields) {
+          schema.fields = Object.keys(modelClass.schema.fields);
+          schema.fieldDetails = this.#extractFieldDetails(
+            modelClass.schema.fields,
+            definitions,
+            definitionMap
+          );
+        }
+        definitions[refName] = schema;
+      } catch (e) {
+        definitions[refName] = { error: String(e) };
+      }
+
+      return `#/definitions/${refName}`;
+    };
+
+    // Main Schema Object
     const schema = {
       type: documentType,
+      definitions: definitions, // The registry
       fields: [],
       fieldDetails: {},
       systemFields: [],
-      systemFieldDetails: {},
+      systemFieldDetails: {}, // Will be empty/ref-based now for cleaner output
       embedded: [],
       embeddedSchemas: {},
       relationships: {},
       references: {},
     };
 
-    // Cycle detection: if we've seen this class before, don't recurse
-    const classId = documentClass?.name || documentClass?.documentName || String(documentClass);
-    if (visited.has(classId)) {
-      schema._cycleDetected = true;
-      return schema;
-    }
-    visited.add(classId);
-
     try {
-      // Extract main schema fields with type information
+      // Extract main schema fields
       if (documentClass.schema?.fields) {
         schema.fields = Object.keys(documentClass.schema.fields);
         schema.fieldDetails = this.#extractFieldDetails(
           documentClass.schema.fields,
-          new Set(visited)
+          definitions,
+          definitionMap
         );
       }
 
-      // Extract system fields with full nested structure if present
+      // Extract system fields (Normalized)
       if (documentClass.schema?.has && documentClass.schema.has('system')) {
         try {
           const systemField = documentClass.schema.getField('system');
-          if (systemField?.fields) {
+          // If system data is a Model, ref it!
+          if (systemField.model) {
+            const ref = getRef(systemField.model, 'SystemData');
+            schema.systemFieldDetails = { $ref: ref };
+            schema.systemFields = ['$ref']; // Indicator
+          }
+          // Fallback for raw fields
+          else if (systemField?.fields) {
             schema.systemFields = Object.keys(systemField.fields);
             schema.systemFieldDetails = this.#extractFieldDetails(
               systemField.fields,
-              new Set(visited)
+              definitions,
+              definitionMap
             );
           }
         } catch (systemError) {
-          documentLogger.debug(
-            `Failed to extract system fields for "${documentType}":`,
-            systemError
-          );
+          documentLogger.debug(`System extraction error:`, systemError);
         }
       }
 
-      // Extract embedded document types (Simplified to prevent recursion loops)
+      // Extract embedded document types (Stubbed as before)
       if (documentClass.hierarchy) {
         schema.embedded = Object.keys(documentClass.hierarchy);
-        // We do NOT recursively extract schemas here anymore.
-        // Nested documents should be inspected individually by the agent.
-        // This prevents "allocation size overflow" in complex systems.
         for (const [embeddedName, embeddedClass] of Object.entries(documentClass.hierarchy)) {
           schema.embeddedSchemas[embeddedName] = {
             type: embeddedClass.documentName || embeddedName,
@@ -489,12 +527,8 @@ export class DocumentAPI {
       try {
         schema.relationships = this.getDocumentRelationships(documentClass);
         schema.references = this.getDocumentReferences(documentClass);
-      } catch (relationError) {
-        documentLogger.debug(
-          `Failed to extract relationships for "${documentType}":`,
-          relationError
-        );
-      }
+      } catch (relationError) { /* ignore */ }
+
     } catch (error) {
       documentLogger.error(`Schema field extraction failed for "${documentType}":`, error);
       throw error;
@@ -504,117 +538,97 @@ export class DocumentAPI {
   }
 
   /**
-   * Extracts detailed information about schema fields including types and nested structures.
-   * Uses cycle detection to prevent infinite loops on circular field references.
+   * Extracts detailed information about schema fields including types.
+   * normalizing nested complex types into definitions.
    * @param {object} fields The fields object from a DataModel schema.
-   * @param {Set} [visited] Set of visited field references to detect cycles.
-   * @returns {object} Field details object with type information.
+   * @param {object} definitions The definitions registry.
+   * @param {Map} definitionMap Map of visited objects to ref names.
+   * @returns {object} Field details object.
    * @private
    */
-  static #extractFieldDetails(fields, visited = new Set()) {
+  static #extractFieldDetails(fields, definitions, definitionMap) {
     const details = {};
+
+    // Helper to recurse via ref
+    const getRef = (modelClass, baseName) => {
+      // ... (Same getRef logic, duplicated locally or class method? 
+      // Duplicate for now to keep strict context or use definitionMap logic inline)
+
+      // RE-USE LOGIC:
+      const id = modelClass;
+      if (definitionMap.has(id)) return `#/definitions/${definitionMap.get(id)}`;
+
+      // Create new
+      const nameGuess = modelClass.name || baseName || 'NestedModel';
+      let refName = nameGuess;
+      let c = 1;
+      while (definitions[refName]) refName = `${nameGuess}_${c++}`;
+
+      definitionMap.set(id, refName);
+
+      const schema = { fields: [], fieldDetails: {} };
+      if (modelClass.schema?.fields) {
+        schema.fields = Object.keys(modelClass.schema.fields);
+        schema.fieldDetails = this.#extractFieldDetails(modelClass.schema.fields, definitions, definitionMap);
+      }
+      definitions[refName] = schema;
+      return `#/definitions/${refName}`;
+    };
 
     for (const [fieldName, field] of Object.entries(fields)) {
       try {
-        // Cycle detection for field objects
-        const fieldId = field?.constructor?.name || String(field);
-        const fullFieldId = `${fieldName}:${fieldId}`;
-
         const fieldInfo = {
           type: this.#getFieldTypeName(field),
           required: field.required || false,
         };
 
-        // Check for nullable
-        if (field.nullable !== undefined) {
-          fieldInfo.nullable = field.nullable;
-        }
+        if (field.nullable !== undefined) fieldInfo.nullable = field.nullable;
 
-        // Check for default value
-        if (field.initial !== undefined) {
-          try {
-            const initial = typeof field.initial === 'function' ? field.initial() : field.initial;
-            // Only include simple defaults, not complex objects
-            if (initial !== null && typeof initial !== 'object') {
-              fieldInfo.default = initial;
-            }
-          } catch (_e) {
-            // Ignore default extraction errors
-          }
-        }
-
-        // Handle collection fields (EmbeddedCollectionField, SetField, ArrayField)
+        // Handle Collections / Embedded Models
         if (field.element || field.model) {
           fieldInfo.isCollection = true;
           const elementClass = field.element || field.model;
-          const elementId =
-            elementClass?.name || elementClass?.documentName || String(elementClass);
 
-          // Simplify: If it's a Document, just reference the type. Don't expand schema.
           if (elementClass?.documentName) {
             fieldInfo.elementType = elementClass.documentName;
-            fieldInfo.isDocumentCollection = true;
-            fieldInfo.note = 'Use inspect_document_schema on this type for details.';
-          }
-          // Only expand if it's a DataModel (not a full Document) and we haven't visited it
-          else if (!visited.has(elementId) && elementClass?.schema?.fields) {
-            const childVisited = new Set(visited);
-            childVisited.add(elementId);
-            fieldInfo.elementSchema = this.#extractFieldDetails(
-              elementClass.schema.fields,
-              childVisited
-            );
-          } else if (visited.has(elementId)) {
-            fieldInfo._cycleDetected = true;
+            fieldInfo.note = 'Embedded Document (see separate schema)';
+          } else if (elementClass?.schema?.fields) {
+            // It's a DataModel -> Normalize it
+            fieldInfo.items = { $ref: getRef(elementClass, fieldName) };
           }
         }
 
-        // Handle SchemaField (nested object structure)
+        // Handle Nested SchemaFields
         if (field.fields && typeof field.fields === 'object') {
-          if (!visited.has(fullFieldId)) {
-            const childVisited = new Set(visited);
-            childVisited.add(fullFieldId);
-            fieldInfo.nested = this.#extractFieldDetails(field.fields, childVisited);
-          } else {
-            fieldInfo._cycleDetected = true;
-          }
+          // Create a synthetic class-like ID for this specific field instance's internal schema
+          // Or just treat as nested object if it doesn't have a named class?
+          // SchemaFields often are ad-hoc.
+          // We can inline them or define them. Inlining is safer for unique structures.
+          // But if huge, we might want to define. 
+          // Let's inline simple ones, ref complex ones?
+          // For simplicity in this logic: Inline, but use same recursion
+          fieldInfo.nested = this.#extractFieldDetails(field.fields, definitions, definitionMap);
         }
 
-        // Handle MappingField (object with dynamic keys)
-        if (field.constructor?.name === 'MappingField' || field.model) {
+        // Handle Mapping
+        if (field.isMapping || field.constructor?.name === 'MappingField') {
           fieldInfo.isMapping = true;
           if (field.model?.schema?.fields) {
-            const modelId = field.model?.name || String(field.model);
-            if (!visited.has(modelId)) {
-              const childVisited = new Set(visited);
-              childVisited.add(modelId);
-              fieldInfo.valueSchema = this.#extractFieldDetails(
-                field.model.schema.fields,
-                childVisited
-              );
-            } else {
-              fieldInfo._cycleDetected = true;
-            }
+            fieldInfo.values = { $ref: getRef(field.model, `${fieldName}Value`) };
           }
         }
 
-        // Handle StringField with choices
+        // Choices
         if (field.choices) {
           try {
-            const choices = typeof field.choices === 'function' ? field.choices() : field.choices;
-            if (Array.isArray(choices)) {
-              fieldInfo.choices = choices.slice(0, 20); // Limit for readability
-            } else if (typeof choices === 'object') {
-              fieldInfo.choices = Object.keys(choices).slice(0, 20);
-            }
-          } catch (_e) {
-            // Ignore choice extraction errors
-          }
+            const ch = typeof field.choices === 'function' ? field.choices() : field.choices;
+            if (Array.isArray(ch)) fieldInfo.choices = ch.slice(0, 20);
+            else if (typeof ch === 'object') fieldInfo.choices = Object.keys(ch).slice(0, 20);
+          } catch (e) { }
         }
 
         details[fieldName] = fieldInfo;
       } catch (fieldError) {
-        documentLogger.debug(`Failed to extract field details for "${fieldName}":`, fieldError);
         details[fieldName] = { type: 'unknown', error: 'Failed to extract' };
       }
     }
