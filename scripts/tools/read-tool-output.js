@@ -100,12 +100,16 @@ export class ReadToolOutputTool extends BaseTool {
             wasTruncated = true;
         }
 
-        return this.createSuccessResponse({
+        const displayText = `Reading lines ${start_line}-${effectiveEndLine} of ${totalLines}${wasTruncated ? ' (truncated)' : ''}`;
+
+        return {
+            success: true,
             content: content,
+            display: displayText,
             total_lines: totalLines,
             showing: `${start_line}-${effectiveEndLine}`,
             has_more: effectiveEndLine < totalLines,
             truncated: wasTruncated ? `Output truncated at ${MAX_OUTPUT_CHARS} chars. Request smaller line ranges.` : undefined,
-        });
+        };
     }
 }

@@ -27,6 +27,31 @@ const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
 
+// Store justifications keyed by toolCallId for retrieval when result is ready
+const toolJustifications = new Map();
+
+/**
+ * Store justification for a tool call (for later retrieval when result is ready)
+ * @param {string} toolCallId - The tool call ID
+ * @param {string} justification - The justification text
+ */
+export function storeToolJustification(toolCallId, justification) {
+  if (toolCallId && justification) {
+    toolJustifications.set(toolCallId, justification);
+  }
+}
+
+/**
+ * Retrieve and remove justification for a tool call
+ * @param {string} toolCallId - The tool call ID
+ * @returns {string} The justification or empty string
+ */
+export function retrieveToolJustification(toolCallId) {
+  const justification = toolJustifications.get(toolCallId) || '';
+  toolJustifications.delete(toolCallId);
+  return justification;
+}
+
 /**
  * Execute tools from an AI response and continue autonomous loop
  */
@@ -114,6 +139,9 @@ async function _runLoopIteration(context) {
         } catch (_e) {
           // Ignore parsing errors
         }
+
+        // Store justification for retrieval when result is ready
+        storeToolJustification(toolCallId, justification);
 
         // Emit hook for UI to render pending tool card
         Hooks.callAll('simulacrumToolPending', {

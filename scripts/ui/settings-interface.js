@@ -175,10 +175,10 @@ export class SettingsInterface extends FormApplication {
       if (result.success) {
         ui.notifications.info(`✅ Connection successful! Model: ${result.model || 'Unknown'}`);
       } else {
-        ui.notifications.error(`❌ Connection failed: ${result.error}`);
+        ui.notifications.error(`Connection failed: ${result.error}`);
       }
     } catch (error) {
-      ui.notifications.error(`❌ Connection test failed: ${error.message}`);
+      ui.notifications.error(`Connection test failed: ${error.message}`);
     } finally {
       this.testing = false;
       button.disabled = false;

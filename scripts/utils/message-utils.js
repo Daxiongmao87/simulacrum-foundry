@@ -106,9 +106,10 @@ export function getToolDisplayContent(toolResult) {
  * @param {Object} toolResult - The tool result object/message
  * @param {string} toolName - The name of the tool (must be provided as it might not be in the message)
  * @param {string} [preRenderedContent=null] - Optional pre-rendered HTML content to use instead of raw extraction
+ * @param {string} [justification=''] - Optional justification for why the tool was used
  * @returns {string} HTML string for display
  */
-export function formatToolCallDisplay(toolResult, toolName = null, preRenderedContent = null) {
+export function formatToolCallDisplay(toolResult, toolName = null, preRenderedContent = null, justification = '') {
   let isSuccess = !toolResult.isError && !toolResult.error;
 
   // Enhance success detection by checking content for error signatures
@@ -131,9 +132,10 @@ export function formatToolCallDisplay(toolResult, toolName = null, preRenderedCo
   const effectiveToolName = toolName || toolResult.toolName || 'unknown';
   const actionText = getToolActionText(effectiveToolName, toolResult);
 
-  // Extract document name if present in the result
-  const documentInfo = extractDocumentInfo(toolResult);
-  const documentHtml = documentInfo ? `<span class="tool-document">${documentInfo}</span>` : '';
+  // Build justification HTML if provided
+  const justificationHtml = justification
+    ? `<div class="tool-justification"><p>${justification}</p></div>`
+    : '';
 
   // Specialized Macro Result Display
   let resultHtml = '';
@@ -149,7 +151,14 @@ export function formatToolCallDisplay(toolResult, toolName = null, preRenderedCo
     }
   }
 
-  return `<div class="simulacrum-tool-call ${statusClass}"><i class="${iconClass} tool-icon"></i><span class="tool-action">${actionText}</span>${documentHtml}${resultHtml}</div>`;
+  // Only show document info if there's no result display (avoids redundancy)
+  let documentHtml = '';
+  if (!resultHtml) {
+    const documentInfo = extractDocumentInfo(toolResult);
+    documentHtml = documentInfo ? `<span class="tool-document">${documentInfo}</span>` : '';
+  }
+
+  return `<div class="simulacrum-tool-call ${statusClass}"><i class="${iconClass} tool-icon"></i><span class="tool-action">${actionText}</span>${justificationHtml}${documentHtml}${resultHtml}</div>`;
 }
 
 /**

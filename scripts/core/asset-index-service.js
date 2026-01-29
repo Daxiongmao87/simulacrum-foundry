@@ -15,6 +15,7 @@ class AssetIndexService {
     constructor() {
         this.logger = createLogger('AssetIndexService');
         this.index = []; // Array of { path: string, source: string, filename: string }
+        this.folderIndex = []; // Array of { path: string, source: string, name: string }
         this.isIndexing = false;
         this.lastIndexTime = null;
         this.syncIntervalId = null;
@@ -129,6 +130,7 @@ class AssetIndexService {
         this.logger.info('Starting index rebuild...');
 
         const newIndex = [];
+        const newFolderIndex = [];
 
         // Define roots to index
         const roots = [
@@ -142,7 +144,7 @@ class AssetIndexService {
 
         for (const root of roots) {
             try {
-                await this._indexRecursive(root.source, root.path, newIndex);
+                await this._indexRecursive(root.source, root.path, newIndex, newFolderIndex);
             } catch (err) {
                 // Root might not exist, that's fine
                 this.logger.debug(`Could not index ${root.source}/${root.path}: ${err.message}`);
@@ -150,17 +152,18 @@ class AssetIndexService {
         }
 
         this.index = newIndex;
+        this.folderIndex = newFolderIndex;
         this.lastIndexTime = new Date();
         this.isIndexing = false;
 
         const elapsed = Date.now() - startTime;
-        this.logger.info(`Index rebuild complete: ${this.index.length} files indexed in ${elapsed}ms`);
+        this.logger.info(`Index rebuild complete: ${this.index.length} files, ${this.folderIndex.length} folders indexed in ${elapsed}ms`);
     }
 
     /**
      * Recursively index a directory - no depth limit
      */
-    async _indexRecursive(source, path, index) {
+    async _indexRecursive(source, path, index, folderIndex) {
         try {
             const result = await FilePicker.browse(source, path);
 
@@ -182,7 +185,14 @@ class AssetIndexService {
                 if (dirname.startsWith('.')) continue;
                 if (dirname === 'node_modules') continue;
 
-                await this._indexRecursive(source, dir, index);
+                // Index the folder itself
+                folderIndex.push({
+                    path: dir,
+                    source: source,
+                    name: dirname.toLowerCase()
+                });
+
+                await this._indexRecursive(source, dir, index, folderIndex);
             }
         } catch (err) {
             // Access denied or path invalid - skip silently
@@ -241,11 +251,69 @@ class AssetIndexService {
     }
 
     /**
+     * Search the index for matching folders
+     * @param {string} query - Search query (folder name or path segment)
+     * @param {string} sourceFilter - Source filter (all, user, core)
+     * @param {number} maxResults - Maximum results to return
+     * @returns {Promise<string[]>} Array of matching folder paths
+     */
+    async searchFolders(query, sourceFilter = 'all', maxResults = 50) {
+        // Wait for initial index if not yet complete
+        if (this._initialIndexPromise) {
+            await this._initialIndexPromise;
+        }
+
+        const lowerQuery = query.toLowerCase();
+        const results = [];
+
+        for (const entry of this.folderIndex) {
+            if (results.length >= maxResults) break;
+
+            // Check source filter
+            if (sourceFilter === 'user' && entry.source !== 'data') continue;
+            if (sourceFilter === 'core' && entry.source !== 'public') continue;
+
+            // Check query match
+            if (!entry.name.includes(lowerQuery) && !entry.path.toLowerCase().includes(lowerQuery)) {
+                continue;
+            }
+
+            results.push(entry.path);
+        }
+
+        return results;
+    }
+
+    /**
+     * Browse a folder - list immediate contents (files and subfolders)
+     * @param {string} path - Folder path to browse
+     * @param {string} source - Source (data or public)
+     * @returns {Promise<{files: string[], folders: string[]}>}
+     */
+    async browseFolder(path, source = 'data') {
+        // Wait for initial index if not yet complete
+        if (this._initialIndexPromise) {
+            await this._initialIndexPromise;
+        }
+
+        try {
+            const result = await FilePicker.browse(source, path);
+            return {
+                files: result.files || [],
+                folders: result.dirs || []
+            };
+        } catch (err) {
+            throw new Error(`Cannot browse folder "${path}": ${err.message}`);
+        }
+    }
+
+    /**
      * Get index stats
      */
     getStats() {
         return {
             fileCount: this.index.length,
+            folderCount: this.folderIndex.length,
             lastIndexTime: this.lastIndexTime,
             isIndexing: this.isIndexing
         };

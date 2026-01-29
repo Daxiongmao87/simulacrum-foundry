@@ -70,7 +70,7 @@ class DocumentSchemaTool extends BaseTool {
    */
   formatSchema(documentType, schema) {
     if (!schema) {
-      return `❌ No schema found for document type: ${documentType}`;
+      return `No schema found for document type: ${documentType}`;
     }
 
     let output = `**${documentType} Schema**\n`;

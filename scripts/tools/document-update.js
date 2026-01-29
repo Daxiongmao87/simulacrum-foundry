@@ -121,21 +121,21 @@ class DocumentUpdateTool extends BaseTool {
         if (!packCollection) {
           return {
             content: `Compendium pack "${pack}" not found`,
-            display: `❌ Pack not found: ${pack}`,
+            display: `Pack not found: ${pack}`,
             error: { message: `pack "${pack}" not found`, type: 'PACK_NOT_FOUND' },
           };
         }
         if (packCollection.locked) {
           return {
             content: `Compendium pack "${pack}" is locked. Use compendium_config to unlock it first.`,
-            display: `❌ Pack is locked: ${pack}`,
+            display: `Pack is locked: ${pack}`,
             error: { message: `pack "${pack}" is locked`, type: 'PACK_LOCKED' },
           };
         }
         if (packCollection.documentName !== documentType) {
           return {
             content: `Pack "${pack}" contains ${packCollection.documentName} documents, but you specified ${documentType}`,
-            display: `❌ Type mismatch: Pack contains ${packCollection.documentName}`,
+            display: `Type mismatch: Pack contains ${packCollection.documentName}`,
             error: { message: `Type mismatch`, type: 'TYPE_MISMATCH' },
           };
         }
@@ -170,7 +170,7 @@ class DocumentUpdateTool extends BaseTool {
     if (readErrors.includes(error.code)) {
       return {
         content: error.message,
-        display: `❌ ${error.message}`,
+        display: `${error.message}`,
         error: {
           message: error.message,
           type: error.code,
@@ -229,7 +229,7 @@ class DocumentUpdateTool extends BaseTool {
         null,
         2
       ),
-      display: `✅ Updated **${id}** (${params.documentType})`,
+      display: `Updated **${id}** (${params.documentType})`,
       document: latestDocument,
     };
   }
@@ -391,7 +391,7 @@ class DocumentUpdateTool extends BaseTool {
 
     return {
       content: `Validation failed for update ${docRef}: ${message}`,
-      display: `❌ Validation Error: ${message}`,
+      display: `Validation Error: ${message}`,
       error: {
         message,
         type: 'VALIDATION_ERROR',

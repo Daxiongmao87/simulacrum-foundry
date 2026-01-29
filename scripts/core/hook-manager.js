@@ -27,6 +27,11 @@ export const SimulacrumHooks = Object.freeze({
   // Tool execution hooks
   TOOL_EXECUTED: 'simulacrum:toolExecuted',
 
+  // Task tracker hooks
+  TASK_STARTED: 'simulacrum:taskStarted',
+  TASK_UPDATED: 'simulacrum:taskUpdated',
+  TASK_FINISHED: 'simulacrum:taskFinished',
+
   // Error hooks
   ERROR_OCCURRED: 'simulacrum:errorOccurred',
 });

@@ -126,7 +126,7 @@ class ChatInterface {
 
     ChatMessage.create({
       user: user._id,
-      content: `❌ **Simulacrum Error:** ${errorMessage}`,
+      content: `**Simulacrum Error:** ${errorMessage}`,
       type: CONST.CHAT_MESSAGE_TYPES.OOC,
       speaker: { alias: 'Simulacrum AI' },
       flags: { simulacrum: { aiError: true } },

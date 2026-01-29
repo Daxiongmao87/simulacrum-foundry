@@ -202,6 +202,6 @@ export function buildGenericFailureMessage() {
     role: 'assistant',
     content:
       'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-    display: '❌ Unable to generate a proper response after multiple attempts.',
+    display: 'Unable to generate a proper response after multiple attempts.',
   };
 }

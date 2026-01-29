@@ -25,6 +25,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   static emittedEvents = Object.freeze(['render', 'close', 'position', 'activate', 'deactivate']);
 
   static PARTS = {
+    taskTracker: {
+      template: 'modules/simulacrum/templates/simulacrum/sidebar-task-tracker.hbs',
+    },
     log: {
       template: 'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
       templates: [
@@ -107,6 +110,19 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         this._updateRetryStatusInDOM(false);
       }
     });
+
+    // Task tracker hooks
+    Hooks.on(SimulacrumHooks.TASK_STARTED, (taskState) => {
+      this._updateTaskTracker(taskState, true);
+    });
+
+    Hooks.on(SimulacrumHooks.TASK_UPDATED, (taskState) => {
+      this._updateTaskTracker(taskState, true);
+    });
+
+    Hooks.on(SimulacrumHooks.TASK_FINISHED, () => {
+      this._updateTaskTracker(null, false);
+    });
   }
 
   /**
@@ -138,6 +154,77 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       if (labelEl) {
         labelEl.textContent = this._getProcessLabel() || 'Thinking...';
       }
+    }
+  }
+
+  /**
+   * Update the task tracker element in the DOM
+   * @param {object|null} taskState - The current task state or null to hide
+   * @param {boolean} show - Whether to show or hide the tracker
+   */
+  _updateTaskTracker(taskState, show) {
+    const container = this.element?.[0] || this.element;
+    if (!container) return;
+
+    const tracker = container.querySelector('.task-tracker');
+    if (!tracker) return;
+
+    if (!show || !taskState) {
+      tracker.style.display = 'none';
+      return;
+    }
+
+    // Show the tracker
+    tracker.style.display = '';
+
+    // Update header
+    const currentStep = taskState.steps[taskState.currentStepIndex];
+    const stepTitle = currentStep?.title || 'Working...';
+    const iconEl = tracker.querySelector('.task-tracker-icon');
+    const stepEl = tracker.querySelector('.task-tracker-step');
+    const progressEl = tracker.querySelector('.task-tracker-progress');
+
+    if (iconEl) {
+      // Update icon based on status
+      iconEl.className = currentStep?.status === 'completed' 
+        ? 'fa-solid fa-circle-check task-tracker-icon'
+        : 'fa-solid fa-circle-notch fa-spin task-tracker-icon';
+    }
+    if (stepEl) stepEl.textContent = stepTitle;
+    if (progressEl) progressEl.textContent = `(${taskState.currentStepIndex + 1}/${taskState.totalSteps})`;
+
+    // Update body
+    const nameEl = tracker.querySelector('.task-tracker-name');
+    const goalEl = tracker.querySelector('.task-tracker-goal');
+    const stepsEl = tracker.querySelector('.task-tracker-steps');
+
+    if (nameEl) nameEl.textContent = taskState.name;
+    if (goalEl) goalEl.textContent = taskState.goal;
+
+    if (stepsEl) {
+      stepsEl.innerHTML = taskState.steps.map((step, index) => {
+        let iconClass = 'fa-regular fa-square';
+        let liClass = '';
+        if (step.status === 'completed') {
+          iconClass = 'fa-solid fa-circle-check';
+          liClass = 'completed-step';
+        } else if (step.status === 'in_progress') {
+          iconClass = 'fa-solid fa-circle-notch fa-spin';
+          liClass = 'current-step';
+        }
+        if (index === taskState.currentStepIndex) liClass = 'current-step';
+        return `<li class="${liClass}"><i class="${iconClass}"></i><span>${step.title}</span></li>`;
+      }).join('');
+    }
+
+    // Set up toggle button click handler (only once)
+    const toggleBtn = tracker.querySelector('.task-tracker-toggle');
+    const header = tracker.querySelector('.task-tracker-header');
+    if (header && !header.dataset.listenerAttached) {
+      header.addEventListener('click', () => {
+        tracker.classList.toggle('expanded');
+      });
+      header.dataset.listenerAttached = 'true';
     }
   }
 
@@ -345,10 +432,13 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (!log) return;
     const dist = log.scrollHeight - log.scrollTop - log.clientHeight;
     const atBottom = dist < 32;
+    const atTop = log.scrollTop < 8;
     this.#isAtBottom = atBottom;
 
     // Toggle 'scrolled' class when there is content below (i.e. not at bottom)
     log.classList.toggle('scrolled', !atBottom);
+    // Toggle 'not-at-top' class when scrolled down from top
+    log.classList.toggle('not-at-top', !atTop);
 
     if (this.#inputElement) {
       const btn = this.#inputElement.querySelector('.jump-to-bottom');

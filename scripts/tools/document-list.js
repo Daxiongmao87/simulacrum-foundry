@@ -63,7 +63,7 @@ class DocumentListTool extends BaseTool {
     if (params.documentType && !this.isValidDocumentType(params.documentType) && !params.pack) {
       return {
         content: 'Document type "' + params.documentType + '" not available in current system',
-        display: '❌ Unknown document type: ' + params.documentType,
+        display: 'Unknown document type: ' + params.documentType,
         error: { message: 'Invalid document type', type: 'UNKNOWN_DOCUMENT_TYPE' },
       };
     }
@@ -82,7 +82,7 @@ class DocumentListTool extends BaseTool {
     } catch (error) {
       return {
         content: 'Failed to list documents: ' + error.message,
-        display: '❌ Error listing documents: ' + error.message,
+        display: 'Error listing documents: ' + error.message,
         error: { message: error.message, type: 'LIST_FAILED' },
       };
     }
@@ -129,7 +129,7 @@ class DocumentListTool extends BaseTool {
     } catch (error) {
       return {
         content: 'Failed to list document types: ' + error.message,
-        display: '❌ Error listing document types: ' + error.message,
+        display: 'Error listing document types: ' + error.message,
         error: { message: error.message, type: 'LIST_TYPES_FAILED' },
       };
     }

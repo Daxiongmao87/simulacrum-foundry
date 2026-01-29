@@ -117,7 +117,7 @@ export class DocumentCreateTool extends BaseTool {
       if (!this.isValidDocumentType(documentType)) {
         return {
           content: `Document type "${documentType}" not available in current system`,
-          display: `❌ Unknown document type: ${documentType}`,
+          display: `Unknown document type: ${documentType}`,
           error: {
             message: `Document type "${documentType}" not available in current system`,
             type: 'UNKNOWN_DOCUMENT_TYPE',
@@ -138,7 +138,7 @@ export class DocumentCreateTool extends BaseTool {
         
         return {
           content: schemaResponse.message,
-          display: `❌ Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}`,
+          display: `Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}`,
           error: {
             message: schemaResponse.message,
             type: 'UNKNOWN_FIELDS',
@@ -170,7 +170,7 @@ export class DocumentCreateTool extends BaseTool {
         if (!packCollection) {
           return {
             content: `Compendium pack "${parameters.pack}" not found`,
-            display: `❌ Pack not found: ${parameters.pack}`,
+            display: `Pack not found: ${parameters.pack}`,
             error: { message: `pack "${parameters.pack}" not found`, type: 'PACK_NOT_FOUND' }
           };
         }
@@ -179,7 +179,7 @@ export class DocumentCreateTool extends BaseTool {
         if (packCollection.locked) {
           return {
             content: `Compendium pack "${parameters.pack}" is locked. Cannot create document.`,
-            display: `❌ Pack is locked: ${parameters.pack}`,
+            display: `Pack is locked: ${parameters.pack}`,
             error: { message: `pack "${parameters.pack}" is locked`, type: 'PACK_LOCKED' }
           };
         }
@@ -188,7 +188,7 @@ export class DocumentCreateTool extends BaseTool {
         if (packCollection.documentName !== documentType) {
           return {
             content: `Pack "${parameters.pack}" contains ${packCollection.documentName} documents, but you requested ${documentType}`,
-            display: `❌ Type mismatch: Pack contains ${packCollection.documentName}`,
+            display: `Type mismatch: Pack contains ${packCollection.documentName}`,
             error: { message: `Type mismatch`, type: 'TYPE_MISMATCH' }
           };
         }
@@ -202,7 +202,7 @@ export class DocumentCreateTool extends BaseTool {
       if (!document) {
         return {
           content: `Document creation failed`,
-          display: `❌ Failed to create ${documentType} document`,
+          display: `Failed to create ${documentType} document`,
           error: { message: 'Document creation failed', type: 'CREATE_FAILED' },
         };
       }
@@ -235,7 +235,7 @@ export class DocumentCreateTool extends BaseTool {
 
       return {
         content: JSON.stringify(contentPayload, null, 2),
-        display: `✅ Created **${fullDocument.name || fullDocument._id || fullDocument.id}** (${documentType})`,
+        display: `Created **${fullDocument.name || fullDocument._id || fullDocument.id}** (${documentType})`,
         document: fullDocument,
       };
     } catch (error) {
@@ -386,7 +386,7 @@ export class DocumentCreateTool extends BaseTool {
     }
 
     // Build a compact but complete schema message
-    let message = `❌ Document creation rejected: Unknown fields would be silently discarded.\n\n`;
+    let message = `Document creation rejected: Unknown fields would be silently discarded.\n\n`;
     message += `Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}\n\n`;
     message += `--- ${documentType} Schema ---\n`;
     message += `Valid top-level fields: ${schema?.fields?.join(', ') || 'none'}\n`;

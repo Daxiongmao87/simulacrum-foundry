@@ -126,7 +126,7 @@ export class DocumentReadTool extends BaseTool {
   _createErrorResponse(type, code, message) {
     return {
       content: `Failed to read ${type} document: ${message}`,
-      display: `❌ Error reading document: ${message}`,
+      display: `Error reading document: ${message}`,
       error: { message, type: code },
     };
   }

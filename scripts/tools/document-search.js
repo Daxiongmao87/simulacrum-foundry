@@ -67,7 +67,7 @@ class DocumentSearchTool extends BaseTool {
     } catch (error) {
       return {
         content: 'Failed to search documents: ' + error.message,
-        display: '❌ Search failed: ' + error.message,
+        display: 'Search failed: ' + error.message,
         error: { message: error.message, type: 'SEARCH_FAILED' },
       };
     }

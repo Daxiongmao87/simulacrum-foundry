@@ -296,7 +296,7 @@ export class ValidationErrorHandler {
 
       return {
         content: `Validation failed for ${operation} ${docRef}: ${enhancedContext}`,
-        display: `❌ Validation Error: ${validationError.message}`,
+        display: `Validation Error: ${validationError.message}`,
         error: {
           message: validationError.message,
           type: 'VALIDATION_ERROR',
@@ -313,7 +313,7 @@ export class ValidationErrorHandler {
     const docRef = documentId ? `@UUID[${documentType}.${documentId}]` : documentType;
     return {
       content: `Failed to ${operation} ${docRef}: ${error.message}`,
-      display: `❌ Failed to ${operation} ${docRef}: ${error.message}`,
+      display: `Failed to ${operation} ${docRef}: ${error.message}`,
       error: {
         message: error.message,
         type: `${operation.toUpperCase()}_FAILED`,

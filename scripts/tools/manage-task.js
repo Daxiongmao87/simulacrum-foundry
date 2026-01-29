@@ -1,4 +1,5 @@
 import { BaseTool } from './base-tool.js';
+import { SimulacrumHooks } from '../core/hook-manager.js';
 
 export class ManageTaskTool extends BaseTool {
   constructor() {
@@ -45,7 +46,7 @@ export class ManageTaskTool extends BaseTool {
           },
           status: {
             type: 'string',
-            description: 'Status update for the current step or task.',
+            description: 'Human-readable status message for the current step (e.g., "Researching existing documents", "Creating the NPC actor"). Do NOT use machine-style values like "in_progress" or "completed".',
           },
           summary: {
             type: 'string',
@@ -108,11 +109,21 @@ export class ManageTaskTool extends BaseTool {
       currentStepIndex: 0,
       startTime: Date.now(),
     };
-    return this._renderTaskUpdate('Task Started');
+
+    // Mark first step as in progress
+    this.currentTask.steps[0].status = 'in_progress';
+
+    // Emit hook to show task tracker
+    Hooks.callAll(SimulacrumHooks.TASK_STARTED, this._getTaskState());
+
+    return {
+      content: `Task started: ${taskName}\nGoal: ${taskGoal}\nSteps: ${steps.length}`,
+      display: '', // No display in chat - tracker shows it
+    };
   }
 
   _updateTask({ currentStep, status }) {
-    if (!this.currentTask) return 'No active task to update.';
+    if (!this.currentTask) return { content: 'No active task to update.', display: '' };
 
     if (typeof currentStep === 'number') {
       this.currentTask.currentStepIndex = currentStep;
@@ -126,11 +137,18 @@ export class ManageTaskTool extends BaseTool {
       }
     }
 
-    return this._renderTaskUpdate(status || 'Task Updated');
+    // Emit hook to update task tracker
+    Hooks.callAll(SimulacrumHooks.TASK_UPDATED, this._getTaskState());
+
+    const currentStepTitle = this.currentTask.steps[this.currentTask.currentStepIndex]?.title || 'Unknown';
+    return {
+      content: `Task update: Step ${this.currentTask.currentStepIndex + 1}/${this.currentTask.steps.length} - ${currentStepTitle}`,
+      display: '', // No display in chat - tracker shows it
+    };
   }
 
   _finishTask({ summary }) {
-    if (!this.currentTask) return 'No active task to finish.';
+    if (!this.currentTask) return { content: 'No active task to finish.', display: '' };
 
     // Require summary content for finish_task
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
@@ -149,32 +167,30 @@ export class ManageTaskTool extends BaseTool {
       s.status = 'completed';
     });
 
-    const finalReport = this._renderTaskUpdate('Task Completed');
+    const taskName = this.currentTask.name;
+
+    // Emit hook to hide task tracker
+    Hooks.callAll(SimulacrumHooks.TASK_FINISHED, {
+      ...this._getTaskState(),
+      summary: summary,
+    });
+
     this.currentTask = null;
-    return finalReport;
+
+    return {
+      content: `Task completed: ${taskName}\n\nSummary: ${summary}`,
+      display: '', // No display in chat - summary is in content for AI context
+    };
   }
 
-  _renderTaskUpdate(header) {
-    if (!this.currentTask) return 'No active task.';
-
-    let html = `<h3>${header}: ${this.currentTask.name}</h3>`;
-    html += `<p><strong>Goal:</strong> ${this.currentTask.goal}</p>`;
-    html += `<ul>`;
-    this.currentTask.steps.forEach((step, index) => {
-      let icon = '⬜';
-      if (step.status === 'completed') icon = '✅';
-      if (step.status === 'in_progress') icon = '🔄';
-      const style = index === this.currentTask.currentStepIndex ? 'font-weight: bold;' : '';
-      // Format as "<Title>: <Description>" for consistency
-      html += `<li style="${style}">${icon} <strong>${step.title}:</strong> ${step.description}</li>`;
-    });
-    html += `</ul>`;
-
-    // In a real implementation this would post to chat, but for now we return string representation
-    // or log it. The tool output is displayed to the user by the AI system anyway.
+  _getTaskState() {
+    if (!this.currentTask) return null;
     return {
-      content: `Task State:\nName: ${this.currentTask.name}\nGoal: ${this.currentTask.goal}\nStep: ${this.currentTask.currentStepIndex}/${this.currentTask.steps.length}`,
-      display: html,
+      name: this.currentTask.name,
+      goal: this.currentTask.goal,
+      steps: this.currentTask.steps.map(s => ({ ...s })),
+      currentStepIndex: this.currentTask.currentStepIndex,
+      totalSteps: this.currentTask.steps.length,
     };
   }
 }

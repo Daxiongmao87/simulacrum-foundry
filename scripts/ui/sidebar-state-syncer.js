@@ -103,17 +103,31 @@ export async function syncMessagesFromCore(conversationManager) {
 
   const messages = [];
   const toolCallNames = new Map();
+  const toolCallJustifications = new Map();
 
   for (const m of filtered) {
-    // Track tool call IDs from assistant messages to resolve names later
+    // Track tool call IDs from assistant messages to resolve names and justifications later
     if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
       for (const tc of m.tool_calls) {
         if (tc.id && (tc.function?.name || tc.name)) {
           toolCallNames.set(tc.id, tc.function?.name || tc.name);
         }
+
+        // Extract justification per tool call
+        try {
+          const args = typeof tc.function?.arguments === 'string'
+            ? JSON.parse(tc.function.arguments)
+            : tc.function?.arguments;
+
+          if (args && args.justification && tc.id) {
+            toolCallJustifications.set(tc.id, args.justification);
+          }
+        } catch (e) {
+          // Ignore parsing errors for justification extraction
+        }
       }
 
-      // Extract and format justification if present
+      // Build aggregate justification HTML for the assistant message display (legacy behavior)
       const justifications = [];
       for (const tc of m.tool_calls) {
         try {
@@ -126,27 +140,16 @@ export async function syncMessagesFromCore(conversationManager) {
             justifications.push(`<strong>${toolName}:</strong> ${args.justification}`);
           }
         } catch (e) {
-          // Ignore parsing errors for justification extraction
+          // Ignore parsing errors
         }
       }
 
       if (justifications.length > 0) {
-        // Append justification to content for display purposes if not already present
-        // (We don't modify m.content directly to avoid persisting duplicates, we modify the display object if we were building it here, 
-        // but here we are iterating. syncing messages usually builds display messages.)
-        // But wait, 'createDisplayMessage' is called below.
-        // We should append it to the content passed to createDisplayMessage, OR modify the loop structure.
-        // m.content is the raw content.
-        // Let's modify the loop to append justification to the text sent to createDisplayMessage
-
         const justificationHtml = `\n\n<div class="tool-justification">
-          <div class="justification-header"><i class="fas fa-thought"></i> Plan</div>
+          <div class="justification-header"><i class="fa-solid fa-lightbulb"></i> Plan</div>
           <div class="justification-content">${justifications.join('<br>')}</div>
         </div>`;
 
-        // We can't easily append to 'm.content' without side effects if we re-sync many times?
-        // Actually syncMessagesFromCore creates NEW display objects.
-        // So appending to the string passed to createDisplayMessage is safe.
         m._justificationHtml = justificationHtml;
       }
     }
@@ -154,6 +157,7 @@ export async function syncMessagesFromCore(conversationManager) {
     if (m.role === 'tool') {
       // Reconstruct tool result display
       const toolName = toolCallNames.get(m.tool_call_id);
+      const justification = toolCallJustifications.get(m.tool_call_id) || '';
 
       let preRendered = null;
       const rawDisplayContent = getToolDisplayContent(m);
@@ -174,7 +178,7 @@ export async function syncMessagesFromCore(conversationManager) {
         }
       }
 
-      const displayHtml = formatToolCallDisplay(m, toolName, preRendered);
+      const displayHtml = formatToolCallDisplay(m, toolName, preRendered, justification);
 
       // Display tool results as assistant messages (matching ChatHandler behavior)
       const message = await createDisplayMessage('assistant', m.content, displayHtml);

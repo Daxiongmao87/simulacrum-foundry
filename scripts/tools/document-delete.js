@@ -95,7 +95,7 @@ class DocumentDeleteTool extends BaseTool {
 
       return {
         content: `Deleted ${params.documentType}:${params.documentId}`,
-        display: `✅ Deleted **${params.documentType}** document with ID: ${params.documentId}`,
+        display: `Deleted **${params.documentType}** document with ID: ${params.documentId}`,
       };
     } catch (error) {
       if (
@@ -117,7 +117,7 @@ class DocumentDeleteTool extends BaseTool {
   #buildErrorResponse(params, code, message) {
     return {
       content: message,
-      display: `❌ ${message}`,
+      display: `${message}`,
       error: {
         message,
         type: code,

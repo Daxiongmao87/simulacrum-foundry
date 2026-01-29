@@ -2,6 +2,7 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { formatToolCallDisplay, getToolDisplayContent } from '../utils/message-utils.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
+import { retrieveToolJustification } from './tool-loop-handler.js';
 /**
  * ChatHandler - Single source of truth for all chat conversation flow
  * Orchestrates between AI, tools, conversation state, and UI
@@ -76,14 +77,14 @@ class ChatHandler {
 
       // Check for 503 Service Unavailable or other API connection issues
       let friendlyMessage = `Error: ${error.message}`;
-      let displayMessage = `❌ ${error.message}`;
+      let displayMessage = `${error.message}`;
 
       if (error.message.includes('503') || error.message.includes('Service Unavailable')) {
         friendlyMessage = 'The AI service is currently unavailable (503). This is typically a temporary issue with the AI provider. Please try again in a few moments.';
         displayMessage = `⚠️ **AI Service Unavailable**\n\nThe AI endpoint is experiencing issues (503). This is usually temporary.\n\n*Error details: ${error.message}*`;
       } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
         friendlyMessage = 'Network connection failed. Please check your internet connection and API settings.';
-        displayMessage = `❌ **Network Error**\n\nFailed to connect to the AI service.\n\n*Error details: ${error.message}*`;
+        displayMessage = `**Network Error**\n\nFailed to connect to the AI service.\n\n*Error details: ${error.message}*`;
       }
 
       // API/Network errors: Show via FoundryVTT notification system
@@ -177,7 +178,7 @@ class ChatHandler {
       const errorMessage = {
         role: 'assistant',
         content: `Tool execution error: ${error.message}`,
-        display: `❌ ${error.message}`,
+        display: `${error.message}`,
       };
       this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
@@ -271,7 +272,7 @@ class ChatHandler {
         role: 'assistant',
         content:
           'Unable to generate a proper response after multiple attempts. Please try rephrasing your request.',
-        display: '❌ Unable to generate a proper response after multiple attempts.',
+        display: 'Unable to generate a proper response after multiple attempts.',
       };
       this.addMessageToUI(errorMessage, options);
       return errorMessage;
@@ -298,7 +299,7 @@ class ChatHandler {
       const errorMessage = {
         role: 'assistant',
         content: `Retry failed: ${error.message}`,
-        display: `❌ Retry failed: ${error.message}`,
+        display: `Retry failed: ${error.message}`,
       };
       this.addMessageToConversation('assistant', errorMessage.content);
       this.addMessageToUI(errorMessage, options);
@@ -362,6 +363,9 @@ class ChatHandler {
 
       // Task-09: Format tool result with rich HTML display if it has a toolName (and is not silent)
       if (toolResult.toolName && options.onAssistantMessage && !isSilent) {
+        // Retrieve justification stored during pending phase
+        const justification = retrieveToolJustification(toolResult.toolCallId);
+
         let preRendered = null;
         try {
           // Task-Fix: Unwrap content if it's JSON to prevent leaking raw JSON string.
@@ -392,7 +396,7 @@ class ChatHandler {
           this.logger.warn('Failed to pre-render tool content', e);
         }
 
-        const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered);
+        const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered, justification);
 
         // Emit hook for UI to remove pending card and display result
         Hooks.callAll('simulacrumToolResult', {

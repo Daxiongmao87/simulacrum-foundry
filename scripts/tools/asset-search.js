@@ -50,7 +50,7 @@ export class AssetSearchTool extends BaseTool {
         } catch (error) {
             return {
                 content: `Failed to search assets: ${error.message}`,
-                display: `❌ Error searching assets: ${error.message}`,
+                display: `Error searching assets: ${error.message}`,
                 error: { message: error.message, type: 'SEARCH_FAILED' }
             };
         }
@@ -65,8 +65,8 @@ export class AssetSearchTool extends BaseTool {
         }
 
         const count = results.length;
-        const display = `**Found ${count} assets matching "${query}"** (Index: ${stats.fileCount} files)\n` +
-            results.map(path => `- [${path.split('/').pop()}](${path})`).join('\n');
+        // Display just shows count - AI gets full list in content
+        const display = `Found ${count} asset${count !== 1 ? 's' : ''} matching "${query}"`;
 
         return {
             content: JSON.stringify(results, null, 2),
