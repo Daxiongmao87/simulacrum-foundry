@@ -576,12 +576,12 @@ function _truncateInitialResult(result, toolName) {
   if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
     const truncatedContent = result.content.substring(0, MAX_OUTPUT_CHARS);
     const lineCount = truncatedContent.split('\n').length;
-    
+
     // Add pagination hint for read_document tool
     const paginationHint = toolName === 'read_document'
       ? ` Use startLine/endLine parameters to read specific sections (e.g., if search found match at line 500, use startLine: 480, endLine: 520).`
       : '';
-    
+
     result.content =
       truncatedContent +
       `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters, showing ~${lineCount} lines.${paginationHint}]`;
@@ -654,7 +654,13 @@ async function _chatWithAI(messages, systemPrompt, context) {
 
 function _notifyAssistantMessage(response, context) {
   if (context.onToolResult && !response._parseError) {
-    context.onToolResult({ role: 'assistant', content: response.content });
+    // Deduplicate identical content within the same loop to prevent UI spam
+    // (Common phenomenon where AI repeats "I will search for..." in every step)
+    const content = response.content?.trim();
+    if (content && content !== context.lastEmittedContent) {
+      context.onToolResult({ role: 'assistant', content: response.content, _fromToolLoop: true });
+      context.lastEmittedContent = content;
+    }
     // Flag as emitted to prevent duplication in ConversationEngine
     response._emitted = true;
   }

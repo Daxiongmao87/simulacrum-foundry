@@ -411,8 +411,10 @@ class ChatHandler {
         );
       }
     } else if (toolResult.role === 'assistant' && toolResult.content) {
-      // Only add assistant messages that have actual content
-      this.addMessageToConversation('assistant', toolResult.content);
+      // Only add assistant messages that have actual content and are NOT from internal tool loop (ephemeral)
+      if (!toolResult._fromToolLoop) {
+        this.addMessageToConversation('assistant', toolResult.content);
+      }
       this.addMessageToUI(
         {
           role: 'assistant',
