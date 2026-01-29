@@ -439,23 +439,15 @@ export class ValidationErrorHandler {
       instructions += '\n• For required fields: Ensure all mandatory fields have non-empty values.';
     }
     if (hasChoiceErrors) {
-      instructions += '\n• For choice fields: Check field schema for valid enum values.';
+      instructions += '\n• For choice fields: Use inspect_document_schema to discover valid enum values.';
     }
 
-    // Document-specific instructions
-    switch (documentType) {
-      case 'JournalEntry':
-        if (suggestions.some(s => s.field.includes('pages'))) {
-          instructions +=
-            '\n• For JournalEntry pages: Each page needs name, type, and appropriate content fields.';
-        }
-        break;
-      case 'Actor':
-        instructions += '\n• For Actors: Ensure type field matches system actor types.';
-        break;
-      case 'Item':
-        instructions += '\n• For Items: Ensure type field matches system item types.';
-        break;
+    // Dynamic hints based on error patterns (no hardcoded document types)
+    if (suggestions.some(s => s.field.includes('pages') || s.field.includes('items') || s.field.includes('effects'))) {
+      instructions += '\n• For embedded documents: Each entry needs name, type, and appropriate content fields. Use inspect_document_schema to see the structure.';
+    }
+    if (suggestions.some(s => s.issue.includes('type') || s.field === 'type')) {
+      instructions += '\n• For type fields: Use inspect_document_schema to discover valid subtypes for this document.';
     }
 
     return instructions;

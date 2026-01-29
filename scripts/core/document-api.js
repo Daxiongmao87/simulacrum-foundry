@@ -627,6 +627,16 @@ export class DocumentAPI {
           } catch (e) { }
         }
 
+        // CONFIG-based enum lookup for fields without explicit choices
+        // Many systems (dnd5e, pf2e, etc.) store valid values in CONFIG.SYSTEM_ID
+        if (!fieldInfo.choices && fieldInfo.type === 'string') {
+          const configChoices = this.#lookupConfigChoices(fieldName);
+          if (configChoices && configChoices.length > 0) {
+            fieldInfo.choices = configChoices.slice(0, 30);
+            fieldInfo.choicesSource = 'CONFIG';
+          }
+        }
+
         details[fieldName] = fieldInfo;
       } catch (fieldError) {
         details[fieldName] = { type: 'unknown', error: 'Failed to extract' };
@@ -666,6 +676,83 @@ export class DocumentAPI {
     }
 
     return 'unknown';
+  }
+
+  /**
+   * Looks up valid choices for a field by searching all CONFIG namespaces dynamically.
+   * No hardcoded system assumptions - searches game.system's CONFIG namespace and
+   * uses fuzzy matching to find enum-like objects.
+   * @param {string} fieldName The name of the field to look up choices for.
+   * @returns {string[]|null} Array of valid choices, or null if not found.
+   * @private
+   */
+  static #lookupConfigChoices(fieldName) {
+    if (!game?.system?.id) return null;
+
+    // Dynamically find the system's CONFIG namespace
+    // Try multiple naming conventions: uppercase, lowercase, original
+    const systemId = game.system.id;
+    const systemConfig = CONFIG[systemId.toUpperCase()] || 
+                         CONFIG[systemId.toLowerCase()] || 
+                         CONFIG[systemId];
+    
+    if (!systemConfig || typeof systemConfig !== 'object') return null;
+
+    // Pure fuzzy search - no hardcoded mappings
+    // Look for CONFIG keys that might match this field name
+    const lowerFieldName = fieldName.toLowerCase();
+    
+    for (const [key, value] of Object.entries(systemConfig)) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+      
+      const lowerKey = key.toLowerCase();
+      
+      // Match patterns like:
+      // - "actorSizes" for field "size" (key ends with fieldName + 's')
+      // - "spellSchools" for field "school" (key ends with fieldName + 's')
+      // - Direct match: key === fieldName
+      const isMatch = lowerKey === lowerFieldName ||
+                      lowerKey === lowerFieldName + 's' ||
+                      lowerKey.endsWith(lowerFieldName + 's') ||
+                      lowerKey.endsWith(lowerFieldName);
+      
+      if (isMatch) {
+        const keys = this.#extractConfigKeys(value);
+        // Sanity check: only return if it looks like an enum (reasonable number of values)
+        if (keys && keys.length > 0 && keys.length < 50) {
+          return keys;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extracts keys from a CONFIG object that represents an enum.
+   * Handles both object-style enums and array-style enums.
+   * @param {object|array} configValue The CONFIG value to extract keys from.
+   * @returns {string[]|null} Array of keys, or null if not a valid enum.
+   * @private
+   */
+  static #extractConfigKeys(configValue) {
+    if (!configValue) return null;
+
+    if (Array.isArray(configValue)) {
+      // Array of strings or objects with 'value' property
+      return configValue
+        .map(item => (typeof item === 'string' ? item : item?.value || item?.id))
+        .filter(Boolean);
+    }
+
+    if (typeof configValue === 'object') {
+      // Object with keys as enum values (most common in Foundry)
+      const keys = Object.keys(configValue);
+      // Filter out methods and prototype properties
+      return keys.filter(k => !k.startsWith('_') && typeof configValue[k] !== 'function');
+    }
+
+    return null;
   }
 
   /**

@@ -88,6 +88,17 @@ export class SchemaValidator {
         analysis.suggestions.push(`Valid choices: ${analysis.choices.join(', ')}`);
       }
 
+      // CONFIG-based enum lookup for fields without explicit choices
+      // Mirrors the logic in DocumentAPI.#lookupConfigChoices for consistency
+      if (!analysis.choices && analysis.type === 'StringField') {
+        const configChoices = this.#lookupConfigChoices(fieldName);
+        if (configChoices && configChoices.length > 0) {
+          analysis.choices = configChoices;
+          analysis.choicesSource = 'CONFIG';
+          analysis.suggestions.push(`Valid values: ${configChoices.slice(0, 10).join(', ')}${configChoices.length > 10 ? '...' : ''}`);
+        }
+      }
+
       if (field.min !== undefined) {
         analysis.validation.min = field.min;
         analysis.suggestions.push(`Minimum value: ${field.min}`);
@@ -369,8 +380,13 @@ export class SchemaValidator {
     }
 
     // Check for embedded collection fields that need special handling
-    if (schemaInfo.fields?.pages && fieldName === 'content') {
-      return `Field "content" is not valid for ${documentType}. Content should be placed in "pages" array as JournalEntryPage embedded documents. Example: pages: [{ name: "Page 1", type: "text", text: { content: "<p>Your content here</p>" } }]`;
+    // Dynamically detect if a field should be in an embedded collection
+    const embeddedCollections = Object.entries(schemaInfo.fields || {}).filter(
+      ([, field]) => field.isCollection || field.elementType
+    ).map(([name]) => name);
+    
+    if (embeddedCollections.length > 0 && fieldName === 'content') {
+      return `Field "content" is not valid at the top level for ${documentType}. This document uses embedded collections: ${embeddedCollections.join(', ')}. Use inspect_document_schema to see the correct structure.`;
     }
 
     // Check for common field name variations
@@ -380,6 +396,71 @@ export class SchemaValidator {
     );
     if (similarFields.length > 0) {
       return `Did you mean one of these fields? ${similarFields.join(', ')}`;
+    }
+
+    return null;
+  }
+
+  /**
+   * Looks up valid choices for a field by searching system CONFIG namespace dynamically.
+   * @param {string} fieldName The name of the field to look up choices for.
+   * @returns {string[]|null} Array of valid choices, or null if not found.
+   * @private
+   */
+  static #lookupConfigChoices(fieldName) {
+    if (!game?.system?.id) return null;
+
+    // Dynamically find the system's CONFIG namespace
+    const systemId = game.system.id;
+    const systemConfig = CONFIG[systemId.toUpperCase()] || 
+                         CONFIG[systemId.toLowerCase()] || 
+                         CONFIG[systemId];
+    
+    if (!systemConfig || typeof systemConfig !== 'object') return null;
+
+    // Pure fuzzy search - no hardcoded mappings
+    const lowerFieldName = fieldName.toLowerCase();
+    
+    for (const [key, value] of Object.entries(systemConfig)) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+      
+      const lowerKey = key.toLowerCase();
+      
+      // Match patterns like "actorSizes" for field "size"
+      const isMatch = lowerKey === lowerFieldName ||
+                      lowerKey === lowerFieldName + 's' ||
+                      lowerKey.endsWith(lowerFieldName + 's') ||
+                      lowerKey.endsWith(lowerFieldName);
+      
+      if (isMatch) {
+        const keys = this.#extractConfigKeys(value);
+        if (keys && keys.length > 0 && keys.length < 50) {
+          return keys;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extracts keys from a CONFIG object that represents an enum.
+   * @param {object|array} configValue The CONFIG value to extract keys from.
+   * @returns {string[]|null} Array of keys, or null if not a valid enum.
+   * @private
+   */
+  static #extractConfigKeys(configValue) {
+    if (!configValue) return null;
+
+    if (Array.isArray(configValue)) {
+      return configValue
+        .map(item => (typeof item === 'string' ? item : item?.value || item?.id))
+        .filter(Boolean);
+    }
+
+    if (typeof configValue === 'object') {
+      const keys = Object.keys(configValue);
+      return keys.filter(k => !k.startsWith('_') && typeof configValue[k] !== 'function');
     }
 
     return null;
