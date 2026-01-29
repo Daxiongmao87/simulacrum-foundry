@@ -16,6 +16,7 @@ import { registerAdvancedSettings, registerSettingsEnhancements } from './ui/set
 import { createLogger } from './utils/logger.js';
 import { BUILD_HASH } from './build-info.js';
 import { InteractionLogDownloader } from './core/interaction-logger.js';
+import { assetIndexService } from './core/asset-index-service.js';
 
 
 const MODULE_ID = 'simulacrum';
@@ -259,6 +260,10 @@ Hooks.once('ready', async () => {
   // Initialize interaction logger (loads persisted entries)
   const { interactionLogger } = await import('./core/interaction-logger.js');
   await interactionLogger.initialize();
+
+  // Initialize asset index service in background (non-blocking)
+  // Search tool will await the index if called before it's ready
+  assetIndexService.initialize();
 
   const version = game.modules.get(MODULE_ID)?.version ?? 'unknown';
   logger.info(`${MODULE_NAME} v${version} is ready! [build:${BUILD_HASH}]`);
