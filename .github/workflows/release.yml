@@ -105,19 +105,23 @@ jobs:
           echo "$COMMITS" > changelog.txt
           
           # Update CHANGELOG.md - insert new version after header
-          # Create the new entry
-          NEW_ENTRY="## [$VERSION] - $TODAY
-
-### Changed
-$COMMITS
-"
+          # Create the new entry using heredoc
+          cat > new_entry.txt << 'ENTRY_EOF'
+          ## [$VERSION] - $TODAY
           
-          # Insert after line 6 (after the header block)
+          ### Changed
+          ENTRY_EOF
+          # Use sed to replace placeholders and append commits
+          sed -i "s/\$VERSION/$VERSION/g; s/\$TODAY/$TODAY/g" new_entry.txt
+          echo "$COMMITS" >> new_entry.txt
+          
+          # Insert after line 7 (after the header block)
           head -n 7 CHANGELOG.md > CHANGELOG.tmp
           echo "" >> CHANGELOG.tmp
-          echo "$NEW_ENTRY" >> CHANGELOG.tmp
+          cat new_entry.txt >> CHANGELOG.tmp
           tail -n +8 CHANGELOG.md >> CHANGELOG.tmp
           mv CHANGELOG.tmp CHANGELOG.md
+          rm new_entry.txt
           
           echo "Updated CHANGELOG.md with $VERSION entry"
 
