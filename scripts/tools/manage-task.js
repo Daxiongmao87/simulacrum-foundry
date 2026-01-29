@@ -179,7 +179,7 @@ export class ManageTaskTool extends BaseTool {
 
     return {
       content: `Task completed: ${taskName}\n\nSummary: ${summary}`,
-      display: '', // No display in chat - summary is in content for AI context
+      display: `**Task Complete: ${taskName}**\n\n${summary}`,
     };
   }
 
