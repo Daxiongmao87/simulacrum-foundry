@@ -127,34 +127,24 @@ export async function syncMessagesFromCore(conversationManager) {
         }
       }
 
-      // Build aggregate justification HTML for the assistant message display (legacy behavior)
-      const justifications = [];
-      for (const tc of m.tool_calls) {
-        try {
-          const args = typeof tc.function?.arguments === 'string'
-            ? JSON.parse(tc.function.arguments)
-            : tc.function?.arguments;
-
-          if (args && args.justification) {
-            const toolName = tc.function?.name || tc.name;
-            justifications.push(`<strong>${toolName}:</strong> ${args.justification}`);
-          }
-        } catch (e) {
-          // Ignore parsing errors
-        }
-      }
-
-      if (justifications.length > 0) {
-        const justificationHtml = `\n\n<div class="tool-justification">
-          <div class="justification-header"><i class="fa-solid fa-lightbulb"></i> Plan</div>
-          <div class="justification-content">${justifications.join('<br>')}</div>
-        </div>`;
-
-        m._justificationHtml = justificationHtml;
-      }
+      // NOTE: We no longer build aggregate "Plan" justification HTML here.
+      // The justification is shown inside each tool-call card via formatToolCallDisplay.
+      // Building it here caused duplicate justification blocks on reload.
     }
 
     if (m.role === 'tool') {
+      // Check for silent tools (like end_loop) - skip UI rendering
+      let isSilent = false;
+      try {
+        const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
+        isSilent = parsed?._silent === true;
+      } catch (_e) { /* not JSON, not silent */ }
+
+      if (isSilent) {
+        // Skip silent tool results entirely (matches live behavior)
+        continue;
+      }
+
       // Reconstruct tool result display
       const toolName = toolCallNames.get(m.tool_call_id);
       const justification = toolCallJustifications.get(m.tool_call_id) || '';
@@ -185,25 +175,8 @@ export async function syncMessagesFromCore(conversationManager) {
       messages.push(message);
     } else {
       // Normal message processing
-      let contentToDisplay = m.content;
-      if (m._justificationHtml) {
-        // Append justification HTML to the content for display
-        // We append it to the 'content' so processMessageForDisplay sees it?
-        // OR we pass it as a separate 'display' argument?
-        // processMessageForDisplay transforms <think> tags etc.
-        // If we append HTML, markdown renderer might escape it?
-        // MarkdownRenderer usually handles HTML if configured.
-        // Better to pass it as 'display' overrides if we can, but createDisplayMessage computes display from content.
-
-        // Let's pre-calculate display and append our HTML
-        const baseDisplay = await processMessageForDisplay(m.content);
-        const finalDisplay = baseDisplay + m._justificationHtml;
-        const message = await createDisplayMessage(m.role, m.content, finalDisplay);
-        messages.push(message);
-      } else {
-        const message = await createDisplayMessage(m.role, m.content);
-        messages.push(message);
-      }
+      const message = await createDisplayMessage(m.role, m.content);
+      messages.push(message);
     }
   }
 

@@ -215,6 +215,15 @@ async function _processLoopCycle(currentResponse, context, state) {
     if (repeatCount >= REPEAT_LIMIT) {
       return { action: 'break' }; // Safety valve
     }
+
+    // PERSIST FIX: Save the AI's text content as a visible message BEFORE adding correction.
+    // This ensures the text is available on reload (live display already shows it via _notifyAssistantMessage).
+    // Only save if there's actual text content (not just whitespace).
+    if (currentResponse.content && currentResponse.content.trim().length > 0) {
+      context.conversationManager.addMessage('assistant', currentResponse.content);
+      await context.conversationManager.save();
+    }
+
     // Send comprehensive correction message with loop context and exit options
     const correctionMessage = `LOOP CONTEXT: You are currently in an autonomous tool execution loop. Text-only responses are rejected - you MUST respond with a tool call.
 
