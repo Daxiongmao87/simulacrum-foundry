@@ -15,7 +15,7 @@ export class ReadToolOutputTool extends BaseTool {
     constructor() {
         super(
             'read_tool_output',
-            'Read a portion of a previously returned tool output by line range. Use this when a tool output was too large and was stored with a reference.',
+            'Read a portion of a previously returned tool output by line range. Use this when a tool output was too large and was stored with a reference. A range of 200 lines (e.g., start_line=1, end_line=200) is a good default chunk size.',
             null,
             false
         );
@@ -35,11 +35,11 @@ export class ReadToolOutputTool extends BaseTool {
                 },
                 start_line: {
                     type: 'integer',
-                    description: 'Starting line number (1-indexed)',
+                    description: 'Starting line number (1-indexed). Default chunk size is 200 lines.',
                 },
                 end_line: {
                     type: 'integer',
-                    description: 'Ending line number (1-indexed, inclusive)',
+                    description: 'Ending line number (1-indexed, inclusive). For a 200-line chunk starting at 1, use end_line=200.',
                 },
             },
             required: ['tool_call_id', 'start_line', 'end_line'],
