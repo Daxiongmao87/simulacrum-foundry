@@ -133,21 +133,48 @@ export async function syncMessagesFromCore(conversationManager) {
     }
 
     if (m.role === 'tool') {
-      // Check for silent tools (like end_loop) - skip UI rendering
-      let isSilent = false;
-      try {
-        const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
-        isSilent = parsed?._silent === true;
-      } catch (_e) { /* not JSON, not silent */ }
+      // Check for silent/hidden tools - skip UI rendering
+      const hiddenTools = ['end_loop'];
+      // Tools that render their display directly without tool card wrapper
+      const directDisplayTools = ['manage_task'];
+      // Tools that don't need justification displayed (self-explanatory from context)
+      const noJustificationTools = ['read_tool_output'];
+
+      const toolName = toolCallNames.get(m.tool_call_id);
+      let isSilent = hiddenTools.includes(toolName);
+      if (!isSilent) {
+        try {
+          const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
+          isSilent = parsed?._silent === true;
+        } catch (_e) { /* not JSON, not silent */ }
+      }
 
       if (isSilent) {
-        // Skip silent tool results entirely (matches live behavior)
+        // Skip silent/hidden tool results entirely (matches live behavior)
+        continue;
+      }
+
+      // Handle direct display tools (e.g., manage_task step separators)
+      if (directDisplayTools.includes(toolName)) {
+        const rawDisplay = getToolDisplayContent(m);
+        // Only show if there's actual display content (skip empty displays like start_task)
+        if (rawDisplay && rawDisplay.trim()) {
+          // Check if display is already HTML (starts with <) or needs markdown rendering
+          let formattedDisplay = rawDisplay;
+          if (!rawDisplay.trim().startsWith('<')) {
+            formattedDisplay = await MarkdownRenderer.render(rawDisplay, { force: true });
+          }
+          const message = await createDisplayMessage('assistant', m.content, formattedDisplay);
+          messages.push(message);
+        }
         continue;
       }
 
       // Reconstruct tool result display
-      const toolName = toolCallNames.get(m.tool_call_id);
-      const justification = toolCallJustifications.get(m.tool_call_id) || '';
+      // Skip justification for self-explanatory tools
+      const justification = noJustificationTools.includes(toolName)
+        ? ''
+        : (toolCallJustifications.get(m.tool_call_id) || '');
 
       let preRendered = null;
       const rawDisplayContent = getToolDisplayContent(m);

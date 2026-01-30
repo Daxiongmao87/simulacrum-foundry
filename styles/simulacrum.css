@@ -879,7 +879,7 @@
 
 .task-tracker-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   cursor: pointer;
 }
@@ -887,11 +887,36 @@
 .task-tracker-header .task-tracker-icon {
   color: #daa520;
   font-size: 1em;
+  margin-top: 0.15em;
+}
+
+/* 2-line info container */
+.task-tracker-header .task-tracker-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.task-tracker-header .task-tracker-title {
+  font-weight: 600;
+  color: #fff4c2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-tracker-header .task-tracker-step-info {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85em;
+  opacity: 0.8;
 }
 
 .task-tracker-header .task-tracker-step {
-  font-weight: 600;
-  flex: 1;
+  color: #c9b68e;
 }
 
 .task-tracker-header .task-tracker-progress {
@@ -907,6 +932,7 @@
   padding: 0.25rem;
   opacity: 0.6;
   transition: opacity 0.2s, transform 0.2s;
+  align-self: center;
 }
 
 .task-tracker-header .task-tracker-toggle:hover {
@@ -1374,4 +1400,66 @@
 .tool-justification strong {
   color: #ffd700;
   font-style: normal;
+}
+
+/* ---------------------------------------- */
+/*  Step Separator (Task Progress Indicator) */
+/* ---------------------------------------- */
+
+/* Minimal 2-line step separator shown when task progresses */
+.simulacrum-step-separator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin: -0.25rem 0;
+  font-size: 0.85em;
+  color: #888;
+  opacity: 0.85;
+}
+
+/* Task name - top line, smaller and muted subtext */
+.simulacrum-step-separator .step-task-name {
+  color: #888;
+  font-size: 0.8em;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80%;
+  margin-bottom: 0.1rem;
+}
+
+/* Step info container - bottom line with horizontal separators */
+.simulacrum-step-separator .step-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+/* Horizontal gradient lines */
+.simulacrum-step-separator .step-info::before,
+.simulacrum-step-separator .step-info::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(218, 165, 32, 0.3));
+}
+
+.simulacrum-step-separator .step-info::after {
+  background: linear-gradient(to left, transparent, rgba(218, 165, 32, 0.3));
+}
+
+.simulacrum-step-separator .step-label {
+  color: #daa520;
+  font-weight: 500;
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.simulacrum-step-separator .step-title {
+  color: #c9b68e;
+  font-style: italic;
 }

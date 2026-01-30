@@ -354,17 +354,54 @@ class ChatHandler {
       // FIX: Do not add to conversation here, as tool-loop-handler already adds it internally.
       // this.addMessageToConversation('tool', toolResult.content, null, toolResult.toolCallId);
 
-      // Check for silent tools (like end_loop) - skip UI rendering
-      let isSilent = false;
-      try {
-        const parsed = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
-        isSilent = parsed?._silent === true;
-      } catch (_e) { /* not JSON, not silent */ }
+      // Check for silent/hidden tools - skip UI rendering
+      const hiddenTools = ['end_loop'];
+      // Tools that don't need justification displayed (self-explanatory from context)
+      const noJustificationTools = ['read_tool_output'];
+      // Tools that render their display directly without tool card wrapper
+      const directDisplayTools = ['manage_task'];
+      let isSilent = hiddenTools.includes(toolResult.toolName);
+      if (!isSilent) {
+        try {
+          const parsed = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+          isSilent = parsed?._silent === true;
+        } catch (_e) { /* not JSON, not silent */ }
+      }
 
       // Task-09: Format tool result with rich HTML display if it has a toolName (and is not silent)
       if (toolResult.toolName && options.onAssistantMessage && !isSilent) {
-        // Retrieve justification stored during pending phase
-        const justification = retrieveToolJustification(toolResult.toolCallId);
+        // Emit hook for UI to remove pending card and display result
+        Hooks.callAll('simulacrumToolResult', {
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName,
+        });
+
+        // Direct display tools: render their display property directly without tool card wrapper
+        if (directDisplayTools.includes(toolResult.toolName)) {
+          const rawDisplay = getToolDisplayContent(toolResult);
+          // Only show if there's actual display content (skip empty displays like start_task)
+          if (rawDisplay && rawDisplay.trim()) {
+            // Check if display is already HTML (starts with <) or needs markdown rendering
+            let formattedDisplay = rawDisplay;
+            if (!rawDisplay.trim().startsWith('<')) {
+              formattedDisplay = await MarkdownRenderer.render(rawDisplay, { force: true });
+            }
+            this.addMessageToUI(
+              {
+                role: 'assistant',
+                content: toolResult.content,
+                display: formattedDisplay,
+              },
+              options
+            );
+          }
+          return; // Skip standard tool card formatting
+        }
+
+        // Retrieve justification stored during pending phase (skip for self-explanatory tools)
+        const justification = noJustificationTools.includes(toolResult.toolName)
+          ? ''
+          : retrieveToolJustification(toolResult.toolCallId);
 
         let preRendered = null;
         try {
@@ -397,12 +434,6 @@ class ChatHandler {
         }
 
         const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered, justification);
-
-        // Emit hook for UI to remove pending card and display result
-        Hooks.callAll('simulacrumToolResult', {
-          toolCallId: toolResult.toolCallId,
-          toolName: toolResult.toolName,
-        });
 
         // Display as assistant message with tool indicator
         this.addMessageToUI(

@@ -141,9 +141,13 @@ export class ManageTaskTool extends BaseTool {
     Hooks.callAll(SimulacrumHooks.TASK_UPDATED, this._getTaskState());
 
     const currentStepTitle = this.currentTask.steps[this.currentTask.currentStepIndex]?.title || 'Unknown';
+    const stepNum = this.currentTask.currentStepIndex + 1;
+    const totalSteps = this.currentTask.steps.length;
+    const taskName = this.currentTask.name;
     return {
-      content: `Task update: Step ${this.currentTask.currentStepIndex + 1}/${this.currentTask.steps.length} - ${currentStepTitle}`,
-      display: '', // No display in chat - tracker shows it
+      content: `Task update: Step ${stepNum}/${totalSteps} - ${currentStepTitle}`,
+      // Minimal 2-line step separator for chat display
+      display: `<div class="simulacrum-step-separator"><div class="step-task-name">${taskName}</div><div class="step-info"><span class="step-label">Step ${stepNum}</span><span class="step-title">${currentStepTitle}</span></div></div>`,
     };
   }
 
