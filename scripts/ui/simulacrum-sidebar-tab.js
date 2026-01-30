@@ -181,24 +181,24 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const currentStep = taskState.steps[taskState.currentStepIndex];
     const stepTitle = currentStep?.title || 'Working...';
     const iconEl = tracker.querySelector('.task-tracker-icon');
+    const titleEl = tracker.querySelector('.task-tracker-title');
     const stepEl = tracker.querySelector('.task-tracker-step');
     const progressEl = tracker.querySelector('.task-tracker-progress');
 
     if (iconEl) {
       // Update icon based on status
-      iconEl.className = currentStep?.status === 'completed' 
+      iconEl.className = currentStep?.status === 'completed'
         ? 'fa-solid fa-circle-check task-tracker-icon'
         : 'fa-solid fa-circle-notch fa-spin task-tracker-icon';
     }
-    if (stepEl) stepEl.textContent = stepTitle;
+    if (titleEl) titleEl.textContent = taskState.name;
+    if (stepEl) stepEl.textContent = `Step ${taskState.currentStepIndex + 1}: ${stepTitle}`;
     if (progressEl) progressEl.textContent = `(${taskState.currentStepIndex + 1}/${taskState.totalSteps})`;
 
     // Update body
-    const nameEl = tracker.querySelector('.task-tracker-name');
     const goalEl = tracker.querySelector('.task-tracker-goal');
     const stepsEl = tracker.querySelector('.task-tracker-steps');
 
-    if (nameEl) nameEl.textContent = taskState.name;
     if (goalEl) goalEl.textContent = taskState.goal;
 
     if (stepsEl) {
@@ -660,6 +660,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    */
   _addPendingToolCard(data) {
     const { toolCallId, toolName, justification } = data;
+
+    // Hidden tools have dedicated UI elsewhere (e.g., task tracker) - skip pending cards
+    const hiddenTools = ['end_loop', 'manage_task'];
+    if (hiddenTools.includes(toolName)) {
+      return;
+    }
 
     // Generate the pending card HTML using the utility function
     const pendingHtml = formatPendingToolCall(toolName, justification || '', toolCallId);
