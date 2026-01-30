@@ -40,20 +40,55 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Convert README to HTML description
+        run: |
+          # Install marked CLI for markdown to HTML conversion
+          npm install -g marked
+
+          # Create a processed README for conversion
+          # 1. Remove badge lines (lines starting with [![)
+          # 2. Convert relative image/doc paths to absolute GitHub URLs
+          REPO_RAW="https://raw.githubusercontent.com/${{ github.repository }}/main"
+
+          cat README.md | \
+            sed '/^\[!\[/d' | \
+            sed "s|](docs/|](${REPO_RAW}/docs/|g" | \
+            sed "s|src=\"docs/|src=\"${REPO_RAW}/docs/|g" \
+            > readme_processed.md
+
+          # Convert to HTML
+          marked readme_processed.md > readme.html
+
+          # Strip the first <h1>...</h1> tag (redundant with package title)
+          # Then collapse to single line for cleaner JSON
+          sed -i '0,/<h1[^>]*>.*<\/h1>/s///' readme.html
+          cat readme.html | tr '\n' ' ' | sed 's/  */ /g' > readme_single.html
+
+          # Cleanup intermediate file
+          rm -f readme_processed.md
+
       - name: Update module.json version
         run: |
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
-          
-          # Update version, manifest, and download URLs
+
+          # Read the HTML description from file
+          README_HTML=$(cat readme_single.html)
+
+          # Update version, manifest, download URLs, and description
           jq --arg ver "$VERSION" \
              --arg manifest "${REPO_URL}/releases/download/${VERSION}/module.json" \
              --arg download "${REPO_URL}/releases/download/${VERSION}/${MODULE_ID}.zip" \
-             '.version = $ver | .manifest = $manifest | .download = $download' \
+             --arg desc "$README_HTML" \
+             '.version = $ver | .manifest = $manifest | .download = $download | .description = $desc' \
              module.json > module.json.tmp && mv module.json.tmp module.json
-          
+
           echo "Updated module.json:"
           cat module.json | jq '.version, .manifest, .download'
+          echo "Description length: $(cat module.json | jq '.description | length') chars"
+
+          # Cleanup
+          rm -f readme.html readme_single.html
 
       - name: Build compendium packs
         run: npm run build:packs
