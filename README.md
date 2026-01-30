@@ -1,5 +1,13 @@
 # Simulacrum: AI Campaign Copilot
 
+[![Foundry Version](https://img.shields.io/endpoint?url=https://foundryshields.com/version?url=https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/module.json)](https://foundryvtt.com/)
+[![Forge Installs](https://img.shields.io/badge/dynamic/json?label=Forge%20Installs&query=package.installs&suffix=%25&url=https://forge-vtt.com/api/bazaar/package/simulacrum&colorB=4aa94a)](https://forge-vtt.com/bazaar#package=simulacrum)
+[![GitHub Downloads](https://img.shields.io/github/downloads/Daxiongmao87/simulacrum-foundry/total?logo=GitHub)](https://github.com/Daxiongmao87/simulacrum-foundry/releases)
+[![Latest Release](https://img.shields.io/github/v/release/Daxiongmao87/simulacrum-foundry)](https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest)
+[![License](https://img.shields.io/github/license/Daxiongmao87/simulacrum-foundry)](LICENSE)
+[![Discord](https://img.shields.io/discord/1466476707522543742?logo=discord&logoColor=white&label=Discord)](https://discord.gg/VSs8jZBgmP)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee)](https://buymeacoffee.com/daxiongmao87)
+
 An AI-powered Campaign Copilot for [Foundry Virtual Tabletop](https://foundryvtt.com/) that helps Game Masters manage their campaigns through natural language conversation.
 
 <p align="center">
