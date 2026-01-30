@@ -220,6 +220,11 @@ class DocumentUpdateTool extends BaseTool {
     if (params.pack) opts.pack = params.pack;
     const latestDocument = await DocumentAPI.getDocument(params.documentType, params.documentId, opts);
     const id = latestDocument.name || latestDocument._id || latestDocument.id;
+
+    // Update the registry with the new document state so subsequent edits don't fail
+    const data = typeof latestDocument?.toObject === 'function' ? latestDocument.toObject() : latestDocument;
+    documentReadRegistry.registerRead(params.documentType, params.documentId, data);
+
     return {
       content: JSON.stringify(
         {
