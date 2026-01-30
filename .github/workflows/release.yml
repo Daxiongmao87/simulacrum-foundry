@@ -195,3 +195,39 @@ jobs:
               exit 1
             fi
           }
+
+      - name: Announce on Discord
+        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          REPO_URL="https://github.com/${{ github.repository }}"
+          RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
+          CHANGELOG=$(cat changelog.txt | head -20 | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+          # Send Discord embed
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🎉 Simulacrum v${VERSION} Released!\",
+                \"url\": \"${RELEASE_URL}\",
+                \"color\": 14206924,
+                \"description\": \"A new version of Simulacrum: AI Campaign Copilot is now available!\",
+                \"fields\": [
+                  {
+                    \"name\": \"📋 Changes\",
+                    \"value\": \"${CHANGELOG}\"
+                  },
+                  {
+                    \"name\": \"📥 Install\",
+                    \"value\": \"Update from Foundry VTT Add-on Modules or [download from GitHub](${RELEASE_URL})\"
+                  }
+                ],
+                \"footer\": {
+                  \"text\": \"Simulacrum: AI Campaign Copilot\"
+                }
+              }]
+            }" \
+            "$DISCORD_WEBHOOK_URL"
