@@ -1,12 +1,18 @@
 # Simulacrum: AI Campaign Copilot
 
-[![Foundry Version](https://img.shields.io/endpoint?url=https://foundryshields.com/version?url=https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/module.json)](https://foundryvtt.com/)
-[![Forge Installs](https://img.shields.io/badge/dynamic/json?label=Forge%20Installs&query=package.installs&suffix=%25&url=https://forge-vtt.com/api/bazaar/package/simulacrum&colorB=4aa94a)](https://forge-vtt.com/bazaar#package=simulacrum)
-[![GitHub Downloads](https://img.shields.io/github/downloads/Daxiongmao87/simulacrum-foundry/total?logo=GitHub)](https://github.com/Daxiongmao87/simulacrum-foundry/releases)
-[![Latest Release](https://img.shields.io/github/v/release/Daxiongmao87/simulacrum-foundry)](https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest)
-[![License](https://img.shields.io/github/license/Daxiongmao87/simulacrum-foundry)](LICENSE)
-[![Discord](https://img.shields.io/discord/1466476707522543742?logo=discord&logoColor=white&label=Discord)](https://discord.gg/VSs8jZBgmP)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee)](https://buymeacoffee.com/daxiongmao87)
+<p align="center">
+  <a href="https://foundryvtt.com/packages/simulacrum"><img src="https://img.shields.io/badge/FoundryVTT-Install%20Package-e67e22?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFjSURBVDhPYxgFxAAmJqb/QBo5jBQAygQpRQb4NMI0wTUyMDD8h9JYMYpGmCYGJiamB1A5OI0kDQE0jQxAza+gNFwzugagRmagxgdQ6QdQjf+hGv8zMzM/gEojawRqegCl/zMxMT2AaQTRf5mYGB4wMjLeB2kA0f+Zn0JNAND/mR9C7YJphNFQDf+ZgZoeMDExPGBkYrgPchLIJJC9IAwEQP4TcCBI439mpvtQOxjugzTCNMJoEAbRQLX3mZiYQE4FagQFEchJYA0wTQgMchKS5vtY5SGGwjXCaKgmkPP+A8kHUI0PYHYxMTHch2nEhmEa/zM/hWq6z/AQ6lSYRhAN1YgLIzT+Z4Y67T/I5UB9D0Ca/sPcCKOhGmGy+DXCNLhBnXafgenZfZBGsJP+g5yKYi8DTDMjE9N/qBQ8bqAqYXpxarxPTDiD8qCMIBmkBlU1UhpGayQmjJE1wjSgJAgGBgCmJJx6XoJdXwAAAABJRU5ErkJggg==" alt="Install on FoundryVTT"></a>
+  <a href="https://discord.gg/VSs8jZBgmP"><img src="https://img.shields.io/discord/1466476707522543742?style=for-the-badge&logo=discord&logoColor=white&label=Discord&color=5865F2" alt="Discord"></a>
+  <a href="https://buymeacoffee.com/daxiongmao87"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?style=for-the-badge&logo=buymeacoffee" alt="Buy Me a Coffee"></a>
+</p>
+
+<p align="center">
+  <a href="https://foundryvtt.com/"><img src="https://img.shields.io/endpoint?url=https://foundryshields.com/version?url=https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest/download/module.json" alt="Foundry Version"></a>
+  <a href="https://forge-vtt.com/bazaar#package=simulacrum"><img src="https://img.shields.io/badge/dynamic/json?label=Forge%20Installs&query=package.installs&suffix=%25&url=https://forge-vtt.com/api/bazaar/package/simulacrum&colorB=4aa94a" alt="Forge Installs"></a>
+  <a href="https://github.com/Daxiongmao87/simulacrum-foundry/releases"><img src="https://img.shields.io/github/downloads/Daxiongmao87/simulacrum-foundry/total?logo=GitHub" alt="GitHub Downloads"></a>
+  <a href="https://github.com/Daxiongmao87/simulacrum-foundry/releases/latest"><img src="https://img.shields.io/github/v/release/Daxiongmao87/simulacrum-foundry" alt="Latest Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Daxiongmao87/simulacrum-foundry" alt="License"></a>
+</p>
 
 An AI-powered Campaign Copilot for [Foundry Virtual Tabletop](https://foundryvtt.com/) that helps Game Masters manage their campaigns through natural language conversation.
 
