@@ -53,8 +53,8 @@ class DocumentListTool extends BaseTool {
     if (params.documentType === 'Compendium') {
       const packs = DocumentAPI.listPacks();
       return {
-        content: `Found ${packs.length} Compendium Packs`,
-        display: this.formatPackList(packs)
+        content: this.formatPackList(packs),
+        display: `Found **${packs.length}** Compendium Packs`,
       };
     }
 
@@ -75,9 +75,8 @@ class DocumentListTool extends BaseTool {
       });
 
       return {
-        content:
-          'Found ' + documents.length + ' ' + (params.documentType || 'total') + ' documents',
-        display: this.formatDocumentList(documents, params.documentType),
+        content: this.formatDocumentList(documents, params.documentType),
+        display: `Found **${documents.length}** ${params.documentType || ''} documents`,
       };
     } catch (error) {
       return {
@@ -123,8 +122,8 @@ class DocumentListTool extends BaseTool {
       });
 
       return {
-        content: 'Available document types: ' + documentTypes.join(', '),
-        display: '**Available Document Types**\n' + typeInfo.join('\n'),
+        content: '**Available Document Types**\n' + typeInfo.join('\n'),
+        display: `Found **${documentTypes.length}** document types`,
       };
     } catch (error) {
       return {
