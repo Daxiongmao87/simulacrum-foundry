@@ -1,25 +1,25 @@
 # FoundryVTT Module Release Workflow
-# Triggered when a version tag is pushed (e.g., 1.0.0)
-# Creates a GitHub release with module.json and module.zip
+# Manual trigger only - run with: gh workflow run release.yml -f version=1.0.2
 
-name: Release
+name: Create Release
 
-on:
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'  # Matches version tags like 1.0.0, 2.1.3
+"on":
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.2)'
+        required: true
+        type: string
 
 env:
   MODULE_ID: simulacrum
-  
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Only run if triggered by a tag push (extra safety)
-    if: startsWith(github.ref, 'refs/tags/')
     permissions:
-      contents: write  # Required for creating releases
-      
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,58 +36,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version from tag
+      - name: Set version
         id: version
-        run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Convert README to HTML description
         run: |
-          # Install marked CLI for markdown to HTML conversion
           npm install -g marked
-
-          # Create a processed README for conversion
-          # 1. Remove badge lines (lines starting with [![)
-          # 2. Convert relative image/doc paths to absolute GitHub URLs
           REPO_RAW="https://raw.githubusercontent.com/${{ github.repository }}/main"
-
           cat README.md | \
             sed '/^\[!\[/d' | \
             sed "s|](docs/|](${REPO_RAW}/docs/|g" | \
             sed "s|src=\"docs/|src=\"${REPO_RAW}/docs/|g" \
             > readme_processed.md
-
-          # Convert to HTML
           marked readme_processed.md > readme.html
-
-          # Strip the first <h1>...</h1> tag (redundant with package title)
-          # Then collapse to single line for cleaner JSON
           sed -i '0,/<h1[^>]*>.*<\/h1>/s///' readme.html
           cat readme.html | tr '\n' ' ' | sed 's/  */ /g' > readme_single.html
-
-          # Cleanup intermediate file
           rm -f readme_processed.md
 
       - name: Update module.json version
         run: |
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
-
-          # Read the HTML description from file
           README_HTML=$(cat readme_single.html)
-
-          # Update version, manifest, download URLs, and description
           jq --arg ver "$VERSION" \
              --arg manifest "${REPO_URL}/releases/download/${VERSION}/module.json" \
              --arg download "${REPO_URL}/releases/download/${VERSION}/${MODULE_ID}.zip" \
              --arg desc "$README_HTML" \
              '.version = $ver | .manifest = $manifest | .download = $download | .description = $desc' \
              module.json > module.json.tmp && mv module.json.tmp module.json
-
           echo "Updated module.json:"
           cat module.json | jq '.version, .manifest, .download'
-          echo "Description length: $(cat module.json | jq '.description | length') chars"
-
-          # Cleanup
           rm -f readme.html readme_single.html
 
       - name: Build compendium packs
@@ -95,10 +74,7 @@ jobs:
 
       - name: Create module zip
         run: |
-          # Create a clean directory for packaging
           mkdir -p dist/${{ env.MODULE_ID }}
-          
-          # Copy module files (exclude dev-only files)
           cp -r assets dist/${{ env.MODULE_ID }}/
           cp -r lang dist/${{ env.MODULE_ID }}/
           cp -r packs dist/${{ env.MODULE_ID }}/
@@ -108,12 +84,8 @@ jobs:
           cp module.json dist/${{ env.MODULE_ID }}/
           cp README.md dist/${{ env.MODULE_ID }}/
           cp LICENSE dist/${{ env.MODULE_ID }}/ 2>/dev/null || true
-          
-          # Create zip
           cd dist
           zip -r ${{ env.MODULE_ID }}.zip ${{ env.MODULE_ID }}
-          
-          # Move assets for release
           mv ${{ env.MODULE_ID }}.zip ../
           cp ${{ env.MODULE_ID }}/module.json ../module.json.release
           cd ..
@@ -124,53 +96,44 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.version }}
           TODAY=$(date +%Y-%m-%d)
-          
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
-            echo "Generating changelog from $PREV_TAG to $VERSION"
+            echo "Generating changelog from $PREV_TAG to HEAD"
             COMMITS=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
           else
-            echo "No previous tag found, including all commits"
+            echo "No previous tag found, including recent commits"
             COMMITS=$(git log --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s")
           fi
-          
-          # Write to file for GitHub release
           echo "$COMMITS" > changelog.txt
-          
-          # Update CHANGELOG.md - insert new version after header
-          # Create the new entry using heredoc
           cat > new_entry.txt << 'ENTRY_EOF'
           ## [$VERSION] - $TODAY
-          
+
           ### Changed
           ENTRY_EOF
-          # Use sed to replace placeholders and append commits
           sed -i "s/\$VERSION/$VERSION/g; s/\$TODAY/$TODAY/g" new_entry.txt
           echo "$COMMITS" >> new_entry.txt
-          
-          # Insert after line 7 (after the header block)
           head -n 7 CHANGELOG.md > CHANGELOG.tmp
           echo "" >> CHANGELOG.tmp
           cat new_entry.txt >> CHANGELOG.tmp
           tail -n +8 CHANGELOG.md >> CHANGELOG.tmp
           mv CHANGELOG.tmp CHANGELOG.md
           rm new_entry.txt
-          
-          echo "Updated CHANGELOG.md with $VERSION entry"
 
-      - name: Commit CHANGELOG.md
+      - name: Commit CHANGELOG.md and create tag
         run: |
+          VERSION=${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git commit -m "docs: update CHANGELOG.md for ${VERSION}" || echo "No changes to commit"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin main
+          git push origin "${VERSION}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.version.outputs.version }}
           name: "v${{ steps.version.outputs.version }}"
           body_path: changelog.txt
           files: |
@@ -197,37 +160,43 @@ jobs:
           }
 
       - name: Announce on Discord
-        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Discord webhook not configured, skipping announcement"
+            exit 0
+          fi
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
           RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
-          CHANGELOG=$(cat changelog.txt | head -20 | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          # Discord field value limit is 1024 chars - truncate changelog
+          CHANGELOG=$(cat changelog.txt | head -10 | cut -c1-900)
+          if [ ${#CHANGELOG} -ge 900 ]; then
+            CHANGELOG="${CHANGELOG}..."
+          fi
 
-          # Send Discord embed
-          curl -H "Content-Type: application/json" \
-            -X POST \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"🎉 Simulacrum v${VERSION} Released!\",
-                \"url\": \"${RELEASE_URL}\",
-                \"color\": 14206924,
-                \"description\": \"A new version of Simulacrum: AI Campaign Copilot is now available!\",
-                \"fields\": [
-                  {
-                    \"name\": \"📋 Changes\",
-                    \"value\": \"${CHANGELOG}\"
-                  },
-                  {
-                    \"name\": \"📥 Install\",
-                    \"value\": \"Update from Foundry VTT Add-on Modules or [download from GitHub](${RELEASE_URL})\"
-                  }
+          # Build JSON payload with proper escaping using jq
+          PAYLOAD=$(jq -n \
+            --arg title "Simulacrum v${VERSION} Released!" \
+            --arg url "$RELEASE_URL" \
+            --arg desc "A new version of Simulacrum: AI Campaign Copilot is now available!" \
+            --arg changes "$CHANGELOG" \
+            --arg install "Update from Foundry VTT or [GitHub](${RELEASE_URL})" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 14206924,
+                description: $desc,
+                fields: [
+                  {name: "Changes", value: $changes},
+                  {name: "Install", value: $install}
                 ],
-                \"footer\": {
-                  \"text\": \"Simulacrum: AI Campaign Copilot\"
-                }
+                footer: {text: "Simulacrum: AI Campaign Copilot"}
               }]
-            }" \
-            "$DISCORD_WEBHOOK_URL"
+            }')
+
+          echo "Payload: $PAYLOAD"
+          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL")
+          echo "Response: $RESPONSE"
