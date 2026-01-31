@@ -99,10 +99,14 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             echo "Generating changelog from $PREV_TAG to HEAD"
-            COMMITS=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+            COMMITS=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD | grep -vE '^- (docs|ci|chore):')
           else
             echo "No previous tag found, including recent commits"
-            COMMITS=$(git log --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s")
+            COMMITS=$(git log --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s" | grep -vE '^- (docs|ci|chore):')
+          fi
+          # Ensure we have at least something for the changelog
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- Maintenance release"
           fi
           echo "$COMMITS" > changelog.txt
           cat > new_entry.txt << 'ENTRY_EOF'
