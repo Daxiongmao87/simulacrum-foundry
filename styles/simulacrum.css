@@ -435,8 +435,16 @@
 /* ---------------------------------------- */
 
 /* Dark customized background for AI messages - Dark Indigo */
-.chat-message.simulacrum-chat-message {
+/* System-agnostic: use high specificity to override system stylesheets */
+/* Specificity: ID (1-0-0) + classes beats most system selectors */
+#simulacrum .chat-message.simulacrum-chat-message,
+#chat-log .chat-message.simulacrum-chat-message,
+.chat-popout .chat-message.simulacrum-chat-message,
+.chat-message.message.simulacrum-chat-message {
   background-color: #1a1625;
+  background-image: none;
+  background: #1a1625;
+  color: #fff4c2;
   border: 1px solid #4b4a45;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -445,8 +453,15 @@
 }
 
 /* User messages - Slightly more blue for distinction */
-.chat-message.simulacrum-chat-message.simulacrum-role-user {
+/* High specificity to override system styles */
+#simulacrum .chat-message.simulacrum-chat-message.simulacrum-role-user,
+#chat-log .chat-message.simulacrum-chat-message.simulacrum-role-user,
+.chat-popout .chat-message.simulacrum-chat-message.simulacrum-role-user,
+.chat-message.message.simulacrum-chat-message.simulacrum-role-user {
   background-color: #101318;
+  background-image: none;
+  background: #101318;
+  color: #fff4c2;
   /* Deep Obsidian Blue */
 }
 
@@ -476,7 +491,7 @@
   text-shadow: 0 0 5px rgba(218, 165, 32, 0.5);
 }
 
-/* Subtle texture overlay */
+/* Subtle texture overlay - System-agnostic noise pattern */
 .chat-message.simulacrum-chat-message::before {
   content: '';
   position: absolute;
@@ -484,11 +499,12 @@
   left: 0;
   width: 100%;
   height: 100%;
-  /* Using system texture as requested */
-  background-image: url('../../../systems/dnd5e/ui/texture-gray1.webp');
-  background-size: cover;
-  background-repeat: repeat;
-  opacity: 0.15;
+  /* CSS-only subtle noise texture (no external image dependency) */
+  background-image:
+    radial-gradient(ellipse at 20% 30%, rgba(255, 244, 194, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(218, 165, 32, 0.02) 0%, transparent 50%);
+  background-size: 100% 100%;
+  opacity: 1;
   pointer-events: none;
   z-index: 0;
 }
@@ -1057,23 +1073,24 @@
 /* ---------------------------------------- */
 
 /* Override system table colors to align with Simulacrum theme */
+/* System-agnostic: define our own custom properties, no --dnd5e-* dependencies */
 .simulacrum-chat-message {
-  /* Table Background - Darker Indigo/Obsidian */
-  --table-background-color: rgba(16, 19, 24, 0.5);
+  /* Simulacrum Table Variables (system-agnostic) */
+  --simulacrum-table-bg: rgba(16, 19, 24, 0.5);
+  --simulacrum-table-header-bg: #1a1625;
+  --simulacrum-table-header-bg-alt: #302831;
+  --simulacrum-table-header-border: #665c3b;
+  --simulacrum-table-header-text: #fff4c2;
+  --simulacrum-table-row-even: rgba(255, 244, 194, 0.05);
+  --simulacrum-table-row-odd: transparent;
+  --simulacrum-table-border: #4b4a45;
 
-  /* Header - Dark Indigo with Gold Accent */
-  --dnd5e-color-table-header-1: #1a1625;
-  --dnd5e-color-table-header-2: #302831;
-  --table-header-bg-color: #1a1625;
-  --table-header-border-color: #665c3b;
-  --table-header-text-color: #fff4c2;
-
-  /* Rows - Alternating dark/transparent with Gold borders */
-  --dnd5e-color-table-row-even: rgba(255, 244, 194, 0.05);
-  /* Very faint gold */
-  --dnd5e-color-table-row-odd: transparent;
-  --dnd5e-color-table-border: #4b4a45;
-  /* Matches message border */
+  /* Legacy compatibility: also set --dnd5e-* for systems that use them */
+  --dnd5e-color-table-header-1: var(--simulacrum-table-header-bg);
+  --dnd5e-color-table-header-2: var(--simulacrum-table-header-bg-alt);
+  --dnd5e-color-table-row-even: var(--simulacrum-table-row-even);
+  --dnd5e-color-table-row-odd: var(--simulacrum-table-row-odd);
+  --dnd5e-color-table-border: var(--simulacrum-table-border);
 }
 
 /* Force table text color to match message text */
