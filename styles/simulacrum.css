@@ -1497,3 +1497,37 @@
   color: #c9b68e;
   font-style: italic;
 }
+
+/* ---------------------------------------- */
+/*  Settings Discord Link                   */
+/* ---------------------------------------- */
+
+.simulacrum-settings .sheet-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.simulacrum-settings .discord-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #5865F2;
+  color: white;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.simulacrum-settings .discord-link:hover {
+  background: #4752C4;
+  color: white;
+  text-decoration: none;
+}
+
+.simulacrum-settings .discord-link i {
+  font-size: 1.1em;
+}
