@@ -285,12 +285,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
 
     // Check if endpoint is configured
-    // Local URLs (localhost, 127.0.0.1) don't require API key
-    // Remote URLs require an API key
     const apiKey = game.settings.get('simulacrum', 'apiKey');
-    const baseURL = game.settings.get('simulacrum', 'baseURL') || '';
-    const isLocalURL = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(baseURL);
-    const hasValidConfig = isLocalURL || (baseURL && apiKey);
+    const baseURL = game.settings.get('simulacrum', 'baseURL');
+    const hasValidConfig = apiKey || baseURL;
 
     if (!hasValidConfig) {
       return foundry.utils.mergeObject(context, {
