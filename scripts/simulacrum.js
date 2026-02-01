@@ -232,14 +232,29 @@ Hooks.once('ready', async () => {
       delete CONFIG.ui.simulacrum;
     }
 
-    // CRITICAL: Remove the tab button from the DOM since it was already rendered
+    // CRITICAL: Remove the tab button AND parent <li> from DOM to avoid empty gap
     const tabButton = document.querySelector('[data-tab="simulacrum"]');
     if (tabButton) {
-      tabButton.remove();
-      logger.info('Removed simulacrum tab button from DOM for non-GM user');
+      const parentLi = tabButton.closest('li');
+      if (parentLi) {
+        parentLi.remove();
+      } else {
+        tabButton.remove();
+      }
+      logger.info('Removed simulacrum tab from DOM for non-GM user');
     }
 
     return; // Exit early, do not initialize any further
+  }
+
+  // Check if endpoint configuration is missing or invalid
+  const apiKey = game.settings.get(MODULE_ID, 'apiKey');
+  const baseURL = game.settings.get(MODULE_ID, 'baseURL');
+  const hasValidConfig = apiKey || baseURL; // At minimum, one should be configured
+
+  if (!hasValidConfig) {
+    logger.warn('Simulacrum endpoint not configured. Tab will show configuration prompt.');
+    // We don't remove the tab, but the sidebar will show a configuration message
   }
 
   // Expose API

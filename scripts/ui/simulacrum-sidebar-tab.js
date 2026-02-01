@@ -52,6 +52,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       clearChat: SimulacrumSidebarTab.prototype._onClearChat,
       jumpToBottom: SimulacrumSidebarTab.prototype._onJumpToBottom,
       cancelProcess: SimulacrumSidebarTab.prototype._onCancelProcess,
+      openSettings: SimulacrumSidebarTab.prototype._onOpenSettings,
     },
   };
 
@@ -276,6 +277,26 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         user: game.user,
         accessDenied: true,
         accessDeniedMessage: game.i18n?.localize('SIMULACRUM.AccessDenied') ?? 'Simulacrum is only available to Game Masters.',
+        isAtBottom: true,
+        processActive: false,
+        processLabel: null,
+        disableInput: true,
+      });
+    }
+
+    // Check if endpoint is configured
+    const apiKey = game.settings.get('simulacrum', 'apiKey');
+    const baseURL = game.settings.get('simulacrum', 'baseURL');
+    const hasValidConfig = apiKey || baseURL;
+
+    if (!hasValidConfig) {
+      return foundry.utils.mergeObject(context, {
+        messages: [],
+        welcomeMessage: null,
+        isGM: true,
+        user: game.user,
+        configurationRequired: true,
+        configurationMessage: game.i18n?.localize('SIMULACRUM.ConfigurationRequired') ?? 'Please configure your AI endpoint in module settings.',
         isAtBottom: true,
         processActive: false,
         processLabel: null,
@@ -850,6 +871,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   async _onCancelProcess(event, target) {
     await SidebarEventHandlers.handleCancelProcess(this, event, target);
+  }
+
+  async _onOpenSettings(_event, _target) {
+    // Open the module settings
+    const { SettingsInterface } = await import('./settings-interface.js');
+    SettingsInterface.open();
   }
 
   _activateListeners(html) {

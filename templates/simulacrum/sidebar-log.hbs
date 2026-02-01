@@ -8,6 +8,15 @@
         <p class="access-denied-text"><i class="fa-solid fa-lock"></i> {{accessDeniedMessage}}</p>
       </div>
     </li>
+    {{else if configurationRequired}}
+    <li class="chat-message message flexcol configuration-required-message">
+      <div class="message-content">
+        <p class="configuration-required-text"><i class="fa-solid fa-gear"></i> {{configurationMessage}}</p>
+        <button type="button" class="open-settings-btn" data-action="openSettings">
+          <i class="fa-solid fa-cog"></i> {{localize "SIMULACRUM.OpenSettings"}}
+        </button>
+      </div>
+    </li>
     {{else}}
     {{#each messages}}
     {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
