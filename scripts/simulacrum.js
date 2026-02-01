@@ -64,6 +64,8 @@ function registerAPISettings() {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after apiKey change');
+        // Re-render sidebar to update configuration state
+        if (ui.simulacrum?.rendered) ui.simulacrum.render();
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after apiKey change', e);
       }
@@ -82,6 +84,8 @@ function registerAPISettings() {
       try {
         await SimulacrumCore.initializeAIClient();
         createLogger('Module').info('AI client reinitialized after baseURL change');
+        // Re-render sidebar to update configuration state
+        if (ui.simulacrum?.rendered) ui.simulacrum.render();
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after baseURL change', e);
       }
