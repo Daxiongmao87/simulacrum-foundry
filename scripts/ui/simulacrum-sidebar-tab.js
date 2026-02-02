@@ -52,7 +52,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       clearChat: SimulacrumSidebarTab.prototype._onClearChat,
       jumpToBottom: SimulacrumSidebarTab.prototype._onJumpToBottom,
       cancelProcess: SimulacrumSidebarTab.prototype._onCancelProcess,
-      openSettings: SimulacrumSidebarTab.prototype._onOpenSettings,
     },
   };
 
@@ -851,12 +850,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   async _onCancelProcess(event, target) {
     await SidebarEventHandlers.handleCancelProcess(this, event, target);
-  }
-
-  async _onOpenSettings(_event, _target) {
-    // Open the module settings
-    const { SettingsInterface } = await import('./settings-interface.js');
-    SettingsInterface.open();
   }
 
   _activateListeners(html) {
