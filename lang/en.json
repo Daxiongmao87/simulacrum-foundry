@@ -38,14 +38,13 @@
       "Title": "Simulacrum AI Assistant"
     },
     "SidebarTab": {
-      "Title": "Simulacrum"
+      "Title": "Simulacrum",
+      "DisabledTooltip": "AI endpoint not configured or invalid"
     },
     "AIName": "Simulacrum AI",
     "Welcome": "Welcome",
     "WelcomeMessage": "Hello! I'm your AI assistant for campaign document management. How can I help you today?",
     "AccessDenied": "Simulacrum is only available to Game Masters.",
-    "ConfigurationRequired": "AI endpoint not configured. Please set your API Key and Base URL in module settings.",
-    "OpenSettings": "Open Settings",
     "InputPlaceholder": "Enter message",
     "SendMessage": "Send Message",
     "ClearChat": "Clear Chat",

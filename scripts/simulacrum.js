@@ -23,6 +23,59 @@ const MODULE_ID = 'simulacrum';
 const MODULE_NAME = 'Simulacrum AI Assistant';
 const logger = createLogger('Module');
 
+/**
+ * Validate the endpoint by calling /models and checking if configured model exists.
+ * Updates the tab button to be grayed out and unclickable if validation fails.
+ */
+async function validateAndUpdateTabButton() {
+  const tabButton = document.querySelector('[data-tab="simulacrum"]');
+  if (!tabButton) return;
+
+  const isValid = await testEndpoint();
+  const disabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured or model not found.';
+  const enabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.Title') ?? 'Simulacrum';
+
+  if (isValid) {
+    tabButton.classList.add('simulacrum-enabled');
+    tabButton.setAttribute('data-tooltip', enabledTooltip);
+  } else {
+    tabButton.classList.remove('simulacrum-enabled');
+    tabButton.setAttribute('data-tooltip', disabledTooltip);
+  }
+}
+
+/**
+ * Test the endpoint by calling /models and checking if the configured model exists.
+ * @returns {Promise<boolean>} True if model exists at endpoint
+ */
+async function testEndpoint() {
+  try {
+    const baseURL = game.settings.get(MODULE_ID, 'baseURL');
+    const apiKey = game.settings.get(MODULE_ID, 'apiKey');
+    const model = game.settings.get(MODULE_ID, 'model');
+
+    if (!baseURL || !model) return false;
+
+    const modelsURL = baseURL.replace(/\/+$/, '') + '/models';
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetch(modelsURL, { method: 'GET', headers });
+    if (!response.ok) return false;
+
+    const data = await response.json();
+    if (data?.data && Array.isArray(data.data)) {
+      return data.data.some(m => m.id === model);
+    }
+    return false;
+  } catch (e) {
+    logger.debug('Endpoint validation failed:', e);
+    return false;
+  }
+}
+
 // No world-level enable toggle: module activation is managed by Foundry's
 // Manage Modules (core.moduleConfiguration). Do not register a redundant toggle.
 
@@ -63,6 +116,7 @@ function registerAPISettings() {
     onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
+        await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after apiKey change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after apiKey change', e);
@@ -81,6 +135,7 @@ function registerAPISettings() {
     onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
+        await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after baseURL change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after baseURL change', e);
@@ -99,6 +154,7 @@ function registerAPISettings() {
     onChange: async _value => {
       try {
         await SimulacrumCore.initializeAIClient();
+        await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after model change');
       } catch (e) {
         createLogger('Module').warn('Failed to reinitialize AI after model change', e);
@@ -247,15 +303,19 @@ Hooks.once('ready', async () => {
     return; // Exit early, do not initialize any further
   }
 
-  // Check if endpoint configuration is missing or invalid
-  const apiKey = game.settings.get(MODULE_ID, 'apiKey');
-  const baseURL = game.settings.get(MODULE_ID, 'baseURL');
-  const hasValidConfig = apiKey || baseURL; // At minimum, one should be configured
+  // Validate endpoint - CSS defaults to disabled, this enables if valid
+  await validateAndUpdateTabButton();
 
-  if (!hasValidConfig) {
-    logger.warn('Simulacrum endpoint not configured. Tab will show configuration prompt.');
-    // We don't remove the tab, but the sidebar will show a configuration message
-  }
+  // Block clicks on disabled sidebar tab
+  document.addEventListener('click', (e) => {
+    const tabButton = e.target.closest('#sidebar-tabs [data-tab="simulacrum"]');
+    if (tabButton && !tabButton.classList.contains('simulacrum-enabled')) {
+      e.preventDefault();
+      e.stopPropagation();
+      ui.notifications.warn(game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured');
+    }
+  }, true);
+
 
   // Expose API
   const module = game.modules.get(MODULE_ID);

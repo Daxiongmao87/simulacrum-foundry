@@ -284,26 +284,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       });
     }
 
-    // Check if endpoint is configured
-    const apiKey = game.settings.get('simulacrum', 'apiKey');
-    const baseURL = game.settings.get('simulacrum', 'baseURL');
-    const hasValidConfig = apiKey || baseURL;
-
-    if (!hasValidConfig) {
-      return foundry.utils.mergeObject(context, {
-        messages: [],
-        welcomeMessage: null,
-        isGM: true,
-        user: game.user,
-        configurationRequired: true,
-        configurationMessage: game.i18n?.localize('SIMULACRUM.ConfigurationRequired') ?? 'Please configure your AI endpoint in module settings.',
-        isAtBottom: true,
-        processActive: false,
-        processLabel: null,
-        disableInput: true,
-      });
-    }
-
     // Sync messages if empty
     if (this.messages.length === 0) {
       await this._syncFromCoreConversation();
