@@ -72,6 +72,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   _popoutClosing = false;
   #availableModels = [];
   #modelDropdownHighlightIndex = -1;
+  #pendingAssistantMessagePromise = null;
 
   constructor(options) {
     super(options);
@@ -131,6 +132,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Asset index status hooks
     Hooks.on(SimulacrumHooks.INDEX_STATUS, (payload) => {
       this._updateIndexStatus(payload);
+    });
+
+    // Process cancelled hook - clear task tracker
+    Hooks.on(SimulacrumHooks.PROCESS_CANCELLED, () => {
+      this._updateTaskTracker(null, false);
     });
   }
 
@@ -738,8 +744,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     let lastAssistantContent = this._getLastAssistantMessageContent();
 
     // If no assistant message exists after the last user message, create one
+    // Use a mutex promise to prevent race conditions creating multiple blank cards
     if (!lastAssistantContent) {
-      await this.addMessage('assistant', '', '', true);
+      if (!this.#pendingAssistantMessagePromise) {
+        this.#pendingAssistantMessagePromise = this.addMessage('assistant', '', '', true).finally(() => {
+          this.#pendingAssistantMessagePromise = null;
+        });
+      }
+      await this.#pendingAssistantMessagePromise;
       lastAssistantContent = this._getLastAssistantMessageContent();
     }
 
