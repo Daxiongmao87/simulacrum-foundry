@@ -225,15 +225,15 @@ function _addDiscordLink($html) {
 
   const discordHtml = `
     <div class="form-group simulacrum-discord-link">
-      <label>Community</label>
+      <label>Join our community</label>
       <div class="form-fields">
-        <a href="https://discord.gg/VSs8jZBgmP" target="_blank" class="discord-link">
-          <i class="fab fa-discord"></i> Join Discord
-        </a>
+        <button type="button" class="discord-btn" onclick="window.open('https://discord.gg/VSs8jZBgmP', '_blank')">
+          <i class="fab fa-discord"></i>
+          <span>Discord</span>
+        </button>
       </div>
-      <p class="hint">Join our Discord community for support and discussion.</p>
     </div>
   `;
 
-  simulacrumTab.append(discordHtml);
+  simulacrumTab.prepend(discordHtml);
 }
