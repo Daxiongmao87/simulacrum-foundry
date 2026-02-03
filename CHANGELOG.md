@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.0.4] - 2026-02-03
+
+### Changed
+- fix: make disabled sidebar tab properly inert and V12 compatibility
+- style: refine Discord link appearance in settings
+- fix: add Discord link to Foundry settings config, remove dead code
+- feat: gray out sidebar tab when AI endpoint not configured or invalid
+- Revert "fix: improve endpoint configuration validation logic"
+- fix: improve endpoint configuration validation logic
+- fix: hide sidebar tab for non-GMs and show config prompt when unconfigured
+- feat: add Discord community link to module and settings UI
+
 ## [1.0.3] - 2026-01-31
 
 ### Changed
