@@ -1,6 +1,6 @@
 /* eslint-disable max-depth, no-unreachable */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
-import { formatToolCallDisplay, getToolDisplayContent } from '../utils/message-utils.js';
+import { formatToolCallDisplay, getToolDisplayContent, getToolContentSummary } from '../utils/message-utils.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import { retrieveToolJustification } from './tool-loop-handler.js';
 /**
@@ -386,10 +386,12 @@ class ChatHandler {
             if (!rawDisplay.trim().startsWith('<')) {
               formattedDisplay = await MarkdownRenderer.render(rawDisplay, { force: true });
             }
+            // Extract proper content summary (not raw JSON)
+            const contentSummary = getToolContentSummary(toolResult) || '';
             this.addMessageToUI(
               {
                 role: 'assistant',
-                content: '', // Empty content - direct display tools are UI-only, don't add JSON to conversation
+                content: contentSummary,
                 display: formattedDisplay,
                 _fromToolLoop: true, // Prevent duplicate conversation entry
               },

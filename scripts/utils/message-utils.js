@@ -102,6 +102,26 @@ export function getToolDisplayContent(toolResult) {
 }
 
 /**
+ * Extracts the content summary string from a tool result (for AI context).
+ * @param {object} toolResult - The tool result object
+ * @returns {string|null} The content summary or null if not found
+ */
+export function getToolContentSummary(toolResult) {
+  try {
+    const parsed = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+    if (parsed && typeof parsed.content === 'string') {
+      return parsed.content;
+    }
+  } catch (e) {
+    // Not valid JSON - return raw content if it's a string
+    if (typeof toolResult.content === 'string') {
+      return toolResult.content;
+    }
+  }
+  return null;
+}
+
+/**
  * Format a tool call result as rich HTML with status icons
  * @param {Object} toolResult - The tool result object/message
  * @param {string} toolName - The name of the tool (must be provided as it might not be in the message)
