@@ -108,6 +108,7 @@ export class ManageTaskTool extends BaseTool {
       steps: steps.map(s => ({ title: s.title, description: s.description, status: 'pending' })),
       currentStepIndex: 0,
       startTime: Date.now(),
+      lastDisplayedStep: -1, // Track which step we last showed a separator for
     };
 
     // Mark first step as in progress
@@ -144,10 +145,20 @@ export class ManageTaskTool extends BaseTool {
     const stepNum = this.currentTask.currentStepIndex + 1;
     const totalSteps = this.currentTask.steps.length;
     const taskName = this.currentTask.name;
+
+    // Only show separator when moving to a NEW step (prevents duplicates when AI calls update_task multiple times)
+    const stepIndex = this.currentTask.currentStepIndex;
+    const isNewStep = stepIndex !== this.currentTask.lastDisplayedStep;
+
+    let display = '';
+    if (isNewStep) {
+      this.currentTask.lastDisplayedStep = stepIndex;
+      display = `<div class="simulacrum-step-separator"><div class="step-task-name">${taskName}</div><div class="step-info"><span class="step-label">Step ${stepNum}</span><span class="step-title">${currentStepTitle}</span></div></div>`;
+    }
+
     return {
       content: `Task update: Step ${stepNum}/${totalSteps} - ${currentStepTitle}`,
-      // Minimal 2-line step separator for chat display
-      display: `<div class="simulacrum-step-separator"><div class="step-task-name">${taskName}</div><div class="step-info"><span class="step-label">Step ${stepNum}</span><span class="step-title">${currentStepTitle}</span></div></div>`,
+      display,
     };
   }
 
