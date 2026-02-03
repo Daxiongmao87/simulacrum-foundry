@@ -28,6 +28,12 @@
         </div>
     </div>
 
+    {{!-- Status Area (hidden by default, shown via JS for indexing, etc.) --}}
+    <div class="simulacrum-status-area" style="display: none;">
+        <i class="status-icon fa-solid fa-layer-group"></i>
+        <span class="status-text"></span>
+    </div>
+
     <textarea id="simulacrum-chat-message" class="chat-input" name="message" autocomplete="off"
         placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat"></textarea>
 </form>

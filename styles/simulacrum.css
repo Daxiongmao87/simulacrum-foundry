@@ -7,6 +7,40 @@
  */
 
 /* ---------------------------------------- */
+/*  Status Area (indexing, etc.)            */
+/* ---------------------------------------- */
+
+@keyframes simulacrum-breathing {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.simulacrum-status-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 0 8px;
+  background: var(--color-cool-5, rgba(0, 0, 0, 0.05));
+  border-radius: 4px;
+  font-size: var(--font-size-12, 12px);
+  color: var(--color-text-dark-secondary, #666);
+}
+
+.simulacrum-status-area .status-icon,
+#simulacrum .simulacrum-status-area .status-icon,
+.simulacrum-sidebar-tab .simulacrum-status-area .status-icon {
+  width: 32px;
+  font-size: 14px;
+  color: var(--color-text-dark-primary, #444);
+  text-align: center;
+}
+
+.simulacrum-status-area .status-text {
+  flex: 1;
+}
+
+/* ---------------------------------------- */
 /*  Disabled Tab Button (invalid endpoint) */
 /* ---------------------------------------- */
 
@@ -1672,3 +1706,4 @@ section[data-tab="simulacrum"] .discord-btn:hover {
 .model-dropdown .no-models:hover {
   background: none;
 }
+

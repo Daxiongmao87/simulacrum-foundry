@@ -5,11 +5,14 @@
 import { BaseTool } from './base-tool.js';
 import { assetIndexService } from '../core/asset-index-service.js';
 
+const BASE_DESCRIPTION =
+    'Search for files (images, audio, etc.) in User Data (assets, modules, worlds) and Core Data.';
+
 export class AssetSearchTool extends BaseTool {
     constructor() {
         super(
             'search_assets',
-            'Search for files (images, audio, etc.) in User Data (assets, modules, worlds) and Core Data.',
+            BASE_DESCRIPTION, // Will be overridden by getter
             {
                 type: 'object',
                 properties: {
@@ -37,21 +40,46 @@ export class AssetSearchTool extends BaseTool {
         this.MAX_RESULTS = 50;
     }
 
+    /**
+     * Dynamic description based on index availability
+     */
+    get description() {
+        const availability = assetIndexService.getAvailability();
+        if (!availability.available) {
+            return `[UNAVAILABLE: ${availability.reason}] ${BASE_DESCRIPTION}`;
+        }
+        const stats = assetIndexService.getStats();
+        return `${BASE_DESCRIPTION} Index contains ${stats.fileCount} files.`;
+    }
+
+    // Prevent setting description (it's computed)
+    set description(_value) {
+        // no-op
+    }
+
     async execute(params) {
         const { query, type = 'any', source = 'all' } = params;
 
+        // Check availability before searching
+        const availability = assetIndexService.getAvailability();
+        if (!availability.available) {
+            return {
+                content: `Asset search unavailable: ${availability.reason}`,
+                display: `Asset search unavailable: ${availability.reason}`,
+                error: { message: availability.reason, type: 'INDEX_UNAVAILABLE' },
+            };
+        }
+
         try {
-            // Use the indexed search (awaits initial index if needed)
             const results = await assetIndexService.search(query, type, source, this.MAX_RESULTS);
             const stats = assetIndexService.getStats();
 
             return this._formatResults(results, query, stats);
-
         } catch (error) {
             return {
                 content: `Failed to search assets: ${error.message}`,
                 display: `Error searching assets: ${error.message}`,
-                error: { message: error.message, type: 'SEARCH_FAILED' }
+                error: { message: error.message, type: 'SEARCH_FAILED' },
             };
         }
     }

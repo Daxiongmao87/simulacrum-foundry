@@ -5,11 +5,14 @@
 import { BaseTool } from './base-tool.js';
 import { assetIndexService } from '../core/asset-index-service.js';
 
+const BASE_DESCRIPTION =
+    'Browse folder contents or search for folders by name. Use to explore file structure and find asset directories.';
+
 export class BrowseFoldersTool extends BaseTool {
     constructor() {
         super(
             'browse_folders',
-            'Browse folder contents or search for folders by name. Use to explore file structure and find asset directories.',
+            BASE_DESCRIPTION, // Will be overridden by getter
             {
                 type: 'object',
                 properties: {
@@ -36,26 +39,53 @@ export class BrowseFoldersTool extends BaseTool {
         this.MAX_RESULTS = 50;
     }
 
+    /**
+     * Dynamic description based on index availability
+     */
+    get description() {
+        const availability = assetIndexService.getAvailability();
+        if (!availability.available) {
+            return `${BASE_DESCRIPTION} [Search unavailable: ${availability.reason}. Browse still works.]`;
+        }
+        const stats = assetIndexService.getStats();
+        return `${BASE_DESCRIPTION} Index contains ${stats.folderCount} folders.`;
+    }
+
+    // Prevent setting description (it's computed)
+    set description(_value) {
+        // no-op
+    }
+
     async execute(params) {
         const { action, path, source = 'data' } = params;
 
         try {
             if (action === 'browse') {
+                // Browse doesn't need the index - uses FilePicker directly
                 return await this._browse(path, source);
             } else if (action === 'search') {
+                // Search requires the index
+                const availability = assetIndexService.getAvailability();
+                if (!availability.available) {
+                    return {
+                        content: `Folder search unavailable: ${availability.reason}. Use "browse" action instead.`,
+                        display: `Folder search unavailable: ${availability.reason}`,
+                        error: { message: availability.reason, type: 'INDEX_UNAVAILABLE' },
+                    };
+                }
                 return await this._search(path, source);
             } else {
                 return {
                     content: `Unknown action: ${action}`,
                     display: `Unknown action: ${action}`,
-                    error: { message: `Unknown action: ${action}`, type: 'INVALID_ACTION' }
+                    error: { message: `Unknown action: ${action}`, type: 'INVALID_ACTION' },
                 };
             }
         } catch (error) {
             return {
                 content: `Failed to ${action} folders: ${error.message}`,
                 display: `Error: ${error.message}`,
-                error: { message: error.message, type: 'BROWSE_FAILED' }
+                error: { message: error.message, type: 'BROWSE_FAILED' },
             };
         }
     }

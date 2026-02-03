@@ -32,6 +32,9 @@ export const SimulacrumHooks = Object.freeze({
   TASK_UPDATED: 'simulacrum:taskUpdated',
   TASK_FINISHED: 'simulacrum:taskFinished',
 
+  // Asset index hooks
+  INDEX_STATUS: 'simulacrum:indexStatus',
+
   // Error hooks
   ERROR_OCCURRED: 'simulacrum:errorOccurred',
 });
@@ -115,4 +118,13 @@ export function emitErrorOccurred(error, context) {
     context,
     error,
   });
+}
+
+/**
+ * Emit index status update
+ * @param {'start'|'progress'|'complete'} state - Index state
+ * @param {Object} [data] - Optional data (fileCount, folderCount)
+ */
+export function emitIndexStatus(state, data = {}) {
+  emitHook(SimulacrumHooks.INDEX_STATUS, { state, ...data });
 }

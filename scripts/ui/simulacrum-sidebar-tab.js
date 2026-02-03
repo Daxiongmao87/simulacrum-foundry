@@ -11,6 +11,7 @@ import {
 } from './sidebar-state-syncer.js';
 import { formatPendingToolCall } from '../utils/message-utils.js';
 import { SimulacrumHooks } from '../core/hook-manager.js';
+import { assetIndexService } from '../core/asset-index-service.js';
 import { modelService } from '../core/model-service.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
@@ -126,6 +127,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     Hooks.on(SimulacrumHooks.TASK_FINISHED, () => {
       this._updateTaskTracker(null, false);
     });
+
+    // Asset index status hooks
+    Hooks.on(SimulacrumHooks.INDEX_STATUS, (payload) => {
+      this._updateIndexStatus(payload);
+    });
   }
 
   /**
@@ -165,6 +171,48 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    * @param {object|null} taskState - The current task state or null to hide
    * @param {boolean} show - Whether to show or hide the tracker
    */
+  /**
+   * Update the status area for indexing progress
+   * @param {Object} payload - Index status payload
+   * @param {'start'|'progress'|'complete'} payload.state - Current state
+   * @param {number} [payload.fileCount] - Number of files indexed
+   * @param {number} [payload.folderCount] - Number of folders indexed
+   */
+  _updateIndexStatus(payload) {
+    const container = this.element?.[0] || this.element;
+    if (!container) return;
+
+    const statusArea = container.querySelector('.simulacrum-status-area');
+    if (!statusArea) return;
+
+    const { state, fileCount = 0, folderCount = 0 } = payload;
+    const statusText = statusArea.querySelector('.status-text');
+
+    if (state === 'complete') {
+      // Hide the status area
+      statusArea.style.display = 'none';
+    } else {
+      // Show the status area with appropriate text
+      statusArea.style.display = '';
+      if (statusText) {
+        if (state === 'start') {
+          statusText.textContent = 'Indexing assets...';
+        } else if (state === 'progress') {
+          const total = fileCount + folderCount;
+          statusText.textContent = `Indexing assets... ${total.toLocaleString()} items`;
+        }
+      }
+      // Apply breathing animation via Web Animations API
+      const icon = statusArea.querySelector('.status-icon');
+      if (icon && !icon.getAnimations?.().length) {
+        icon.animate?.(
+          [{ opacity: 0.3 }, { opacity: 1 }, { opacity: 0.3 }],
+          { duration: 2000, iterations: Infinity, easing: 'ease-in-out' }
+        );
+      }
+    }
+  }
+
   _updateTaskTracker(taskState, show) {
     const container = this.element?.[0] || this.element;
     if (!container) return;
@@ -378,6 +426,18 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       // Ensure button visibility is correct even if we didn't scroll to bottom
       const log = this.element[0]?.querySelector('.chat-scroll') ?? this.element.querySelector?.('.chat-scroll');
       if (log) this._updateJumpToBottomVisibility(log);
+    }
+
+    // Check if asset indexing is in progress and show status if so
+    if (options.isFirstRender) {
+      const stats = assetIndexService.getStats();
+      if (stats.isIndexing && !assetIndexService.isReady()) {
+        this._updateIndexStatus({
+          state: 'progress',
+          fileCount: stats.fileCount,
+          folderCount: stats.folderCount,
+        });
+      }
     }
   }
 
