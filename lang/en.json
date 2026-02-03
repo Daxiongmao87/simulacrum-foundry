@@ -135,6 +135,9 @@
       "MacroGeneric": "Allows the AI to execute this macro, which may contain arbitrary code.",
       "ConfigureCompendium": "Allows the AI to lock or unlock compendium packs, controlling whether they can be modified.",
       "SetDocumentOwnership": "Allows the AI to change who can view or edit documents by modifying their ownership permissions."
+    },
+    "ModelSelector": {
+      "Placeholder": "Select model..."
     }
   }
 }

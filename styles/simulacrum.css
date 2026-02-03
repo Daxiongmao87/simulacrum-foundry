@@ -1531,3 +1531,144 @@ section[data-tab="simulacrum"] .discord-btn:hover {
   color: white;
   border-color: #5865F2;
 }
+
+/* ---------------------------------------- */
+/*  Model Selector Combobox                 */
+/* ---------------------------------------- */
+
+/* Control buttons container - flex row layout */
+#simulacrum-chat-controls .control-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Container - positioned relative for dropdown */
+.model-selector-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Text input - matches Foundry styling */
+.model-selector-input {
+  width: 100%;
+  padding: 2px 24px 2px 6px;
+  border: 1px solid var(--color-border-dark, #4b4a45);
+  border-radius: 3px;
+  background: var(--color-cool-5, #1a1625);
+  color: var(--color-text-light-primary, #fff4c2);
+  font-size: 0.85em;
+  font-family: var(--font-body);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.model-selector-input:focus {
+  border-color: var(--color-warm-1, #daa520);
+  box-shadow: 0 0 4px rgba(218, 165, 32, 0.3);
+}
+
+.model-selector-input::placeholder {
+  color: var(--color-text-dark-secondary, #888);
+  font-style: italic;
+}
+
+/* Autocomplete hint overlay - shows grayed completion */
+.model-autocomplete-hint {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-dark-secondary, #666);
+  font-size: 0.85em;
+  font-family: var(--font-body);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: calc(100% - 30px);
+}
+
+/* Caret icon */
+.model-selector-icon {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-dark-secondary, #888);
+  font-size: 0.75em;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.model-selector-wrapper.dropdown-open .model-selector-icon {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* Dropdown list - opens upward */
+.model-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-cool-5, #1a1625);
+  border: 1px solid var(--color-border-dark, #4b4a45);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.model-dropdown.hidden {
+  display: none;
+}
+
+.model-dropdown li {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.85em;
+  color: var(--color-text-light-primary, #fff4c2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-dropdown li:hover,
+.model-dropdown li.highlighted {
+  background: rgba(218, 165, 32, 0.2);
+}
+
+.model-dropdown li.selected {
+  background: rgba(218, 165, 32, 0.3);
+  font-weight: 500;
+}
+
+/* Loading state */
+.model-selector-wrapper.loading .model-selector-icon::before {
+  content: "\f110";
+  animation: fa-spin 1s infinite linear;
+}
+
+.model-selector-wrapper.loading .model-selector-icon {
+  transform: translateY(-50%);
+}
+
+/* Empty state message in dropdown */
+.model-dropdown .no-models {
+  padding: 8px;
+  color: var(--color-text-dark-secondary, #888);
+  font-style: italic;
+  text-align: center;
+  cursor: default;
+}
+
+.model-dropdown .no-models:hover {
+  background: none;
+}

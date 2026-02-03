@@ -17,6 +17,7 @@ import { createLogger } from './utils/logger.js';
 import { BUILD_HASH } from './build-info.js';
 import { InteractionLogDownloader } from './core/interaction-logger.js';
 import { assetIndexService } from './core/asset-index-service.js';
+import { modelService } from './core/model-service.js';
 
 
 const MODULE_ID = 'simulacrum';
@@ -32,7 +33,7 @@ async function validateAndUpdateTabButton() {
   if (!tabButton) return;
 
   const isValid = await testEndpoint();
-  const disabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured or model not found.';
+  const disabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured or unreachable';
   const enabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.Title') ?? 'Simulacrum';
 
   if (isValid) {
@@ -49,16 +50,16 @@ async function validateAndUpdateTabButton() {
 }
 
 /**
- * Test the endpoint by calling /models and checking if the configured model exists.
- * @returns {Promise<boolean>} True if model exists at endpoint
+ * Test the endpoint by calling /models and checking for HTTP 200.
+ * Does not validate that the configured model exists - that's handled by the model selector.
+ * @returns {Promise<boolean>} True if endpoint responds with HTTP 200
  */
 async function testEndpoint() {
   try {
     const baseURL = game.settings.get(MODULE_ID, 'baseURL');
     const apiKey = game.settings.get(MODULE_ID, 'apiKey');
-    const model = game.settings.get(MODULE_ID, 'model');
 
-    if (!baseURL || !model) return false;
+    if (!baseURL) return false;
 
     const modelsURL = baseURL.replace(/\/+$/, '') + '/models';
     const headers = { 'Content-Type': 'application/json' };
@@ -67,14 +68,7 @@ async function testEndpoint() {
     }
 
     const response = await fetch(modelsURL, { method: 'GET', headers });
-    if (!response.ok) return false;
-
-    const data = await response.json();
-    if (data?.data && Array.isArray(data.data)) {
-      // Match exact ID or handle prefixed IDs (e.g., Google's "models/gemini-2.5-flash")
-      return data.data.some(m => m.id === model || m.id === `models/${model}`);
-    }
-    return false;
+    return response.ok;
   } catch (e) {
     logger.debug('Endpoint validation failed:', e);
     return false;
@@ -98,6 +92,7 @@ function registerAPISettings() {
     restricted: true,
     onChange: async _value => {
       try {
+        modelService.invalidateCache();
         await SimulacrumCore.initializeAIClient();
         await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after apiKey change');
@@ -117,6 +112,7 @@ function registerAPISettings() {
     restricted: true,
     onChange: async _value => {
       try {
+        modelService.invalidateCache();
         await SimulacrumCore.initializeAIClient();
         await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after baseURL change');
@@ -130,7 +126,7 @@ function registerAPISettings() {
     name: 'AI Model',
     hint: 'The AI model to use (e.g., gpt-3.5-turbo, llama2).',
     scope: 'world',
-    config: true,
+    config: false, // Hidden from settings - managed via sidebar combobox
     type: String,
     default: 'gpt-3.5-turbo',
     restricted: true,
