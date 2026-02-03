@@ -174,10 +174,22 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
           RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
-          # Discord field value limit is 1024 chars - truncate changelog
-          CHANGELOG=$(cat changelog.txt | head -10 | cut -c1-900)
-          if [ ${#CHANGELOG} -ge 900 ]; then
-            CHANGELOG="${CHANGELOG}..."
+          # Discord field value limit is 1024 chars - truncate if needed but inform reader
+          TOTAL_LINES=$(wc -l < changelog.txt)
+          MAX_LINES=15
+          if [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
+            REMAINING=$((TOTAL_LINES - MAX_LINES))
+            CHANGELOG=$(head -$MAX_LINES changelog.txt)
+            CHANGELOG="${CHANGELOG}
+... and ${REMAINING} more. [See full release notes](${RELEASE_URL})"
+          else
+            CHANGELOG=$(cat changelog.txt)
+          fi
+          # Ensure we don't exceed Discord's 1024 char limit
+          if [ ${#CHANGELOG} -ge 1000 ]; then
+            CHANGELOG=$(echo "$CHANGELOG" | cut -c1-950)
+            CHANGELOG="${CHANGELOG}...
+[See full release notes](${RELEASE_URL})"
           fi
 
           # Build JSON payload with proper escaping using jq
