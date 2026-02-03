@@ -463,12 +463,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (active) {
       this.#thinkingWordIndex = 0;
       this.#needsScroll = true;
-      this.render({ parts: ['log'] });
+      this.render({ parts: ['log', 'input'] });
       this.#startThinkingInterval();
     } else {
       this.#stopThinkingInterval();
       this.#needsScroll = true;
-      this.render({ parts: ['log'] });
+      this.render({ parts: ['log', 'input'] });
     }
   }
 
