@@ -1,7 +1,6 @@
-{{!-- Simulacrum Sidebar Input Form Template - EXACT FoundryVTT Structure --}}
+{{!-- Simulacrum Sidebar Input Form Template --}}
 <form class="chat-form {{#if disableInput}}hidden{{/if}}" data-application-part="input">
 
-    {{!-- Jump to Bottom --}}
     {{!-- Jump to Bottom --}}
     <button type="button" class="ui-control jump-to-bottom" data-tooltip
         aria-label="{{localize 'CHAT.JumpToBottom'}}" data-action="jumpToBottom" {{#if
@@ -20,7 +19,6 @@
             {{/if}}
         </div>
     </div>
-
 
     <textarea id="simulacrum-chat-message" class="chat-input" name="message" autocomplete="off"
         placeholder="{{localize 'SIMULACRUM.InputPlaceholder'}}" aria-label="Chat"></textarea>

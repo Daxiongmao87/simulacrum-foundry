@@ -10,16 +10,18 @@
 /*  Disabled Tab Button (invalid endpoint) */
 /* ---------------------------------------- */
 
-/* Default: grayed out until validated (pointer-events kept for tooltip hover) */
+/* Default: grayed out and inert until validated */
 #sidebar-tabs .ui-control.icon[data-tab="simulacrum"] {
   opacity: 0.4;
   filter: grayscale(100%);
+  pointer-events: none;
 }
 
 /* Enabled after successful validation */
 #sidebar-tabs .ui-control.icon[data-tab="simulacrum"].simulacrum-enabled {
   opacity: 1;
   filter: none;
+  pointer-events: auto;
 }
 
 /* ---------------------------------------- */

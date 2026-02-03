@@ -23,17 +23,23 @@ function convertSettingToTextarea({
   // Ensure html is a jQuery object for consistent API usage
   const $html = html instanceof jQuery ? html : $(html);
 
-  // Use the data-setting-id attribute to find the setting div
-  const settingDiv = $html.find(`[data-setting-id="${fullSettingId}"]`);
-  if (!settingDiv.length) return;
+  // Find the input directly by name attribute (V12 compatible)
+  const inputEl = $html.find(`input[name="${fullSettingId}"]`);
+  if (!inputEl.length) {
+    console.warn(`[Simulacrum] Could not find input element for ${fullSettingId}`);
+    return;
+  }
+
+  // Get the form-group parent (contains label, input, and hint)
+  const settingDiv = inputEl.closest('.form-group');
+  if (!settingDiv.length) {
+    console.warn(`[Simulacrum] Could not find form-group parent for ${fullSettingId}`);
+    return;
+  }
 
   // Get the original stored value from settings
   let storedValue = game.settings.get(moduleId, settingKey) || '';
   storedValue = storedValue.replace(/\\n/g, '\n');
-
-  // Find the original input
-  const inputEl = settingDiv.find(`input[name="${fullSettingId}"]`);
-  if (!inputEl.length) return;
 
   // Create the textarea with proper attributes for code display
   const textarea = $(`
@@ -201,7 +207,8 @@ function _applyEnhancements(html) {
 
   $html.find('a.item[data-tab="simulacrum"]').on('click', () => {
     setTimeout(() => {
-      if ($html.find('div[data-setting-id="simulacrum.customSystemPrompt"] input').length) {
+      // Check if input exists and hasn't been converted to textarea yet
+      if ($html.find('input[name="simulacrum.customSystemPrompt"]').length) {
         convertSettingToTextarea({
           html: $html,
           moduleId: 'simulacrum',
@@ -217,7 +224,11 @@ function _applyEnhancements(html) {
 }
 
 function _addDiscordLink($html) {
-  const simulacrumTab = $html.find('section[data-tab="simulacrum"]');
+  // Try both section and div for V12/V13 compatibility
+  let simulacrumTab = $html.find('section[data-tab="simulacrum"]');
+  if (!simulacrumTab.length) {
+    simulacrumTab = $html.find('div[data-tab="simulacrum"]');
+  }
   if (!simulacrumTab.length) return;
 
   // Don't add if already present

@@ -259,12 +259,15 @@ class InteractionLogger {
      * @returns {string} JSON export
      */
     export() {
+        const customSystemPrompt = game?.settings?.get('simulacrum', 'customSystemPrompt') || '';
+        
         const exportData = {
             version: LOGGER_VERSION,
             exportedAt: new Date().toISOString(),
             worldId: game?.world?.id || 'unknown',
             userId: game?.user?.id || 'unknown',
             sessionStart: this._sessionStart,
+            customSystemPrompt: customSystemPrompt,
             entryCount: this._entries.length,
             entries: this._entries,
         };

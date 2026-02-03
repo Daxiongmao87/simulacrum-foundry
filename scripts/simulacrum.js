@@ -38,9 +38,13 @@ async function validateAndUpdateTabButton() {
   if (isValid) {
     tabButton.classList.add('simulacrum-enabled');
     tabButton.setAttribute('data-tooltip', enabledTooltip);
+    tabButton.removeAttribute('inert');
+    tabButton.removeAttribute('aria-disabled');
   } else {
     tabButton.classList.remove('simulacrum-enabled');
     tabButton.setAttribute('data-tooltip', disabledTooltip);
+    tabButton.setAttribute('inert', '');
+    tabButton.setAttribute('aria-disabled', 'true');
   }
 }
 
@@ -305,17 +309,6 @@ Hooks.once('ready', async () => {
 
   // Validate endpoint - CSS defaults to disabled, this enables if valid
   await validateAndUpdateTabButton();
-
-  // Block clicks on disabled sidebar tab
-  document.addEventListener('click', (e) => {
-    const tabButton = e.target.closest('#sidebar-tabs [data-tab="simulacrum"]');
-    if (tabButton && !tabButton.classList.contains('simulacrum-enabled')) {
-      e.preventDefault();
-      e.stopPropagation();
-      ui.notifications.warn(game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured');
-    }
-  }, true);
-
 
   // Expose API
   const module = game.modules.get(MODULE_ID);
