@@ -60,9 +60,11 @@ class DocumentSearchTool extends BaseTool {
       // Ensure results are limited even if API returns more
       const limitedResults = params.maxResults ? results.slice(0, params.maxResults) : results;
 
+      const resultCount = limitedResults.length;
+      const summary = `Found ${resultCount} document${resultCount !== 1 ? 's' : ''} matching "${params.query}"`;
       return {
-        content: 'Found ' + limitedResults.length + ' documents matching "' + params.query + '"',
-        display: this.formatSearchResults(limitedResults, params.query),
+        content: this.formatSearchResults(limitedResults, params.query),
+        display: `<p><strong>${summary}</strong></p>`,
       };
     } catch (error) {
       return {
