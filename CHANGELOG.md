@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.0.5] - 2026-02-03
+
+### Changed
+- fix: preserve textarea content and status area on thinking state change
+- fix: extract proper content summary for direct display tools
+- fix: prevent raw JSON from rendering for direct display tools
+- fix: clear task tracker on process cancel, fix blank card race condition
+- fix: swap content/display in document-search for consistency
+- feat: migrate asset index to IndexedDB with UI status indicator
+- fix: show pending tool cards during execution, update in place with result
+- fix: prevent duplicate step separators in task management
+- fix: render input part when thinking state changes
+- feat: add response parameter to all tools for Gemini compatibility
+- feat: add model selector combobox to sidebar header
+- refactor: remove Gemini provider, use OpenAI-compatible endpoints only
+
 ## [1.0.4] - 2026-02-03
 
 ### Changed
