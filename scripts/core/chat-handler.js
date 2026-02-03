@@ -370,14 +370,14 @@ class ChatHandler {
 
       // Task-09: Format tool result with rich HTML display if it has a toolName (and is not silent)
       if (toolResult.toolName && options.onAssistantMessage && !isSilent) {
-        // Emit hook for UI to remove pending card and display result
-        Hooks.callAll('simulacrumToolResult', {
-          toolCallId: toolResult.toolCallId,
-          toolName: toolResult.toolName,
-        });
-
         // Direct display tools: render their display property directly without tool card wrapper
         if (directDisplayTools.includes(toolResult.toolName)) {
+          // Emit hook to remove pending card for direct display tools
+          Hooks.callAll('simulacrumToolResult', {
+            toolCallId: toolResult.toolCallId,
+            toolName: toolResult.toolName,
+          });
+
           const rawDisplay = getToolDisplayContent(toolResult);
           // Only show if there's actual display content (skip empty displays like start_task)
           if (rawDisplay && rawDisplay.trim()) {
@@ -435,15 +435,13 @@ class ChatHandler {
 
         const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered, justification);
 
-        // Display as assistant message with tool indicator
-        this.addMessageToUI(
-          {
-            role: 'assistant',
-            content: toolResult.content,
-            display: formattedDisplay,
-          },
-          options
-        );
+        // Emit hook with formatted HTML so UI can update pending card in place
+        Hooks.callAll('simulacrumToolResult', {
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName,
+          formattedDisplay,
+          content: toolResult.content,
+        });
       }
     } else if (toolResult.role === 'assistant' && toolResult.content) {
       // Only add assistant messages that have actual content and are NOT from internal tool loop (ephemeral)

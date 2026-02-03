@@ -123,7 +123,20 @@ async function _runLoopIteration(context) {
       lastResponseContent = null;
     }
 
-    // Emit pending tool state for each tool call (UI renders styled pending cards)
+    // Extract response from tool calls (primary) or use content (fallback)
+    // The response parameter is the canonical way for AI to communicate with users
+    const toolResponse = _extractToolResponse(currentResponse.toolCalls);
+    if (toolResponse) {
+      currentResponse.content = toolResponse;
+    }
+
+    // Notify UI of the message content FIRST so pending cards have a message to attach to
+    if (currentResponse.content && currentResponse.content.trim().length > 0) {
+      _notifyAssistantMessage(currentResponse, context);
+    }
+
+    // Emit pending tool state for each tool call AFTER assistant message exists
+    // (UI appends pending cards to last assistant message)
     if (Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0) {
       for (const toolCall of currentResponse.toolCalls) {
         const toolName = toolCall.function?.name || toolCall.name || 'Unknown Tool';
@@ -150,18 +163,6 @@ async function _runLoopIteration(context) {
           justification,
         });
       }
-    }
-
-    // Extract response from tool calls (primary) or use content (fallback)
-    // The response parameter is the canonical way for AI to communicate with users
-    const toolResponse = _extractToolResponse(currentResponse.toolCalls);
-    if (toolResponse) {
-      currentResponse.content = toolResponse;
-    }
-
-    // Notify UI of the message content
-    if (currentResponse.content && currentResponse.content.trim().length > 0) {
-      _notifyAssistantMessage(currentResponse, context);
     }
 
     // Process a single cycle of the loop

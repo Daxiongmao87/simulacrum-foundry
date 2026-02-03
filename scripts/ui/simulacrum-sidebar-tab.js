@@ -95,9 +95,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       this._addPendingToolCard(data);
     });
 
-    // Listen for tool results to remove pending cards
+    // Listen for tool results to update pending cards with result
     Hooks.on('simulacrumToolResult', (data) => {
-      this._removePendingToolCard(data.toolCallId);
+      this._updateToolCardWithResult(data);
     });
 
     // Listen for API retry status to show connection error warnings
@@ -662,7 +662,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    * @param {string} data.toolName - The name of the tool being executed
    * @param {string} [data.justification] - Optional justification/reason
    */
-  _addPendingToolCard(data) {
+  async _addPendingToolCard(data) {
     const { toolCallId, toolName, justification } = data;
 
     // Hidden tools have dedicated UI elsewhere (e.g., task tracker) - skip pending cards
@@ -674,8 +674,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Generate the pending card HTML using the utility function
     const pendingHtml = formatPendingToolCall(toolName, justification || '', toolCallId);
 
-    // Find the last assistant message's content container
-    const lastAssistantContent = this._getLastAssistantMessageContent();
+    // Find the last assistant message's content container (must be after last user message)
+    let lastAssistantContent = this._getLastAssistantMessageContent();
+
+    // If no assistant message exists after the last user message, create one
+    if (!lastAssistantContent) {
+      await this.addMessage('assistant', '', '', true);
+      lastAssistantContent = this._getLastAssistantMessageContent();
+    }
 
     if (lastAssistantContent) {
       // Append directly to the last assistant message content
@@ -692,7 +698,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   /**
    * Get the last assistant message's .message-content element from DOM
-   * Skips ephemeral elements like process-status, pending cards, and confirmations
+   * Only returns an assistant message that comes AFTER the last user message
+   * (to avoid attaching pending cards to old messages from previous turns)
    * @returns {HTMLElement|null}
    */
   _getLastAssistantMessageContent() {
@@ -703,32 +710,111 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const chatLog = chatScroll.querySelector('.chat-log');
     if (!chatLog) return null;
 
-    // Find the last assistant message (skip ephemeral elements)
-    const messages = chatLog.querySelectorAll('.chat-message.simulacrum-role-assistant');
-    if (messages.length === 0) return null;
+    // Get all chat messages (not ephemeral process-status messages)
+    const allMessages = chatLog.querySelectorAll('.chat-message.simulacrum-chat-message');
+    if (allMessages.length === 0) return null;
 
-    const lastMsg = messages[messages.length - 1];
-    return lastMsg.querySelector('.message-content');
+    // Find the index of the last user message
+    let lastUserIndex = -1;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (allMessages[i].classList.contains('simulacrum-role-user')) {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    // Find the last assistant message that comes AFTER the last user message
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (allMessages[i].classList.contains('simulacrum-role-assistant')) {
+        // Only return if this assistant message is after the last user message
+        if (i > lastUserIndex) {
+          return allMessages[i].querySelector('.message-content');
+        }
+        // Found an assistant message but it's before the last user message - stop looking
+        break;
+      }
+    }
+
+    return null;
   }
 
   /**
-   * Remove a pending tool card when the result arrives
-   * @param {string} toolCallId - The tool call ID to find and remove
+   * Update a pending tool card with the result, or remove it for special tools
+   * @param {Object} data - Tool result data
+   * @param {string} data.toolCallId - The tool call ID to find
+   * @param {string} data.toolName - The tool name
+   * @param {string} [data.formattedDisplay] - The formatted HTML to display (if absent, just removes the card)
+   * @param {string} [data.content] - The raw content for persistence
    */
-  _removePendingToolCard(toolCallId) {
+  _updateToolCardWithResult(data) {
+    const { toolCallId, formattedDisplay, content } = data;
     if (!toolCallId) return;
 
     const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
       this.element?.querySelector?.('.chat-scroll');
 
-    if (chatScroll) {
-      // Look for inline pending cards (new pattern) or standalone wrappers (legacy)
-      const pendingEl = chatScroll.querySelector(`.pending-tool-inline[data-tool-call-id="${toolCallId}"]`) ||
-        chatScroll.querySelector(`.pending-tool-wrapper[data-tool-call-id="${toolCallId}"]`);
-      if (pendingEl) {
+    if (!chatScroll) return;
+
+    // Look for inline pending cards (new pattern) or standalone wrappers (legacy)
+    const pendingEl = chatScroll.querySelector(`.pending-tool-inline[data-tool-call-id="${toolCallId}"]`) ||
+      chatScroll.querySelector(`.pending-tool-wrapper[data-tool-call-id="${toolCallId}"]`);
+
+    if (pendingEl) {
+      if (formattedDisplay) {
+        // Update the pending card with the result HTML (transition pending → complete)
+        pendingEl.innerHTML = formattedDisplay;
+        pendingEl.classList.remove('pending-tool-inline');
+        pendingEl.classList.add('tool-result-inline');
+
+        // Add to messages array for persistence (re-render scenarios)
+        // Merge with last assistant message if it exists
+        if (this.messages.length > 0) {
+          const lastMsg = this.messages[this.messages.length - 1];
+          if (lastMsg.role === 'assistant') {
+            lastMsg.content += '\n\n' + (content || '');
+            lastMsg.display = (lastMsg.display || '') + formattedDisplay;
+          }
+        }
+
+        this._scrollToBottom();
+      } else {
+        // No formatted display (e.g., direct display tools) - just remove the card
         pendingEl.remove();
       }
+    } else if (formattedDisplay) {
+      // Fallback: No pending card found (e.g., AI responded with only tool calls, no text)
+      // Try to append to the last assistant message, or create a new one
+      const lastAssistantContent = this._getLastAssistantMessageContent();
+      if (lastAssistantContent) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'tool-result-inline';
+        wrapper.dataset.toolCallId = toolCallId;
+        wrapper.innerHTML = formattedDisplay;
+        lastAssistantContent.appendChild(wrapper);
+
+        // Add to messages array for persistence
+        if (this.messages.length > 0) {
+          const lastMsg = this.messages[this.messages.length - 1];
+          if (lastMsg.role === 'assistant') {
+            lastMsg.content += '\n\n' + (content || '');
+            lastMsg.display = (lastMsg.display || '') + formattedDisplay;
+          }
+        }
+
+        this._scrollToBottom();
+      } else {
+        // No assistant message exists at all - create a new one with the tool result
+        this.addMessage('assistant', content || '', formattedDisplay, true);
+      }
     }
+  }
+
+  /**
+   * Remove a pending tool card (legacy support)
+   * @param {string} toolCallId - The tool call ID to find and remove
+   */
+  _removePendingToolCard(toolCallId) {
+    this._updateToolCardWithResult({ toolCallId });
   }
 
   rollbackUserMessage() {
