@@ -389,8 +389,9 @@ class ChatHandler {
             this.addMessageToUI(
               {
                 role: 'assistant',
-                content: toolResult.content,
+                content: '', // Empty content - direct display tools are UI-only, don't add JSON to conversation
                 display: formattedDisplay,
+                _fromToolLoop: true, // Prevent duplicate conversation entry
               },
               options
             );
