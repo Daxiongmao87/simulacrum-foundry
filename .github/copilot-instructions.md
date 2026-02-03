@@ -4,7 +4,7 @@
 **Layered structure:** UI → Core → AI Client → Document → Tools (see `reference/ARCHITECTURE.md`)
 - **Core entry:** `scripts/simulacrum.js` - module initialization, settings, sidebar registration
 - **Tool system:** All tools extend `scripts/tools/base-tool.js` and register via `scripts/core/tool-registry.js`
-- **AI providers:** Abstract `AIProvider` base in `scripts/core/providers/base-provider.js` with OpenAI/Gemini/Mock implementations
+- **AI providers:** Abstract `AIProvider` base in `scripts/core/providers/base-provider.js` with OpenAI/Mock implementations
 
 ## Key Patterns
 
@@ -69,8 +69,7 @@ UI enhancements injected via `registerSettingsEnhancements()` hook on `renderSet
 Use `hookManager.withHooksDisabled(async () => { ... })` for operations that shouldn't trigger UI updates.
 
 ### AI Provider Integration
-Providers normalize responses via `normalizeToolCall()` in `ai-normalization.js`.
-OpenAI uses `tool_calls`, Gemini uses `functionCall` - abstraction layer unifies them.
+All providers use OpenAI-compatible endpoints. Response normalization via `normalizeToolCall()` in `ai-normalization.js` handles minor format differences between providers.
 
 ## File Structure
 - `scripts/core/` - Core engine, conversation, tool registry, AI clients

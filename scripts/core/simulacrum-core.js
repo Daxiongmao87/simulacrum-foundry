@@ -134,19 +134,17 @@ class SimulacrumCore {
       const baseURL = game.settings.get('simulacrum', 'baseURL');
       const model = game.settings.get('simulacrum', 'model');
       const temperature = game.settings.get('simulacrum', 'temperature');
-      const provider = game.settings.get('simulacrum', 'provider') || 'openai';
 
       // Do not enforce API key at this layer. Some endpoints may not require it.
 
-      // Create AI client (provider-agnostic)
+      // Create AI client (OpenAI-compatible)
       this.aiClient = new AIClient({
         apiKey,
         baseURL,
         model,
-        provider,
         temperature,
       });
-      this.logger.info(`AI Client Initialized with provider: ${provider}`);
+      this.logger.info('AI Client Initialized');
 
       // Validate connection
       // await this.aiClient.validateConnection();

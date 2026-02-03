@@ -5,4 +5,3 @@
 export { AIProvider } from './base-provider.js';
 export { MockAIProvider } from './mock-provider.js';
 export { OpenAIProvider } from './openai-provider.js';
-export { GeminiProvider, GEMINI_ERROR_CODES } from './gemini-provider.js';

@@ -52,11 +52,12 @@ Destructive operations (update, delete, macro/JS execution) require confirmation
 For complex operations, Simulacrum can create and manage tasks, tracking progress across multiple steps and reporting when complete.
 
 ### Multi-Provider Support
-Connect to the AI provider of your choice:
-- OpenAI (GPT-4, etc.)
-- Google Gemini
-- Anthropic Claude
-- Any OpenAI-compatible API (local models, proxies, etc.)
+Connect to any OpenAI-compatible API endpoint:
+- OpenAI (GPT-4o, etc.)
+- Google Gemini (via [OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai))
+- Anthropic Claude (via proxy or OpenRouter)
+- OpenRouter, LLM7, and other aggregators
+- Local models (Ollama, LM Studio, etc.)
 
 ### GM-Only Access
 Simulacrum is restricted to Game Masters only—players cannot access the AI interface or execute commands.
@@ -82,9 +83,9 @@ Simulacrum is restricted to Game Masters only—players cannot access the AI int
 4. Access Simulacrum from the sidebar tab
 
 ### Required Settings
-- **API Provider**: Select your AI service
+- **API Base URL**: Your provider's OpenAI-compatible endpoint (e.g., `https://api.openai.com/v1`)
 - **API Key**: Your provider's API key
-- **Model**: The model to use (e.g., `gpt-4o`, `gemini-2.5-flash`, `claude-3.5-sonnet`)
+- **Model**: The model to use (e.g., `gpt-4o`, `gemini-2.5-flash`)
 
 ## Usage
 
@@ -135,11 +136,12 @@ For advanced users, Simulacrum can execute arbitrary JavaScript, enabling comple
 ## Requirements
 
 - Foundry VTT v13.0.0 or higher
-- An AI provider API key with **tool/function calling support**:
-  - OpenAI (GPT-4, GPT-4o, etc.)
-  - Google Gemini (2.0 Flash, 2.5 Pro, etc.)
-  - Anthropic Claude (3.5 Sonnet, etc.)
-  - Any OpenAI-compatible API that supports function calling
+- An OpenAI-compatible API endpoint with **tool/function calling support**:
+  - OpenAI (`https://api.openai.com/v1`)
+  - Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai`)
+  - OpenRouter (`https://openrouter.ai/api/v1`)
+  - Ollama (`http://localhost:11434/v1`)
+  - Any other OpenAI-compatible endpoint
 
 > **Note**: Your AI endpoint must support OpenAI-style tool/function calling. Simulacrum relies on native tool calling to execute actions reliably. Endpoints that only support text completion are not compatible.
 

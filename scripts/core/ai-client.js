@@ -9,7 +9,6 @@ import { SimulacrumError, APIError } from '../utils/errors.js';
 import { normalizeAIResponse } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
-  delayWithSignal,
   createAbortError,
   isAbortError,
   throwIfAborted,
@@ -21,12 +20,11 @@ import {
 } from '../utils/retry-helpers.js';
 // Import providers
 import { AIProvider } from './providers/base-provider.js';
-import { GeminiProvider } from './providers/gemini-provider.js';
 import { MockAIProvider } from './providers/mock-provider.js';
 import { OpenAIProvider } from './providers/openai-provider.js';
 
 // Re-export providers for backward compatibility
-export { AIProvider, MockAIProvider, OpenAIProvider, GeminiProvider };
+export { AIProvider, MockAIProvider, OpenAIProvider };
 
 export const AI_ERROR_CODES = Object.freeze({
   TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE',
@@ -64,7 +62,6 @@ export class AIClient {
       // Ignore settings access errors (e.g. during tests)
     }
     this.temperature = config.temperature;
-    this.provider = config.provider || 'openai';
     this.providers = new Map();
     this.defaultProvider = null;
   }
@@ -256,96 +253,19 @@ export class AIClient {
   }
 
   /**
-   * Chat with AI using OpenAI or Ollama API
+   * Chat with AI using OpenAI-compatible API
    * @param {Array} messages - Array of message objects
    * @param {Array} tools - Optional tools for function calling
    * @returns {Promise<Object>} AI response
    */
   async chat(messages, tools = null, options = {}) {
-    // Only require baseURL for non-Gemini providers (Gemini defaults to v1beta internally)
-    const provider = options.provider || this.provider || 'openai';
-    if (!this.baseURL && provider !== 'gemini') {
+    if (!this.baseURL) {
       throw new SimulacrumError('No baseURL configured for AI client');
     }
 
     // Task-14: Apply request delay to prevent rate limiting
     await this._applyRequestDelay();
 
-    if (provider === 'gemini') {
-      // Use GeminiProvider for Gemini API calls
-      const geminiProvider = new GeminiProvider({
-        apiKey: this.apiKey,
-        baseURL: this.baseURL,
-        model: this.model,
-        maxTokens: this.maxTokens,
-        temperature: this.temperature,
-      });
-
-      // Validate and repair message structure (critical for strict APIs like Gemini 1.5)
-      const safeMessages = this._checkMessageStructure(messages);
-
-      const { maxRetries: MAX_GEMINI_RETRIES, initialDelayMs: INITIAL_DELAY_MS } = DEFAULT_RETRY_CONFIG;
-      let lastResult;
-
-      for (let i = 0; i <= MAX_GEMINI_RETRIES; i++) {
-        // Check for cancellation at the start of each iteration
-        throwIfAborted(options.signal);
-
-        try {
-          if (isDebugEnabled()) {
-            createLogger('AIClient').info(`Sending Gemini Request (Attempt ${i + 1})`);
-          }
-
-          lastResult = await geminiProvider.chat(safeMessages, {
-            tools,
-            systemPrompt: options.systemPrompt,
-            signal: options.signal,
-          });
-
-          // If success, return immediately
-          if (!lastResult.errorCode) {
-            return lastResult;
-          }
-
-          // If TOOL_CALL_FAILURE (model logic error), retry with backoff
-          if (i < MAX_GEMINI_RETRIES) {
-            const delay = calculateRetryDelay(i, INITIAL_DELAY_MS, false);
-            if (isDebugEnabled()) {
-              createLogger('AIClient').warn(
-                `Gemini tool call failure (attempt ${i + 1}/${MAX_GEMINI_RETRIES + 1}), retrying...`,
-                { errorCode: lastResult.errorCode }
-              );
-            }
-            await delayWithSignal(delay, options.signal);
-            continue;
-          }
-        } catch (error) {
-          // Check for abort error first - do NOT retry if user cancelled
-          if (isAbortError(error, options.signal)) {
-            throw createAbortError();
-          }
-
-          // Network error handling (429, 5xx)
-          if (i < MAX_GEMINI_RETRIES && isRetryableError(error)) {
-            const delay = calculateRetryDelay(i, INITIAL_DELAY_MS, true);
-            const retryCallId = `api-retry-gemini-${Date.now()}`;
-            emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(i + 2, MAX_GEMINI_RETRIES + 1));
-            if (isDebugEnabled()) {
-              createLogger('AIDiagnostics').info('Retrying Gemini network error', { attempt: i + 1, error: error.message, delay });
-            }
-            await executeRetryDelay(delay, options.signal, retryCallId);
-            emitRetryStatus('end', retryCallId);
-            continue;
-          }
-
-          // If not retryable or retries exhausted, throw
-          throw new Error(`Failed to fetch after ${MAX_GEMINI_RETRIES + 1} attempts: ${error.message}`);
-        }
-      }
-      return lastResult; // partial failure returned if retries exhausted
-    }
-
-    // OpenAI-style providers
     const contextLength = this.getContextLength();
     const estimatedPromptTokens = messages.reduce((acc, message) => {
       const content = message.content || '';
@@ -423,11 +343,7 @@ export class AIClient {
       };
 
       try {
-        // Fallback: Add API key to query string in case Authorization header is stripped by proxy/browser
         const url = new URL(`${this.baseURL.replace(/\/$/, '')}/chat/completions`);
-        if (this.apiKey) {
-          url.searchParams.append('api_key', this.apiKey);
-        }
 
         if (isDebugEnabled()) {
           const debugHeaders = { ...headers };
@@ -575,12 +491,6 @@ export class AIClient {
    */
   async chatWithSystem(conversationMessages, getSystemPrompt, tools = null, options = {}) {
     const systemPrompt = getSystemPrompt();
-    const provider = options.provider || this.provider || 'openai';
-    if (provider === 'gemini') {
-      const forwardedOptions = { ...options, systemPrompt };
-      return this.chat(conversationMessages, tools, forwardedOptions);
-    }
-
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationMessages];
     return this.chat(messages, tools, options);
   }
@@ -670,7 +580,7 @@ export class AIClient {
    * @returns {Promise<Object>} AI response
    */
   async sendMessage(message, options = {}) {
-    const providerName = options.provider || this.defaultProvider || this.provider || 'openai';
+    const providerName = options.provider || this.defaultProvider || 'openai';
     const provider = providerName ? this.providers.get(providerName) : null;
 
     if (provider) {
@@ -711,7 +621,7 @@ export class AIClient {
    * @returns {Promise<Object>} AI response
    */
   async generateResponse(messages, options = {}) {
-    const providerName = options.provider || this.defaultProvider || this.provider || 'openai';
+    const providerName = options.provider || this.defaultProvider || 'openai';
     const provider = providerName ? this.providers.get(providerName) : null;
 
     if (provider) {
