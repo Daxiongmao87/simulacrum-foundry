@@ -12,11 +12,19 @@ import { createLogger } from '../utils/logger.js';
  * Base tool that all other tools extend from
  */
 export class BaseTool {
-  constructor(name, description, schema = null, requiresConfirmation = false) {
+  /**
+   * @param {string} name - Tool name
+   * @param {string} description - Tool description
+   * @param {Object} schema - Parameter schema (deprecated, use getParameterSchema)
+   * @param {boolean} requiresConfirmation - Whether tool requires user confirmation
+   * @param {boolean} responseRequired - Whether the response parameter is required (for user-facing message)
+   */
+  constructor(name, description, schema = null, requiresConfirmation = false, responseRequired = false) {
     this.name = name;
     this.description = description;
     this.schema = schema;
     this.requiresConfirmation = requiresConfirmation;
+    this.responseRequired = responseRequired;
     this.documentAPI = null;
     this.logger = createLogger('BaseTool');
   }
@@ -103,14 +111,43 @@ export class BaseTool {
 
   /**
    * Get parameter schema - override in subclasses
+   * Subclasses should call _addResponseParam() on their schema before returning
    * @returns {Object} Parameter schema definition
    */
   getParameterSchema() {
-    return {
+    return this._addResponseParam({
       type: 'object',
       properties: {},
       required: [],
+    });
+  }
+
+  /**
+   * Add the standard 'response' parameter to a schema
+   * @param {Object} schema - The parameter schema to augment
+   * @returns {Object} New schema with response parameter added (does not mutate original)
+   * @protected
+   */
+  _addResponseParam(schema) {
+    // Clone to avoid mutating the original schema
+    const result = {
+      ...schema,
+      properties: { ...schema.properties },
+      required: [...(schema.required || [])],
     };
+
+    // Add response property
+    result.properties.response = {
+      type: 'string',
+      description: 'Your message to the user explaining what you are doing or have done. Required for models that cannot send text alongside tool calls.',
+    };
+
+    // If responseRequired is set, add to required array
+    if (this.responseRequired && !result.required.includes('response')) {
+      result.required.push('response');
+    }
+
+    return result;
   }
 
   /**

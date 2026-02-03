@@ -50,7 +50,7 @@ export class DocumentCreateTool extends BaseTool {
    * Get the parameter schema for this tool
    */
   getParameterSchema() {
-    return this.schema;
+    return this._addResponseParam(this.schema);
   }
 
   /**

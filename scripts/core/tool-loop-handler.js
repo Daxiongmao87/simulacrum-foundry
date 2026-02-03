@@ -152,7 +152,14 @@ async function _runLoopIteration(context) {
       }
     }
 
-    // Notify UI of the assistant message content (without appending tool announcements)
+    // Extract response from tool calls (primary) or use content (fallback)
+    // The response parameter is the canonical way for AI to communicate with users
+    const toolResponse = _extractToolResponse(currentResponse.toolCalls);
+    if (toolResponse) {
+      currentResponse.content = toolResponse;
+    }
+
+    // Notify UI of the message content
     if (currentResponse.content && currentResponse.content.trim().length > 0) {
       _notifyAssistantMessage(currentResponse, context);
     }
@@ -285,7 +292,6 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   const endLoopResult = toolResults.find(r => r.result?._endLoop === true || r.result?.data?._endLoop === true);
   if (endLoopResult) {
     if (isDebugEnabled()) logger.debug('end_loop tool detected; terminating loop');
-    // Silent termination - no message to emit, AI text is already displayed
     return { action: 'break' };
   }
 
@@ -687,6 +693,41 @@ async function _chatWithAI(messages, systemPrompt, context) {
     }
   }
   return normalized;
+}
+
+/**
+ * Extract the response parameter from tool calls
+ * The response parameter is the canonical way for AI to communicate with users
+ * @param {Array} toolCalls - Array of tool calls from the AI response
+ * @returns {string|null} The combined response text or null if none found
+ */
+function _extractToolResponse(toolCalls) {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return null;
+  }
+
+  // Collect responses from all tool calls that have them
+  const responses = toolCalls
+    .map(tc => {
+      // Arguments may be a JSON string or already parsed object
+      const args = tc.function?.arguments || tc.arguments;
+      if (!args) return null;
+
+      try {
+        const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+        return parsed?.response;
+      } catch (_e) {
+        return null;
+      }
+    })
+    .filter(r => r && typeof r === 'string' && r.trim().length > 0);
+
+  if (responses.length === 0) {
+    return null;
+  }
+
+  // Join multiple responses with newlines
+  return responses.join('\n\n');
 }
 
 function _notifyAssistantMessage(response, context) {

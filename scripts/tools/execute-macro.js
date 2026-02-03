@@ -28,7 +28,7 @@ export class ExecuteMacroTool extends BaseTool {
   }
 
   getParameterSchema() {
-    return this.schema;
+    return this._addResponseParam(this.schema);
   }
 
   /**

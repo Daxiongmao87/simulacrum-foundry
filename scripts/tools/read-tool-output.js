@@ -26,7 +26,7 @@ export class ReadToolOutputTool extends BaseTool {
      * @returns {Object} Parameter schema definition
      */
     getParameterSchema() {
-        return {
+        return this._addResponseParam({
             type: 'object',
             properties: {
                 tool_call_id: {
@@ -43,7 +43,7 @@ export class ReadToolOutputTool extends BaseTool {
                 },
             },
             required: ['tool_call_id', 'start_line', 'end_line'],
-        };
+        });
     }
 
     /**

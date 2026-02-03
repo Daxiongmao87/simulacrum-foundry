@@ -59,7 +59,7 @@ export class DocumentOwnershipTool extends BaseTool {
      * @returns {Object} Parameter schema
      */
     getParameterSchema() {
-        return this.schema;
+        return this._addResponseParam(this.schema);
     }
 
     /**
