@@ -529,12 +529,45 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (active) {
       this.#thinkingWordIndex = 0;
       this.#needsScroll = true;
-      this.render({ parts: ['log', 'input'] });
+      this.render({ parts: ['log'] });
+      this._updateProcessButton(true);
       this.#startThinkingInterval();
     } else {
       this.#stopThinkingInterval();
       this.#needsScroll = true;
-      this.render({ parts: ['log', 'input'] });
+      this.render({ parts: ['log'] });
+      this._updateProcessButton(false);
+    }
+  }
+
+  /**
+   * Update the process button (trash/stop) via direct DOM manipulation
+   * Avoids re-rendering the input part which would lose textarea content and status area state
+   * @param {boolean} isProcessing - Whether a process is active
+   */
+  _updateProcessButton(isProcessing) {
+    const container = this.element?.[0] || this.element;
+    if (!container) return;
+
+    const controlButtons = container.querySelector('.control-buttons');
+    if (!controlButtons) return;
+
+    // Find the existing button (either trash or stop)
+    const existingBtn = controlButtons.querySelector('button.ui-control.icon');
+    if (!existingBtn) return;
+
+    if (isProcessing) {
+      // Switch to stop button
+      existingBtn.classList.remove('fa-trash');
+      existingBtn.classList.add('fa-stop');
+      existingBtn.setAttribute('aria-label', 'Cancel Agent Process');
+      existingBtn.dataset.action = 'cancelProcess';
+    } else {
+      // Switch to trash button
+      existingBtn.classList.remove('fa-stop');
+      existingBtn.classList.add('fa-trash');
+      existingBtn.setAttribute('aria-label', 'Clear Chat Log');
+      existingBtn.dataset.action = 'clearChat';
     }
   }
 
