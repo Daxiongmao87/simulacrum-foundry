@@ -79,13 +79,15 @@ Simulacrum is restricted to Game Masters only—players cannot access the AI int
 
 1. Enable the module in your world
 2. Open **Module Settings** → **Simulacrum**
-3. Configure your AI provider and API key
+3. Configure your API Base URL and API Key
 4. Access Simulacrum from the sidebar tab
+5. Select a model from the dropdown in the sidebar header
 
 ### Required Settings
 - **API Base URL**: Your provider's OpenAI-compatible endpoint (e.g., `https://api.openai.com/v1`)
 - **API Key**: Your provider's API key
-- **Model**: The model to use (e.g., `gpt-4o`, `gemini-2.5-flash`)
+
+The model selector in the sidebar automatically fetches available models from your configured endpoint.
 
 ## Usage
 
