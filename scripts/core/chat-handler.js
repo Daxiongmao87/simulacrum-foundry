@@ -49,7 +49,7 @@ class ChatHandler {
             );
           }
         },
-        onToolResult: toolResult => this.handleToolResult(toolResult, options),
+        onToolResult: async toolResult => await this.handleToolResult(toolResult, options),
       });
 
       return finalResponse;

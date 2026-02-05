@@ -132,7 +132,7 @@ async function _runLoopIteration(context) {
 
     // Notify UI of the message content FIRST so pending cards have a message to attach to
     if (currentResponse.content && currentResponse.content.trim().length > 0) {
-      _notifyAssistantMessage(currentResponse, context);
+      await _notifyAssistantMessage(currentResponse, context);
     }
 
     // Emit pending tool state for each tool call AFTER assistant message exists
@@ -411,7 +411,7 @@ async function _executeToolCalls(toolCalls, context) {
           const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
           results.push(resultObj);
           if (onToolResult) {
-            onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+            await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
           }
           continue;
         }
@@ -437,7 +437,7 @@ async function _executeToolCalls(toolCalls, context) {
             const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
             results.push(resultObj);
             if (onToolResult) {
-              onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+              await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
             }
             continue;
           }
@@ -460,7 +460,7 @@ async function _executeToolCalls(toolCalls, context) {
             const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
             results.push(resultObj);
             if (onToolResult) {
-              onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+              await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
             }
             continue;
           }
@@ -540,7 +540,7 @@ async function _executeToolCalls(toolCalls, context) {
     interactionLogger.logToolResult(toolCall.id, result, isSuccess, durationMs);
 
     if (onToolResult) {
-      onToolResult({
+      await onToolResult({
         role: 'tool',
         content: JSON.stringify(result),
         toolCallId: toolCall.id,
@@ -731,13 +731,13 @@ function _extractToolResponse(toolCalls) {
   return responses.join('\n\n');
 }
 
-function _notifyAssistantMessage(response, context) {
+async function _notifyAssistantMessage(response, context) {
   if (context.onToolResult && !response._parseError) {
     // Deduplicate identical content within the same loop to prevent UI spam
     // (Common phenomenon where AI repeats "I will search for..." in every step)
     const content = response.content?.trim();
     if (content && content !== context.lastEmittedContent) {
-      context.onToolResult({ role: 'assistant', content: response.content, _fromToolLoop: true });
+      await context.onToolResult({ role: 'assistant', content: response.content, _fromToolLoop: true });
       context.lastEmittedContent = content;
     }
     // Flag as emitted to prevent duplication in ConversationEngine
