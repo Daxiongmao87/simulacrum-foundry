@@ -1722,3 +1722,30 @@ section[data-tab="simulacrum"] .discord-btn:hover {
 .model-dropdown .no-models:hover {
   background: none;
 }
+
+/* Context limit input - compact input next to model dropdown */
+.context-limit-input {
+  width: 56px;
+  padding: 2px 4px;
+  margin-left: 4px;
+  border: 1px solid var(--color-border-dark, #4b4a45);
+  border-radius: 3px;
+  background: var(--color-cool-5, #1a1625);
+  color: var(--color-text-light-primary, #fff4c2);
+  font-size: 0.85em;
+  font-family: var(--font-body);
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.context-limit-input:focus {
+  border-color: var(--color-warm-1, #daa520);
+  box-shadow: 0 0 4px rgba(218, 165, 32, 0.3);
+}
+
+.context-limit-input::placeholder {
+  color: var(--color-text-dark-secondary, #888);
+  font-style: italic;
+}

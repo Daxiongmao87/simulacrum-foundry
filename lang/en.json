@@ -25,7 +25,9 @@
           "Deny": "Always Deny"
         }
       },
-      "Save": "Save Changes"
+      "Save": "Save Changes",
+      "FallbackContextLimit": "Fallback Context Limit",
+      "FallbackContextLimitHint": "Token limit used when context window cannot be derived from model API. Most modern models have 32k-128k context."
     },
     "ToolPermissionsConfig": {
       "Title": "Tool Permissions Configuration"

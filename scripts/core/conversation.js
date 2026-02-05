@@ -30,11 +30,11 @@ class ConversationManager {
     this.activeMessages = []; // Tier 3: Recent messages in full fidelity
     this.toolOutputBuffer = new Map(); // Store full tool outputs for indexed access
 
-    // Configurable token limit support
+    // Configurable token limit support (fallback context limit)
     let configuredMax = maxTokens;
     try {
       if (typeof game !== 'undefined' && game?.settings?.get) {
-        const limit = game.settings.get('simulacrum', 'tokenLimit');
+        const limit = game.settings.get('simulacrum', 'fallbackContextLimit');
         if (limit && limit > 0) {
           configuredMax = limit;
         }

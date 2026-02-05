@@ -71,6 +71,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   #retryLabel = null;
   _popoutClosing = false;
   #availableModels = [];
+  #modelsLoaded = false;
+  #loadingModelPromise = null;
   #modelDropdownHighlightIndex = -1;
 
   constructor(options) {
@@ -319,7 +321,82 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
         !this._popoutClosing,
       currentModel: game.settings.get('simulacrum', 'model') || '',
+      contextLimit: this._getFormattedContextLimit(game.settings.get('simulacrum', 'model')),
     });
+  }
+
+  /**
+   * Get formatted context limit for a model (e.g., "128k", "1M")
+   * @param {string} modelId
+   * @returns {string}
+   */
+  _getFormattedContextLimit(modelId) {
+    if (!modelId) return '32k';
+
+    // Check for derived limit first
+    const { limit, source } = modelService.getContextLimit(modelId);
+
+    console.log(`[Simulacrum] Derived limit for ${modelId}: ${limit} (source: ${source})`);
+
+    if (limit > 0 && (source === 'derived' || source === 'openrouter')) {
+      return this._formatLimitValue(limit);
+    }
+
+    // Use stored fallback if no derived limit
+    const storedLimit = game.settings.get('simulacrum', 'fallbackContextLimit');
+    return this._formatLimitValue(storedLimit);
+  }
+
+
+  /**
+   * Format numeric limit to string string (e.g. 1000 -> "1k")
+   * @param {number} limit 
+   * @returns {string}
+   */
+  _formatLimitValue(limit) {
+    if (!limit) return '';
+
+    // Millions: always format with up to 2 decimals
+    if (limit >= 1000000) {
+      return `${parseFloat((limit / 1000000).toFixed(2))}M`;
+    }
+
+    // Thousands:
+    // If >= 10k or exact thousand, use 'k' notation with decimals
+    // Else (small integers like 1024, 4096, 8192) show raw number
+    if (limit >= 10000 || (limit >= 1000 && limit % 1000 === 0)) {
+      return `${parseFloat((limit / 1000).toFixed(2))}k`;
+    }
+
+    return `${limit}`;
+  }
+
+
+
+  /**
+   * Save model selection to settings
+   * @param {string} model - The model ID to save
+   */
+  async _saveModelSelection(model) {
+    const currentModel = game.settings.get('simulacrum', 'model');
+    if (model && model !== currentModel) {
+      try {
+        await game.settings.set('simulacrum', 'model', model);
+        this.logger.info(`Model changed to: ${model}`);
+
+        // Update context limit input
+        const limitInput = this.element.querySelector('.context-limit-input');
+        if (limitInput) {
+          const newVal = this._getFormattedContextLimit(model);
+          console.log(`[Simulacrum] Updating input to: ${newVal}`);
+          limitInput.value = newVal;
+        } else {
+          console.warn('[Simulacrum] Could not find .context-limit-input to update');
+        }
+      } catch (e) {
+        this.logger.warn('Failed to save model selection:', e);
+      }
+    }
   }
 
   _getProcessLabel() {
@@ -978,24 +1055,31 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     if (!modelInput || !dropdown || !wrapper) return;
 
-    // Load models on first interaction
-    let modelsLoaded = false;
-    const ensureModelsLoaded = async () => {
-      if (modelsLoaded) return;
-      modelsLoaded = true;
-      wrapper.classList.add('loading');
-      this.#availableModels = await modelService.fetchModels();
-      wrapper.classList.remove('loading');
-    };
-
     // Input event - filter dropdown and update autocomplete hint
     modelInput.addEventListener('input', () => {
       this._filterAndShowDropdown(modelInput, dropdown, hintEl);
     });
 
+    // Context limit input events
+    const limitInput = element.querySelector('.context-limit-input');
+    if (limitInput) {
+      // Save on blur/enter
+      limitInput.addEventListener('change', () => {
+        this._saveContextLimit(limitInput.value);
+      });
+
+      // Auto-format on blur (e.g. 1000 -> 1k)
+      limitInput.addEventListener('blur', () => {
+        const parsed = this._parseContextLimit(limitInput.value);
+        if (parsed) {
+          limitInput.value = this._formatLimitValue(parsed);
+        }
+      });
+    }
+
     // Focus event - show dropdown
     modelInput.addEventListener('focus', async () => {
-      await ensureModelsLoaded();
+      await this._loadAvailableModels(); // Changed from ensureModelsLoaded
       this._filterAndShowDropdown(modelInput, dropdown, hintEl);
       wrapper.classList.add('dropdown-open');
     });
@@ -1012,15 +1096,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     modelInput.addEventListener('keydown', (e) => {
       const isOpen = !dropdown.classList.contains('hidden');
 
-      if (e.key === 'Tab' && !e.shiftKey) {
-        // Accept autocomplete suggestion
-        const hint = hintEl.textContent;
-        if (hint && hint !== modelInput.value) {
-          e.preventDefault();
-          modelInput.value = hint;
-          this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-        }
-      } else if (e.key === 'Enter') {
+      if (e.key === 'Enter') {
         e.preventDefault();
         if (isOpen && this.#modelDropdownHighlightIndex >= 0) {
           const items = dropdown.querySelectorAll('li:not(.no-models)');
@@ -1059,6 +1135,86 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         this._saveModelSelection(li.dataset.model);
       }
     });
+
+    // Initialize logic
+    this._loadAvailableModels();
+  }
+
+  /**
+   * Load available models from services
+   */
+  async _loadAvailableModels() {
+    // If already loaded, return immediately
+    if (this.#modelsLoaded) return;
+
+    // If already loading, wait for existing promise
+    if (this.#loadingModelPromise) {
+      await this.#loadingModelPromise;
+      return;
+    }
+
+    const wrapper = this.element.querySelector('.model-selector-wrapper');
+    if (wrapper) wrapper.classList.add('loading');
+
+    // Create shared promise
+    this.#loadingModelPromise = (async () => {
+      try {
+        const [models] = await Promise.all([
+          modelService.fetchModels(),
+          modelService.fetchOpenRouterModels()
+        ]);
+        this.#availableModels = models;
+        this.#modelsLoaded = true;
+      } catch (error) {
+        this.logger.warn('Failed to load models:', error);
+      }
+    })();
+
+    try {
+      await this.#loadingModelPromise;
+    } finally {
+      this.#loadingModelPromise = null;
+      if (wrapper) wrapper.classList.remove('loading');
+    }
+  }
+
+
+
+  /**
+   * Parse numeric limit from string (e.g. "1k" -> 1000)
+   * @param {string} value 
+   * @returns {number|null}
+   */
+  _parseContextLimit(value) {
+    if (!value) return null;
+    value = value.toString().trim().toLowerCase();
+
+    let multiplier = 1;
+    if (value.endsWith('k')) {
+      multiplier = 1000;
+      value = value.slice(0, -1);
+    } else if (value.endsWith('m')) {
+      multiplier = 1000000;
+      value = value.slice(0, -1);
+    }
+
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return null;
+
+    return Math.round(num * multiplier);
+  }
+
+  /**
+   * Save context limit to settings
+   * @param {string} value - The input string (e.g. "128k")
+   */
+  async _saveContextLimit(value) {
+    const limit = this._parseContextLimit(value);
+    if (limit) {
+      // Update fallback setting
+      await game.settings.set('simulacrum', 'fallbackContextLimit', limit);
+      this.logger.info(`Context limit updated to: ${limit}`);
+    }
   }
 
   /**
@@ -1076,13 +1232,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       ? this.#availableModels.filter(m => m.toLowerCase().includes(query))
       : this.#availableModels;
 
-    // Build dropdown HTML
+    // Build dropdown HTML with context limit suffix
     if (filtered.length === 0) {
       dropdown.innerHTML = '<li class="no-models">No models found</li>';
     } else {
       dropdown.innerHTML = filtered.map(model => {
         const isSelected = model === currentModel;
-        return `<li data-model="${model}" class="${isSelected ? 'selected' : ''}">${model}</li>`;
+        const displayName = this._formatModelDisplayName(model);
+        return `<li data-model="${model}" class="${isSelected ? 'selected' : ''}" title="${displayName}">${displayName}</li>`;
       }).join('');
     }
 
@@ -1091,33 +1248,28 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     this.#modelDropdownHighlightIndex = -1;
 
     // Update autocomplete hint
-    this._updateAutocompleteHint(input, hintEl, filtered);
+
   }
 
   /**
-   * Update the autocomplete hint with first matching model
-   * @param {HTMLInputElement} input - The model input element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
-   * @param {string[]} filtered - Filtered models list
+   * Format model name with context limit suffix
+   * @param {string} modelId - The model ID
+   * @returns {string} Display name with context limit (e.g., "gpt-4 (128k)")
    */
-  _updateAutocompleteHint(input, hintEl, filtered) {
-    const query = input.value;
+  _formatModelDisplayName(modelId) {
+    const { limit, source } = modelService.getContextLimit(modelId);
 
-    if (!query || filtered.length === 0) {
-      hintEl.textContent = '';
-      return;
+    // Show suffix for derived or openrouter sources (not fallback)
+    if ((source === 'derived' || source === 'openrouter') && limit > 0) {
+      const suffix = this._formatLimitValue(limit);
+      return `${modelId} (${suffix})`;
     }
 
-    // Find first model that starts with the query (case-insensitive)
-    const match = filtered.find(m => m.toLowerCase().startsWith(query.toLowerCase()));
-
-    if (match) {
-      // Show full model name as hint
-      hintEl.textContent = match;
-    } else {
-      hintEl.textContent = '';
-    }
+    return modelId;
   }
+
+
+
 
   /**
    * Navigate dropdown with arrow keys
@@ -1160,19 +1312,5 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     this.#modelDropdownHighlightIndex = -1;
   }
 
-  /**
-   * Save model selection to settings
-   * @param {string} model - The model ID to save
-   */
-  async _saveModelSelection(model) {
-    const currentModel = game.settings.get('simulacrum', 'model');
-    if (model && model !== currentModel) {
-      try {
-        await game.settings.set('simulacrum', 'model', model);
-        this.logger.info(`Model changed to: ${model}`);
-      } catch (e) {
-        this.logger.warn('Failed to save model selection:', e);
-      }
-    }
-  }
+
 }

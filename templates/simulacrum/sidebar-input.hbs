@@ -2,9 +2,8 @@
 <form class="chat-form {{#if disableInput}}hidden{{/if}}" data-application-part="input">
 
     {{!-- Jump to Bottom --}}
-    <button type="button" class="ui-control jump-to-bottom" data-tooltip
-        aria-label="{{localize 'CHAT.JumpToBottom'}}" data-action="jumpToBottom" {{#if
-        isAtBottom}}hidden{{/if}}>
+    <button type="button" class="ui-control jump-to-bottom" data-tooltip aria-label="{{localize 'CHAT.JumpToBottom'}}"
+        data-action="jumpToBottom" {{#if isAtBottom}}hidden{{/if}}>
         <i class="fa-solid fa-arrow-down"></i>
     </button>
 
@@ -18,13 +17,14 @@
                 data-action="clearChat"></button>
             {{/if}}
             <div class="model-selector-wrapper">
-                <input type="text" class="model-selector-input" name="model"
-                       value="{{currentModel}}" autocomplete="off"
-                       placeholder="{{localize 'SIMULACRUM.ModelSelector.Placeholder'}}">
-                <span class="model-autocomplete-hint"></span>
+                <input type="text" class="model-selector-input" name="model" value="{{currentModel}}" autocomplete="off"
+                    placeholder="{{localize 'SIMULACRUM.ModelSelector.Placeholder'}}">
+
                 <i class="model-selector-icon fa-solid fa-caret-down"></i>
                 <ul class="model-dropdown hidden"></ul>
             </div>
+            <input type="text" class="context-limit-input" name="contextLimit" value="{{contextLimit}}"
+                autocomplete="off" placeholder="32k" title="Context limit (e.g. 128k, 1M)">
         </div>
     </div>
 

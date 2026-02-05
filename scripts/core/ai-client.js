@@ -18,6 +18,7 @@ import {
   buildConnectionRetryLabel,
   DEFAULT_RETRY_CONFIG,
 } from '../utils/retry-helpers.js';
+import { modelService } from './model-service.js';
 // Import providers
 import { AIProvider } from './providers/base-provider.js';
 import { MockAIProvider } from './providers/mock-provider.js';
@@ -48,19 +49,20 @@ export class AIClient {
     this.baseURL = config.baseURL;
     this.model = config.model;
     this.maxTokens = config.maxTokens || 4096;
-    this.contextLength = 32000;
 
-    // Override contextLength with configured tokenLimit if available
+    // Context length will be dynamically derived when needed
+    this._fallbackContextLimit = 32000;
     try {
       if (typeof game !== 'undefined' && game?.settings?.get) {
-        const configuredLimit = game.settings.get('simulacrum', 'tokenLimit');
+        const configuredLimit = game.settings.get('simulacrum', 'fallbackContextLimit');
         if (configuredLimit && configuredLimit > 0) {
-          this.contextLength = configuredLimit;
+          this._fallbackContextLimit = configuredLimit;
         }
       }
     } catch {
       // Ignore settings access errors (e.g. during tests)
     }
+
     this.temperature = config.temperature;
     this.providers = new Map();
     this.defaultProvider = null;
@@ -90,11 +92,15 @@ export class AIClient {
   }
 
   /**
-   * Get context length - uses configured contextLength
+   * Get context length - derives from model metadata or uses fallback
    * @returns {number} Context length
    */
   getContextLength() {
-    return this.contextLength;
+    if (this.model) {
+      const { limit } = modelService.getContextLimit(this.model, this._fallbackContextLimit);
+      return limit;
+    }
+    return this._fallbackContextLimit;
   }
 
   /**

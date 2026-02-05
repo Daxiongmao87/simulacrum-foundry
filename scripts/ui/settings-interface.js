@@ -115,13 +115,13 @@ function _registerToolPermissionSettings() {
 }
 
 function _registerCoreSettings() {
-  game.settings.register('simulacrum', 'maxTokens', {
-    name: 'Maximum Tokens',
-    hint: 'Maximum number of tokens for AI responses.',
+  game.settings.register('simulacrum', 'fallbackContextLimit', {
+    name: 'SIMULACRUM.Settings.FallbackContextLimit',
+    hint: 'SIMULACRUM.Settings.FallbackContextLimitHint',
     scope: 'world',
-    config: false,
+    config: false, // Managed via sidebar input
     type: Number,
-    default: 4096,
+    default: 32000,
     restricted: true,
   });
 
