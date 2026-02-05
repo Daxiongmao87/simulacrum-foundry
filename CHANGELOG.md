@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.0.6] - 2026-02-05
+
+### Changed
+- fix(ui): Restore status bar styling and task tracker regressions
+- fix(ui): Remove leftover _monitorStatus call causing crash
+- fix(ui): Restore status bar and indexing status logic
+- feat: Add context limit handling and sidebar UI refinements
+- fix: restore tool justification expand/collapse functionality
+- fix: restore model selector logic lost in commit 169670fb
+- fix(chat): holistic architecture audit and serialization hardening
+- Fix: Synchronize Chat UI and persistence logic
+- fix: wrap merged message content in div to prevent text running together
+- fix: await async onToolResult callbacks to prevent race conditions in message display
+- fix: reset task-tracker to inactive state when stop button pressed
+- fix: show truncation notice with release link in Discord announcements
+
 ## [1.0.5] - 2026-02-03
 
 ### Changed
