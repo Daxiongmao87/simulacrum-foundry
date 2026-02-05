@@ -81,7 +81,7 @@ class SimulacrumCore {
     await this.initializeAIClient();
 
     // Initialize conversation manager with auto-save callback
-    const tokenLimit = game.settings.get('simulacrum', 'tokenLimit') || 32000;
+    const tokenLimit = game.settings.get('simulacrum', 'fallbackContextLimit') || 32000;
     this.conversationManager = new ConversationManager(
       game.user.id,
       game.world.id,

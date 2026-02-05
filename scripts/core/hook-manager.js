@@ -35,6 +35,9 @@ export const SimulacrumHooks = Object.freeze({
   // Asset index hooks
   INDEX_STATUS: 'simulacrum:indexStatus',
 
+  // Endpoint validation hooks
+  ENDPOINT_STATUS: 'simulacrum:endpointStatus',
+
   // Error hooks
   ERROR_OCCURRED: 'simulacrum:errorOccurred',
 });
@@ -127,4 +130,13 @@ export function emitErrorOccurred(error, context) {
  */
 export function emitIndexStatus(state, data = {}) {
   emitHook(SimulacrumHooks.INDEX_STATUS, { state, ...data });
+}
+
+/**
+ * Emit endpoint status update
+ * @param {'ok'|'error'} state - Endpoint state
+ * @param {string} [message] - Optional message for error state
+ */
+export function emitEndpointStatus(state, message = null) {
+  emitHook(SimulacrumHooks.ENDPOINT_STATUS, { state, message });
 }

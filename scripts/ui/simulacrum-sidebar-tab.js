@@ -75,6 +75,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   #loadingModelPromise = null;
   #modelDropdownHighlightIndex = -1;
   #statusInterval = null;
+  #modelSaveDebounceTimer = null;
+  #contextLimitDebounceTimer = null;
 
   constructor(options) {
     super(options);
@@ -137,6 +139,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     Hooks.on(SimulacrumHooks.INDEX_STATUS, (payload) => {
       this._updateIndexStatus(payload);
     });
+
+    // Endpoint validation status hooks
+    Hooks.on(SimulacrumHooks.ENDPOINT_STATUS, (payload) => {
+      this._updateEndpointStatus(payload);
+    });
   }
 
   /**
@@ -194,6 +201,39 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
   }
 
+  /**
+   * Update the status area to show endpoint validation errors
+   * @param {Object} payload - { state: 'ok'|'error', message?: string }
+   */
+  _updateEndpointStatus(payload) {
+    const container = this.element?.[0] || this.element;
+    if (!container) return;
+
+    const statusArea = container.querySelector('.simulacrum-status-area');
+    if (!statusArea) return;
+
+    const { state, message } = payload;
+    const statusText = statusArea.querySelector('.status-text');
+    const statusIcon = statusArea.querySelector('.status-icon');
+
+    if (state === 'ok') {
+      // Hide status area when endpoint is OK (unless indexing is active)
+      // Check if indexing is currently shown
+      if (statusText?.textContent?.includes('Indexing')) {
+        // Don't hide - indexing is in progress
+        return;
+      }
+      statusArea.style.display = 'none';
+    } else {
+      statusArea.style.display = '';
+      if (statusIcon) {
+        statusIcon.className = 'status-icon fa-solid fa-triangle-exclamation';
+      }
+      if (statusText) {
+        statusText.textContent = message || 'Endpoint not available';
+      }
+    }
+  }
 
   /**
    * Update the task tracker element in the DOM
@@ -404,6 +444,20 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
 
   /**
+   * Debounced model save - saves 500ms after user stops typing
+   * @param {string} model - The model ID to save
+   */
+  _debouncedSaveModel(model) {
+    if (this.#modelSaveDebounceTimer) {
+      clearTimeout(this.#modelSaveDebounceTimer);
+    }
+    this.#modelSaveDebounceTimer = setTimeout(() => {
+      this._saveModelSelection(model);
+      this.#modelSaveDebounceTimer = null;
+    }, 500);
+  }
+
+  /**
    * Save model selection to settings
    * @param {string} model - The model ID to save
    */
@@ -413,6 +467,13 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       try {
         await game.settings.set('simulacrum', 'model', model);
         this.logger.info(`Model changed to: ${model}`);
+
+        // CRITICAL: Explicitly reinitialize AI client here to avoid race condition.
+        // The settings onChange callback is async and doesn't block, so the user
+        // could send a message before it completes. By awaiting this here, we ensure
+        // the AI client uses the new model before returning control to the UI.
+        const { SimulacrumCore } = await import('../core/simulacrum-core.js');
+        await SimulacrumCore.initializeAIClient();
 
         // Update context limit input
         const limitInput = this.element.querySelector('.context-limit-input');
@@ -1086,24 +1147,39 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     if (!modelInput || !dropdown || !wrapper) return;
 
-    // Input event - filter dropdown and update autocomplete hint
+    // Input event - filter dropdown, update autocomplete hint, and trigger debounced save
     modelInput.addEventListener('input', () => {
       this._filterAndShowDropdown(modelInput, dropdown, hintEl);
+      // Debounced save: save model selection 500ms after user stops typing
+      this._debouncedSaveModel(modelInput.value);
     });
 
     // Context limit input events
     const limitInput = element.querySelector('.context-limit-input');
     if (limitInput) {
-      // Save on blur/enter
-      limitInput.addEventListener('change', () => {
-        this._saveContextLimit(limitInput.value);
+      // Debounced save on input (500ms)
+      limitInput.addEventListener('input', () => {
+        // Cancel existing timer
+        if (this.#contextLimitDebounceTimer) {
+          clearTimeout(this.#contextLimitDebounceTimer);
+        }
+        // Start new debounce timer
+        this.#contextLimitDebounceTimer = setTimeout(() => {
+          this._saveContextLimit(limitInput.value);
+        }, 500);
       });
 
       // Auto-format on blur (e.g. 1000 -> 1k)
       limitInput.addEventListener('blur', () => {
+        // Cancel any pending debounced save and save immediately
+        if (this.#contextLimitDebounceTimer) {
+          clearTimeout(this.#contextLimitDebounceTimer);
+          this.#contextLimitDebounceTimer = null;
+        }
         const parsed = this._parseContextLimit(limitInput.value);
         if (parsed) {
           limitInput.value = this._formatLimitValue(parsed);
+          this._saveContextLimit(limitInput.value);
         }
       });
     }
@@ -1156,13 +1232,18 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       }
     });
 
-    // Click on dropdown item
+    // Click on dropdown item - save immediately (cancel any pending debounce)
     dropdown.addEventListener('mousedown', (e) => {
       const li = e.target.closest('li:not(.no-models)');
       if (li && li.dataset.model) {
         e.preventDefault();
         modelInput.value = li.dataset.model;
         this._closeDropdown(wrapper, dropdown, hintEl);
+        // Cancel any pending debounced save and save immediately
+        if (this.#modelSaveDebounceTimer) {
+          clearTimeout(this.#modelSaveDebounceTimer);
+          this.#modelSaveDebounceTimer = null;
+        }
         this._saveModelSelection(li.dataset.model);
       }
     });
@@ -1339,7 +1420,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   _closeDropdown(wrapper, dropdown, hintEl) {
     dropdown.classList.add('hidden');
     wrapper.classList.remove('dropdown-open');
-    hintEl.textContent = '';
+    if (hintEl) hintEl.textContent = '';
     this.#modelDropdownHighlightIndex = -1;
   }
 

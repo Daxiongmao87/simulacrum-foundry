@@ -43,21 +43,20 @@
 }
 
 /* ---------------------------------------- */
-/*  Disabled Tab Button (invalid endpoint) */
+/*  Tab Button Visual States                */
 /* ---------------------------------------- */
 
-/* Default: grayed out and inert until validated */
-#sidebar-tabs .ui-control.icon[data-tab="simulacrum"] {
-  opacity: 0.4;
-  filter: grayscale(100%);
-  pointer-events: none;
+/* Tab is always accessible - validation provides visual feedback only */
+/* No blocking behavior - users can always access their conversation */
+
+/* Subtle visual indicator when endpoint validation failed */
+#sidebar-tabs .ui-control.icon[data-tab="simulacrum"].simulacrum-endpoint-error {
+  opacity: 0.7;
 }
 
-/* Enabled after successful validation */
+/* Visual feedback when endpoint is validated successfully */
 #sidebar-tabs .ui-control.icon[data-tab="simulacrum"].simulacrum-enabled {
   opacity: 1;
-  filter: none;
-  pointer-events: auto;
 }
 
 /* ---------------------------------------- */

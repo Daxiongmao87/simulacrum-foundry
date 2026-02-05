@@ -25,27 +25,27 @@ const MODULE_NAME = 'Simulacrum AI Assistant';
 const logger = createLogger('Module');
 
 /**
- * Validate the endpoint by calling /models and checking if configured model exists.
- * Updates the tab button to be grayed out and unclickable if validation fails.
+ * Validate the endpoint by calling /models and checking for HTTP 200.
+ * Does NOT block access - just provides visual feedback and emits status hook.
+ * Users can always access the tab to see their conversation.
  */
 async function validateAndUpdateTabButton() {
   const tabButton = document.querySelector('[data-tab="simulacrum"]');
   if (!tabButton) return;
 
   const isValid = await testEndpoint();
-  const disabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.DisabledTooltip') ?? 'AI endpoint not configured or unreachable';
-  const enabledTooltip = game.i18n?.localize('SIMULACRUM.SidebarTab.Title') ?? 'Simulacrum';
+
+  // Import hook manager dynamically to emit status
+  const { emitEndpointStatus } = await import('./core/hook-manager.js');
 
   if (isValid) {
     tabButton.classList.add('simulacrum-enabled');
-    tabButton.setAttribute('data-tooltip', enabledTooltip);
-    tabButton.removeAttribute('inert');
-    tabButton.removeAttribute('aria-disabled');
+    tabButton.classList.remove('simulacrum-endpoint-error');
+    emitEndpointStatus('ok');
   } else {
     tabButton.classList.remove('simulacrum-enabled');
-    tabButton.setAttribute('data-tooltip', disabledTooltip);
-    tabButton.setAttribute('inert', '');
-    tabButton.setAttribute('aria-disabled', 'true');
+    tabButton.classList.add('simulacrum-endpoint-error');
+    emitEndpointStatus('error', 'AI endpoint not configured or unreachable');
   }
 }
 
@@ -124,11 +124,11 @@ function registerAPISettings() {
 
   game.settings.register(MODULE_ID, 'model', {
     name: 'AI Model',
-    hint: 'The AI model to use (e.g., gpt-3.5-turbo, llama2).',
+    hint: 'The AI model to use. Select from the dropdown in the sidebar or enter a model name.',
     scope: 'world',
     config: false, // Hidden from settings - managed via sidebar combobox
     type: String,
-    default: 'gpt-3.5-turbo',
+    default: '', // No default - user must select from their configured endpoint
     restricted: true,
     onChange: async _value => {
       try {
@@ -141,23 +141,7 @@ function registerAPISettings() {
     },
   });
 
-  game.settings.register(MODULE_ID, 'tokenLimit', {
-    name: 'Token Limit',
-    hint: 'The maximum context window size (tokens) for the AI model. Defaults to 32000.',
-    scope: 'world',
-    config: true,
-    type: Number,
-    default: 32000,
-    restricted: true,
-    onChange: async _value => {
-      try {
-        await SimulacrumCore.initializeAIClient();
-        createLogger('Module').info('AI client reinitialized after tokenLimit change');
-      } catch (e) {
-        createLogger('Module').warn('Failed to reinitialize AI after tokenLimit change', e);
-      }
-    },
-  });
+  // tokenLimit setting removed - consolidated to fallbackContextLimit (managed via sidebar context input)
 
   game.settings.register(MODULE_ID, 'apiRequestDelay', {
     name: 'API Request Delay',

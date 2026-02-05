@@ -11,13 +11,13 @@ export class OpenAIProvider extends AIProvider {
    * @param {Object} config - OpenAI configuration
    * @param {string} config.apiKey - OpenAI API key
    * @param {string} [config.baseURL='https://api.openai.com/v1'] - OpenAI API base URL
-   * @param {string} [config.model='gpt-3.5-turbo'] - OpenAI model to use
+   * @param {string} config.model - Model to use (required)
    */
   constructor(config) {
     super(config);
     // Expect caller to provide versioned baseURL; default to standard v1
     this.baseURL = config.baseURL || 'https://api.openai.com/v1';
-    this.model = config.model || 'gpt-3.5-turbo';
+    this.model = config.model; // Model must be explicitly configured
   }
 
   /**
