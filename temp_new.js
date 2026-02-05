@@ -928,14 +928,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         scroll.addEventListener('scroll', _e => {
           this._updateJumpToBottomVisibility(scroll);
         });
-
-        // Toggle justification expansion on click (for completed tool cards only)
-        scroll.addEventListener('click', e => {
-          const justification = e.target.closest('.tool-success .tool-justification, .tool-failure .tool-justification');
-          if (justification) {
-            justification.classList.toggle('expanded');
-          }
-        });
       }
     }
     if (partId === 'input') {

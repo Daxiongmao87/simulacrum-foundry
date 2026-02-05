@@ -9,7 +9,6 @@ import {
   syncMessagesFromCore,
   processMessageForDisplay,
 } from './sidebar-state-syncer.js';
-import { modelService } from '../core/model-service.js';
 import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
 import { SimulacrumHooks } from '../core/hook-manager.js';
 import { SequentialQueue } from '../utils/sequential-queue.js';
@@ -70,8 +69,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   #isRetrying = false;
   #retryLabel = null;
   _popoutClosing = false;
-  #availableModels = [];
-  #modelDropdownHighlightIndex = -1;
 
   constructor(options) {
     super(options);
@@ -318,7 +315,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         !this.isPopout &&
         !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
         !this._popoutClosing,
-      currentModel: game.settings.get('simulacrum', 'model') || '',
     });
   }
 
@@ -342,13 +338,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async _syncFromCoreConversation() {
-    // Prevent syncing while the agent is actively processing/thinking.
-    // This avoids race conditions where a stale Core State (triggered by a document update hook)
-    // overwrites the live DOM updates (like Tool Cards) that the ChatHandler is managing.
-    if (this.isProcessing()) {
-      return;
-    }
-
     // Logic handled in state syncer helper or simplified here
     try {
       let cm;
@@ -928,14 +917,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         scroll.addEventListener('scroll', _e => {
           this._updateJumpToBottomVisibility(scroll);
         });
-
-        // Toggle justification expansion on click (for completed tool cards only)
-        scroll.addEventListener('click', e => {
-          const justification = e.target.closest('.tool-success .tool-justification, .tool-failure .tool-justification');
-          if (justification) {
-            justification.classList.toggle('expanded');
-          }
-        });
       }
     }
     if (partId === 'input') {
@@ -959,219 +940,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
             this._onSendMessage(e, input);
           }
         });
-      }
-    }
-
-    // Model selector event listeners
-    this._attachModelSelectorListeners(element);
-  }
-
-  /**
-   * Attach event listeners for the model selector combobox
-   * @param {HTMLElement} element - The input part element
-   */
-  _attachModelSelectorListeners(element) {
-    const wrapper = element.querySelector('.model-selector-wrapper');
-    const modelInput = element.querySelector('.model-selector-input');
-    const dropdown = element.querySelector('.model-dropdown');
-    const hintEl = element.querySelector('.model-autocomplete-hint');
-
-    if (!modelInput || !dropdown || !wrapper) return;
-
-    // Load models on first interaction
-    let modelsLoaded = false;
-    const ensureModelsLoaded = async () => {
-      if (modelsLoaded) return;
-      modelsLoaded = true;
-      wrapper.classList.add('loading');
-      this.#availableModels = await modelService.fetchModels();
-      wrapper.classList.remove('loading');
-    };
-
-    // Input event - filter dropdown and update autocomplete hint
-    modelInput.addEventListener('input', () => {
-      this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-    });
-
-    // Focus event - show dropdown
-    modelInput.addEventListener('focus', async () => {
-      await ensureModelsLoaded();
-      this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-      wrapper.classList.add('dropdown-open');
-    });
-
-    // Blur event - save and close dropdown (with delay for click handling)
-    modelInput.addEventListener('blur', () => {
-      setTimeout(() => {
-        this._closeDropdown(wrapper, dropdown, hintEl);
-        this._saveModelSelection(modelInput.value);
-      }, 150);
-    });
-
-    // Keydown event - handle Tab, Enter, Escape, Arrow keys
-    modelInput.addEventListener('keydown', (e) => {
-      const isOpen = !dropdown.classList.contains('hidden');
-
-      if (e.key === 'Tab' && !e.shiftKey) {
-        // Accept autocomplete suggestion
-        const hint = hintEl.textContent;
-        if (hint && hint !== modelInput.value) {
-          e.preventDefault();
-          modelInput.value = hint;
-          this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-        }
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (isOpen && this.#modelDropdownHighlightIndex >= 0) {
-          const items = dropdown.querySelectorAll('li:not(.no-models)');
-          const selected = items[this.#modelDropdownHighlightIndex];
-          if (selected) {
-            modelInput.value = selected.dataset.model;
-          }
-        }
-        this._closeDropdown(wrapper, dropdown, hintEl);
-        this._saveModelSelection(modelInput.value);
-        modelInput.blur();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        this._closeDropdown(wrapper, dropdown, hintEl);
-        modelInput.blur();
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (!isOpen) {
-          this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-          wrapper.classList.add('dropdown-open');
-        }
-        this._navigateDropdown(dropdown, 1);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        this._navigateDropdown(dropdown, -1);
-      }
-    });
-
-    // Click on dropdown item
-    dropdown.addEventListener('mousedown', (e) => {
-      const li = e.target.closest('li:not(.no-models)');
-      if (li && li.dataset.model) {
-        e.preventDefault();
-        modelInput.value = li.dataset.model;
-        this._closeDropdown(wrapper, dropdown, hintEl);
-        this._saveModelSelection(li.dataset.model);
-      }
-    });
-  }
-
-  /**
-   * Filter dropdown based on input and show matching models
-   * @param {HTMLInputElement} input - The model input element
-   * @param {HTMLUListElement} dropdown - The dropdown element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
-   */
-  _filterAndShowDropdown(input, dropdown, hintEl) {
-    const query = input.value.toLowerCase();
-    const currentModel = game.settings.get('simulacrum', 'model');
-
-    // Filter models
-    const filtered = query
-      ? this.#availableModels.filter(m => m.toLowerCase().includes(query))
-      : this.#availableModels;
-
-    // Build dropdown HTML
-    if (filtered.length === 0) {
-      dropdown.innerHTML = '<li class="no-models">No models found</li>';
-    } else {
-      dropdown.innerHTML = filtered.map(model => {
-        const isSelected = model === currentModel;
-        return `<li data-model="${model}" class="${isSelected ? 'selected' : ''}">${model}</li>`;
-      }).join('');
-    }
-
-    // Show dropdown
-    dropdown.classList.remove('hidden');
-    this.#modelDropdownHighlightIndex = -1;
-
-    // Update autocomplete hint
-    this._updateAutocompleteHint(input, hintEl, filtered);
-  }
-
-  /**
-   * Update the autocomplete hint with first matching model
-   * @param {HTMLInputElement} input - The model input element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
-   * @param {string[]} filtered - Filtered models list
-   */
-  _updateAutocompleteHint(input, hintEl, filtered) {
-    const query = input.value;
-
-    if (!query || filtered.length === 0) {
-      hintEl.textContent = '';
-      return;
-    }
-
-    // Find first model that starts with the query (case-insensitive)
-    const match = filtered.find(m => m.toLowerCase().startsWith(query.toLowerCase()));
-
-    if (match) {
-      // Show full model name as hint
-      hintEl.textContent = match;
-    } else {
-      hintEl.textContent = '';
-    }
-  }
-
-  /**
-   * Navigate dropdown with arrow keys
-   * @param {HTMLUListElement} dropdown - The dropdown element
-   * @param {number} direction - 1 for down, -1 for up
-   */
-  _navigateDropdown(dropdown, direction) {
-    const items = dropdown.querySelectorAll('li:not(.no-models)');
-    if (items.length === 0) return;
-
-    // Remove current highlight
-    items.forEach(li => li.classList.remove('highlighted'));
-
-    // Calculate new index
-    this.#modelDropdownHighlightIndex += direction;
-    if (this.#modelDropdownHighlightIndex < 0) {
-      this.#modelDropdownHighlightIndex = items.length - 1;
-    } else if (this.#modelDropdownHighlightIndex >= items.length) {
-      this.#modelDropdownHighlightIndex = 0;
-    }
-
-    // Apply highlight
-    const highlighted = items[this.#modelDropdownHighlightIndex];
-    if (highlighted) {
-      highlighted.classList.add('highlighted');
-      highlighted.scrollIntoView({ block: 'nearest' });
-    }
-  }
-
-  /**
-   * Close the dropdown
-   * @param {HTMLElement} wrapper - The wrapper element
-   * @param {HTMLUListElement} dropdown - The dropdown element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
-   */
-  _closeDropdown(wrapper, dropdown, hintEl) {
-    dropdown.classList.add('hidden');
-    wrapper.classList.remove('dropdown-open');
-    hintEl.textContent = '';
-    this.#modelDropdownHighlightIndex = -1;
-  }
-
-  /**
-   * Save model selection to settings
-   * @param {string} model - The model ID to save
-   */
-  async _saveModelSelection(model) {
-    const currentModel = game.settings.get('simulacrum', 'model');
-    if (model && model !== currentModel) {
-      try {
-        await game.settings.set('simulacrum', 'model', model);
-        this.logger.info(`Model changed to: ${model}`);
-      } catch (e) {
-        this.logger.warn('Failed to save model selection:', e);
       }
     }
   }
