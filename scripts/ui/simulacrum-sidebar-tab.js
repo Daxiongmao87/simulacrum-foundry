@@ -9,8 +9,9 @@ import {
   syncMessagesFromCore,
   processMessageForDisplay,
 } from './sidebar-state-syncer.js';
-import { formatPendingToolCall } from '../utils/message-utils.js';
+import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
 import { SimulacrumHooks } from '../core/hook-manager.js';
+import { SequentialQueue } from '../utils/sequential-queue.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
 const AbstractSidebarTab =
@@ -75,6 +76,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     this._activeProcesses = new Map();
     this.chatHandler = null;
     this.logger = createLogger('SimulacrumSidebarTab');
+    this._messageQueue = new SequentialQueue();
 
     // Sync when conversation is loaded (race condition fix)
     Hooks.on('simulacrumConversationLoaded', async () => {
@@ -95,6 +97,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Listen for tool results to remove pending cards
     Hooks.on('simulacrumToolResult', (data) => {
       this._removePendingToolCard(data.toolCallId);
+      this._addToolResultCard(data);
     });
 
     // Listen for API retry status to show connection error warnings
@@ -186,7 +189,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     if (iconEl) {
       // Update icon based on status
-      iconEl.className = currentStep?.status === 'completed' 
+      iconEl.className = currentStep?.status === 'completed'
         ? 'fa-solid fa-circle-check task-tracker-icon'
         : 'fa-solid fa-circle-notch fa-spin task-tracker-icon';
     }
@@ -520,126 +523,119 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async addMessage(role, content, display = null, noGroup = false) {
-    const processedDisplay = display || (await processMessageForDisplay(content));
+    // Queue the message addition to prevent race conditions
+    return this._messageQueue.add(async () => {
+      const processedDisplay = display || (await processMessageForDisplay(content));
 
-    // Check for grouping (skip if noGroup flag is set)
-    if (!noGroup && this.messages.length > 0 && role === 'assistant') {
-      const lastMsg = this.messages[this.messages.length - 1];
-      if (lastMsg.role === 'assistant') {
-        // Merge with proper HTML separation to prevent content running together
-        lastMsg.content += '\n\n' + content;
-        const existingDisplay = lastMsg.display || lastMsg.content;
-        // Wrap new content in a div to ensure proper block-level separation
-        lastMsg.display = existingDisplay + `<div class="merged-content">${processedDisplay}</div>`;
+      // Check for grouping (skip if noGroup flag is set)
+      if (!noGroup && this.messages.length > 0 && role === 'assistant') {
+        const lastMsg = this.messages[this.messages.length - 1];
+        if (lastMsg.role === 'assistant') {
+          // Merge with proper HTML separation to prevent content running together
+          lastMsg.content += '\n\n' + content;
+          const existingDisplay = lastMsg.display || lastMsg.content;
+          // Wrap new content in a div to ensure proper block-level separation
+          lastMsg.display = existingDisplay + `<div class="merged-content">${processedDisplay}</div>`;
 
-        // Try to update DOM directly to avoid destroying ephemeral elements (confirmation dialogs)
-        const updated = this._updateMessageInDOM(lastMsg.id, lastMsg.display);
-        if (!updated) {
-          // Fallback to render if element not found
-          this.#needsScroll = true;
-          this.render({ parts: ['log'] });
-        } else {
-          // Scroll to bottom if needed
-          this._scrollToBottom();
-        }
-        return;
-      }
-    }
+          // Attempt to update DOM using Block Architecture (Non-destructive)
+          const updated = this._updateMessageInDOM(lastMsg.id, processedDisplay);
 
-    const msg = {
-      role,
-      content,
-      display: processedDisplay,
-      timestamp: new Date(),
-      user: role === 'user' ? game.user : undefined,
-      id: foundry.utils.randomID(),
-      pending: false,
-    };
-    this.messages.push(msg);
-
-    // Render the single message template and append to DOM
-    // This avoids destruction of ephemeral elements (confirmation dialogs) caused by full re-renders
-    const templatePath = 'modules/simulacrum/templates/simulacrum/message.hbs';
-    const html = await renderTemplate(templatePath, msg);
-
-    const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
-      this.element?.querySelector?.('.chat-scroll');
-
-    if (chatScroll) {
-      // Create a temporary container to extract the element
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      const messageEl = div.firstElementChild;
-
-      // Before appending, check if we need to remove any "process status" or "pending" elements?
-      // No, usually we just append. But we might want to insert BEFORE the process status if it exists.
-      // However, process status is usually at the bottom.
-      // If we append, it goes after process status. 
-      // Foundry structure: <ol class="chat-log"> ... </ol>
-      // Process status is an <li> inside the <ol>.
-
-      const chatLog = chatScroll.querySelector('.chat-log');
-      if (chatLog) {
-        // Check for process status message to insert before (direct child only)
-        const processStatus = chatLog.querySelector(':scope > .process-status-message');
-        if (processStatus) {
-          chatLog.insertBefore(messageEl, processStatus);
-        } else {
-          chatLog.appendChild(messageEl);
+          if (!updated) {
+            // Fallback to render if element not found (rare)
+            // Note: This fallback is destructive, but should only happen if the DOM disappeared
+            this.#needsScroll = true;
+            this.render({ parts: ['log'] });
+          } else {
+            this._scrollToBottom();
+          }
+          return;
         }
       }
 
-      this._scrollToBottom();
-    } else {
-      // Fallback only if DOM is missing (should not happen if visible)
-      this.#needsScroll = true;
-      this.render({ parts: ['log'] });
-    }
+      const msg = {
+        role,
+        content,
+        // Wrap initial display in a content block for consistency
+        display: `<div class="content-block text">${processedDisplay}</div>`,
+        timestamp: new Date(),
+        user: role === 'user' ? game.user : undefined,
+        id: foundry.utils.randomID(),
+        pending: false,
+      };
+      this.messages.push(msg);
+
+      // Render the single message template and append to DOM
+      const templatePath = 'modules/simulacrum/templates/simulacrum/message.hbs';
+      const html = await renderTemplate(templatePath, msg);
+
+      const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
+        this.element?.querySelector?.('.chat-scroll');
+
+      if (chatScroll) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const messageEl = div.firstElementChild;
+        const chatLog = chatScroll.querySelector('.chat-log');
+        if (chatLog) {
+          const processStatus = chatLog.querySelector(':scope > .process-status-message');
+          if (processStatus) {
+            chatLog.insertBefore(messageEl, processStatus);
+          } else {
+            chatLog.appendChild(messageEl);
+          }
+        }
+        this._scrollToBottom();
+      } else {
+        this.#needsScroll = true;
+        this.render({ parts: ['log'] });
+      }
+    });
   }
 
   /**
-   * Update message content in DOM directly
+   * Update message content in DOM using Block Architecture
+   * Appends new content as a block instead of replacing innerHTML
    * @param {string} messageId - ID of the message to update
-   * @param {string} content - New HTML content
+   * @param {string} newContentChunk - The NEW chunk of content to append
    * @returns {boolean} True if updated, false if element not found
    */
-  _updateMessageInDOM(messageId, content) {
+  _updateMessageInDOM(messageId, newContentChunk) {
     if (!this.element) return false;
-
-    // Find message element by data-message-id
-    // Note: The template needs to ensure data-message-id is set. 
-    // Looking at message.hbs, we might need to verify if ID is on the element.
-    // If not, we might need to find the LAST assistant message.
 
     const chatScroll = this.element[0]?.querySelector('.chat-scroll') ||
       this.element.querySelector?.('.chat-scroll');
     if (!chatScroll) return false;
 
-    // Strategy: Start from bottom and find the last assistant message that matches
-    const messages = chatScroll.querySelectorAll('.chat-message');
+    // Find the last assistant message (assumed target for streaming)
+    const messages = chatScroll.querySelectorAll('.chat-message.simulacrum-role-assistant');
     if (messages.length === 0) return false;
+    const msgEl = messages[messages.length - 1];
 
-    // Iterate backwards
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msgEl = messages[i];
-      // Check if this is the message we want (by ID if possible, or assumption it's the last one)
-      // Since addMessage only merges into the VERY LAST message of the array, 
-      // we can assume the last message in DOM (ignoring ephemeral ones like confirmation/pending) is the target.
+    const contentEl = msgEl.querySelector('.message-content');
+    if (contentEl) {
+      // BLOCK 1: Check if the last child is a text block
+      const lastChild = contentEl.lastElementChild;
+      const isTextBlock = lastChild && lastChild.classList.contains('content-block') && lastChild.classList.contains('text');
 
-      // Skip ephemeral elements
-      if (msgEl.classList.contains('tool-confirmation-wrapper') ||
-        msgEl.classList.contains('pending-tool-wrapper') ||
-        msgEl.classList.contains('process-status-message')) {
-        continue;
+      if (isTextBlock) {
+        // Safe to append to the existing text block's innerHTML? 
+        // Yes, because processDisplay returns safe HTML and we are only modifying this specific block.
+        // And we know this block is PURE text/html content, not a tool card.
+        // However, user complained about inconsistency.
+        // If we strictly *append*, we never overwrite.
+        // But for *streaming text*, we usually want to append to the text node.
+
+        // Use insertAdjacentHTML to append to the end of the text block
+        lastChild.insertAdjacentHTML('beforeend', newContentChunk);
+      } else {
+        // Last child is NOT a text block (might be a tool card or nothing)
+        // Create a NEW text block
+        const newBlock = document.createElement('div');
+        newBlock.className = 'content-block text';
+        newBlock.innerHTML = newContentChunk;
+        contentEl.appendChild(newBlock);
       }
-
-      // This should be our message
-      const contentEl = msgEl.querySelector('.message-content');
-      if (contentEl) {
-        contentEl.innerHTML = content;
-        return true;
-      }
-      return false; // Found the message element but no content wrapper?
+      return true;
     }
     return false;
   }
@@ -661,31 +657,77 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    * @param {string} [data.justification] - Optional justification/reason
    */
   _addPendingToolCard(data) {
-    const { toolCallId, toolName, justification } = data;
+    this._messageQueue.add(async () => {
+      const { toolCallId, toolName, justification } = data;
 
-    // Hidden tools have dedicated UI elsewhere (e.g., task tracker) - skip pending cards
-    const hiddenTools = ['end_loop', 'manage_task'];
-    if (hiddenTools.includes(toolName)) {
-      return;
-    }
+      // Hidden tools have dedicated UI elsewhere (e.g., task tracker) - skip pending cards
+      const hiddenTools = ['end_loop', 'manage_task'];
+      if (hiddenTools.includes(toolName)) {
+        return;
+      }
 
-    // Generate the pending card HTML using the utility function
-    const pendingHtml = formatPendingToolCall(toolName, justification || '', toolCallId);
+      // Generate the pending card HTML using the utility function
+      const pendingHtml = formatPendingToolCall(toolName, justification || '', toolCallId);
 
-    // Find the last assistant message's content container
-    const lastAssistantContent = this._getLastAssistantMessageContent();
+      // Find the last assistant message's content container
+      const lastAssistantContent = this._getLastAssistantMessageContent();
 
-    if (lastAssistantContent) {
-      // Append directly to the last assistant message content
-      const wrapper = document.createElement('div');
-      wrapper.className = 'pending-tool-inline';
-      wrapper.dataset.toolCallId = toolCallId;
-      wrapper.innerHTML = pendingHtml;
-      lastAssistantContent.appendChild(wrapper);
+      if (lastAssistantContent) {
+        // Append directly to the last assistant message content
+        const wrapper = document.createElement('div');
+        wrapper.className = 'content-block tool-card pending-tool-inline'; // Block Architecture
+        wrapper.dataset.toolCallId = toolCallId;
+        wrapper.innerHTML = pendingHtml;
+        lastAssistantContent.appendChild(wrapper);
 
-      // Scroll to bottom
-      this._scrollToBottom();
-    }
+        // Scroll to bottom
+        this._scrollToBottom();
+      }
+    });
+  }
+
+  /**
+   * Add a completed tool result card to the chat display
+   * @param {Object} data - Tool result data
+   */
+  _addToolResultCard(data) {
+    this._messageQueue.add(async () => {
+      const { toolCallId, toolName, formattedDisplay, result, justification } = data;
+
+      // Hidden tools check
+      const hiddenTools = ['end_loop', 'manage_task'];
+      if (hiddenTools.includes(toolName)) {
+        return;
+      }
+
+      // Generate result HTML
+      // PRIORITIZE formattedDisplay from Hook (which includes pre-rendered markdown)
+      let html = formattedDisplay;
+      if (!html) {
+        // Fallback (e.g. if hook didn't send formattedDisplay for some reason)
+        html = formatToolCallDisplay(result || { content: data.content }, toolName, null, justification);
+      }
+
+      // Append to last assistant message DOM
+      const lastAssistantContent = this._getLastAssistantMessageContent();
+      if (lastAssistantContent) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'content-block tool-card tool-result';
+        wrapper.dataset.toolCallId = toolCallId; // Optional: track it
+        wrapper.innerHTML = html;
+        lastAssistantContent.appendChild(wrapper);
+        this._scrollToBottom();
+
+        // CRITICAL: Update the persistent state so re-renders don't wipe the card
+        if (this.messages.length > 0) {
+          const lastMsg = this.messages[this.messages.length - 1];
+          if (lastMsg.role === 'assistant') {
+            // Append the full block HTML to the display string
+            lastMsg.display = (lastMsg.display || '') + wrapper.outerHTML;
+          }
+        }
+      }
+    });
   }
 
   /**
@@ -716,17 +758,19 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   _removePendingToolCard(toolCallId) {
     if (!toolCallId) return;
 
-    const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
-      this.element?.querySelector?.('.chat-scroll');
+    this._messageQueue.add(async () => {
+      const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
+        this.element?.querySelector?.('.chat-scroll');
 
-    if (chatScroll) {
-      // Look for inline pending cards (new pattern) or standalone wrappers (legacy)
-      const pendingEl = chatScroll.querySelector(`.pending-tool-inline[data-tool-call-id="${toolCallId}"]`) ||
-        chatScroll.querySelector(`.pending-tool-wrapper[data-tool-call-id="${toolCallId}"]`);
-      if (pendingEl) {
-        pendingEl.remove();
+      if (chatScroll) {
+        // Look for inline pending cards (new pattern) or standalone wrappers (legacy)
+        const pendingEl = chatScroll.querySelector(`.pending-tool-inline[data-tool-call-id="${toolCallId}"]`) ||
+          chatScroll.querySelector(`.pending-tool-wrapper[data-tool-call-id="${toolCallId}"]`);
+        if (pendingEl) {
+          pendingEl.remove();
+        }
       }
-    }
+    });
   }
 
   rollbackUserMessage() {

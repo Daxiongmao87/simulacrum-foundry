@@ -108,7 +108,7 @@ export class ManageTaskTool extends BaseTool {
       steps: steps.map(s => ({ title: s.title, description: s.description, status: 'pending' })),
       currentStepIndex: 0,
       startTime: Date.now(),
-      lastDisplayedStep: -1, // Track which step we last showed a separator for
+      lastDisplayedStep: 0, // Track which step we last showed a separator for (started at 0)
     };
 
     // Mark first step as in progress
@@ -117,9 +117,14 @@ export class ManageTaskTool extends BaseTool {
     // Emit hook to show task tracker
     Hooks.callAll(SimulacrumHooks.TASK_STARTED, this._getTaskState());
 
+    // Generate separator for Step 1 immediately
+    const stepNum = 1;
+    const currentStepTitle = steps[0].title;
+    const separatorHtml = `<div class="simulacrum-step-separator"><div class="step-task-name">${taskName}</div><div class="step-info"><span class="step-label">Step ${stepNum}</span><span class="step-title">${currentStepTitle}</span></div></div>`;
+
     return {
       content: `Task started: ${taskName}\nGoal: ${taskGoal}\nSteps: ${steps.length}`,
-      display: '', // No display in chat - tracker shows it
+      display: separatorHtml,
     };
   }
 

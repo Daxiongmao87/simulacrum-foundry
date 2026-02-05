@@ -11,8 +11,15 @@
 /* ---------------------------------------- */
 
 @keyframes simulacrum-breathing {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .simulacrum-status-area .status-icon,
@@ -805,6 +812,33 @@
 }
 
 /* Collapsed justification for completed tools - 1 line with ellipsis */
+.simulacrum-tool-call:not(.tool-pending):not(.tool-failure) .tool-justification {
+  padding: 0 0.5rem;
+  background: transparent;
+  border: none;
+  border-left: 2px solid rgba(218, 165, 32, 0.3);
+}
+
+.simulacrum-tool-call:not(.tool-pending):not(.tool-failure) .tool-justification p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* ---------------------------------------- */
+/*  Task-21: Block-Based Content Architecture */
+/* ---------------------------------------- */
+
+/* 
+ * Wrapper for separate text chunks and tools to prevent innerHTML overwritting.
+ * explicit 'display: contents' ensures the wrapper doesn't affect layout/margins/selectors 
+ */
+.content-block {
+  display: contents;
+}
+
 .simulacrum-tool-call.tool-success .tool-justification p,
 .simulacrum-tool-call.tool-failure .tool-justification p {
   display: -webkit-box;
@@ -1696,4 +1730,3 @@ section[data-tab="simulacrum"] .discord-btn:hover {
 .model-dropdown .no-models:hover {
   background: none;
 }
-
