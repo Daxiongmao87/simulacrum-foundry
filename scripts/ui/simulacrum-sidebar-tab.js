@@ -338,6 +338,13 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   }
 
   async _syncFromCoreConversation() {
+    // Prevent syncing while the agent is actively processing/thinking.
+    // This avoids race conditions where a stale Core State (triggered by a document update hook)
+    // overwrites the live DOM updates (like Tool Cards) that the ChatHandler is managing.
+    if (this.isProcessing()) {
+      return;
+    }
+
     // Logic handled in state syncer helper or simplified here
     try {
       let cm;

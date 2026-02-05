@@ -34,7 +34,7 @@ class ChatHandler {
 
       const finalResponse = await engine.processTurn({
         signal: options.signal,
-        onAssistantMessage: msg => {
+        onAssistantMessage: async msg => {
           // Support ephemeral messages (display only) by checking for either content or display
           if (msg?.role === 'assistant' && (msg?.content || msg?.display)) {
             // Only add to conversation if this is NOT a tool-call response.
@@ -43,7 +43,7 @@ class ChatHandler {
             if (msg.content && !msg.toolCalls && !msg._fromToolLoop) {
               this.addMessageToConversation('assistant', msg.content);
             }
-            this.addMessageToUI(
+            await this.addMessageToUI(
               { role: 'assistant', content: msg.content, display: msg.display || msg.content },
               options
             );
@@ -124,7 +124,7 @@ class ChatHandler {
     this.addMessageToConversation('assistant', aiResponse.content, aiResponse.toolCalls, null, aiResponse.provider_metadata);
 
     // Add to UI
-    this.addMessageToUI(
+    await this.addMessageToUI(
       {
         role: 'assistant',
         content: aiResponse.content,
@@ -205,6 +205,7 @@ class ChatHandler {
       currentToolSupport,
       signal: options.signal,
       onToolResult: toolResult => this.handleToolResult(toolResult, options),
+      onToolPending: options.onToolPending,
     });
   }
 
@@ -372,11 +373,20 @@ class ChatHandler {
       if (toolResult.toolName && options.onAssistantMessage && !isSilent) {
         // Direct display tools: render their display property directly without tool card wrapper
         if (directDisplayTools.includes(toolResult.toolName)) {
-          // Emit hook to remove pending card for direct display tools
-          Hooks.callAll('simulacrumToolResult', {
+          const payload = {
             toolCallId: toolResult.toolCallId,
             toolName: toolResult.toolName,
-          });
+          };
+
+          // Prefer direct callback for removal
+          if (options.onToolRemove) {
+            options.onToolRemove(payload);
+          }
+
+          // Emit hook (standard event for pending removal? or result?)
+          // Maintained for backward compatibility, but arguably this should be simulacrumToolRemove?
+          // Existing listeners likely expect 'simulacrumToolResult' to imply completion.
+          Hooks.callAll('simulacrumToolResult', payload);
 
           const rawDisplay = getToolDisplayContent(toolResult);
           // Only show if there's actual display content (skip empty displays like start_task)
@@ -388,7 +398,7 @@ class ChatHandler {
             }
             // Extract proper content summary (not raw JSON)
             const contentSummary = getToolContentSummary(toolResult) || '';
-            this.addMessageToUI(
+            await this.addMessageToUI(
               {
                 role: 'assistant',
                 content: contentSummary,
@@ -438,20 +448,28 @@ class ChatHandler {
 
         const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered, justification);
 
-        // Emit hook with formatted HTML so UI can update pending card in place
-        Hooks.callAll('simulacrumToolResult', {
+        const payload = {
           toolCallId: toolResult.toolCallId,
           toolName: toolResult.toolName,
           formattedDisplay,
           content: toolResult.content,
-        });
+        };
+
+        // Prefer direct callback if provided (Closed Loop for Active UI)
+        if (options.onToolResult) {
+          await options.onToolResult(payload);
+        }
+
+        // Emit hook for global observability (Background tasks / Macros / Other Users)
+        Hooks.callAll('simulacrumToolResult', payload);
       }
-    } else if (toolResult.role === 'assistant' && toolResult.content) {
-      // Only add assistant messages that have actual content and are NOT from internal tool loop (ephemeral)
-      if (!toolResult._fromToolLoop) {
+    } else if (toolResult.role === 'assistant') {
+      // Allow empty content to serve as anchor bubbles for tool cards (Fix for Floating Tool Card bug)
+      // Only add assistant messages that have actual content (and aren't from loop) to conversation history
+      if (!toolResult._fromToolLoop && toolResult.content) {
         this.addMessageToConversation('assistant', toolResult.content);
       }
-      this.addMessageToUI(
+      await this.addMessageToUI(
         {
           role: 'assistant',
           content: toolResult.content,
@@ -472,10 +490,13 @@ class ChatHandler {
   /**
    * Add message to UI only (through callback)
    */
-  addMessageToUI(message, options = {}) {
+  /**
+   * Add message to UI only (through callback)
+   */
+  async addMessageToUI(message, options = {}) {
     if (options.onAssistantMessage && message.role === 'assistant') {
       try {
-        options.onAssistantMessage(message);
+        await options.onAssistantMessage(message);
       } catch (error) {
         this.logger.error('Error in UI callback', error);
       }

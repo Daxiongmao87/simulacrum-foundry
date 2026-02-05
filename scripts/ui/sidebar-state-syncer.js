@@ -18,7 +18,10 @@ const logger = createLogger('SidebarSync');
  * @returns {Promise<string>} Processed HTML content
  */
 export async function processMessageForDisplay(content, _options = {}) {
+  // Ensure content is not null/undefined. If empty, provide a space to force rendering.
+  // Ensure content is not null/undefined.
   let processedContent = String(content ?? '');
+  // if (!processedContent) processedContent = '&nbsp;'; // Removed to avoid visible empty bubble
 
   // Transform <think></think> tags to collapsible spoilers
   if (hasThinkTags(processedContent)) {

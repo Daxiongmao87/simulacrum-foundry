@@ -97,7 +97,7 @@ class ConversationEngine {
     // If no tools, emit assistant and finish
     if (!Array.isArray(aiResponse.toolCalls) || aiResponse.toolCalls.length === 0) {
       if (onAssistantMessage && aiResponse?.content) {
-        onAssistantMessage({
+        await onAssistantMessage({
           role: 'assistant',
           content: aiResponse.content,
           display: aiResponse.display || aiResponse.content,
@@ -125,7 +125,7 @@ class ConversationEngine {
 
     // If loop produced a distinct final message and it wasn't already emitted by the loop handler, emit to UI
     if (finalResponse && finalResponse.content && onAssistantMessage && !finalResponse._emitted) {
-      onAssistantMessage({
+      await onAssistantMessage({
         role: 'assistant',
         content: finalResponse.content,
         display: finalResponse.display || finalResponse.content,

@@ -131,7 +131,12 @@ async function _runLoopIteration(context) {
     }
 
     // Notify UI of the message content FIRST so pending cards have a message to attach to
-    if (currentResponse.content && currentResponse.content.trim().length > 0) {
+    // We must ensure an assistant message bubble exists even if content is empty (pure tool call)
+    // otherwise the pending tool card will attach to the *previous* assistant message (floating bug).
+    const hasContent = currentResponse.content && currentResponse.content.trim().length > 0;
+    const hasTools = Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
+
+    if (hasContent || hasTools) {
       await _notifyAssistantMessage(currentResponse, context);
     }
 
@@ -156,7 +161,16 @@ async function _runLoopIteration(context) {
         // Store justification for retrieval when result is ready
         storeToolJustification(toolCallId, justification);
 
-        // Emit hook for UI to render pending tool card
+        // Emit pending tool state via callback (Closed Loop)
+        if (context.onToolPending) {
+          context.onToolPending({
+            toolCallId,
+            toolName,
+            justification,
+          });
+        }
+
+        // Emit hook for UI to render pending tool card (Backwards Compatibility / Observability)
         Hooks.callAll('simulacrumToolPending', {
           toolCallId,
           toolName,
@@ -734,10 +748,12 @@ function _extractToolResponse(toolCalls) {
 async function _notifyAssistantMessage(response, context) {
   if (context.onToolResult && !response._parseError) {
     // Deduplicate identical content within the same loop to prevent UI spam
-    // (Common phenomenon where AI repeats "I will search for..." in every step)
-    const content = response.content?.trim();
-    if (content && content !== context.lastEmittedContent) {
-      await context.onToolResult({ role: 'assistant', content: response.content, _fromToolLoop: true });
+    const content = response.content?.trim() || ''; // Use empty string if undefined
+
+    // We emit if content is new OR if it's the first emission (even if empty) to serve as tool anchor
+    if (content !== context.lastEmittedContent || !response._emitted) {
+      // Pass content (even if empty) to UI. SidebarEventHandlers/ChatHandler must handle empty accordingly.
+      await context.onToolResult({ role: 'assistant', content: response.content || undefined, _fromToolLoop: true });
       context.lastEmittedContent = content;
     }
     // Flag as emitted to prevent duplication in ConversationEngine
