@@ -1047,7 +1047,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
     if (partId === 'input') {
       this.#inputElement = element;
-      this._monitorStatus(element);
+
       const form = element.querySelector('.chat-form');
       if (form && !form.dataset.simulacrumBound) {
         form.dataset.simulacrumBound = '1';
