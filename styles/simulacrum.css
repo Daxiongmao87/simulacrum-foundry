@@ -25,9 +25,6 @@
 .simulacrum-status-area {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid var(--color-border-light-2);
   font-size: 12px;
   color: var(--color-text-light-highlight);
 }
@@ -35,7 +32,7 @@
 .simulacrum-status-area .status-icon,
 #simulacrum .simulacrum-status-area .status-icon,
 .simulacrum-sidebar-tab .simulacrum-status-area .status-icon {
-  width: 24px;
+  width: 32px;
   text-align: center;
   margin-right: 6px;
   animation: simulacrum-breathing 2s infinite ease-in-out;
@@ -827,7 +824,7 @@
 }
 
 /* Collapsed justification for completed tools - 1 line with ellipsis */
-.simulacrum-tool-call:not(.tool-pending):not(.tool-failure) .tool-justification {
+.simulacrum-tool-call:not(.tool-pending) .tool-justification {
   padding: 0 0.5rem;
   background: transparent;
   border: none;
@@ -1742,7 +1739,6 @@ section[data-tab="simulacrum"] .discord-btn:hover {
 .context-limit-input {
   width: 56px;
   padding: 2px 4px;
-  margin-left: 4px;
   border: 1px solid var(--color-border-dark, #4b4a45);
   border-radius: 3px;
   background: var(--color-cool-5, #1a1625);

@@ -228,15 +228,15 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         ? 'fa-solid fa-circle-check task-tracker-icon'
         : 'fa-solid fa-circle-notch fa-spin task-tracker-icon';
     }
-    if (stepEl) stepEl.textContent = stepTitle;
+    if (stepEl) stepEl.textContent = `Step ${taskState.currentStepIndex + 1}: ${stepTitle}`;
     if (progressEl) progressEl.textContent = `(${taskState.currentStepIndex + 1}/${taskState.totalSteps})`;
 
     // Update body
-    const nameEl = tracker.querySelector('.task-tracker-name');
+    const titleEl = tracker.querySelector('.task-tracker-title');
     const goalEl = tracker.querySelector('.task-tracker-goal');
     const stepsEl = tracker.querySelector('.task-tracker-steps');
 
-    if (nameEl) nameEl.textContent = taskState.name;
+    if (titleEl) titleEl.textContent = taskState.name;
     if (goalEl) goalEl.textContent = taskState.goal;
 
     if (stepsEl) {
