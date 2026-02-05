@@ -123,3 +123,4 @@ memory_event_log.json
 vector_store.json
 
 workspace/.foundry-test-data/
+.github/copilot-instructions.md
