@@ -526,9 +526,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (!noGroup && this.messages.length > 0 && role === 'assistant') {
       const lastMsg = this.messages[this.messages.length - 1];
       if (lastMsg.role === 'assistant') {
-        // Merge!
+        // Merge with proper HTML separation to prevent content running together
         lastMsg.content += '\n\n' + content;
-        lastMsg.display = (lastMsg.display || lastMsg.content) + processedDisplay;
+        const existingDisplay = lastMsg.display || lastMsg.content;
+        // Wrap new content in a div to ensure proper block-level separation
+        lastMsg.display = existingDisplay + `<div class="merged-content">${processedDisplay}</div>`;
 
         // Try to update DOM directly to avoid destroying ephemeral elements (confirmation dialogs)
         const updated = this._updateMessageInDOM(lastMsg.id, lastMsg.display);

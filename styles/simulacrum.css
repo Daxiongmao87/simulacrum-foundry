@@ -454,6 +454,13 @@
   color: white;
 }
 
+/* Merged content wrapper - ensures proper block-level separation when messages are grouped */
+#simulacrum .message-content .merged-content,
+.simulacrum-sidebar-tab .message-content .merged-content {
+  display: block;
+  margin-top: 0.5em;
+}
+
 /* Body Text Fonts - Roboto - Strictly Scoped to ID */
 #simulacrum .chat-message .message-content,
 #simulacrum .chat-message .message-content p,
