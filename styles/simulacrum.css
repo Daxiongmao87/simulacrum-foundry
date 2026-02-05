@@ -22,12 +22,27 @@
   }
 }
 
+.simulacrum-status-area {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--color-border-light-2);
+  font-size: 12px;
+  color: var(--color-text-light-highlight);
+}
+
 .simulacrum-status-area .status-icon,
 #simulacrum .simulacrum-status-area .status-icon,
 .simulacrum-sidebar-tab .simulacrum-status-area .status-icon {
-  width: 32px;
-  font-size: 14px;
+  width: 24px;
   text-align: center;
+  margin-right: 6px;
+  animation: simulacrum-breathing 2s infinite ease-in-out;
+}
+
+.simulacrum-status-area .status-text {
+  flex: 1;
 }
 
 /* ---------------------------------------- */

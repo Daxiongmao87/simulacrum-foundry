@@ -74,6 +74,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   #modelsLoaded = false;
   #loadingModelPromise = null;
   #modelDropdownHighlightIndex = -1;
+  #statusInterval = null;
 
   constructor(options) {
     super(options);
@@ -131,6 +132,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     Hooks.on(SimulacrumHooks.TASK_FINISHED, () => {
       this._updateTaskTracker(null, false);
     });
+
+    // Asset index status hooks
+    Hooks.on(SimulacrumHooks.INDEX_STATUS, (payload) => {
+      this._updateIndexStatus(payload);
+    });
   }
 
   /**
@@ -164,6 +170,30 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       }
     }
   }
+  _updateIndexStatus(payload) {
+    const container = this.element?.[0] || this.element;
+    if (!container) return;
+
+    const statusArea = container.querySelector('.simulacrum-status-area');
+    if (!statusArea) return;
+
+    const { state, fileCount = 0, folderCount = 0 } = payload;
+    const statusText = statusArea.querySelector('.status-text');
+
+    if (state === 'complete') {
+      statusArea.style.display = 'none';
+    } else {
+      statusArea.style.display = '';
+      if (statusText) {
+        if (state === 'start') {
+          statusText.textContent = 'Indexing assets...';
+        } else if (state === 'progress') {
+          statusText.textContent = `Indexing... (${fileCount} files, ${folderCount} folders)`;
+        }
+      }
+    }
+  }
+
 
   /**
    * Update the task tracker element in the DOM
@@ -1017,6 +1047,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
     if (partId === 'input') {
       this.#inputElement = element;
+      this._monitorStatus(element);
       const form = element.querySelector('.chat-form');
       if (form && !form.dataset.simulacrumBound) {
         form.dataset.simulacrumBound = '1';
