@@ -180,16 +180,14 @@ jobs:
           if [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
             REMAINING=$((TOTAL_LINES - MAX_LINES))
             CHANGELOG=$(head -$MAX_LINES changelog.txt)
-            CHANGELOG="${CHANGELOG}
-... and ${REMAINING} more. [See full release notes](${RELEASE_URL})"
+            CHANGELOG="${CHANGELOG}"$'\n'"... and ${REMAINING} more. [See full release notes](${RELEASE_URL})"
           else
             CHANGELOG=$(cat changelog.txt)
           fi
           # Ensure we don't exceed Discord's 1024 char limit
           if [ ${#CHANGELOG} -ge 1000 ]; then
             CHANGELOG=$(echo "$CHANGELOG" | cut -c1-950)
-            CHANGELOG="${CHANGELOG}...
-[See full release notes](${RELEASE_URL})"
+            CHANGELOG="${CHANGELOG}..."$'\n'"[See full release notes](${RELEASE_URL})"
           fi
 
           # Build JSON payload with proper escaping using jq
