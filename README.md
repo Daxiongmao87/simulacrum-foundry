@@ -89,6 +89,8 @@ Simulacrum is restricted to Game Masters only—players cannot access the AI int
 
 The model selector in the sidebar automatically fetches available models from your configured endpoint.
 
+For detailed setup instructions, including free tier options and troubleshooting, see the **[Getting Started Guide](docs/GETTING-STARTED.md)**.
+
 ## Usage
 
 Click the Simulacrum tab in the sidebar and start chatting. Examples:
@@ -138,14 +140,56 @@ For advanced users, Simulacrum can execute arbitrary JavaScript, enabling comple
 ## Requirements
 
 - Foundry VTT v13.0.0 or higher
-- An OpenAI-compatible API endpoint with **tool/function calling support**:
-  - OpenAI (`https://api.openai.com/v1`)
-  - Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai`)
-  - OpenRouter (`https://openrouter.ai/api/v1`)
-  - Ollama (`http://localhost:11434/v1`)
-  - Any other OpenAI-compatible endpoint
+- An OpenAI-compatible API endpoint with **tool/function calling support**
 
-> **Note**: Your AI endpoint must support OpenAI-style tool/function calling. Simulacrum relies on native tool calling to execute actions reliably. Endpoints that only support text completion are not compatible.
+> [!IMPORTANT]
+> **Simulacrum requires models that support tool/function calling.** This is how the AI interacts with your Foundry world. Models without tool support will produce errors or fail to respond. See [Choosing a Model](#choosing-a-model) below.
+
+### Choosing a Model
+
+Simulacrum works with any OpenAI-compatible endpoint that supports tool calling. Below are some common options, but any compatible provider will work:
+
+#### Free Tier (~$0)
+
+Perfect for trying Simulacrum or light usage.
+
+| Provider | Setup |
+|----------|-------|
+| **Google AI Studio** | Base URL: `https://generativelanguage.googleapis.com/v1beta/openai`<br>Get API key: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)<br>Model: `gemini-3-flash-preview` or `gemini-3-pro-preview` |
+| **OpenRouter Free** | Base URL: `https://openrouter.ai/api/v1`<br>Get API key: [openrouter.ai/keys](https://openrouter.ai/keys)<br>Model: `openrouter/auto` (auto-selects free models with tool support) |
+
+*Free tiers have rate limits (typically 50-250 requests/day). Sufficient for testing and occasional use.*
+
+#### Pay-Per-Use (~$0.01-0.10 per session)
+
+Best balance of cost, speed, and capability.
+
+| Provider | Setup |
+|----------|-------|
+| **OpenAI** | Base URL: `https://api.openai.com/v1`<br>Models: `gpt-5-nano` (cheapest), `gpt-5-mini`, `gpt-5.2` |
+| **Anthropic** | Requires [OpenRouter](https://openrouter.ai) or compatible proxy<br>Models: `claude-haiku-4.5`, `claude-sonnet-4.5`, `claude-opus-4.5` |
+| **OpenRouter** | Access to 100+ models from one API key<br>[Browse models with tool support](https://openrouter.ai/models?supported_parameters=tools) |
+
+#### Local Inference (Hardware Investment)
+
+Run models privately on your own hardware.
+
+| Component | Recommendation |
+|-----------|---------------|
+| **Software** | [Ollama](https://ollama.com) — see their [model library](https://ollama.com/library) for tool-capable models |
+| **Model Size** | 20B+ parameters recommended for complex tasks |
+| **GPU VRAM** | 24GB+ for best experience (16GB minimum with quantization) |
+| **Hardware Cost** | Used RTX 3090 (~$800-1300) or RTX 4090 (~$2200) |
+
+> [!WARNING]
+> **Small models (7B-14B) will struggle** with Simulacrum's multi-tool workflows. Expect slow responses and frequent errors. If your hardware is limited, cloud APIs provide a better experience.
+
+### Verifying Tool Support
+
+Not sure if your model supports tools? Check these resources:
+- **OpenRouter**: [Models with tool support](https://openrouter.ai/models?supported_parameters=tools)
+- **Ollama**: Model pages indicate "Tools" support in capabilities
+- **Provider docs**: Search for "function calling" or "tool use" in your provider's documentation
 
 ## Support
 
