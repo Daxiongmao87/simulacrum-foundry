@@ -5,7 +5,7 @@
  * Minimal, no dependencies: shells out to `zip`.
  */
 
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
@@ -40,9 +40,12 @@ const include = [
 
 console.log(`[pack] Packaging ${moduleId}@${version} -> ${zipPath}`);
 
+// Remove old zip to prevent stale entries from lingering
+try { rmSync(zipPath); } catch { }
+
 try {
-  // Build zip with reproducible path
-  const cmd = `cd ${ROOT} && zip -r -q ${zipPath} ${include.join(' ')} -x "*LOCK*"`;
+  // Build zip with reproducible path, excluding LOCK files and pack source
+  const cmd = `cd ${ROOT} && zip -r -q ${zipPath} ${include.join(' ')} -x "*LOCK*" "packs/_source/*" "packs/_source/**"`;
   execSync(cmd, { stdio: 'inherit' });
   console.log(`[pack] Created ${zipPath}`);
 } catch (err) {
