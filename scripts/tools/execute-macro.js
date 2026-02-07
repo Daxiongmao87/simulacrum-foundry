@@ -7,24 +7,27 @@ import { BaseTool } from './base-tool.js';
  */
 export class ExecuteMacroTool extends BaseTool {
   constructor() {
-    super('execute_macro', 'Executes a FoundryVTT Macro by name or UUID. Provide either name or uuid (uuid is more precise).', {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'The name of the macro to execute (use uuid instead if possible for precision)',
+    super(
+      'execute_macro',
+      'Execute a FoundryVTT macro by name or UUID. Macros are user-defined scripts that automate game actions such as rolling dice, applying effects, or modifying tokens. Provide `uuid` for precise targeting or `name` to search by macro name. Only GMs can execute macros through this tool.',
+      {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'The name of the macro to execute. Searches world macros first, then compendium packs. Use `uuid` instead when multiple macros share the same name.',
+          },
+          uuid: {
+            type: 'string',
+            description: 'The UUID of the macro to execute (e.g., "Macro.abc123def456"). More precise than `name` — use when the exact macro identity is known.',
+          },
+          args: {
+            type: 'object',
+            description: 'An object of arguments to pass to the macro. The macro accesses these via the `scope` parameter in its code.',
+          },
         },
-        uuid: {
-          type: 'string',
-          description: 'The UUID of the macro to execute (more precise than name)',
-        },
-        args: {
-          type: 'object',
-          description:
-            'Optional arguments to pass to the macro (accessed via `scope` or arguments in the macro code)',
-        },
-      },
-    });
+      }
+    );
   }
 
   getParameterSchema() {

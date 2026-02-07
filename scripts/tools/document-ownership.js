@@ -31,16 +31,16 @@ export class DocumentOwnershipTool extends BaseTool {
                 document_type: {
                     type: 'string',
                     description:
-                        'The document type (e.g., "Actor", "Item", "JournalEntry", "Scene", "RollTable", "Playlist", "Macro", "Cards")',
+                        'The document class to set ownership on (e.g., "Actor", "Item", "JournalEntry", "Scene", "RollTable", "Playlist", "Macro", "Cards").',
                 },
                 document_id: {
                     type: 'string',
-                    description: 'The document ID to set ownership for',
+                    description: 'The ID of the document to set ownership for.',
                 },
                 ownership: {
                     type: 'object',
                     description:
-                        'Ownership object mapping user IDs to permission levels. Use "default" key for default permission level. Permission levels: 0=None, 1=Limited, 2=Observer, 3=Owner. Example: {"default": 1, "userId123": 3}',
+                        'An object mapping user IDs to permission levels (0-3). Use the "default" key to set the baseline for all players. Specific user IDs override the default (e.g., `{"default": 1, "userId123": 3}` gives one user full control and everyone else limited access).',
                 },
             },
             required: ['document_type', 'document_id', 'ownership'],
@@ -48,7 +48,7 @@ export class DocumentOwnershipTool extends BaseTool {
 
         super(
             'set_document_ownership',
-            'Set ownership permissions for a Foundry VTT document. Controls which players can view/edit the document. Use permission levels: 0=None, 1=Limited, 2=Observer, 3=Owner.',
+            'Set ownership permissions for a document, controlling which players can view or edit it. Permission levels: 0 = None (hidden), 1 = Limited (name and basic info only), 2 = Observer (can view but not edit), 3 = Owner (full control). Use the "default" key in the ownership object to set the baseline for all players not explicitly listed.',
             schema,
             true // requiresConfirmation
         );

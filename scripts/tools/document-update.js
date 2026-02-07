@@ -33,36 +33,49 @@ class DocumentUpdateTool extends BaseTool {
   constructor() {
     super(
       'update_document',
-      'Update documents of any type supported by current system.',
+      'Update an existing document by merging field changes or performing array/embedded collection operations. The document must be read with `read_document` before it can be updated (stale-check enforced). Use `updates` for simple field changes with dot notation (e.g., `"system.hp.value": 25`). Use `operations` to insert, replace, or delete entries in arrays and embedded collections (e.g., pages, items, effects).',
       {
         type: 'object',
         properties: {
           documentType: {
             type: 'string',
-            description: 'The type/class of document (Actor, Item, JournalEntry, etc.)',
+            description: 'The document class to update (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
           },
           documentId: {
             type: 'string',
-            description: 'The ID of the document to update',
+            description: 'The ID of the document to update. The document must have been read first via `read_document`.',
           },
           updates: {
             type: 'object',
-            description: 'Object key/value document data to merge-update (dot notation supported)',
+            description: 'An object of field paths and values to merge into the document. Supports dot notation for nested fields (e.g., `{"system.hp.value": 25, "name": "New Name"}`). Use this for simple field changes.',
             additionalProperties: true,
           },
           operations: {
             type: 'array',
-            description: 'Ordered list of operations for arrays/embedded collections',
+            description: 'An ordered list of mutations for arrays and embedded collections. Use this instead of `updates` when adding, replacing, or removing entries in collections like pages, items, or effects.',
             items: {
               type: 'object',
               properties: {
-                action: { type: 'string', enum: ['insert', 'replace', 'delete'] },
-                path: { type: 'string', description: 'Path to array or embedded collection' },
-                index: { type: 'integer', description: 'Index for array operations' },
-                id: { type: 'string', description: 'ID for embedded collection operations' },
+                action: {
+                  type: 'string',
+                  enum: ['insert', 'replace', 'delete'],
+                  description: 'The mutation to perform: "insert" adds a new entry, "replace" overwrites an existing entry, "delete" removes an entry.',
+                },
+                path: {
+                  type: 'string',
+                  description: 'The dot-notation path to the target array or embedded collection (e.g., "pages", "items", "effects", "system.activities").',
+                },
+                index: {
+                  type: 'integer',
+                  description: 'The 0-based position for plain array operations. Required for insert/replace/delete on arrays.',
+                },
+                id: {
+                  type: 'string',
+                  description: 'The ID of the embedded document to target. Required for replace/delete on embedded collections (pages, items, effects).',
+                },
                 value: {
                   type: 'object',
-                  description: 'Value to insert/replace (not needed for delete)',
+                  description: 'The data object to insert or replace with. Not needed for delete operations.',
                 },
               },
               required: ['action', 'path'],
@@ -70,7 +83,7 @@ class DocumentUpdateTool extends BaseTool {
           },
           pack: {
             type: 'string',
-            description: 'Compendium Pack ID if updating in a compendium (e.g. "simulacrum.simulacrum-tools")',
+            description: 'The compendium pack ID if updating in a compendium (e.g., "simulacrum.simulacrum-tools"). The pack must be unlocked via `configure_compendium` first. Omit to update in the world.',
           },
         },
         required: ['documentType', 'documentId'],

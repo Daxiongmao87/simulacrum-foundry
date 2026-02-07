@@ -15,7 +15,7 @@ export class ReadToolOutputTool extends BaseTool {
     constructor() {
         super(
             'read_tool_output',
-            'Read stored tool output by line range. Use when output was compacted with a read_tool_output reference. Default chunk: 200 lines.',
+            'Read a portion of a previously stored tool output by line range. When a tool produces output that exceeds the context window, it is compacted and stored with a reference ID. Use this tool with that reference ID to retrieve specific line ranges. Request 200 lines or fewer per call to avoid truncation.',
             null,
             false
         );
@@ -31,15 +31,15 @@ export class ReadToolOutputTool extends BaseTool {
             properties: {
                 tool_call_id: {
                     type: 'string',
-                    description: 'The ID of the tool call whose output to read',
+                    description: 'The ID of the tool call whose stored output to read. This ID is provided in the compacted reference when output exceeds the context window.',
                 },
                 start_line: {
                     type: 'integer',
-                    description: 'Starting line number (1-indexed). Default chunk size is 200 lines.',
+                    description: 'The starting line number to read from (1-indexed). Use 1 for the first chunk.',
                 },
                 end_line: {
                     type: 'integer',
-                    description: 'Ending line number (1-indexed, inclusive). For a 200-line chunk starting at 1, use end_line=200.',
+                    description: 'The ending line number to read to (1-indexed, inclusive). For a 200-line chunk starting at line 1, use 200.',
                 },
             },
             required: ['tool_call_id', 'start_line', 'end_line'],

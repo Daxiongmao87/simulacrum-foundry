@@ -9,17 +9,17 @@ class DocumentSchemaTool extends BaseTool {
   constructor() {
     super(
       'inspect_document_schema',
-      'Inspect schema for a specific document type. Provide a subtype (e.g., "npc", "weapon") to get system-specific fields. Use list_document_schemas to discover available types and subtypes.',
+      'Retrieve the full field schema for a document type, including required fields, field types, and nested structure. Provide a `subtype` to include game-system-specific fields (e.g., subtype "npc" for Actor shows hit points, challenge rating, etc.). Use this before `create_document` or `update_document` to understand what fields are valid. Use `list_document_schemas` to discover available types and subtypes.',
       {
         type: 'object',
         properties: {
           documentType: {
             type: 'string',
-            description: 'Document type to inspect (e.g., Actor, Item, JournalEntry)',
+            description: 'The document class to inspect (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
           },
           subtype: {
             type: 'string',
-            description: 'Document subtype for system-specific fields (e.g., npc, weapon, spell). Use list_document_schemas to discover available subtypes.',
+            description: 'The document subtype for game-system-specific fields (e.g., "npc", "character", "weapon", "spell"). Omit to see only base document fields. Use `list_document_schemas` to discover available subtypes.',
           },
         },
         required: ['documentType'],

@@ -5,22 +5,22 @@ export class ManageTaskTool extends BaseTool {
   constructor() {
     super(
       'manage_task',
-      'Track multi-step tasks. Use start_task to plan, update_task to mark progress, finish_task to complete. The FINAL step MUST have title "Summary". finish_task requires a "summary" parameter describing what was accomplished.',
+      'Track progress on multi-step tasks with a visual step tracker shown to the user. Call with "start_task" to define a task with named steps, "update_task" to advance to each step as you work, and "finish_task" to complete the task with a summary. The final step in every task must have the title "Summary".',
       {
         type: 'object',
         properties: {
           action: {
             type: 'string',
             enum: ['start_task', 'update_task', 'finish_task'],
-            description: 'The action to perform on the task.',
+            description: 'The lifecycle action: "start_task" creates a new task with a name, goal, and step list. "update_task" advances to a step and reports progress. "finish_task" completes the task and displays a summary.',
           },
           taskName: {
             type: 'string',
-            description: 'Name of the task (required for start_task).',
+            description: 'The display name for the task (required for start_task).',
           },
           taskGoal: {
             type: 'string',
-            description: 'Overall goal of the task (required for start_task).',
+            description: 'A brief description of what the task aims to accomplish (required for start_task).',
           },
           steps: {
             type: 'array',
@@ -29,28 +29,28 @@ export class ManageTaskTool extends BaseTool {
               properties: {
                 title: {
                   type: 'string',
-                  description: 'Short title for the step (e.g., "Research", "Implement", "Verify", "Summary").',
+                  description: 'A short label for the step (e.g., "Research", "Implement", "Verify", "Summary").',
                 },
                 description: {
                   type: 'string',
-                  description: 'Detailed description of what this step accomplishes.',
+                  description: 'A description of what this step accomplishes.',
                 },
               },
               required: ['title', 'description'],
             },
-            description: 'List of steps to complete the task (required for start_task). Each step is an object with "title" and "description". The LAST step MUST have title "Summary".',
+            description: 'The ordered list of steps for the task (required for start_task). Each step has a `title` and `description`. The last step must have title "Summary".',
           },
           currentStep: {
             type: 'integer',
-            description: 'Index of the current step being executed (0-indexed).',
+            description: 'The 0-indexed step number to advance to (for update_task). All steps before this index are marked completed.',
           },
           status: {
             type: 'string',
-            description: 'Human-readable status message for the current step (e.g., "Researching existing documents", "Creating the NPC actor"). Do NOT use machine-style values like "in_progress" or "completed".',
+            description: 'A human-readable progress message for the current step (e.g., "Researching existing documents", "Creating the NPC actor"). Do not use machine-style values like "in_progress" or "completed".',
           },
           summary: {
             type: 'string',
-            description: 'REQUIRED for finish_task. The actual, concise summary of what was accomplished during the task. This will be displayed as the final Summary step content.',
+            description: 'A concise summary of what was accomplished (required for finish_task). This text is displayed as the final Summary step content.',
           },
         },
         required: ['action'],

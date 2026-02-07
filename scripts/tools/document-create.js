@@ -20,26 +20,29 @@ import { documentReadRegistry } from '../utils/document-read-registry.js';
  */
 export class DocumentCreateTool extends BaseTool {
   constructor() {
-    super('create_document', 'Create document of any type supported by current system');
+    super(
+      'create_document',
+      'Create a new document in the world or a compendium pack. The `data` parameter must contain the document\'s fields (e.g., `name`, `type`, and any system-specific fields nested under `system`). Use `inspect_document_schema` to discover required fields and valid structure for a given document type. Use `list_document_schemas` to discover available document types and subtypes.'
+    );
     this.requiresConfirmation = true;
     this.schema = {
       type: 'object',
       properties: {
         documentType: {
           type: 'string',
-          description: 'Type of document to create',
+          description: 'The document class to create (e.g., Actor, Item, JournalEntry, RollTable, Scene). Use `list_document_schemas` to discover available types.',
         },
         data: {
           type: 'object',
-          description: 'Document data (will be validated by FoundryVTT)',
+          description: 'The document\'s field data as a JSON object. Must include at least `name` and, for typed documents, a `type` field (e.g., "npc", "weapon"). Structure varies by document type — use `inspect_document_schema` to discover valid fields. Embedded documents go in their respective arrays (e.g., `pages` for JournalEntry, `items` for Actor).',
         },
         folder: {
           type: 'string',
-          description: 'Folder ID to create document in',
+          description: 'The ID of an existing Folder to place the document in. Omit to create at root level.',
         },
         pack: {
           type: 'string',
-          description: 'Compendium pack ID to create document in (e.g., "dnd5e.items")',
+          description: 'The compendium pack ID to create the document in (e.g., "dnd5e.items"). The pack must be unlocked and match the document type. Omit to create in the world.',
         },
       },
       required: ['documentType', 'data'],

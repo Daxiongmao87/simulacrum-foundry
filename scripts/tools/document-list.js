@@ -12,26 +12,26 @@ class DocumentListTool extends BaseTool {
   constructor() {
     super(
       'list_documents',
-      'List documents of any type available in current system.  Use this as a broad search.',
+      'List documents by type, returning names, IDs, and UUID references. Use this to browse or inventory documents when you do not have a specific search term — for targeted text searches, use `search_documents` instead. Omit `documentType` to list all available document types with counts. Pass `documentType` as "Compendium" to list available compendium packs.',
       {
         type: 'object',
         properties: {
           documentType: {
             type: 'string',
-            description: 'Document type to list (optional - lists all types if omitted)',
+            description: 'The document class to list (e.g., Actor, Item, JournalEntry, RollTable, Folder). Omit to list all available document types with counts. Pass "Compendium" to list compendium packs.',
           },
           filters: {
             type: 'object',
-            description: 'Filter criteria (name, folder, etc.)',
+            description: 'An object of filter criteria to narrow results (e.g., `{"name": "Goblin", "folder": "folderId"}`). Applied as field-level matches.',
           },
           includeCompendiums: {
             type: 'boolean',
             default: false,
-            description: 'Include documents from compendium packs (Only if supported by implementation, prefer using "pack" param)',
+            description: 'Whether to also include documents from compendium packs in the results. Defaults to false. Prefer using the `pack` parameter to target a specific compendium.',
           },
           pack: {
             type: 'string',
-            description: 'Specific Compendium Pack ID to list documents from (e.g. "dnd5e.monsters")',
+            description: 'A specific compendium pack ID to list documents from (e.g., "dnd5e.monsters"). When set, only documents from this pack are returned.',
           },
         },
       }

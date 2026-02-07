@@ -8,7 +8,7 @@ class DocumentSchemaListTool extends BaseTool {
   constructor() {
     super(
       'list_document_schemas',
-      'List all available document types, their subtypes, and document counts. Use this to discover what document types and subtypes are available before inspecting a specific schema.',
+      'List all available document types with their subtypes and document counts. Returns each type\'s name, available subtypes (e.g., "npc", "weapon"), world document count, and compendium pack count. Use this as the starting point to discover what types and subtypes exist before calling `inspect_document_schema` for detailed field information.',
       { type: 'object', properties: {} }
     );
   }

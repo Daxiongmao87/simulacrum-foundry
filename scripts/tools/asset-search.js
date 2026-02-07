@@ -6,7 +6,7 @@ import { BaseTool } from './base-tool.js';
 import { assetIndexService } from '../core/asset-index-service.js';
 
 const BASE_DESCRIPTION =
-    'Search for files (images, audio, etc.) in User Data (assets, modules, worlds) and Core Data.';
+    'Search for asset files by filename or path segment. Returns matching file paths from User Data (uploaded assets, modules, worlds) and Core Data (Foundry built-in files). Use this to find images, audio, or other files for use in document fields like `img` or `src`. For exploring folder structure, use `browse_folders` instead.';
 
 export class AssetSearchTool extends BaseTool {
     constructor() {
@@ -18,19 +18,19 @@ export class AssetSearchTool extends BaseTool {
                 properties: {
                     query: {
                         type: 'string',
-                        description: 'Filename or path segment to search for (e.g. "potion", "sword.png")',
+                        description: 'The filename or path segment to search for (e.g., "potion", "sword.png", "tokens/goblin"). Matches against the full file path.',
                     },
                     type: {
                         type: 'string',
                         enum: ['image', 'audio', 'video', 'text', 'font', 'any'],
                         default: 'any',
-                        description: 'Type of file to search for (filters by extension)',
+                        description: 'The file type to filter by. Restricts results to files with matching extensions (e.g., "image" matches .webp/.png/.jpg, "audio" matches .mp3/.ogg/.wav). Defaults to "any".',
                     },
                     source: {
                         type: 'string',
                         enum: ['all', 'user', 'core'],
                         default: 'all',
-                        description: 'Where to search: "user" (Use Data), "core" (Foundry Core), or "all"',
+                        description: 'Where to search: "user" for uploaded assets and module files, "core" for Foundry built-in files, or "all" for both. Defaults to "all".',
                     },
                 },
                 required: ['query'],

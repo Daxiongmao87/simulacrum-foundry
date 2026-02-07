@@ -7,17 +7,21 @@ import { BaseTool } from './base-tool.js';
  */
 export class RunJavascriptTool extends BaseTool {
     constructor() {
-        super('run_javascript', 'Executes arbitrary JavaScript code.', {
-            type: 'object',
-            properties: {
-                script: {
-                    type: 'string',
-                    description:
-                        'The JavaScript code to execute. Use `return` to return a value. `console.log` output is captured and returned.',
+        super(
+            'run_javascript',
+            'Execute JavaScript code in the FoundryVTT browser context. The script runs with full access to the Foundry API (`game`, `canvas`, `CONFIG`, `ui`, etc.) and can interact with any game data or UI element. Use `return` to send a value back. Console output is captured and included in the result.',
+            {
+                type: 'object',
+                properties: {
+                    script: {
+                        type: 'string',
+                        description:
+                            'The JavaScript code to execute. Runs as an async function body — use `await` for async operations and `return` to return a value. `console.log`, `console.warn`, and `console.error` output is captured and returned alongside the result.',
+                    },
                 },
-            },
-            required: ['script'],
-        });
+                required: ['script'],
+            }
+        );
     }
 
     /**

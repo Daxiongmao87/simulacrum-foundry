@@ -14,7 +14,7 @@ export class EndLoopTool extends BaseTool {
     constructor() {
         super(
             'end_loop',
-            'Exit the tool loop and return control to the user. Include a response if your last output was a tool call (i.e. no accompanying text message).',
+            'Signal that you are done using tools and return control to the user. Call this when the task is complete, when you need clarification from the user, or when an unrecoverable error occurs. Include a `response` if your preceding output was a tool call with no accompanying text.',
             null,
             false, // Does not require confirmation
             false  // Response is optional
@@ -29,7 +29,7 @@ export class EndLoopTool extends BaseTool {
                 reason: {
                     type: 'string',
                     enum: ['task_complete', 'need_clarification', 'error', 'question'],
-                    description: 'Why the loop is ending. Used for logging only.',
+                    description: 'Why the loop is ending: "task_complete" for successful completion, "need_clarification" when user input is required, "error" for unrecoverable failures, "question" when asking the user a question. Used for logging only.',
                 },
             },
             required: [],

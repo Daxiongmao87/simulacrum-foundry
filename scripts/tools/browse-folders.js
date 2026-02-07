@@ -6,7 +6,7 @@ import { BaseTool } from './base-tool.js';
 import { assetIndexService } from '../core/asset-index-service.js';
 
 const BASE_DESCRIPTION =
-    'Browse folder contents or search for folders by name. Use to explore file structure and find asset directories.';
+    'Browse the contents of a specific folder or search for folders by name. Use "browse" to list subfolders and files at a given path. Use "search" to find folders matching a name query across the index. For finding specific files by name, use `search_assets` instead.';
 
 export class BrowseFoldersTool extends BaseTool {
     constructor() {
@@ -19,17 +19,17 @@ export class BrowseFoldersTool extends BaseTool {
                     action: {
                         type: 'string',
                         enum: ['browse', 'search'],
-                        description: '"browse" lists contents of a specific folder, "search" finds folders by name',
+                        description: 'The operation to perform: "browse" lists the subfolders and files at the path specified by `path`. "search" finds folders whose name matches `path` as a search query.',
                     },
                     path: {
                         type: 'string',
-                        description: 'For browse: folder path to list (e.g. "assets/tokens"). For search: folder name to search for.',
+                        description: 'For "browse": the folder path to list contents of (e.g., "assets/tokens", "systems/dnd5e/icons"). For "search": the folder name or partial name to find (e.g., "tokens", "portraits").',
                     },
                     source: {
                         type: 'string',
                         enum: ['data', 'public', 'all'],
                         default: 'data',
-                        description: 'Source to browse/search: "data" (User Data), "public" (Core), "all" (search only)',
+                        description: 'The data source to operate on: "data" for User Data (uploaded assets), "public" for Foundry Core data, or "all" (search only — browse requires a specific source). Defaults to "data".',
                     },
                 },
                 required: ['action', 'path'],

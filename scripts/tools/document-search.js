@@ -12,30 +12,28 @@ class DocumentSearchTool extends BaseTool {
   constructor() {
     super(
       'search_documents',
-      'Search for documents by text content, names, or metadata.  Use this for narrow, targetted searches.',
+      'Search for documents by matching a text query against document names, content, and metadata fields. Use this when you have a specific search term — for browsing all documents of a type without a query, use `list_documents` instead. Searches across all document types by default; use `documentTypes` to restrict scope.',
       {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Search text - can be document names, content, or keywords.',
+            description: 'The text to search for. Matches against document names, text content, and metadata fields (e.g., "goblin", "fire damage", "healing potion").',
           },
           documentTypes: {
             type: 'array',
             items: { type: 'string' },
-            description:
-              'Limit search to specific document types (optional - searches all types if omitted)',
+            description: 'Restrict the search to specific document classes (e.g., ["Actor", "Item"]). Omit to search all types.',
           },
           fields: {
             type: 'array',
             items: { type: 'string' },
-            description:
-              'Specific document fields to search in (optional - searches all fields if omitted)',
+            description: 'Restrict the search to specific document fields (e.g., ["name", "system.description.value"]). Omit to search all fields.',
           },
           maxResults: {
             type: 'number',
             default: 20,
-            description: 'Maximum number of results to return (default: 20)',
+            description: 'The maximum number of results to return. Defaults to 20.',
           },
         },
         required: ['query'],

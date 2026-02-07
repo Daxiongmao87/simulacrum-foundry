@@ -20,12 +20,12 @@ export class DocumentCompendiumConfigTool extends BaseTool {
                 pack_id: {
                     type: 'string',
                     description:
-                        'The full compendium pack ID (e.g., "world.my-compendium" or "module-name.pack-name"). Use list_documents with document_type="Compendium" to discover available packs.',
+                        'The full compendium pack ID (e.g., "world.my-compendium", "module-name.pack-name"). Use `list_documents` with `documentType` set to "Compendium" to discover available pack IDs.',
                 },
                 action: {
                     type: 'string',
                     enum: ['lock', 'unlock'],
-                    description: 'Whether to lock or unlock the compendium pack',
+                    description: 'Whether to lock or unlock the pack. Unlock before modifying pack contents, lock again after modifications are complete.',
                 },
             },
             required: ['pack_id', 'action'],
@@ -33,7 +33,7 @@ export class DocumentCompendiumConfigTool extends BaseTool {
 
         super(
             'configure_compendium',
-            'Lock or unlock a compendium pack. Locked packs cannot be modified until unlocked. Use this before/after modifying compendium contents.',
+            'Lock or unlock a compendium pack. Packs are locked by default and must be unlocked before documents inside them can be created, updated, or deleted via `create_document`, `update_document`, or `delete_document`. Re-lock the pack after modifications are complete to prevent accidental changes.',
             schema,
             true // requiresConfirmation
         );

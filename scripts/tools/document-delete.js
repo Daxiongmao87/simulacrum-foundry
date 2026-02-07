@@ -35,24 +35,28 @@ class DocumentDeleteTool extends BaseTool {
    * Create a new Document Delete Tool
    */
   constructor() {
-    super('delete_document', 'Delete documents of any type supported by current system.', {
-      type: 'object',
-      properties: {
-        documentType: {
-          type: 'string',
-          description: 'Type of document to delete',
+    super(
+      'delete_document',
+      'Permanently delete a document from the world or a compendium pack. The document must be read with `read_document` before it can be deleted (stale-check enforced). This action is irreversible — the document and all its embedded content (pages, items, effects) will be destroyed.',
+      {
+        type: 'object',
+        properties: {
+          documentType: {
+            type: 'string',
+            description: 'The document class to delete (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
+          },
+          documentId: {
+            type: 'string',
+            description: 'The ID of the document to delete. The document must have been read first via `read_document`.',
+          },
+          pack: {
+            type: 'string',
+            description: 'The compendium pack ID to delete from (e.g., "dnd5e.items"). The pack must be unlocked. Omit to delete from the world.',
+          },
         },
-        documentId: {
-          type: 'string',
-          description: 'ID of document to delete',
-        },
-        pack: {
-          type: 'string',
-          description: 'Compendium pack ID to delete document from (e.g., "dnd5e.items")',
-        },
-      },
-      required: ['documentType', 'documentId'],
-    });
+        required: ['documentType', 'documentId'],
+      }
+    );
     this.requiresConfirmation = true;
   }
 
