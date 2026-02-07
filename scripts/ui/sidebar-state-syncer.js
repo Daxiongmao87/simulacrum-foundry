@@ -18,10 +18,7 @@ const logger = createLogger('SidebarSync');
  * @returns {Promise<string>} Processed HTML content
  */
 export async function processMessageForDisplay(content, _options = {}) {
-  // Ensure content is not null/undefined. If empty, provide a space to force rendering.
-  // Ensure content is not null/undefined.
   let processedContent = String(content ?? '');
-  // if (!processedContent) processedContent = '&nbsp;'; // Removed to avoid visible empty bubble
 
   // Transform <think></think> tags to collapsible spoilers
   if (hasThinkTags(processedContent)) {
@@ -137,12 +134,8 @@ export async function syncMessagesFromCore(conversationManager) {
 
     if (m.role === 'tool') {
       // Check for silent/hidden tools - skip UI rendering
-      const hiddenTools = ['end_loop'];
-      // Tools that render their display directly without tool card wrapper
-      const directDisplayTools = ['manage_task'];
-      // Tools that don't need justification displayed (self-explanatory from context)
-      const noJustificationTools = ['read_tool_output'];
-
+      // manage_task is hidden because it has a dedicated task tracker UI at the top of the chat
+      const hiddenTools = ['end_loop', 'manage_task'];
       const toolName = toolCallNames.get(m.tool_call_id);
       let isSilent = hiddenTools.includes(toolName);
       if (!isSilent) {
@@ -157,27 +150,9 @@ export async function syncMessagesFromCore(conversationManager) {
         continue;
       }
 
-      // Handle direct display tools (e.g., manage_task step separators)
-      if (directDisplayTools.includes(toolName)) {
-        const rawDisplay = getToolDisplayContent(m);
-        // Only show if there's actual display content (skip empty displays like start_task)
-        if (rawDisplay && rawDisplay.trim()) {
-          // Check if display is already HTML (starts with <) or needs markdown rendering
-          let formattedDisplay = rawDisplay;
-          if (!rawDisplay.trim().startsWith('<')) {
-            formattedDisplay = await MarkdownRenderer.render(rawDisplay, { force: true });
-          }
-          const message = await createDisplayMessage('assistant', m.content, formattedDisplay);
-          messages.push(message);
-        }
-        continue;
-      }
-
       // Reconstruct tool result display
-      // Skip justification for self-explanatory tools
-      const justification = noJustificationTools.includes(toolName)
-        ? ''
-        : (toolCallJustifications.get(m.tool_call_id) || '');
+      // Note: toolName already declared above for hidden check
+      const justification = toolCallJustifications.get(m.tool_call_id) || '';
 
       let preRendered = null;
       const rawDisplayContent = getToolDisplayContent(m);
