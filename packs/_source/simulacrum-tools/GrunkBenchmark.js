@@ -384,7 +384,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : result.score + '/100'})` },
     content: `${scoreHtml}
       ${hasWebhook ? `<hr>
-        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>?</p>
+        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>? Submissions are reviewed before appearing publicly.</p>
         <div class="form-group">
           <label>Username</label>
           <input name="grunk-username" type="text" placeholder="Anonymous">
