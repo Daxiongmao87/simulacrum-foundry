@@ -74,9 +74,10 @@ export class DocumentAPI {
    * Retrieves the schema for a given document type, including fields, embedded documents,
    * relationships, and references. Supports both top-level and embedded document types.
    * @param {string} documentType The name of the document type.
+   * @param {string} [subtype] Optional subtype for system-specific fields (e.g., "npc", "weapon").
    * @returns {object|null} The document schema object, or null if the type is invalid.
    */
-  static getDocumentSchema(documentType) {
+  static getDocumentSchema(documentType, subtype) {
     const startTime = performance.now();
 
     try {
@@ -92,7 +93,7 @@ export class DocumentAPI {
         return null;
       }
 
-      const schema = this.#extractDocumentSchema(documentType, documentClass);
+      const schema = this.#extractDocumentSchema(documentType, documentClass, subtype);
 
       const elapsed = performance.now() - startTime;
       if (elapsed > 50) {
@@ -411,15 +412,41 @@ export class DocumentAPI {
   }
 
   /**
+   * Extracts system-specific fields for a document subtype.
+   * Resolves CONFIG[documentType].dataModels[subtype] and extracts its schema fields.
+   * @param {string} documentType The parent document type (e.g., "Actor", "Item").
+   * @param {string} subtype The subtype to resolve (e.g., "npc", "weapon").
+   * @param {object} definitions The definitions registry for $refs.
+   * @param {Map} definitionMap Map of visited objects to ref names.
+   * @returns {{ systemFields: string[], systemFieldDetails: object }|null} Extracted fields or null.
+   * @private
+   */
+  static #extractSystemFieldsForSubtype(documentType, subtype, definitions, definitionMap) {
+    const dataModel = CONFIG[documentType]?.dataModels?.[subtype];
+    if (!dataModel?.schema?.fields) {
+      documentLogger.debug(
+        `No dataModel found for ${documentType}.${subtype}`
+      );
+      return null;
+    }
+
+    const fields = dataModel.schema.fields;
+    const systemFields = Object.keys(fields);
+    const systemFieldDetails = this.#extractFieldDetails(fields, definitions, definitionMap);
+
+    return { systemFields, systemFieldDetails };
+  }
+
+  /**
    * Extracts and formats the schema information from a document class.
    * Uses Schema Normalization ($defs) to prevent JSON explosion from shared data models.
    * @param {string} documentType The document type name.
    * @param {object} documentClass The document class to extract schema from.
-   * @param {Set} [visited] DEPRECATED - used for legacy cycle detection, now replaced by definition map
+   * @param {string} [subtype] Optional subtype for system-specific fields.
    * @returns {object} The formatted schema object with $defs.
    * @private
    */
-  static #extractDocumentSchema(documentType, documentClass) {
+  static #extractDocumentSchema(documentType, documentClass, subtype) {
     // Registry for shared definitions (DataModels)
     const definitions = {};
     const definitionMap = new Map(); // Object -> RefName mapping
@@ -487,8 +514,17 @@ export class DocumentAPI {
         );
       }
 
-      // Extract system fields (Normalized)
-      if (documentClass.schema?.has && documentClass.schema.has('system')) {
+      // Extract system fields — subtype-aware when subtype is provided
+      if (subtype) {
+        const subtypeResult = this.#extractSystemFieldsForSubtype(
+          documentType, subtype, definitions, definitionMap
+        );
+        if (subtypeResult) {
+          schema.systemFields = subtypeResult.systemFields;
+          schema.systemFieldDetails = subtypeResult.systemFieldDetails;
+          schema.subtype = subtype;
+        }
+      } else if (documentClass.schema?.has && documentClass.schema.has('system')) {
         try {
           const systemField = documentClass.schema.getField('system');
           // If system data is a Model, ref it!
@@ -532,6 +568,28 @@ export class DocumentAPI {
     } catch (error) {
       documentLogger.error(`Schema field extraction failed for "${documentType}":`, error);
       throw error;
+    }
+
+    // When subtype is provided, trim low-value core fields to reduce bloat
+    if (subtype) {
+      delete schema.definitions;
+      delete schema.references;
+
+      // Strip noisy core field details, keep only essential ones
+      const essentialFields = new Set(['name', 'type', 'img', 'system']);
+      const trimmedDetails = {};
+      for (const key of essentialFields) {
+        if (schema.fieldDetails[key]) {
+          trimmedDetails[key] = schema.fieldDetails[key];
+        }
+      }
+      schema.fieldDetails = trimmedDetails;
+
+      // Remove _stats and flags from systemFieldDetails if present
+      if (schema.systemFieldDetails && typeof schema.systemFieldDetails === 'object' && !schema.systemFieldDetails.$ref) {
+        delete schema.systemFieldDetails._stats;
+        delete schema.systemFieldDetails.flags;
+      }
     }
 
     return schema;

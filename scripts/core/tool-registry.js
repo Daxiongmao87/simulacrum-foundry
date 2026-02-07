@@ -16,6 +16,7 @@ import { DocumentSearchTool } from '../tools/document-search.js';
 import { AssetSearchTool } from '../tools/asset-search.js';
 import { BrowseFoldersTool } from '../tools/browse-folders.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
+import { DocumentSchemaListTool } from '../tools/document-schema-list.js';
 import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { ManageTaskTool } from '../tools/manage-task.js';
 import { RunJavascriptTool } from '../tools/run-javascript.js';
@@ -73,6 +74,7 @@ export class ToolRegistry {
         new AssetSearchTool(),
         new BrowseFoldersTool(),
         new DocumentSchemaTool(),
+        new DocumentSchemaListTool(),
         new ExecuteMacroTool(),
         new ManageTaskTool(),
         new RunJavascriptTool(),

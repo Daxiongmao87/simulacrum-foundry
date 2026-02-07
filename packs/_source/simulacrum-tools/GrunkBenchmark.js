@@ -50,9 +50,10 @@ function scoreResult(outcome) {
     checks.push({ name: 'Weapon is rusty', pass: wName.includes('rusty') || wDesc.includes('rusty'), detail: (wName.includes('rusty') || wDesc.includes('rusty')) ? 'yes' : 'no' });
 
     // Bonus: S-tier check — did the AI use the Grunk image?
+    // Hidden unless it actually passed (revealed as a surprise bonus)
     const actorImg = (actor.img || '').toLowerCase();
     const usesGrunkImg = actorImg.includes('grunk');
-    checks.push({ name: 'Uses Grunk image', pass: usesGrunkImg, detail: actor.img || 'none', bonus: true });
+    checks.push({ name: 'Uses Grunk image', pass: usesGrunkImg, detail: actor.img || 'none', bonus: true, hidden: !usesGrunkImg });
   }
 
   // Gather efficiency metrics from the interaction log
@@ -61,8 +62,10 @@ function scoreResult(outcome) {
   const steps = entries.filter(e => e.type === 'tool_call').length;
   const failures = entries.filter(e => e.type === 'tool_result' && e.metadata?.success === false).length;
 
-  // DNF (timeout/error) = 0 points. Cancel = no score (not submitted).
-  const dnf = outcome === 'timeout' || outcome === 'error';
+  // DNF (timeout/error/all correctness missed) = 0 points. Cancel = no score (not submitted).
+  const correctnessChecks = checks.filter(c => !c.bonus);
+  const allCorrectnessFailed = correctnessChecks.every(c => !c.pass);
+  const dnf = outcome === 'timeout' || outcome === 'error' || allCorrectnessFailed;
   const cancelled = outcome === 'cancelled';
 
   // Scoring: start at 100, deduct points
@@ -102,7 +105,7 @@ function buildReadableLog(result, elapsedMs, model, outcome) {
   const system = game.system?.id || 'unknown';
   const moduleVersion = game.modules.get('simulacrum')?.version || 'unknown';
   const date = new Date().toISOString();
-  const scoreDisplay = result.cancelled ? 'Cancelled' : `${result.score}/100`;
+  const scoreDisplay = result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : `${result.score}/100`;
 
   let log = `=== Grunk Benchmark Log ===\n`;
   log += `Model: ${model} | System: ${system} | Simulacrum: ${moduleVersion}\n`;
@@ -132,6 +135,7 @@ function buildReadableLog(result, elapsedMs, model, outcome) {
 
   log += `\n--- Score Breakdown ---\n`;
   for (const c of result.checks) {
+    if (c.hidden) continue;
     log += `[${c.pass ? 'PASS' : 'FAIL'}] ${c.name} (${c.detail})\n`;
   }
 
@@ -147,8 +151,8 @@ function buildScoreHtml(result, elapsedMs, model, outcome) {
     html += `<p>Benchmark was cancelled by user. No score recorded.</p></div>`;
     return html;
   }
-  const scoreDisplay = `${result.score}/100`;
-  const color = result.score >= 90 ? '#4caf50' : result.score >= 60 ? '#ff9800' : '#f44336';
+  const scoreDisplay = result.dnf ? 'DNF 0/100' : `${result.score}/100`;
+  const color = result.dnf ? '#f44336' : result.score >= 90 ? '#4caf50' : result.score >= 60 ? '#ff9800' : '#f44336';
   let html = `<div style="font-family: var(--font-mono); font-size: 13px;">`;
   html += `<p><strong>Model:</strong> ${model}<br><strong>System:</strong> ${system}<br><strong>Outcome:</strong> ${outcome}</p>`;
   html += `<h2 style="color:${color}; margin:8px 0;">${scoreDisplay}</h2>`;
@@ -156,6 +160,7 @@ function buildScoreHtml(result, elapsedMs, model, outcome) {
   html += `<p style="color:#888; font-size:11px;">Deductions: correctness &minus;${result.deductions.correctness} | failures &minus;${result.deductions.failures} | steps &minus;${result.deductions.steps} | bonus +${result.deductions.bonus}</p>`;
   html += `<table style="width:100%; border-collapse:collapse; margin-top:8px;">`;
   for (const c of result.checks) {
+    if (c.hidden) continue;
     const icon = c.pass ? '&#9989;' : '&#10060;';
     const tag = c.bonus
       ? (c.pass ? ' <span style="color:#4caf50;">(+1 bonus)</span>' : ' <span style="color:#888;">(bonus)</span>')
@@ -171,8 +176,8 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
 
   const system = game.system?.id || 'unknown';
   const moduleVersion = game.modules.get('simulacrum')?.version || 'unknown';
-  const scoreDisplay = `${result.score}/100`;
-  const color = result.score >= 90 ? 0x4caf50 : result.score >= 60 ? 0xff9800 : 0xf44336;
+  const scoreDisplay = result.dnf ? 'DNF 0/100' : `${result.score}/100`;
+  const color = result.dnf ? 0xf44336 : result.score >= 90 ? 0x4caf50 : result.score >= 60 ? 0xff9800 : 0xf44336;
 
   const fields = [
     { name: 'Model', value: model, inline: true },
@@ -188,6 +193,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
   fields.push({ name: 'Deductions', value: `correctness \u2212${result.deductions.correctness}, failures \u2212${result.deductions.failures}, steps \u2212${result.deductions.steps}, bonus +${result.deductions.bonus}`, inline: false });
 
   for (const c of result.checks) {
+    if (c.hidden) continue;
     fields.push({ name: c.name, value: c.pass ? '\u2705' : `\u274c (${c.detail})`, inline: true });
   }
 
@@ -386,7 +392,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
   });
 
   new DialogV2({
-    window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.score + '/100'})` },
+    window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : result.score + '/100'})` },
     content: `${scoreHtml}
       ${hasWebhook ? `<hr>
         <p>Submit results to the Simulacrum Discord?</p>
