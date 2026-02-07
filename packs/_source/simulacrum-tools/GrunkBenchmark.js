@@ -1,6 +1,6 @@
 /**
  * Grunk Benchmark — Standardized AI model evaluation for Simulacrum.
- * Sends a fixed prompt, scores the result, optionally submits to Discord.
+ * Sends a fixed prompt, scores the result, and provides guided Discord sharing.
  *
  * Usage: Import from the Simulacrum Tools compendium and click to run.
  */
@@ -8,7 +8,7 @@
 // ─── Configuration ───────────────────────────────────────────────
 const BENCHMARK_PROMPT = 'Create a goblin warrior named Grunk with 15 HP and a rusty shortsword.';
 const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1469766376037027954/45eMohmn8F-rqlC81MC-efZnE_sXIBM2XkR1NlyTiX-gBcJmDKlnqQ-vNBILyvvqhnXH';
+const DISCORD_INVITE_URL = 'https://discord.gg/YC4u8wbM6V';
 const DialogV2 = foundry.applications.api.DialogV2;
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -158,49 +158,58 @@ function buildScoreHtml(result, elapsedMs, model, outcome) {
   return html;
 }
 
-async function submitToDiscord(result, elapsedMs, model, outcome, username, readableLog) {
-  if (!DISCORD_WEBHOOK_URL) throw new Error('No webhook URL configured');
+function buildDiscordPostTitle(model, result) {
+  const scoreDisplay = result.dnf ? 'DNF 0/100' : `${result.score}/100`;
+  return `Grunk Benchmark \u2014 ${model} \u2014 ${scoreDisplay}`;
+}
 
+function buildDiscordPostBody(result, elapsedMs, model) {
   const system = game.system?.id || 'unknown';
   const moduleVersion = game.modules.get('simulacrum')?.version || 'unknown';
   const scoreDisplay = result.dnf ? 'DNF 0/100' : `${result.score}/100`;
-  const color = result.dnf ? 0xf44336 : result.score >= 90 ? 0x4caf50 : result.score >= 60 ? 0xff9800 : 0xf44336;
 
-  const fields = [
-    { name: 'Model', value: model, inline: true },
-    { name: 'System', value: system, inline: true },
-    { name: 'Outcome', value: outcome, inline: true },
-    { name: 'Score', value: scoreDisplay, inline: true },
-    { name: 'Steps', value: String(result.steps), inline: true },
-    { name: 'Failures', value: String(result.failures), inline: true },
-    { name: 'Time', value: formatElapsed(elapsedMs), inline: true },
-    { name: 'Simulacrum', value: moduleVersion, inline: true },
-  ];
+  let body = `**Score: ${scoreDisplay}**\n`;
+  body += `Model: ${model} | System: ${system} | Simulacrum: ${moduleVersion}\n`;
+  body += `Steps: ${result.steps} | Failures: ${result.failures} | Time: ${formatElapsed(elapsedMs)}\n`;
 
-  let deductionStr = `correctness \u2212${result.deductions.correctness}, failures \u2212${result.deductions.failures}, steps \u2212${result.deductions.steps}`;
-  if (result.deductions.bonus > 0) deductionStr += `, bonus +${result.deductions.bonus}`;
-  fields.push({ name: 'Deductions', value: deductionStr, inline: false });
+  let deductions = `Deductions: correctness \u2212${result.deductions.correctness}, failures \u2212${result.deductions.failures}, steps \u2212${result.deductions.steps}`;
+  if (result.deductions.bonus > 0) deductions += `, bonus +${result.deductions.bonus}`;
+  body += deductions + '\n\n';
 
   for (const c of result.checks) {
     if (c.hidden) continue;
-    fields.push({ name: c.name, value: c.pass ? '\u2705' : `\u274c (${c.detail})`, inline: true });
+    body += `${c.pass ? '\u2705' : '\u274c'} ${c.name} (${c.detail})\n`;
   }
 
-  const embed = {
-    title: ':grunk: Grunk Benchmark Result',
-    color,
-    fields,
-    footer: { text: `Submitted by ${username || 'Anonymous'}` },
-    timestamp: new Date().toISOString(),
-  };
+  return body;
+}
 
-  const threadName = `Grunk Benchmark \u2014 ${model} \u2014 ${scoreDisplay}`;
-  const formData = new FormData();
-  formData.append('payload_json', JSON.stringify({ embeds: [embed], thread_name: threadName }));
-  formData.append('file', new Blob([readableLog], { type: 'text/plain' }), 'grunk-benchmark-log.txt');
+function downloadLog(readableLog) {
+  const blob = new Blob([readableLog], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `grunk-benchmark-${Date.now()}.txt`;
+  a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  setTimeout(() => URL.revokeObjectURL(a.href), 100);
+}
 
-  const resp = await fetch(DISCORD_WEBHOOK_URL, { method: 'POST', body: formData });
-  if (!resp.ok) throw new Error(`Discord webhook failed: ${resp.status} ${resp.statusText}`);
+async function copyToClipboard(text, label) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      ui.notifications.info(`${label} copied to clipboard!`);
+      return;
+    } catch { /* fall through to legacy method */ }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+  ui.notifications.info(`${label} copied to clipboard!`);
 }
 
 // ─── Main Flow ───────────────────────────────────────────────────
@@ -219,10 +228,11 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
 
   // Check for existing Grunk actor/items that will be cleaned up
   const existingGrunk = game.actors.find(a => a.name.toLowerCase().includes('grunk'));
-  const existingItems = existingGrunk ? existingGrunk.items.filter(i => i.type === 'weapon') : [];
-  const cleanupWarning = existingGrunk
-    ? `<li>Existing actor <strong>"${existingGrunk.name}"</strong>${existingItems.length ? ` and its items` : ''} will be <strong>deleted</strong></li>`
-    : '';
+  const existingRusty = game.items.filter(i => i.name.toLowerCase().includes('rusty') && i.name.toLowerCase().includes('shortsword'));
+  const warnings = [];
+  if (existingGrunk) warnings.push(`<li>Existing actor <strong>"${existingGrunk.name}"</strong> and its items will be <strong>deleted</strong></li>`);
+  if (existingRusty.length) warnings.push(`<li>Existing item${existingRusty.length > 1 ? 's' : ''} <strong>"${existingRusty.map(i => i.name).join('", "')}"</strong> will be <strong>deleted</strong></li>`);
+  const cleanupWarning = warnings.join('\n        ');
 
   // Confirmation dialog
   const confirmed = await DialogV2.confirm({
@@ -236,7 +246,8 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
         <li>The AI has up to <strong>30 minutes</strong> to complete the task</li>
         <li>Results will be scored automatically</li>
       </ul>
-      <p style="color:var(--color-level-error);"><strong>Warning:</strong> Your current conversation will be lost.</p>`,
+      <p style="color:var(--color-level-error);"><strong>Warning:</strong> Your current conversation will be lost.</p>
+      <p class="hint">If your AI provider charges per token, running this benchmark will incur costs.</p>`,
     yes: { label: 'Start Benchmark', icon: 'fa-solid fa-play' },
     no: { label: 'Cancel', icon: 'fa-solid fa-xmark' },
     rejectClose: false,
@@ -290,11 +301,16 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     await tab.chatHandler.clearConversation();
     await tab.clearMessages();
 
-    // Delete any existing Grunk actor so the benchmark starts clean
+    // Delete any existing Grunk actors and Rusty Shortsword items so the benchmark starts clean
     const grunkActors = game.actors.filter(a => a.name.toLowerCase().includes('grunk'));
     for (const actor of grunkActors) {
       console.log(`Grunk Benchmark: deleting existing actor "${actor.name}" (${actor.id})`);
       await actor.delete();
+    }
+    const rustyItems = game.items.filter(i => i.name.toLowerCase().includes('rusty') && i.name.toLowerCase().includes('shortsword'));
+    for (const item of rustyItems) {
+      console.log(`Grunk Benchmark: deleting existing item "${item.name}" (${item.id})`);
+      await item.delete();
     }
 
     tab.setProcessing(true);
@@ -339,37 +355,68 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
   const readableLog = buildReadableLog(result, elapsedMs, model, outcome);
   const scoreHtml = buildScoreHtml(result, elapsedMs, model, outcome);
 
+  // Store share data for the guided share dialog
+  const postTitle = buildDiscordPostTitle(model, result);
+  const postBody = buildDiscordPostBody(result, elapsedMs, model);
+  window._grunkShare = {
+    download: () => downloadLog(readableLog),
+    copyTitle: () => copyToClipboard(postTitle, 'Post title'),
+    copyBody: () => copyToClipboard(postBody, 'Post body'),
+  };
+
   // Results dialog
-  const hasWebhook = !result.cancelled && DISCORD_WEBHOOK_URL && DISCORD_WEBHOOK_URL.startsWith('https://');
-
-  const resultsButtons = [{
-    action: 'download',
-    label: 'Download Log',
-    icon: 'fa-solid fa-download',
-    callback: () => {
-      const blob = new Blob([readableLog], { type: 'text/plain' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `grunk-benchmark-${Date.now()}.txt`;
-      a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-      setTimeout(() => URL.revokeObjectURL(a.href), 100);
+  const resultsButtons = [
+    {
+      action: 'download',
+      label: 'Download Log',
+      icon: 'fa-solid fa-download',
+      callback: () => downloadLog(readableLog),
     },
-  }];
+  ];
 
-  if (hasWebhook) {
+  if (!result.cancelled) {
     resultsButtons.push({
-      action: 'submit',
-      label: 'Submit to Discord',
+      action: 'share',
+      label: 'Share on Discord',
       icon: 'fa-brands fa-discord',
       default: true,
-      callback: async (event, button, dialog) => {
-        const username = button.form.elements['grunk-username']?.value || '';
-        try {
-          await submitToDiscord(result, elapsedMs, model, outcome, username, readableLog);
-          ui.notifications.info('Benchmark results submitted to Discord!');
-        } catch (err) {
-          ui.notifications.error(`Failed to submit: ${err.message}`);
-        }
+      callback: () => {
+        const shareDialog = new DialogV2({
+          window: { title: 'Share on Discord' },
+          content: `<div style="display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; font-size: 13px;">
+            <div><strong>1.</strong> Download the benchmark log</div>
+            <div><button type="button" class="dialog-button"><i class="fa-solid fa-download"></i> Download</button></div>
+
+            <div><strong>2.</strong> Open the Grunk Benchmark channel</div>
+            <div><button type="button" class="dialog-button"><i class="fa-brands fa-discord"></i> Open Discord</button></div>
+
+            <div><strong>3.</strong> Create a <strong>New Post</strong></div>
+            <div></div>
+
+            <div><strong>4.</strong> Copy the post title</div>
+            <div><button type="button" class="dialog-button"><i class="fa-solid fa-copy"></i> Copy Title</button></div>
+
+            <div><strong>5.</strong> Copy the post body</div>
+            <div><button type="button" class="dialog-button"><i class="fa-solid fa-copy"></i> Copy Body</button></div>
+
+            <div><strong>6.</strong> Upload the benchmark log</div>
+            <div></div>
+
+            <div><strong>7.</strong> Press <strong>Post</strong></div>
+            <div></div>
+          </div>`,
+          buttons: [{ action: 'close', label: 'Done', icon: 'fa-solid fa-check' }],
+          position: { width: 480 },
+          close: () => { delete window._grunkShare; },
+        });
+        shareDialog.addEventListener('render', () => {
+          const buttons = shareDialog.element.querySelectorAll('.dialog-content button');
+          buttons[0]?.addEventListener('click', () => window._grunkShare.download());
+          buttons[1]?.addEventListener('click', () => window.open(DISCORD_INVITE_URL, '_blank'));
+          buttons[2]?.addEventListener('click', () => window._grunkShare.copyTitle());
+          buttons[3]?.addEventListener('click', () => window._grunkShare.copyBody());
+        });
+        shareDialog.render({ force: true });
       },
     });
   }
@@ -378,19 +425,13 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     action: 'close',
     label: 'Close',
     icon: 'fa-solid fa-xmark',
+    callback: () => { delete window._grunkShare; },
   });
 
   new DialogV2({
     window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : result.score + '/100'})` },
-    content: `${scoreHtml}
-      ${hasWebhook ? `<hr>
-        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>?</p>
-        <div class="form-group">
-          <label>Username</label>
-          <input name="grunk-username" type="text" placeholder="Anonymous">
-        </div>` : '<p class="hint">Discord submission not configured.</p>'}`,
+    content: scoreHtml,
     buttons: resultsButtons,
     position: { width: 450 },
-    form: { closeOnSubmit: false },
   }).render({ force: true });
 })();
