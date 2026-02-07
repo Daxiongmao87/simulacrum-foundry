@@ -977,7 +977,12 @@ export class DocumentAPI {
     }
 
     const sliced = typeof limit === 'number' ? sorted.slice(0, limit) : sorted;
-    return sliced.map(d => d.toObject());
+    return sliced.map(d => {
+      const obj = d.toObject();
+      // Preserve uuid from the live Document — toObject() strips computed getters
+      if (d.uuid) obj.uuid = d.uuid;
+      return obj;
+    });
   }
 
   /**
@@ -1005,9 +1010,7 @@ export class DocumentAPI {
       if (!doc) throw new Error(`Document not found in pack '${pack}': ${id}`);
 
       const obj = doc.toObject();
-      // Compendium documents do not check standard User permissions in the same way (usually observer/owner only matters for edit)
-      // READ access to compendiums is generally open if the pack is visible.
-      // We assume if game.packs.get() returned it and user can see it, they can read it.
+      if (doc.uuid) obj.uuid = doc.uuid;
 
       return obj;
     }
@@ -1040,6 +1043,7 @@ export class DocumentAPI {
     }
 
     const obj = doc.toObject();
+    if (doc.uuid) obj.uuid = doc.uuid;
     if (!includeEmbedded) return obj;
     // MVP: no deep embedding; return as-is
     return obj;
