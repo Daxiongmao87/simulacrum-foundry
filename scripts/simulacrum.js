@@ -93,6 +93,7 @@ function registerAPISettings() {
     onChange: async _value => {
       try {
         modelService.invalidateCache();
+        ui.simulacrum?.invalidateModelList();
         await SimulacrumCore.initializeAIClient();
         await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after apiKey change');
@@ -113,6 +114,8 @@ function registerAPISettings() {
     onChange: async _value => {
       try {
         modelService.invalidateCache();
+        ui.simulacrum?.invalidateModelList(true);
+        await game.settings.set(MODULE_ID, 'model', '');
         await SimulacrumCore.initializeAIClient();
         await validateAndUpdateTabButton();
         createLogger('Module').info('AI client reinitialized after baseURL change');
