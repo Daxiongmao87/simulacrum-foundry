@@ -71,10 +71,8 @@ export class DocumentCompendiumConfigTool extends BaseTool {
             // List available packs for helpful error
             const availablePacks = Array.from(game.packs.keys()).slice(0, 10);
             return this.handleError(
-                new SimulacrumError(
-                    `Compendium pack not found: "${pack_id}". Available packs include: ${availablePacks.join(', ')}${game.packs.size > 10 ? '...' : ''}`
-                ),
-                { pack_id, action }
+                `Compendium pack not found: "${pack_id}". Available packs include: ${availablePacks.join(', ')}${game.packs.size > 10 ? '...' : ''}`,
+                'NotFoundError'
             );
         }
 
@@ -83,13 +81,8 @@ export class DocumentCompendiumConfigTool extends BaseTool {
 
         // Check if already in desired state
         if (pack.locked === targetLocked) {
-            return this.createSuccessResponse({
-                pack_id,
-                action,
-                status: 'no_change',
-                message: `Pack "${pack.metadata.label}" is already ${action}ed`,
-                locked: pack.locked,
-            });
+            const msg = `Pack "${pack.metadata.label}" is already ${action}ed`;
+            return this.createSuccessResponse(msg, msg);
         }
 
         try {
@@ -98,17 +91,10 @@ export class DocumentCompendiumConfigTool extends BaseTool {
 
             logger.info(`Compendium pack "${pack_id}" ${action}ed successfully`);
 
-            return this.createSuccessResponse({
-                pack_id,
-                pack_label: pack.metadata.label,
-                action,
-                status: 'success',
-                message: `Successfully ${action}ed compendium pack "${pack.metadata.label}"`,
-                locked: pack.locked,
-                document_count: pack.index.size,
-            });
+            const msg = `Successfully ${action}ed compendium pack "${pack.metadata.label}" (${pack.index.size} documents)`;
+            return this.createSuccessResponse(msg, msg);
         } catch (error) {
-            return this.handleError(error, { pack_id, action });
+            return this.handleError(error.message, error.constructor.name);
         }
     }
 }

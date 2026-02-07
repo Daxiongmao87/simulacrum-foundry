@@ -36,11 +36,11 @@ export class ExecuteMacroTool extends BaseTool {
    * @param {string} [args.name]
    * @param {string} [args.uuid]
    * @param {object} [args.args]
-   * @returns {Promise<string>}
+   * @returns {Promise<Object>} Result with content and display
    */
   async execute({ name, uuid, args = {} } = {}) {
     if (!game.user.isGM) {
-      throw new Error('Permission denied: Only GMs can execute macros via Simulacrum.');
+      return this.handleError('Permission denied: Only GMs can execute macros via Simulacrum.', 'PermissionError');
     }
 
     let macro;
@@ -66,19 +66,18 @@ export class ExecuteMacroTool extends BaseTool {
     }
 
     if (!macro) {
-      throw new Error(`Macro not found: ${uuid || name}`);
+      return this.handleError(`Macro not found: ${uuid || name}`, 'NotFoundError');
     }
 
     try {
       // Execute the macro, passing args in the scope
       const result = await macro.execute(args);
-      // return unstringified object, tool-loop-handler will stringify it for the message
-      return {
-        message: `Successfully executed macro: ${macro.name}`,
-        result: result,
-      };
+      const resultStr = result !== undefined ? `\nResult: ${JSON.stringify(result)}` : '';
+      const content = `Successfully executed macro: ${macro.name}${resultStr}`;
+      const display = `Executed macro: ${macro.name}`;
+      return this.createSuccessResponse(content, display);
     } catch (err) {
-      throw new Error(`Error executing macro '${macro.name}': ${err.message}`);
+      return this.handleError(`Error executing macro '${macro.name}': ${err.message}`, err.constructor.name);
     }
   }
 }

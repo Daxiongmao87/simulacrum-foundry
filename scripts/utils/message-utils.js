@@ -161,7 +161,8 @@ export function formatToolCallDisplay(toolResult, toolName = null, preRenderedCo
   let resultHtml = '';
   if (effectiveToolName === 'execute_macro' && isSuccess) {
     resultHtml = formatMacroResult(toolResult);
-  } else {
+  }
+  if (!resultHtml) {
     // Standard display logic (handles both success and error)
     if (preRenderedContent && isSuccess) {
       resultHtml = `<div class="tool-result-display">${preRenderedContent}</div>`;
@@ -334,16 +335,16 @@ export function extractToolDisplay(toolResult) {
       const parsed = JSON.parse(content);
 
       if (parsed && typeof parsed === 'object') {
-        // Case 1: Display property exists (standard success)
-        if (parsed.display) {
-          return `<div class="tool-result-display">${parsed.display}</div>`;
-        }
-
-        // Case 2: Error object
-        if (parsed.error && (parsed.success === false || parsed.error.message)) {
+        // Case 1: Error object (check before display — errors also have display)
+        if (parsed.error && (parsed.error.message || typeof parsed.error === 'string')) {
           const errorMessage = parsed.error.message || parsed.error;
           const errorType = parsed.error.type ? `<strong>${parsed.error.type}:</strong> ` : '';
           return `<div class="tool-result-display error-display">${errorType}${errorMessage}</div>`;
+        }
+
+        // Case 2: Display property exists (standard success)
+        if (parsed.display) {
+          return `<div class="tool-result-display">${parsed.display}</div>`;
         }
 
         // Case 3: Success but no display (message property)

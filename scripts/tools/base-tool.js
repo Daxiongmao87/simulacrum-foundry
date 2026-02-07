@@ -168,34 +168,33 @@ export class BaseTool {
 
   /**
    * Handle errors consistently across tools
-   * @param {Error} error - The error to handle
-   * @param {Object} contextContext for error handling
-   * @returns {Object} Formatted error response
+   * @param {string} message - Human-readable error message
+   * @param {string} [type='Error'] - Error type/category
+   * @returns {Object} Formatted error response with content, display, and error
    */
-  handleError(error, context = {}) {
-    this.logger.error(`Tool ${this.name} failed:`, error);
+  handleError(message, type = 'Error') {
+    this.logger.error(`Tool ${this.name} failed:`, message);
 
     return {
-      success: false,
+      content: message,
+      display: message,
       error: {
-        message: error.message,
-        type: error.constructor.name,
-        tool: this.name,
-        context: context,
+        message,
+        type,
       },
     };
   }
 
   /**
    * Create success response
-   * @param {Object} data - Success data
-   * @returns {Object} Formatted success response
+   * @param {string} content - Serialized to conversation history, seen by AI
+   * @param {string} display - Rendered in UI tool cards
+   * @returns {Object} Formatted success response with content and display
    */
-  createSuccessResponse(data) {
+  createSuccessResponse(content, display) {
     return {
-      success: true,
-      data: data,
-      tool: this.name,
+      content,
+      display,
     };
   }
 

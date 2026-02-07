@@ -50,7 +50,7 @@ export class ManageTaskTool extends BaseTool {
           },
           summary: {
             type: 'string',
-            description: 'REQUIRED for finish_task. The actual summary of what was accomplished during the task. This will be displayed as the final Summary step content.',
+            description: 'REQUIRED for finish_task. The actual, concise summary of what was accomplished during the task. This will be displayed as the final Summary step content.',
           },
         },
         required: ['action'],
@@ -78,27 +78,28 @@ export class ManageTaskTool extends BaseTool {
 
   _startTask({ taskName, taskGoal, steps }) {
     if (!taskName || !taskGoal || !steps) {
-      throw new Error('start_task requires taskName, taskGoal, and steps.');
+      return this.handleError('start_task requires taskName, taskGoal, and steps.', 'ValidationError');
     }
 
     // Validate step structure
     if (!Array.isArray(steps) || steps.length === 0) {
-      throw new Error('Task rejected: steps must be a non-empty array of {title, description} objects.');
+      return this.handleError('Task rejected: steps must be a non-empty array of {title, description} objects.', 'ValidationError');
     }
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       if (!step || typeof step.title !== 'string' || typeof step.description !== 'string') {
-        throw new Error(`Task rejected: Step ${i} must be an object with "title" and "description" string properties.`);
+        return this.handleError(`Task rejected: Step ${i} must be an object with "title" and "description" string properties.`, 'ValidationError');
       }
     }
 
     // Validate that the final step is a Summary step
     const lastStep = steps[steps.length - 1];
     if (lastStep.title !== 'Summary') {
-      throw new Error(
+      return this.handleError(
         'Task rejected: The final step must have title "Summary". ' +
-        'Please restructure your task list so the last step is { title: "Summary", description: "<placeholder or actual summary>" }.'
+        'Please restructure your task list so the last step is { title: "Summary", description: "<placeholder or actual summary>" }.',
+        'ValidationError'
       );
     }
 
@@ -172,9 +173,10 @@ export class ManageTaskTool extends BaseTool {
 
     // Require summary content for finish_task
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
-      throw new Error(
+      return this.handleError(
         'finish_task rejected: You MUST provide a "summary" parameter describing what was accomplished. ' +
-        'Example: { action: "finish_task", summary: "Deleted the accidental human race item and updated the Shym races journal with all canonical FR 2e races." }'
+        'Example: { action: "finish_task", summary: "Deleted the accidental human race item and updated the Shym races journal with all canonical FR 2e races." }',
+        'ValidationError'
       );
     }
 

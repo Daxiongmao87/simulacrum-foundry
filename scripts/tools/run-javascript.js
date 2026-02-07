@@ -23,7 +23,7 @@ export class RunJavascriptTool extends BaseTool {
     /**
      * @param {object} args
      * @param {string} args.script
-     * @returns {Promise<any>}
+     * @returns {Promise<Object>} Result with content and display
      */
     async execute({ script }) {
         const logs = [];
@@ -54,6 +54,10 @@ export class RunJavascriptTool extends BaseTool {
             },
         };
 
+        const formatLogs = () => logs.length > 0
+            ? '\nConsole output:\n' + logs.map(l => `[${l.type}] ${l.message}`).join('\n')
+            : '';
+
         try {
             // Use AsyncFunction
             // We pass 'console' as an argument to shadow the global console within the script scope
@@ -62,18 +66,13 @@ export class RunJavascriptTool extends BaseTool {
 
             const result = await fn(capturedConsole);
 
-            return {
-                searchResult: result, // Using 'searchResult' key for consistency with generic tool output viewing if applicable, or just result
-                result: result,
-                logs: logs,
-            };
+            const resultStr = result !== undefined ? JSON.stringify(result) : 'undefined';
+            const content = `Result: ${resultStr}${formatLogs()}`;
+            const display = `Script executed successfully`;
+            return this.createSuccessResponse(content, display);
         } catch (err) {
-            // We catch the error to return the logs along with the error message
-            return {
-                error: err.message,
-                stack: err.stack,
-                logs: logs,
-            };
+            const message = `Script error: ${err.message}${formatLogs()}`;
+            return this.handleError(message, err.constructor.name);
         }
     }
 }

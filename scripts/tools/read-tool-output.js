@@ -56,29 +56,28 @@ export class ReadToolOutputTool extends BaseTool {
 
         // Validate parameters
         if (!tool_call_id || typeof tool_call_id !== 'string') {
-            return this.handleError(new Error('tool_call_id is required and must be a string'));
+            return this.handleError('tool_call_id is required and must be a string', 'ValidationError');
         }
 
         if (!Number.isInteger(start_line) || start_line < 1) {
-            return this.handleError(new Error('start_line must be a positive integer'));
+            return this.handleError('start_line must be a positive integer', 'ValidationError');
         }
 
         if (!Number.isInteger(end_line) || end_line < start_line) {
-            return this.handleError(new Error('end_line must be >= start_line'));
+            return this.handleError('end_line must be >= start_line', 'ValidationError');
         }
 
         // Access the tool output buffer from ConversationManager
         const buffer = SimulacrumCore.conversationManager?.toolOutputBuffer;
 
         if (!buffer) {
-            return this.handleError(new Error('Tool output buffer not available'));
+            return this.handleError('Tool output buffer not available', 'Error');
         }
 
         if (!buffer.has(tool_call_id)) {
             return this.handleError(
-                new Error(
-                    `No stored output for tool call: ${tool_call_id}. The output may have expired or the ID is incorrect.`
-                )
+                `No stored output for tool call: ${tool_call_id}. The output may have expired or the ID is incorrect.`,
+                'NotFoundError'
             );
         }
 

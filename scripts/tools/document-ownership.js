@@ -87,41 +87,35 @@ export class DocumentOwnershipTool extends BaseTool {
         // Get the collection
         const collection = game.collections.get(document_type);
         if (!collection) {
-            return this.handleError(
-                new SimulacrumError(`Invalid document type: "${document_type}"`),
-                { document_type, document_id }
-            );
+            return this.handleError(`Invalid document type: "${document_type}"`, 'ValidationError');
         }
 
         // Get the document
         const doc = collection.get(document_id);
         if (!doc) {
             return this.handleError(
-                new SimulacrumError(`Document not found: "${document_id}" of type "${document_type}"`),
-                { document_type, document_id }
+                `Document not found: "${document_id}" of type "${document_type}"`,
+                'NotFoundError'
             );
         }
 
         // Validate ownership values
         if (!ownership || typeof ownership !== 'object') {
             return this.handleError(
-                new SimulacrumError('Ownership must be an object mapping user IDs to permission levels'),
-                { document_type, document_id }
+                'Ownership must be an object mapping user IDs to permission levels',
+                'ValidationError'
             );
         }
 
         const validationErrors = this._validateOwnershipObject(ownership);
         if (validationErrors.length > 0) {
             return this.handleError(
-                new SimulacrumError(`Invalid ownership values: ${validationErrors.join(', ')}`),
-                { document_type, document_id, ownership }
+                `Invalid ownership values: ${validationErrors.join(', ')}`,
+                'ValidationError'
             );
         }
 
         try {
-            // Store previous ownership for reporting
-            const previousOwnership = foundry.utils.deepClone(doc.ownership);
-
             // Update the document
             await doc.update({ ownership });
 
@@ -129,19 +123,13 @@ export class DocumentOwnershipTool extends BaseTool {
 
             // Build user-friendly ownership report
             const ownershipReport = this._buildOwnershipReport(doc.ownership);
+            const reportLines = ownershipReport.map(r => `  ${r.user}: ${r.level_name}`).join('\n');
 
-            return this.createSuccessResponse({
-                document_type,
-                document_id,
-                document_name: doc.name,
-                status: 'success',
-                message: `Successfully updated ownership for "${doc.name}"`,
-                previous_ownership: previousOwnership,
-                current_ownership: doc.ownership,
-                ownership_report: ownershipReport,
-            });
+            const content = `Successfully updated ownership for "${doc.name}" (${document_type})\n${reportLines}`;
+            const display = `Updated ownership for "${doc.name}"`;
+            return this.createSuccessResponse(content, display);
         } catch (error) {
-            return this.handleError(error, { document_type, document_id, ownership });
+            return this.handleError(error.message, error.constructor.name);
         }
     }
 
