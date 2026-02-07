@@ -70,12 +70,12 @@ function scoreResult(outcome) {
 
   // Scoring: start at 100, deduct points
   //  -10 per failed correctness check (not counting bonus checks)
-  //  -1  per failed tool call
+  //  -2  per failed tool call
   //  -1  per step after 10
   //  +1  per passed bonus check (can exceed 100 for S-tier)
   const correctnessDeduction = checks.filter(c => !c.pass && !c.bonus).length * 10;
   const bonusPoints = checks.filter(c => c.bonus && c.pass).length;
-  const failureDeduction = failures;
+  const failureDeduction = failures * 2;
   const stepDeduction = steps - 15;
   const score = dnf ? 0 : Math.max(0, 100 - correctnessDeduction - failureDeduction - stepDeduction) + bonusPoints;
 
@@ -107,7 +107,9 @@ function buildReadableLog(result, elapsedMs, model, outcome) {
   log += `Score: ${scoreDisplay} | Steps: ${result.steps} | Failures: ${result.failures} | Time: ${formatElapsed(elapsedMs)}\n`;
   log += `Outcome: ${outcome}\n`;
   if (!result.cancelled) {
-    log += `Deductions: correctness -${result.deductions.correctness}, failures -${result.deductions.failures}, steps -${result.deductions.steps}, bonus +${result.deductions.bonus}\n`;
+    let deductionLine = `Deductions: correctness -${result.deductions.correctness}, failures -${result.deductions.failures}, steps -${result.deductions.steps}`;
+    if (result.deductions.bonus > 0) deductionLine += `, bonus +${result.deductions.bonus}`;
+    log += deductionLine + '\n';
   }
 
   // Conversation body from shared logger
@@ -140,7 +142,9 @@ function buildScoreHtml(result, elapsedMs, model, outcome) {
   html += `<p><strong>Model:</strong> ${model}<br><strong>System:</strong> ${system}<br><strong>Outcome:</strong> ${outcome}</p>`;
   html += `<h2 style="color:${color}; margin:8px 0;">${scoreDisplay}</h2>`;
   html += `<p><strong>Steps:</strong> ${result.steps} tool calls | <strong>Failures:</strong> ${result.failures} | <strong>Time:</strong> ${formatElapsed(elapsedMs)}</p>`;
-  html += `<p style="color:#888; font-size:11px;">Deductions: correctness &minus;${result.deductions.correctness} | failures &minus;${result.deductions.failures} | steps &minus;${result.deductions.steps} | bonus +${result.deductions.bonus}</p>`;
+  let deductionHtml = `Deductions: correctness &minus;${result.deductions.correctness} | failures &minus;${result.deductions.failures} | steps &minus;${result.deductions.steps}`;
+  if (result.deductions.bonus > 0) deductionHtml += ` | bonus +${result.deductions.bonus}`;
+  html += `<p style="color:#888; font-size:11px;">${deductionHtml}</p>`;
   html += `<table style="width:100%; border-collapse:collapse; margin-top:8px;">`;
   for (const c of result.checks) {
     if (c.hidden) continue;
@@ -173,7 +177,9 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     { name: 'Simulacrum', value: moduleVersion, inline: true },
   ];
 
-  fields.push({ name: 'Deductions', value: `correctness \u2212${result.deductions.correctness}, failures \u2212${result.deductions.failures}, steps \u2212${result.deductions.steps}, bonus +${result.deductions.bonus}`, inline: false });
+  let deductionStr = `correctness \u2212${result.deductions.correctness}, failures \u2212${result.deductions.failures}, steps \u2212${result.deductions.steps}`;
+  if (result.deductions.bonus > 0) deductionStr += `, bonus +${result.deductions.bonus}`;
+  fields.push({ name: 'Deductions', value: deductionStr, inline: false });
 
   for (const c of result.checks) {
     if (c.hidden) continue;
@@ -378,7 +384,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : result.score + '/100'})` },
     content: `${scoreHtml}
       ${hasWebhook ? `<hr>
-        <p>Submit results to the Simulacrum Discord?</p>
+        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>?</p>
         <div class="form-group">
           <label>Username</label>
           <input name="grunk-username" type="text" placeholder="Anonymous">
