@@ -1393,6 +1393,11 @@ export class DocumentAPI {
    * @returns {Promise<object[]>} Result objects with minimal info
    */
   static async searchDocuments({ types, query, fields = ['name'], maxResults = 50 }) {
+    // Normalize fields: null/empty from LLM tool calls should fall back to default
+    if (!Array.isArray(fields) || fields.length === 0) {
+      fields = ['name'];
+    }
+
     const searchTypes = Array.isArray(types) && types.length ? types : this.getAllDocumentTypes();
     const results = [];
     const q = String(query || '').toLowerCase();
