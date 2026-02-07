@@ -106,9 +106,9 @@ class DocumentSearchTool extends BaseTool {
       }
 
       if (uuid) {
-        return `- @UUID[${uuid}]{${name}} (${type})`;
+        return `- @UUID[${uuid}]{${name}} (${type}, id: ${id})`;
       } else {
-        return '- **' + name + '** (ID: ' + id + ', Type: ' + type + ')';
+        return `- **${name}** (Type: ${type}, id: ${id})`;
       }
     });
 

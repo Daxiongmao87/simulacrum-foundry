@@ -127,7 +127,6 @@ export async function buildSystemPrompt() {
       game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.CriticalRules'),
       documentTypesInfo,
       game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.StrategicProtocol'),
-      game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.TaskManagement'),
       game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.ToolOperatives'),
       `## Available Macros\nThe following macros are available for execution via the execute_macro tool:\n${macrosList}`,
       game.i18n.localize('SIMULACRUM.SystemPrompt.Standard.CommunicationStyle_v2'),

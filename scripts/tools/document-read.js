@@ -62,7 +62,10 @@ export class DocumentReadTool extends BaseTool {
   async execute(parameters) {
     try {
       this.validateParameters(parameters, this.schema);
-      const { documentType, documentId, pack } = parameters;
+      const { documentType, pack } = parameters;
+      // Extract raw ID from UUID references that models may pass
+      // e.g. "@UUID[JournalEntry.BtDHCHehjqLjmMpV]{Sunken Halls}" → "BtDHCHehjqLjmMpV"
+      const documentId = BaseTool.extractRawId(parameters.documentId);
 
       if (!this.isValidDocumentType(documentType) && !pack) {
         return this._createErrorResponse(

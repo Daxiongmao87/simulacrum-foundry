@@ -167,9 +167,9 @@ class DocumentListTool extends BaseTool {
 
       // Fallback if we still can't determine UUID
       if (uuid) {
-        return `@UUID[${uuid}]{${name}}`;
+        return `@UUID[${uuid}]{${name}} (id: ${id})`;
       } else {
-        return `${name} (${id})`;
+        return `${name} (id: ${id})`;
       }
     });
 

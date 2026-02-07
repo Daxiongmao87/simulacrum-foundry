@@ -264,7 +264,12 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   if (addedToolCallsToConversation) {
     const content = currentResponse.content || null;
     const metadata = currentResponse.provider_metadata || null;
-    context.conversationManager.addMessage('assistant', content, currentResponse.toolCalls, null, metadata);
+    // Strip transient UI-only fields (justification, response) from stored tool_calls
+    // to reduce token accumulation in conversation history. These fields are already
+    // consumed for display before this point (justification for pending cards, response
+    // for message content). Original toolCalls are preserved for _executeToolCalls below.
+    const sanitizedToolCalls = _sanitizeToolCallsForHistory(currentResponse.toolCalls);
+    context.conversationManager.addMessage('assistant', content, sanitizedToolCalls, null, metadata);
     await context.conversationManager.save();
   }
 
@@ -628,6 +633,45 @@ async function _getNextAIResponse(toolResults, context) {
 }
 
 // --- Utilities ---
+
+/**
+ * Strip transient fields from tool_calls before storing in conversation history.
+ * justification and response are consumed for UI display before storage and
+ * don't need to persist in context sent to the API on subsequent calls.
+ * @param {Array} toolCalls - Original tool calls array
+ * @returns {Array} New array with transient fields removed from arguments
+ */
+function _sanitizeToolCallsForHistory(toolCalls) {
+  const TRANSIENT_FIELDS = ['justification', 'response'];
+
+  return toolCalls.map(tc => {
+    const argsRaw = tc.function?.arguments || tc.arguments;
+    if (!argsRaw) return tc;
+
+    try {
+      const parsed = typeof argsRaw === 'string' ? JSON.parse(argsRaw) : argsRaw;
+      let changed = false;
+      for (const field of TRANSIENT_FIELDS) {
+        if (field in parsed) {
+          delete parsed[field];
+          changed = true;
+        }
+      }
+      if (!changed) return tc;
+
+      const cleanArgs = JSON.stringify(parsed);
+
+      // Rebuild tool call with cleaned arguments, preserving structure
+      if (tc.function) {
+        return { ...tc, function: { ...tc.function, arguments: cleanArgs } };
+      }
+      return { ...tc, arguments: cleanArgs };
+    } catch (_e) {
+      // If arguments can't be parsed, return as-is
+      return tc;
+    }
+  });
+}
 
 function _truncateInitialResult(result, toolName) {
   const MAX_OUTPUT_CHARS = 10000;

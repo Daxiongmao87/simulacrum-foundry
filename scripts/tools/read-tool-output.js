@@ -15,7 +15,7 @@ export class ReadToolOutputTool extends BaseTool {
     constructor() {
         super(
             'read_tool_output',
-            'Read a portion of a previously returned tool output by line range. Use this when a tool output was too large and was stored with a reference. A range of 200 lines (e.g., start_line=1, end_line=200) is a good default chunk size.',
+            'Read stored tool output by line range. Use when output was compacted with a read_tool_output reference. Default chunk: 200 lines.',
             null,
             false
         );

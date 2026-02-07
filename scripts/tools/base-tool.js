@@ -151,6 +151,24 @@ export class BaseTool {
   }
 
   /**
+   * Extract raw document ID from a value that may be a UUID reference.
+   * Handles: "@UUID[JournalEntry.abc123]{Name}" → "abc123"
+   *          "@UUID[Compendium.dnd5e.monsters.abc123]{Name}" → "abc123"
+   *          "abc123" → "abc123" (passthrough)
+   * @param {string} input - Raw input from AI
+   * @returns {string} The extracted document ID
+   */
+  static extractRawId(input) {
+    if (!input || typeof input !== 'string') return input;
+    const match = input.match(/@UUID\[([^\]]+)\]/);
+    if (match) {
+      const segments = match[1].split('.');
+      return segments[segments.length - 1];
+    }
+    return input;
+  }
+
+  /**
    * Handle errors consistently across tools
    * @param {Error} error - The error to handle
    * @param {Object} contextContext for error handling

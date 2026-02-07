@@ -14,7 +14,7 @@ export class EndLoopTool extends BaseTool {
     constructor() {
         super(
             'end_loop',
-            'Terminate the tool loop and return control to the user. Call this when: (1) your task is complete, (2) you need user clarification, (3) you encountered an error, or (4) you are asking a question. The response parameter is your message to the user.',
+            'Exit the tool loop and return control to the user. The response parameter is your message to the user.',
             null,
             false, // Does not require confirmation
             true   // Response is required

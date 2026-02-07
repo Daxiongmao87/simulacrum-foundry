@@ -76,6 +76,11 @@ class DocumentDeleteTool extends BaseTool {
    * @returns {Object} Tool result
    */
   async execute(params) {
+    // Extract raw ID from UUID references that models may pass
+    if (typeof params.documentId === 'string') {
+      params.documentId = BaseTool.extractRawId(params.documentId);
+    }
+
     try {
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {

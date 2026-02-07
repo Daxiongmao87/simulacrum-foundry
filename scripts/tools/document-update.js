@@ -108,7 +108,7 @@ class DocumentUpdateTool extends BaseTool {
     }
     const normalizedParams = { ...params };
     if (typeof normalizedParams.documentId === 'string') {
-      normalizedParams.documentId = normalizedParams.documentId.trim();
+      normalizedParams.documentId = BaseTool.extractRawId(normalizedParams.documentId.trim());
     }
 
     try {

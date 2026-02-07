@@ -5,7 +5,7 @@ export class ManageTaskTool extends BaseTool {
   constructor() {
     super(
       'manage_task',
-      'Manage complex tasks by breaking them into steps, tracking progress, and updating state. Each step must have a "title" and "description" formatted as "<Title>: <Description>". IMPORTANT: The FINAL step MUST have title "Summary" (description can be a placeholder). When calling finish_task, you MUST provide the actual summary content describing what was accomplished.',
+      'Track multi-step tasks. Use start_task to plan, update_task to mark progress, finish_task to complete. The FINAL step MUST have title "Summary". finish_task requires a "summary" parameter describing what was accomplished.',
       {
         type: 'object',
         properties: {
