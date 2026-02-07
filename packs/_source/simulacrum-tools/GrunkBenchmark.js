@@ -8,7 +8,7 @@
 // ─── Configuration ───────────────────────────────────────────────
 const BENCHMARK_PROMPT = 'Create a goblin warrior named Grunk with 15 HP and a rusty shortsword.';
 const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1469565244916371469/yukpQGiNzTAcaEmsdcneHSCpUy8NyMVqJTH6UTW6kB4dokGm-XnLlG96MCSSy8DMlhyB';
+const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1469765782853386240/6Ve965B_xBywWgxAi-cMWa59ReunngcXQLOLB66doRUxOKB4jAOL3zn_VZa9YVnX2GMM';
 const DialogV2 = foundry.applications.api.DialogV2;
 
 // ─── Helpers ─────────────────────────────────────────────────────
