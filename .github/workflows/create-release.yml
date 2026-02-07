@@ -77,7 +77,7 @@ jobs:
           mkdir -p dist/${{ env.MODULE_ID }}
           cp -r assets dist/${{ env.MODULE_ID }}/
           cp -r lang dist/${{ env.MODULE_ID }}/
-          rsync -a --exclude='_source' --exclude='_staging' packs/ dist/${{ env.MODULE_ID }}/packs/
+          cp -r packs dist/${{ env.MODULE_ID }}/
           cp -r scripts dist/${{ env.MODULE_ID }}/
           cp -r styles dist/${{ env.MODULE_ID }}/
           cp -r templates dist/${{ env.MODULE_ID }}/
@@ -123,13 +123,13 @@ jobs:
           mv CHANGELOG.tmp CHANGELOG.md
           rm new_entry.txt
 
-      - name: Commit version bump and create tag
+      - name: Commit CHANGELOG.md and create tag
         run: |
           VERSION=${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md module.json
-          git commit -m "release: ${VERSION}" || echo "No changes to commit"
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for ${VERSION}" || echo "No changes to commit"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin main
           git push origin "${VERSION}"
