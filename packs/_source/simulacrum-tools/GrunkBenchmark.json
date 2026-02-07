@@ -1,0 +1,15 @@
+{
+    "_id": "jCVNhdzugkmzE5U3",
+    "_key": "!macros!jCVNhdzugkmzE5U3",
+    "name": "Grunk Benchmark",
+    "type": "script",
+    "author": "simulacrum",
+    "img": "modules/simulacrum/assets/grunk.png",
+    "scope": "global",
+    "folder": null,
+    "sort": 0,
+    "ownership": {
+        "default": 0
+    },
+    "flags": {}
+}
