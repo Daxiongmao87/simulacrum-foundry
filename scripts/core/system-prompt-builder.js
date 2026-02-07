@@ -51,7 +51,7 @@ export async function getAvailableMacrosList() {
   });
 
   // 2. Simulacrum Module Macros
-  const pack = game.packs.get('simulacrum.simulacrum-macros');
+  const pack = game.packs.get('simulacrum.simulacrum-tools');
   if (pack) {
     const index = await pack.getIndex();
     index.forEach(i => {
