@@ -329,37 +329,19 @@ You cannot respond without a tool call. Either continue with the next tool in yo
     _notifyLegacyToolResults(toolResults, context);
   }
 
-  // 7. Get Next Response
-  try {
-    const response = await _getNextAIResponse(toolResults, context);
-    return { action: 'continue', response, repeatCount, toolFailureAttempts };
-  } catch (error) {
-    logger.error('API Error during loop cycle:', error);
-    toolFailureAttempts++;
-    if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
-      return { action: 'return', value: await _runToolFailureFallback(context) };
+  // 7. Get Next Response (with retry on transient API errors)
+  for (let apiAttempt = 0; apiAttempt < MAX_TOOL_FAILURE_ATTEMPTS; apiAttempt++) {
+    try {
+      const response = await _getNextAIResponse(toolResults, context);
+      return { action: 'continue', response, repeatCount, toolFailureAttempts };
+    } catch (error) {
+      logger.error(`API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`, error);
+      if (apiAttempt + 1 >= MAX_TOOL_FAILURE_ATTEMPTS) {
+        return { action: 'return', value: await _runToolFailureFallback(context) };
+      }
+      const delayMs = getRetryDelayMs(apiAttempt);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
-    // TODO: Ideally we should delay here before retrying or use specific API retry logic
-    // For now, we treat it as a tool failure attempt to prevent infinite loops on broken APIs
-
-    // Construct a temporary error response to trigger retry logic in next cycle or falling back
-    // Since we can't get a valid response, we might need to manually trigger refusal handling logic
-    // But _handleToolRefusal needs a response object.
-
-    // Force a retry by returning a fake "failure" response that will be caught by isToolCallFailure next time?
-    // Or just recurse?
-    // Simpler: Return a "continue" with the SAME response (if we didn't update it) but increment failure count?
-    // But we need NEW response.
-
-    // If we return action 'continue' without response? loop breaks?
-    // _runLoopIteration: currentResponse = cycleResult.response.
-
-    // We must return a valid response structure to continue.
-    // If we failed to get one, we are in trouble.
-    // Fallback immediately if we can't get response?
-    // OR try to return a dummy response that says "I failed"?
-
-    return { action: 'return', value: await _runToolFailureFallback(context) };
   }
 }
 
@@ -416,27 +398,10 @@ async function _executeToolCalls(toolCalls, context) {
       // Log tool call before execution (must happen before any early-exit so rejections appear in logs)
       interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
 
-      // Enforce justification on every tool call — required for approval dialogs and audit trail.
-      // The AI-facing schema marks it required, but models may skip it; this is the hard enforcement.
+      // Warn if justification is missing — the AI-facing schema marks it required, but
+      // models (especially smaller ones) may skip it. Log a warning but still execute.
       if (!parsedArgs.justification || typeof parsedArgs.justification !== 'string' || !parsedArgs.justification.trim()) {
-        result = {
-          content: `Tool call rejected: missing required "justification" parameter. Every tool call must include a "justification" string explaining why this action is necessary.`,
-          error: { message: 'Missing required parameter: justification', type: 'MISSING_JUSTIFICATION' },
-        };
-        isSuccess = false;
-
-        if (currentToolSupport === true) {
-          conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-          await conversationManager.save();
-        }
-
-        const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
-        results.push(resultObj);
-        interactionLogger.logToolResult(toolCall.id, result, isSuccess, 0);
-        if (onToolResult) {
-          await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
-        }
-        continue;
+        logger.warn(`Tool call "${toolName}" missing justification parameter`);
       }
 
       // Permission check for destructive tools
