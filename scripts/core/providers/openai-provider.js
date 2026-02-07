@@ -52,8 +52,6 @@ export class OpenAIProvider extends AIProvider {
         body: JSON.stringify({
           model: this.model,
           messages: messages,
-          max_tokens: this.config.maxTokens || 1000,
-          temperature: this.config.temperature || 0.7,
         }),
       });
 

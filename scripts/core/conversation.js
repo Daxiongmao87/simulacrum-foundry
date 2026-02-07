@@ -221,7 +221,7 @@ class ConversationManager {
       const response = await aiClient.chat(
         [{ role: 'user', content: prompt }],
         null,
-        { maxTokens: 500, isBackground: true }
+        { isBackground: true }
       );
 
       const newSummary = response?.choices?.[0]?.message?.content || '';

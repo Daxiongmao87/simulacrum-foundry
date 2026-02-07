@@ -41,14 +41,12 @@ export class AIClient {
    * @param {string} [config.apiKey] - API key for the AI provider
    * @param {string} [config.baseURL] - Base URL for API requests
    * @param {string} [config.model] - Model name to use
-   * @param {number} [config.maxTokens=4096] - Maximum tokens for responses
    * @throws {SimulacrumError} When unsupported provider baseURL is provided
    */
   constructor(config = {}) {
     this.apiKey = config.apiKey ? config.apiKey.trim() : config.apiKey;
     this.baseURL = config.baseURL;
     this.model = config.model;
-    this.maxTokens = config.maxTokens || 4096;
 
     // Context length will be dynamically derived when needed
     this._fallbackContextLimit = 32000;
@@ -63,7 +61,6 @@ export class AIClient {
       // Ignore settings access errors (e.g. during tests)
     }
 
-    this.temperature = config.temperature;
     this.providers = new Map();
     this.defaultProvider = null;
   }
@@ -272,41 +269,8 @@ export class AIClient {
     // Task-14: Apply request delay to prevent rate limiting
     await this._applyRequestDelay();
 
-    const contextLength = this.getContextLength();
-    const estimatedPromptTokens = messages.reduce((acc, message) => {
-      const content = message.content || '';
-      const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
-      return acc + Math.ceil((content.length + toolCalls.length) / 4);
-    }, 0);
-
-    const estimatedToolTokens = tools ? Math.ceil(JSON.stringify(tools).length / 4) : 0;
-    const totalEstimatedPromptTokens = estimatedPromptTokens + estimatedToolTokens;
-
-    const buffer = 200;
-    let dynamicMaxTokens = contextLength - totalEstimatedPromptTokens - buffer;
-
-    if (dynamicMaxTokens < 1) {
-      if (isDebugEnabled()) {
-        createLogger('AIDiagnostics').warn(
-          'Prompt is very close to the context limit. Setting max_tokens to a small value.'
-        );
-      }
-      dynamicMaxTokens = 100;
-    }
-
-    const configuredMax =
-      typeof options.maxTokens === 'number'
-        ? options.maxTokens
-        : typeof this.maxTokens === 'number'
-          ? this.maxTokens
-          : dynamicMaxTokens;
-    const maxTokens = Math.min(dynamicMaxTokens, configuredMax);
-
     if (isDebugEnabled()) {
       createLogger('AIDiagnostics').info('Chat request context:', {
-        contextLength,
-        promptTokens: totalEstimatedPromptTokens,
-        maxTokens,
         messagesCount: messages.length,
         hasTools: !!tools,
         toolCount: tools ? tools.length : 0,
@@ -324,8 +288,6 @@ export class AIClient {
         ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
         ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
       })),
-      max_tokens: maxTokens,
-      temperature: typeof this.temperature === 'number' ? this.temperature : undefined,
     };
 
     if (tools) {

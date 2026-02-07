@@ -133,7 +133,6 @@ class SimulacrumCore {
       const apiKey = game.settings.get('simulacrum', 'apiKey');
       const baseURL = game.settings.get('simulacrum', 'baseURL');
       const model = game.settings.get('simulacrum', 'model');
-      const temperature = game.settings.get('simulacrum', 'temperature');
 
       // Do not enforce API key at this layer. Some endpoints may not require it.
 
@@ -142,7 +141,6 @@ class SimulacrumCore {
         apiKey,
         baseURL,
         model,
-        temperature,
       });
       this.logger.info('AI Client Initialized');
 
