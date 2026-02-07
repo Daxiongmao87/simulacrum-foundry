@@ -71,12 +71,12 @@ function scoreResult(outcome) {
   // Scoring: start at 100, deduct points
   //  -10 per failed correctness check (not counting bonus checks)
   //  -1  per failed tool call
-  //  -1  per 10 steps (floor)
+  //  -1  per step after 10
   //  +1  per passed bonus check (can exceed 100 for S-tier)
   const correctnessDeduction = checks.filter(c => !c.pass && !c.bonus).length * 10;
   const bonusPoints = checks.filter(c => c.bonus && c.pass).length;
   const failureDeduction = failures;
-  const stepDeduction = Math.floor(steps / 10);
+  const stepDeduction = steps - 15;
   const score = dnf ? 0 : Math.max(0, 100 - correctnessDeduction - failureDeduction - stepDeduction) + bonusPoints;
 
   return {
@@ -100,39 +100,22 @@ function formatElapsed(ms) {
 }
 
 function buildReadableLog(result, elapsedMs, model, outcome) {
-  const logger = window.SimulacrumLogger;
-  const entries = logger ? logger.getEntries() : [];
-  const system = game.system?.id || 'unknown';
-  const moduleVersion = game.modules.get('simulacrum')?.version || 'unknown';
-  const date = new Date().toISOString();
   const scoreDisplay = result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : `${result.score}/100`;
 
+  // Benchmark-specific header
   let log = `=== Grunk Benchmark Log ===\n`;
-  log += `Model: ${model} | System: ${system} | Simulacrum: ${moduleVersion}\n`;
-  log += `Date: ${date} | Score: ${scoreDisplay} | Steps: ${result.steps} | Failures: ${result.failures} | Time: ${formatElapsed(elapsedMs)}\n`;
+  log += `Score: ${scoreDisplay} | Steps: ${result.steps} | Failures: ${result.failures} | Time: ${formatElapsed(elapsedMs)}\n`;
   log += `Outcome: ${outcome}\n`;
   if (!result.cancelled) {
     log += `Deductions: correctness -${result.deductions.correctness}, failures -${result.deductions.failures}, steps -${result.deductions.steps}, bonus +${result.deductions.bonus}\n`;
   }
-  log += `\n--- Conversation ---\n`;
 
-  for (const entry of entries) {
-    const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '??:??:??';
-    if (entry.type === 'user') {
-      log += `[${time}] User: ${entry.content || ''}\n`;
-    } else if (entry.type === 'assistant') {
-      log += `[${time}] Assistant: ${(entry.content || '').substring(0, 500)}\n`;
-    } else if (entry.type === 'tool_call') {
-      const tn = entry.metadata?.toolName || 'unknown';
-      const args = entry.metadata?.arguments ? JSON.stringify(entry.metadata.arguments) : '';
-      log += `[${time}] Tool: ${tn}(${args.substring(0, 300)})\n`;
-    } else if (entry.type === 'tool_result') {
-      const ok = entry.metadata?.success !== false ? 'OK' : 'FAIL';
-      const content = (entry.content || '').substring(0, 300);
-      log += `[${time}] Result [${ok}]: ${content}\n`;
-    }
-  }
+  // Conversation body from shared logger
+  const logger = window.SimulacrumLogger;
+  log += `\n`;
+  log += logger ? logger.buildReadableLog() : '(No interaction log available)\n';
 
+  // Score breakdown
   log += `\n--- Score Breakdown ---\n`;
   for (const c of result.checks) {
     if (c.hidden) continue;
@@ -198,7 +181,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
   }
 
   const embed = {
-    title: '\ud83c\udff0 Grunk Benchmark Result',
+    title: ':grunk: Grunk Benchmark Result',
     color,
     fields,
     footer: { text: `Submitted by ${username || 'Anonymous'}` },

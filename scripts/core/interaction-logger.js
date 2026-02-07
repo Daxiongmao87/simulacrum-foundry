@@ -255,6 +255,44 @@ class InteractionLogger {
     }
 
     /**
+     * Build a human-readable diagnostic log from current entries.
+     * @returns {string} Formatted text log
+     */
+    buildReadableLog() {
+        const model = typeof game !== 'undefined' ? (game.settings?.get('simulacrum', 'model') ?? 'unknown') : 'unknown';
+        const system = game?.system?.id || 'unknown';
+        const moduleVersion = game?.modules?.get('simulacrum')?.version || 'unknown';
+        const date = new Date().toISOString();
+
+        const toolCalls = this._entries.filter(e => e.type === EntryType.TOOL_CALL).length;
+        const failures = this._entries.filter(e => e.type === EntryType.TOOL_RESULT && e.metadata?.success === false).length;
+
+        let log = `=== Simulacrum Interaction Log ===\n`;
+        log += `Model: ${model} | System: ${system} | Simulacrum: ${moduleVersion}\n`;
+        log += `Date: ${date} | Entries: ${this._entries.length} | Tool Calls: ${toolCalls} | Failures: ${failures}\n`;
+        log += `\n--- Conversation ---\n`;
+
+        for (const entry of this._entries) {
+            const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '??:??:??';
+            if (entry.type === EntryType.USER) {
+                log += `[${time}] User: ${entry.content || ''}\n`;
+            } else if (entry.type === EntryType.ASSISTANT) {
+                log += `[${time}] Assistant: ${(entry.content || '').substring(0, 500)}\n`;
+            } else if (entry.type === EntryType.TOOL_CALL) {
+                const tn = entry.metadata?.toolName || 'unknown';
+                const args = entry.metadata?.arguments ? JSON.stringify(entry.metadata.arguments) : '';
+                log += `[${time}] Tool: ${tn}(${args.substring(0, 300)})\n`;
+            } else if (entry.type === EntryType.TOOL_RESULT) {
+                const ok = entry.metadata?.success !== false ? 'OK' : 'FAIL';
+                const content = (entry.content || '').substring(0, 300);
+                log += `[${time}] Result [${ok}]: ${content}\n`;
+            }
+        }
+
+        return log;
+    }
+
+    /**
      * Export log as JSON string
      * @returns {string} JSON export
      */
@@ -276,22 +314,19 @@ class InteractionLogger {
     }
 
     /**
-     * Download log as JSON file
+     * Download log as human-readable text file.
      * Uses exact pattern from Foundry Core (client/utils/helpers.mjs)
-     * using text/json to ensure correct behavior.
      */
     downloadAsFile() {
-        const jsonData = this.export();
+        const textData = this.buildReadableLog();
         const dateStr = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-        const filename = `simulacrum-log-${dateStr}.json`;
+        const filename = `simulacrum-log-${dateStr}.txt`;
 
-        // Implementation matches foundry.utils.saveDataToFile
-        const blob = new Blob([jsonData], { type: 'text/json' });
+        const blob = new Blob([textData], { type: 'text/plain' });
         const a = document.createElement('a');
         a.href = window.URL.createObjectURL(blob);
         a.download = filename;
 
-        // Dispatch a click event to the element
         a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
         setTimeout(() => window.URL.revokeObjectURL(a.href), 100);
 
