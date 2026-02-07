@@ -151,9 +151,11 @@ export class DocumentCreateTool extends BaseTool {
       // Generic Schema Migration (String -> Object promotion)
       await this._promoteSystemFields(documentType, data);
 
-      // Validate image URLs (Task-04)
-      await this.validateImageUrls(data);
-      if (parameters.folder) await this.validateImageUrls({ folder: parameters.folder }); // unlikely but consistent
+      // Validate image URLs — invalid ones are blanked, not rejected
+      const imageWarnings = await this.validateImageUrls(data);
+
+      // Correct malformed UUIDs using schema-derived reference fields
+      const uuidWarnings = this.validateUuids(documentType, data, parameters.pack);
 
       // Mock DocumentAPI for testing - in real implementation, this would use this.documentAPI
       const { DocumentAPI } = await import('../core/document-api.js');
@@ -253,6 +255,10 @@ export class DocumentCreateTool extends BaseTool {
         message,
         document: fullDocument,
       };
+      const allWarnings = [...imageWarnings, ...uuidWarnings];
+      if (allWarnings.length > 0) {
+        contentPayload.warnings = allWarnings;
+      }
 
       return {
         content: JSON.stringify(contentPayload, null, 2),
@@ -260,6 +266,13 @@ export class DocumentCreateTool extends BaseTool {
         document: fullDocument,
       };
     } catch (error) {
+      // Attempt to auto-correct invalid document ID fields and retry once
+      try {
+        const retryResult = await this.#retryWithCorrectedIds(error, parameters);
+        if (retryResult) return retryResult;
+      } catch {
+        // Retry also failed — fall through to original error response
+      }
       return ValidationErrorHandler.createToolErrorResponse(
         error,
         'create',
@@ -374,6 +387,138 @@ export class DocumentCreateTool extends BaseTool {
     }
 
     return false;
+  }
+
+  /**
+   * Attempt to fix invalid document ID fields detected by Foundry validation and retry creation.
+   * Foundry requires ID fields to match /^[a-zA-Z0-9]{16}$/. When the AI provides invalid IDs
+   * (e.g. a folder name instead of a folder ID), we detect the validation error, correct the
+   * fields, and retry the creation — reporting what was auto-corrected.
+   * @param {Error} error - The original validation error from Foundry
+   * @param {Object} parameters - The tool parameters (data is mutated in place)
+   * @returns {Promise<Object|null>} Success response with warnings, or null if not an ID error
+   */
+  async #retryWithCorrectedIds(error, parameters) {
+    const parsed = ValidationErrorHandler.parseFoundryValidationError(error);
+    if (!parsed) return null;
+
+    const ID_ERROR = '16-character alphanumeric';
+    const corrections = [];
+
+    for (const [fieldPath, detail] of Object.entries(parsed.details)) {
+      if (!detail.error?.includes(ID_ERROR)) continue;
+
+      const originalValue = this.#getFieldValue(parameters.data, fieldPath);
+      let correctedValue;
+
+      if (fieldPath === 'folder' || fieldPath.endsWith('.folder')) {
+        // For folder fields: try to resolve by name, otherwise null (root level)
+        correctedValue = this.#resolveFolderByName(originalValue, parameters.documentType);
+      } else {
+        // For other ID fields: remove and let Foundry auto-generate
+        correctedValue = null;
+      }
+
+      this.#setFieldValue(parameters.data, fieldPath, correctedValue);
+      corrections.push({ field: fieldPath, original: originalValue, corrected: correctedValue });
+    }
+
+    if (corrections.length === 0) return null;
+
+    // Retry the creation with corrected data
+    const { DocumentAPI } = await import('../core/document-api.js');
+    let document;
+    if (parameters.pack) {
+      const documentClass = CONFIG[parameters.documentType]?.documentClass;
+      document = await documentClass.create(parameters.data, { pack: parameters.pack });
+    } else {
+      document = await DocumentAPI.createDocument(parameters.documentType, parameters.data);
+    }
+
+    if (!document) return null;
+
+    // Verify the created document
+    const verificationOpts = { includeEmbedded: true };
+    if (parameters.pack) verificationOpts.pack = parameters.pack;
+
+    const fullDocument = await DocumentAPI.getDocument(
+      parameters.documentType,
+      document.id || document._id,
+      verificationOpts
+    );
+
+    if (fullDocument) {
+      documentReadRegistry.registerRead(
+        parameters.documentType,
+        fullDocument.id || fullDocument._id,
+        fullDocument
+      );
+    }
+
+    // Build correction warnings so the AI knows what was changed
+    const warnings = corrections.map(c => {
+      if (c.corrected === null) {
+        return `Auto-corrected "${c.field}": invalid ID "${c.original}" was removed (set to null). Foundry document IDs must be exactly 16 alphanumeric characters.`;
+      }
+      return `Auto-corrected "${c.field}": invalid value "${c.original}" was resolved to folder ID "${c.corrected}".`;
+    });
+
+    const message = `Created @UUID[${parameters.documentType}.${fullDocument._id || fullDocument.id}]{${fullDocument.name || fullDocument._id}}`;
+    const contentPayload = { message, document: fullDocument, warnings };
+
+    return {
+      content: JSON.stringify(contentPayload, null, 2),
+      display: `Created **${fullDocument.name || fullDocument._id || fullDocument.id}** (${parameters.documentType})`,
+      document: fullDocument,
+    };
+  }
+
+  /**
+   * Try to resolve a folder by name when an invalid ID was provided.
+   * @param {string} value - The invalid folder value (might be a name)
+   * @param {string} documentType - The document type to match folder type
+   * @returns {string|null} Valid folder ID or null
+   */
+  #resolveFolderByName(value, documentType) {
+    if (!value || typeof value !== 'string') return null;
+    try {
+      const folder = game.folders?.find(f =>
+        f.name?.toLowerCase() === value.toLowerCase() &&
+        f.type === documentType
+      );
+      return folder?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get a value from an object by dot-separated field path.
+   */
+  #getFieldValue(obj, path) {
+    const parts = path.split('.');
+    let current = obj;
+    for (const part of parts) {
+      if (current == null) return undefined;
+      current = current[part];
+    }
+    return current;
+  }
+
+  /**
+   * Set a value on an object by dot-separated field path.
+   */
+  #setFieldValue(obj, path, value) {
+    const parts = path.split('.');
+    const last = parts.pop();
+    let current = obj;
+    for (const part of parts) {
+      if (current[part] == null || typeof current[part] !== 'object') {
+        current[part] = {};
+      }
+      current = current[part];
+    }
+    current[last] = value;
   }
 
   /**
