@@ -94,7 +94,7 @@ class MessageQueueManager {
         }
 
         // Render logic
-        const html = await renderTemplate('modules/simulacrum/templates/simulacrum/message-queue.hbs', {
+        const html = await foundry.applications.handlebars.renderTemplate('modules/simulacrum/templates/simulacrum/message-queue.hbs', {
             messages: this.queue,
             isProcessing: this.isProcessing
         });

@@ -23,8 +23,8 @@ export class SidebarEventHandlers {
     // Clear input immediately
     input.value = '';
 
-    // Set thinking state immediately and trigger render
-    app.setThinking(true);
+    // Set processing state immediately and trigger render
+    app.setProcessing(true);
 
     try {
       await app.ensureChatHandler();
@@ -84,7 +84,7 @@ export class SidebarEventHandlers {
       createLogger('SidebarEventHandlers').error('Error processing message', error);
       ui.notifications?.error(`Simulacrum: ${error.message}`, { permanent: false });
     } finally {
-      app.setThinking(false);
+      app.setProcessing(false);
     }
   }
 

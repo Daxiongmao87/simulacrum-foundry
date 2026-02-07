@@ -60,9 +60,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   /** Private fields */
   #isAtBottom = true;
   #needsScroll = false;
-  #isThinking = false;
-  #thinkingWordIndex = 0;
-  #thinkingIntervalId = null;
+  #isProcessing = false;
+  #processingWordIndex = 0;
+  #processingIntervalId = null;
   #notificationsElement;
   #inputElement;
   #chatControls;
@@ -173,7 +173,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       spinnerEl?.classList.remove('retry-icon');
       // Restore normal label
       if (labelEl) {
-        labelEl.textContent = this._getProcessLabel() || 'Thinking...';
+        labelEl.textContent = this._getProcessLabel();
       }
     }
   }
@@ -366,15 +366,15 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       await this._syncFromCoreConversation();
     }
 
-    const processActive = this.#isThinking || this._activeProcesses.size > 0 || this.#isRetrying;
+    const processActive = this.#isProcessing || this._activeProcesses.size > 0 || this.#isRetrying;
     const processLabel = this._getProcessLabel();
 
     if (isDebugEnabled()) {
       this.logger.debug(
         '_prepareContext processActive:',
         processActive,
-        'isThinking:',
-        this.#isThinking
+        'isProcessing:',
+        this.#isProcessing
       );
     }
 
@@ -497,20 +497,15 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
 
     let label = Array.from(this._activeProcesses.values()).slice(-1)[0]?.label || null;
-    if (!label && this.#isThinking) {
-      const thinkingWords = game.i18n?.translations?.SIMULACRUM?.ThinkingWords || [
-        'Divining...',
-        'Scrying...',
-        'Weaving...',
-        'Conjuring...',
-      ];
-      label = thinkingWords[this.#thinkingWordIndex % thinkingWords.length];
+    if (!label && this.#isProcessing) {
+      const words = game.i18n.translations.SIMULACRUM.ProcessingWords;
+      label = words[this.#processingWordIndex % words.length];
     }
     return label;
   }
 
   async _syncFromCoreConversation() {
-    // Prevent syncing while the agent is actively processing/thinking.
+    // Prevent syncing while the agent is actively processing.
     // This avoids race conditions where a stale Core State (triggered by a document update hook)
     // overwrites the live DOM updates (like Tool Cards) that the ChatHandler is managing.
     if (this.isProcessing()) {
@@ -633,36 +628,43 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   /* Public Interface for Handlers */
 
   isProcessing() {
-    return this.#isThinking || this._activeProcesses.size > 0;
+    return this.#isProcessing || this._activeProcesses.size > 0;
   }
 
-  setThinking(active) {
-    this.#isThinking = active;
+  setProcessing(active) {
+    this.#isProcessing = active;
     if (active) {
-      this.#thinkingWordIndex = 0;
+      this.#processingWordIndex = 0;
       this.#needsScroll = true;
       this.render({ parts: ['log', 'input'] });
-      this.#startThinkingInterval();
+      this.#startProcessingInterval();
     } else {
-      this.#stopThinkingInterval();
+      this.#stopProcessingInterval();
+      const textarea = this.element?.querySelector('textarea[name="message"]');
+      const preservedText = textarea?.value || '';
       this.#needsScroll = true;
       this.render({ parts: ['log', 'input'] });
+      if (preservedText) {
+        requestAnimationFrame(() => {
+          const restored = this.element?.querySelector('textarea[name="message"]');
+          if (restored) restored.value = preservedText;
+        });
+      }
     }
   }
 
-  #startThinkingInterval() {
-    if (this.#thinkingIntervalId) clearInterval(this.#thinkingIntervalId);
-    this.#thinkingIntervalId = setInterval(() => {
-      this.#thinkingWordIndex++;
-      // Update label directly in DOM to avoid destroying ephemeral elements (confirmation dialogs)
-      this._updateThinkingLabelInDOM();
+  #startProcessingInterval() {
+    if (this.#processingIntervalId) clearInterval(this.#processingIntervalId);
+    this.#processingIntervalId = setInterval(() => {
+      this.#processingWordIndex++;
+      this._updateProcessingLabelInDOM();
     }, 2500);
   }
 
   /**
-   * Update the thinking label text directly in DOM without full re-render
+   * Update the processing label text directly in DOM without full re-render
    */
-  _updateThinkingLabelInDOM() {
+  _updateProcessingLabelInDOM() {
     const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
       this.element?.querySelector?.('.chat-scroll');
     if (!chatScroll) return;
@@ -672,21 +674,15 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     const labelEl = processStatusMsg.querySelector('.process-status .label');
     if (labelEl) {
-      // Get current thinking word
-      const thinkingWords = game.i18n?.translations?.SIMULACRUM?.ThinkingWords || [
-        'Divining...',
-        'Scrying...',
-        'Weaving...',
-        'Conjuring...',
-      ];
-      labelEl.textContent = thinkingWords[this.#thinkingWordIndex % thinkingWords.length];
+      const words = game.i18n.translations.SIMULACRUM.ProcessingWords;
+      labelEl.textContent = words[this.#processingWordIndex % words.length];
     }
   }
 
-  #stopThinkingInterval() {
-    if (this.#thinkingIntervalId) {
-      clearInterval(this.#thinkingIntervalId);
-      this.#thinkingIntervalId = null;
+  #stopProcessingInterval() {
+    if (this.#processingIntervalId) {
+      clearInterval(this.#processingIntervalId);
+      this.#processingIntervalId = null;
     }
   }
 
@@ -745,7 +741,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
       // Render the single message template and append to DOM
       const templatePath = 'modules/simulacrum/templates/simulacrum/message.hbs';
-      const html = await renderTemplate(templatePath, msg);
+      const html = await foundry.applications.handlebars.renderTemplate(templatePath, msg);
 
       const chatScroll = this.element?.[0]?.querySelector('.chat-scroll') ||
         this.element?.querySelector?.('.chat-scroll');
@@ -988,7 +984,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       this.#currentAbortController = null;
     }
     this._activeProcesses.clear();
-    this.setThinking(false);
+    this.setProcessing(false);
     this._updateTaskTracker(null, false);
     return true;
   }
@@ -1013,7 +1009,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     // Render the confirmation template
     const templatePath = 'modules/simulacrum/templates/simulacrum/tool-confirmation.hbs';
-    const html = await renderTemplate(templatePath, {
+    const html = await foundry.applications.handlebars.renderTemplate(templatePath, {
       toolName,
       toolCallId,
       displayName,

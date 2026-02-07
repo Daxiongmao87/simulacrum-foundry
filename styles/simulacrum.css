@@ -612,7 +612,7 @@
 }
 
 /* ---------------------------------------- */
-/*  Thinking Indicator Styling (Task-17)   */
+/*  Processing Indicator Styling (Task-17) */
 /* ---------------------------------------- */
 
 /* Process status message container - transparent, no border */
@@ -639,7 +639,7 @@
   font-style: italic;
 }
 
-/* Thinking text - warm gold to match established palette */
+/* Processing text - warm gold to match established palette */
 #simulacrum .process-status .label,
 .simulacrum-sidebar-tab .process-status .label {
   padding-left: 4px;
