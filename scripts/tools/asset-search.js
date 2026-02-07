@@ -37,7 +37,6 @@ export class AssetSearchTool extends BaseTool {
             }
         );
 
-        this.MAX_RESULTS = 50;
     }
 
     /**
@@ -71,7 +70,7 @@ export class AssetSearchTool extends BaseTool {
         }
 
         try {
-            const results = await assetIndexService.search(query, type, source, this.MAX_RESULTS);
+            const results = await assetIndexService.search(query, type, source);
             const stats = assetIndexService.getStats();
 
             return this._formatResults(results, query, stats);

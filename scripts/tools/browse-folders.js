@@ -36,7 +36,6 @@ export class BrowseFoldersTool extends BaseTool {
             }
         );
 
-        this.MAX_RESULTS = 50;
     }
 
     /**
@@ -121,7 +120,7 @@ export class BrowseFoldersTool extends BaseTool {
 
     async _search(query, source) {
         const sourceFilter = source === 'all' ? 'all' : (source === 'public' ? 'core' : 'user');
-        const results = await assetIndexService.searchFolders(query, sourceFilter, this.MAX_RESULTS);
+        const results = await assetIndexService.searchFolders(query, sourceFilter);
         const stats = assetIndexService.getStats();
 
         if (results.length === 0) {

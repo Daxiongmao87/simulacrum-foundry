@@ -490,10 +490,9 @@ class AssetIndexService {
      * @param {string} query - Search query (filename or path segment)
      * @param {string} type - File type filter (image, audio, video, text, font, any)
      * @param {string} sourceFilter - Source filter (all, user, core)
-     * @param {number} maxResults - Maximum results to return
      * @returns {Promise<string[]>} Array of matching file paths
      */
-    async search(query, type = 'any', sourceFilter = 'all', maxResults = 50) {
+    async search(query, type = 'any', sourceFilter = 'all') {
         // Wait for initial index if not yet complete
         if (this._initialIndexPromise) {
             await this._initialIndexPromise;
@@ -522,7 +521,7 @@ class AssetIndexService {
             request.onsuccess = (event) => {
                 const cursor = event.target.result;
 
-                if (!cursor || results.length >= maxResults) {
+                if (!cursor) {
                     resolve(results);
                     return;
                 }
@@ -570,10 +569,9 @@ class AssetIndexService {
      * Search the index for matching folders
      * @param {string} query - Search query (folder name or path segment)
      * @param {string} sourceFilter - Source filter (all, user, core)
-     * @param {number} maxResults - Maximum results to return
      * @returns {Promise<string[]>} Array of matching folder paths
      */
-    async searchFolders(query, sourceFilter = 'all', maxResults = 50) {
+    async searchFolders(query, sourceFilter = 'all') {
         // Wait for initial index if not yet complete
         if (this._initialIndexPromise) {
             await this._initialIndexPromise;
@@ -594,7 +592,7 @@ class AssetIndexService {
             request.onsuccess = (event) => {
                 const cursor = event.target.result;
 
-                if (!cursor || results.length >= maxResults) {
+                if (!cursor) {
                     resolve(results);
                     return;
                 }
