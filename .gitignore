@@ -9,6 +9,7 @@ specs/
 
 # Build outputs
 dist/
+scripts/build-info.js
 
 # Node modules
 node_modules/
