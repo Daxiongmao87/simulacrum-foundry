@@ -19,7 +19,7 @@ import {
   getRetryDelayMs,
   delayWithSignal,
 } from '../utils/retry-helpers.js';
-import { emitProcessStatus, emitRetryStatus } from './hook-manager.js';
+import { emitProcessStatus, emitRetryStatus, SimulacrumHooks } from './hook-manager.js';
 import { toolPermissionManager, PermissionState } from './tool-permission-manager.js';
 import { interactionLogger } from './interaction-logger.js';
 
@@ -312,6 +312,15 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   const endLoopResult = toolResults.find(r => r.result?._endLoop === true || r.result?.data?._endLoop === true);
   if (endLoopResult) {
     if (isDebugEnabled()) logger.debug('end_loop tool detected; terminating loop');
+
+    // Auto-close task tracker if manage_task has an active task
+    const manageTaskTool = toolRegistry.getTool('manage_task');
+    if (manageTaskTool?.currentTask) {
+      if (isDebugEnabled()) logger.debug('end_loop: closing orphaned task tracker');
+      Hooks.callAll(SimulacrumHooks.TASK_FINISHED);
+      manageTaskTool.currentTask = null;
+    }
+
     return { action: 'break' };
   }
 

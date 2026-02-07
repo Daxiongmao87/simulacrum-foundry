@@ -14,10 +14,10 @@ export class EndLoopTool extends BaseTool {
     constructor() {
         super(
             'end_loop',
-            'Exit the tool loop and return control to the user. The response parameter is your message to the user.',
+            'Exit the tool loop and return control to the user. Include a response if your last output was a tool call (i.e. no accompanying text message).',
             null,
             false, // Does not require confirmation
-            true   // Response is required
+            false  // Response is optional
         );
     }
 
