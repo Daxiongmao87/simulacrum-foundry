@@ -210,20 +210,18 @@ export class BaseTool {
   }
 
   /**
-   * Validate image URLs in data object (recursive)
-   * @param {Object} data - Data to validate
-   * @throws {SimulacrumError} if invalid URL found
+   * Validate image URLs in data object (recursive).
+   * Invalid images are blanked out so Foundry uses its default icon.
+   * @param {Object} data - Data to validate (modified in place)
+   * @returns {Promise<string[]>} Warning messages for any cleared images
    */
   async validateImageUrls(data) {
-    if (!data || typeof data !== 'object') return;
+    if (!data || typeof data !== 'object') return [];
 
-    const validationPromises = [];
+    const entries = [];
 
-    // Helper to collect promises
-    const collectPromises = obj => {
+    const collect = obj => {
       for (const [key, value] of Object.entries(obj)) {
-        // targeted keys: img, texture.src, valid image fields, or any key ending in .img/.src
-        // Common Foundry image fields: img, src, texture.src, icon, banner
         const isImageField =
           key === 'img' ||
           key === 'src' ||
@@ -231,48 +229,112 @@ export class BaseTool {
           key.endsWith('.img') ||
           key.endsWith('texture.src');
 
-        if (isImageField) {
-          if (typeof value === 'string' && value.trim().length > 0) {
-            validationPromises.push(this.#validateSingleUrl(key, value));
-          }
+        if (isImageField && typeof value === 'string' && value.trim().length > 0) {
+          entries.push({ parentObj: obj, key, url: value });
         }
 
         if (typeof value === 'object' && value !== null) {
-          collectPromises(value);
+          collect(value);
         }
       }
     };
 
-    collectPromises(data);
+    collect(data);
+    if (entries.length === 0) return [];
 
-    if (validationPromises.length > 0) {
-      await Promise.all(validationPromises);
+    const warnings = [];
+    await Promise.all(entries.map(async ({ parentObj, key, url }) => {
+      if (this.#isSimpleInvalidCheck(url) || !(await this.#checkUrlExists(url))) {
+        delete parentObj[key];
+        warnings.push(`'${key}' image '${url}' does not exist — removed. Foundry will use its default icon.`);
+      }
+    }));
+    return warnings;
+  }
+
+  /**
+   * Validate and correct UUID references in data using the document schema.
+   * Scans for ForeignDocumentField entries, checks values, and rebuilds
+   * malformed UUIDs via foundry.utils.buildUuid. Modifies data in place.
+   * @param {string} documentType - The parent document type (e.g. 'Actor')
+   * @param {Object} data - Data to validate (modified in place)
+   * @param {string} [pack] - Compendium pack key if applicable
+   * @returns {string[]} Warning messages for any corrected UUIDs
+   */
+  validateUuids(documentType, data, pack) {
+    const warnings = [];
+    if (!data || typeof data !== 'object') return warnings;
+
+    const documentClass = CONFIG[documentType]?.documentClass;
+    if (!documentClass?.schema) return warnings;
+
+    // Walk schema fields to find all reference fields, then validate their values
+    this.#validateSchemaUuids(documentClass.schema, data, pack, '', warnings);
+    return warnings;
+  }
+
+  /**
+   * Recursively walk schema fields looking for document reference fields.
+   * @param {DataSchema} schema - Foundry schema (or sub-schema)
+   * @param {Object} data - Corresponding data object
+   * @param {string} pack - Pack key
+   * @param {string} pathPrefix - Dot-separated path for warnings
+   * @param {string[]} warnings - Collects warning messages
+   */
+  #validateSchemaUuids(schema, data, pack, pathPrefix, warnings) {
+    if (!schema?.fields || !data) return;
+
+    const fields = schema.fields instanceof Map
+      ? Object.fromEntries(schema.fields)
+      : schema.fields;
+
+    for (const [fieldName, field] of Object.entries(fields)) {
+      const value = data[fieldName];
+      const fullPath = pathPrefix ? `${pathPrefix}.${fieldName}` : fieldName;
+      const ctor = field?.constructor?.name;
+
+      // ForeignDocumentField — expects a document reference
+      if (ctor === 'ForeignDocumentField' && typeof value === 'string' && value.trim()) {
+        const refDocName = field.model?.documentName;
+        if (refDocName) {
+          this.#tryCorrectUuid(data, fieldName, value, refDocName, pack, fullPath, warnings);
+        }
+        continue;
+      }
+
+      // Recurse into sub-schemas (e.g. system.*)
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const subSchema = field?.fields ? field : field?.schema;
+        if (subSchema?.fields) {
+          this.#validateSchemaUuids(subSchema, value, pack, fullPath, warnings);
+        }
+      }
     }
   }
 
-  async #validateSingleUrl(key, url) {
-    if (this.#isSimpleInvalidCheck(url)) {
-      throw new SimulacrumError(
-        `Invalid image URL for field '${key}': '${url}'. Value must be a valid file path or URL, not a description.`
-      );
-    }
+  /**
+   * Check a single UUID value and correct it if malformed.
+   */
+  #tryCorrectUuid(parentObj, key, value, documentName, pack, fullPath, warnings) {
+    // Extract raw ID in case the AI wrapped it in @UUID[...]{...}
+    const rawId = BaseTool.extractRawId(value);
 
-    // Perform network check
-    const exists = await this.#checkUrlExists(url);
-    if (!exists) {
-      throw new SimulacrumError(
-        `Invalid image URL for field '${key}': '${url}'. The file does not exist (404). Please use the 'search_assets' tool to find a valid image path.`
-      );
+    try {
+      const corrected = foundry.utils.buildUuid({ documentName, id: rawId, pack });
+      if (corrected && corrected !== value) {
+        parentObj[key] = corrected;
+        warnings.push(`Corrected UUID for '${fullPath}': '${value}' → '${corrected}'`);
+      }
+    } catch {
+      // buildUuid failed — leave value as-is, Foundry validation will catch it
     }
   }
 
   #isSimpleInvalidCheck(url) {
-    // Reject descriptions or obvious non-URLs
-    if (url.includes(' ') && !url.startsWith('http')) return true; // URLs with spaces usually encoded
-    if (url.length > 500) return true; // Too long
+    if (url.includes(' ') && !url.startsWith('http')) return true;
+    if (url.length > 500) return true;
 
     const lower = url.toLowerCase();
-    // Heuristic: reject "natural language" starts
     if (lower.startsWith('image of') || lower.startsWith('picture of') || lower.startsWith('a '))
       return true;
 
@@ -281,15 +343,9 @@ export class BaseTool {
 
   async #checkUrlExists(url) {
     try {
-      // In Foundry, relative paths are common. Fetch handles them relative to base.
-      // Use method: 'HEAD' to avoid downloading the whole image.
       const response = await fetch(url, { method: 'HEAD' });
       return response.ok;
-    } catch (error) {
-      // Network error or other fetch failure -> treat as non-existent for safety
-      if (isDebugEnabled()) {
-        this.logger.warn(`Failed to check image URL '${url}':`, error);
-      }
+    } catch {
       return false;
     }
   }

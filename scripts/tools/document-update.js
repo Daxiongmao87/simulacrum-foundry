@@ -143,8 +143,13 @@ class DocumentUpdateTool extends BaseTool {
 
       await this.#enforceReadBeforeModify(documentType, documentId, pack);
 
+      // Validate images — invalid ones are blanked, not rejected
       if (normalizedParams.updates) await this.validateImageUrls(normalizedParams.updates);
       if (normalizedParams.operations) await this.validateImageUrls(normalizedParams.operations);
+
+      // Correct malformed UUIDs using schema-derived reference fields
+      if (normalizedParams.updates) this.validateUuids(documentType, normalizedParams.updates, pack);
+      if (normalizedParams.operations) this.validateUuids(documentType, normalizedParams.operations, pack);
 
       const plan = await this.#buildOperationPlan(normalizedParams);
       const { updates, embeddedOperations } = plan;
