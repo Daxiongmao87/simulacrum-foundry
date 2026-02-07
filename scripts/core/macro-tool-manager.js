@@ -151,15 +151,31 @@ export class MacroToolManager {
 
         const toolName = config.name;
 
+        // Add 'response' parameter to schema (like BaseTool._addResponseParam)
+        const augmentedParameters = this._addResponseParam(config.parameters);
+
         const toolDef = {
             name: toolName,
             description: config.description,
-            parameters: config.parameters,
-            schema: config.parameters,
+            parameters: augmentedParameters,
+            schema: augmentedParameters,
             execute: async (args) => {
                 const errors = this._validateSchema(args, config.parameters);
                 if (errors.length > 0) throw new Error(`Validation: ${errors.join(', ')}`);
-                return await macro.execute({ args });
+
+                const rawResult = await macro.execute({ args });
+
+                // Wrap result with proper structure (like normal tools)
+                // The 'content' is the full output for AI context
+                // The 'display' is a brief summary for the user
+                const contentStr = typeof rawResult === 'string'
+                    ? rawResult
+                    : (rawResult !== undefined && rawResult !== null ? JSON.stringify(rawResult) : 'No output');
+
+                return {
+                    content: contentStr,
+                    display: `<p><strong>${toolName}</strong> executed successfully</p>`,
+                };
             },
             originalName: macro.name,
             uuid: macro.uuid,
@@ -204,6 +220,38 @@ export class MacroToolManager {
             if (args[req] === undefined) errors.push(`Missing '${req}'`);
         }
         return errors;
+    }
+
+    /**
+     * Add the standard 'response' parameter to a schema (mirrors BaseTool._addResponseParam)
+     * @param {Object} schema - The parameter schema to augment
+     * @returns {Object} New schema with response parameter added
+     */
+    _addResponseParam(schema) {
+        if (!schema) {
+            return {
+                type: 'object',
+                properties: {
+                    response: {
+                        type: 'string',
+                        description: 'Your message to the user explaining what you are doing or have done. Required for models that cannot send text alongside tool calls.',
+                    },
+                },
+                required: [],
+            };
+        }
+
+        return {
+            ...schema,
+            properties: {
+                ...schema.properties,
+                response: {
+                    type: 'string',
+                    description: 'Your message to the user explaining what you are doing or have done. Required for models that cannot send text alongside tool calls.',
+                },
+            },
+            required: [...(schema.required || [])],
+        };
     }
 
     getTools() {
