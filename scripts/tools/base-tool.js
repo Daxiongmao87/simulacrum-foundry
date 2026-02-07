@@ -115,11 +115,9 @@ export class BaseTool {
    * @returns {Object} Parameter schema definition
    */
   getParameterSchema() {
-    return this._addResponseParam({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
+    return this._addResponseParam(
+      this.schema || { type: 'object', properties: {}, required: [] }
+    );
   }
 
   /**

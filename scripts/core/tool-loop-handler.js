@@ -404,10 +404,32 @@ async function _executeToolCalls(toolCalls, context) {
       const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
       const executionStart = Date.now();
 
-      // Log tool call before execution
+      // Log tool call before execution (must happen before any early-exit so rejections appear in logs)
       interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
 
-      // Permission check for destructive tools
+      // Enforce justification on every tool call — required for approval dialogs and audit trail.
+      // The AI-facing schema marks it required, but models may skip it; this is the hard enforcement.
+      if (!parsedArgs.justification || typeof parsedArgs.justification !== 'string' || !parsedArgs.justification.trim()) {
+        result = {
+          content: `Tool call rejected: missing required "justification" parameter. Every tool call must include a "justification" string explaining why this action is necessary.`,
+          error: { message: 'Missing required parameter: justification', type: 'MISSING_JUSTIFICATION' },
+        };
+        isSuccess = false;
+
+        if (currentToolSupport === true) {
+          conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+          await conversationManager.save();
+        }
+
+        const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
+        results.push(resultObj);
+        interactionLogger.logToolResult(toolCall.id, result, isSuccess, 0);
+        if (onToolResult) {
+          await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+        }
+        continue;
+      }
+
       // Permission check for destructive tools
       if (toolPermissionManager.isDestructive(toolName)) {
         const permission = toolPermissionManager.getPermission(toolName);
@@ -642,7 +664,7 @@ async function _getNextAIResponse(toolResults, context) {
  * @returns {Array} New array with transient fields removed from arguments
  */
 function _sanitizeToolCallsForHistory(toolCalls) {
-  const TRANSIENT_FIELDS = ['justification', 'response'];
+  const TRANSIENT_FIELDS = ['response'];
 
   return toolCalls.map(tc => {
     const argsRaw = tc.function?.arguments || tc.arguments;

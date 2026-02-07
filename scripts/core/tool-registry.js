@@ -244,10 +244,14 @@ export class ToolRegistry {
     // [{ type: 'function', function: { name, description, parameters } }]
     return Array.from(this.tools.values()).map(registration => {
       const tool = registration.tool;
+      // Use getParameterSchema() first (returns a clone), fall back to cloning tool.schema.
+      // IMPORTANT: Must NOT use tool.schema directly — the mutations below (injecting
+      // justification) would corrupt the tool's internal schema used for execute() validation.
       const raw =
-        tool.schema ||
         (typeof tool.getParameterSchema === 'function' ? tool.getParameterSchema() : null) ||
-        {};
+        (tool.schema
+          ? { ...tool.schema, properties: { ...tool.schema.properties }, required: [...(tool.schema.required || [])] }
+          : {});
       let parameters = raw;
       if (!raw || typeof raw !== 'object' || raw.type !== 'object') {
         const props =
@@ -257,23 +261,21 @@ export class ToolRegistry {
         parameters = { type: 'object', properties: props };
       }
 
-      // Inject mandatory 'justification' field
-      if (!parameters.properties) {
-        parameters.properties = {};
-      }
-      parameters.properties.justification = {
-        type: 'string',
-        description: 'Reason for using this tool. Explain why this action is necessary.',
+      // Inject mandatory 'justification' field FIRST so the model generates it before other params
+      const toolProps = parameters.properties || {};
+      parameters.properties = {
+        justification: {
+          type: 'string',
+          description: 'Reason for using this tool. Explain why this action is necessary.',
+        },
+        ...toolProps,
       };
 
-      if (!parameters.required) {
-        parameters.required = [];
-      }
-      if (!Array.isArray(parameters.required)) {
+      if (!parameters.required || !Array.isArray(parameters.required)) {
         parameters.required = [];
       }
       if (!parameters.required.includes('justification')) {
-        parameters.required.push('justification');
+        parameters.required.unshift('justification');
       }
 
       return {
