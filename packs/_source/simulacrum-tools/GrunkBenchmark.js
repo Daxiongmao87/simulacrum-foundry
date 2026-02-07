@@ -8,7 +8,7 @@
 // ─── Configuration ───────────────────────────────────────────────
 const BENCHMARK_PROMPT = 'Create a goblin warrior named Grunk with 15 HP and a rusty shortsword.';
 const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1469765782853386240/6Ve965B_xBywWgxAi-cMWa59ReunngcXQLOLB66doRUxOKB4jAOL3zn_VZa9YVnX2GMM';
+const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1469766376037027954/45eMohmn8F-rqlC81MC-efZnE_sXIBM2XkR1NlyTiX-gBcJmDKlnqQ-vNBILyvvqhnXH';
 const DialogV2 = foundry.applications.api.DialogV2;
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ async function submitToDiscord(result, elapsedMs, model, outcome, username, read
     window: { title: `Grunk Benchmark Results (${result.cancelled ? 'Cancelled' : result.dnf ? 'DNF 0/100' : result.score + '/100'})` },
     content: `${scoreHtml}
       ${hasWebhook ? `<hr>
-        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>? Submissions are reviewed before appearing publicly.</p>
+        <p>Submit results to the <a href="https://discord.gg/VSs8jZBgmP" target="_blank">Simulacrum Discord</a>?</p>
         <div class="form-group">
           <label>Username</label>
           <input name="grunk-username" type="text" placeholder="Anonymous">
