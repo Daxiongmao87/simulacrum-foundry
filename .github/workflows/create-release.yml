@@ -174,20 +174,16 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
           RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
-          # Discord field value limit is 1024 chars - truncate if needed but inform reader
-          TOTAL_LINES=$(wc -l < changelog.txt)
-          MAX_LINES=15
-          if [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
-            REMAINING=$((TOTAL_LINES - MAX_LINES))
-            CHANGELOG=$(head -$MAX_LINES changelog.txt)
-            CHANGELOG="${CHANGELOG}"$'\n'"... and ${REMAINING} more. [See full release notes](${RELEASE_URL})"
-          else
-            CHANGELOG=$(cat changelog.txt)
-          fi
-          # Ensure we don't exceed Discord's 1024 char limit
-          if [ ${#CHANGELOG} -ge 1000 ]; then
-            CHANGELOG=$(echo "$CHANGELOG" | cut -c1-950)
-            CHANGELOG="${CHANGELOG}..."$'\n'"[See full release notes](${RELEASE_URL})"
+          # Discord field value limit is 1024 chars - truncate by lines until under limit
+          SUFFIX=$'\n'"[See full release notes](${RELEASE_URL})"
+          MAX_CHARS=$((1024 - ${#SUFFIX} - 10))
+          CHANGELOG=$(cat changelog.txt)
+          while [ ${#CHANGELOG} -gt $MAX_CHARS ]; do
+            # Drop the last line and append truncation notice
+            CHANGELOG=$(echo "$CHANGELOG" | head -n -1)
+          done
+          if [ ${#CHANGELOG} -lt $(wc -c < changelog.txt) ]; then
+            CHANGELOG="${CHANGELOG}${SUFFIX}"
           fi
 
           # Build JSON payload with proper escaping using jq
@@ -212,5 +208,10 @@ jobs:
             }')
 
           echo "Payload: $PAYLOAD"
-          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL")
-          echo "Response: $RESPONSE"
+          HTTP_CODE=$(curl -s -o /tmp/discord_response.txt -w "%{http_code}" -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL")
+          BODY=$(cat /tmp/discord_response.txt)
+          echo "Response ($HTTP_CODE): $BODY"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Discord announcement failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
