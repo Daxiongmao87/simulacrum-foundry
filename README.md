@@ -17,7 +17,7 @@
 An AI-powered Campaign Copilot for [Foundry Virtual Tabletop](https://foundryvtt.com/) that helps Game Masters manage their campaigns through natural language conversation.
 
 <p align="center">
-  <img src="docs/images/simulacrum-screenshot.png" alt="Simulacrum AI Assistant" width="400">
+  <a href="https://www.youtube.com/watch?v=tu1EZ57aNW8"><img src="https://i.ytimg.com/an_webp/SavHeq80Ymk/mqdefault_6s.webp?du=3000&sqp=CO2-oMwG&rs=AOn4CLDwsWxvagwAX6DadQT171jAjTOZvQ" alt="Simulacrum AI Assistant" width="400"></a>
 </p>
 
 ## What is Simulacrum?
