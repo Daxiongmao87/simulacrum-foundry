@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.0.8] - 2026-02-08
+
+### Changed
+- refactor(benchmark): replace webhook with guided Discord sharing flow
+- chore(benchmark): switch webhook to public channel, drop review language
+- fix(benchmark): note that Discord submissions are reviewed
+- chore(benchmark): rotate Discord webhook to private verification channel
+- fix(benchmark): increase failure penalty, hide bonus, add Discord link
+- docs(tools): rewrite all 16 tool descriptions and parameter descriptions
+- refactor(tools): align BaseTool helpers with {content, display} contract
+- fix(tools): remove 50-result cap from asset search and browse folders
+- fix(prompts): correct pack name in macro list builder
+- refactor(ui): simplify sidebar tool display rendering
+- fix(settings): invalidate model list on API key/URL change
+- fix(tools): add API retry loop with backoff, soften justification enforcement
+- feat(logger): human-readable interaction log export
+- fix(documents): preserve uuid through toObject() serialization
+- refactor(ai): remove max_tokens and temperature from AI client
+- feat(tools): split schema tool, add subtype support, fix benchmark scoring
+- feat(benchmark): add Grunk Benchmark macro
+- chore(build): add JS injection to pack builds, exclude source from zips
+- fix(tools): make end_loop response optional, auto-close task tracker
+- fix(tools): auto-correct invalid document IDs on creation retry
+- fix(tools): validate image URLs and UUIDs non-destructively
+- fix(tools): prevent schema mutation, enforce justification, fix parameter ordering
+- refactor(tokens): strip transient fields from history, trim prompts, fix UUID-as-documentId
+- refactor(ui): rename thinking to processing, fix renderTemplate calls
+- refactor(chat): handle cancellation before error logging
+- feat(macro-tools): add response parameter and structured result wrapping
+- fix(search): guard against null fields parameter in searchDocuments
+
 ## [1.0.7] - 2026-02-06
 
 ### Changed
