@@ -28,7 +28,7 @@ class DocumentSchemaListTool extends BaseTool {
       .map(type => {
         const subtypes = game.documentTypes[type] || [];
         const world = game.collections.get(type)?.size || 0;
-        const compendiums = game.packs.filter(p => p.documentName === type).length;
+        const compendiums = game.packs?.filter(p => p.documentName === type).length ?? 0;
         return { name: type, subtypes, world, compendiums };
       });
   }

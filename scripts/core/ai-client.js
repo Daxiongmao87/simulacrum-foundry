@@ -316,8 +316,7 @@ export class AIClient {
         if (isDebugEnabled()) {
           const debugHeaders = { ...headers };
           if (debugHeaders.Authorization) {
-            debugHeaders.Authorization =
-              debugHeaders.Authorization.substring(0, 15) + '...[MASKED]';
+            debugHeaders.Authorization = '[MASKED]';
           }
           createLogger('AIClient').info('Sending API Request:', {
             url: url.toString(),

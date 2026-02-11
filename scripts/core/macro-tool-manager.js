@@ -63,7 +63,7 @@ export class MacroToolManager {
         }
 
         // 2. Scan all Macro-type compendiums
-        for (const pack of game.packs) {
+        for (const pack of game.packs ?? []) {
             if (pack.documentName !== 'Macro') continue;
 
             try {
@@ -76,6 +76,19 @@ export class MacroToolManager {
                 }
             } catch (e) {
                 logger.debug(`Could not scan pack ${pack.collection}: ${e.message}`);
+            }
+        }
+
+        // Unregister stale macro tools that are no longer in the new set
+        if (this.toolRegistry) {
+            for (const oldName of this.tools.keys()) {
+                if (!newTools.has(oldName)) {
+                    try {
+                        this.toolRegistry.unregisterTool(oldName);
+                    } catch (_e) {
+                        // Ignore - may already be removed
+                    }
+                }
             }
         }
 

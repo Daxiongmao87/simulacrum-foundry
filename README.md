@@ -18,7 +18,7 @@ An AI-powered Campaign Copilot for [Foundry Virtual Tabletop](https://foundryvtt
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=tu1EZ57aNW8"><strong>Video: Grunk Test</strong></a><br>
-  <a href="https://www.youtube.com/watch?v=tu1EZ57aNW8"><img src="https://i.ytimg.com/an_webp/SavHeq80Ymk/mqdefault_6s.webp?du=3000&sqp=CO2-oMwG&rs=AOn4CLDwsWxvagwAX6DadQT171jAjTOZvQ" alt="Simulacrum AI Assistant" width="400"></a>
+  <img src="assets/simulacrum-demo.gif" alt="Simulacrum AI Assistant Demo" width="600">
 </p>
 
 ## What is Simulacrum?

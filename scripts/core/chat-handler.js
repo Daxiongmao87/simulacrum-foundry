@@ -1,4 +1,4 @@
-/* eslint-disable max-depth, no-unreachable */
+/* eslint-disable max-depth */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { formatToolCallDisplay, getToolDisplayContent, getToolContentSummary } from '../utils/message-utils.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
@@ -106,8 +106,6 @@ class ChatHandler {
       this.addMessageToUI(errorMessage, options);
 
       return errorMessage;
-
-      return null;
     }
   }
 
@@ -231,7 +229,7 @@ class ChatHandler {
     if (finalResponse && finalResponse.content) {
       const lastMessage =
         this.conversationManager.messages[this.conversationManager.messages.length - 1];
-      if (lastMessage.role !== 'assistant' || lastMessage.content !== finalResponse.content) {
+      if (lastMessage?.role !== 'assistant' || lastMessage?.content !== finalResponse.content) {
         this.addMessageToConversation('assistant', finalResponse.content, null, null, finalResponse.provider_metadata);
         this.addMessageToUI(
           {
@@ -337,7 +335,7 @@ class ChatHandler {
         createLogger('AIDiagnostics').info('assistant.empty_response.retry', {
           attempt: currentRetries,
           lastRole: last?.role,
-          hasToolCalls: Array.isArray(last?.tool_calls) && last.tool_calls.length > 0,
+          hasToolCalls: Array.isArray(last?.tool_calls) && last?.tool_calls.length > 0,
         });
       }
     } catch {

@@ -54,7 +54,7 @@ export class ExecuteMacroTool extends BaseTool {
       macro = game.macros.getName(name);
 
       // If not found in world, check compendiums (slow, but useful)
-      if (!macro) {
+      if (!macro && game.packs) {
         for (const pack of game.packs) {
           if (pack.documentName === 'Macro') {
             const index = await pack.getIndex();
