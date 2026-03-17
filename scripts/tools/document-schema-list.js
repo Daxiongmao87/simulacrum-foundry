@@ -32,7 +32,6 @@ class DocumentSchemaListTool extends BaseTool {
         return { name: type, subtypes, world, compendiums };
       });
   }
-
 }
 
 export { DocumentSchemaListTool };

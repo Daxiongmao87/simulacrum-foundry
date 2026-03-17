@@ -18,17 +18,20 @@ class DocumentSearchTool extends BaseTool {
         properties: {
           query: {
             type: 'string',
-            description: 'The text to search for. Matches against document names, text content, and metadata fields (e.g., "goblin", "fire damage", "healing potion").',
+            description:
+              'The text to search for. Matches against document names, text content, and metadata fields (e.g., "goblin", "fire damage", "healing potion").',
           },
           documentTypes: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Restrict the search to specific document classes (e.g., ["Actor", "Item"]). Omit to search all types.',
+            description:
+              'Restrict the search to specific document classes (e.g., ["Actor", "Item"]). Omit to search all types.',
           },
           fields: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Restrict the search to specific document fields (e.g., ["name", "system.description.value"]). Omit to search all fields.',
+            description:
+              'Restrict the search to specific document fields (e.g., ["name", "system.description.value"]). Omit to search all fields.',
           },
           maxResults: {
             type: 'number',
@@ -95,7 +98,7 @@ class DocumentSearchTool extends BaseTool {
         if (doc.pack) {
           uuid = `Compendium.${doc.pack}.${id}`;
         } else {
-          const docType = doc.documentName || (doc.constructor?.documentName) || type;
+          const docType = doc.documentName || doc.constructor?.documentName || type;
           // Basic heuristic if documentName isn't available on the result object
           if (docType) {
             uuid = `${docType}.${id}`;

@@ -6,136 +6,138 @@ import { BaseTool } from './base-tool.js';
 import { assetIndexService } from '../core/asset-index-service.js';
 
 const BASE_DESCRIPTION =
-    'Browse the contents of a specific folder or search for folders by name. Use "browse" to list subfolders and files at a given path. Use "search" to find folders matching a name query across the index. For finding specific files by name, use `search_assets` instead.';
+  'Browse the contents of a specific folder or search for folders by name. Use "browse" to list subfolders and files at a given path. Use "search" to find folders matching a name query across the index. For finding specific files by name, use `search_assets` instead.';
 
 export class BrowseFoldersTool extends BaseTool {
-    constructor() {
-        super(
-            'browse_folders',
-            BASE_DESCRIPTION, // Will be overridden by getter
-            {
-                type: 'object',
-                properties: {
-                    action: {
-                        type: 'string',
-                        enum: ['browse', 'search'],
-                        description: 'The operation to perform: "browse" lists the subfolders and files at the path specified by `path`. "search" finds folders whose name matches `path` as a search query.',
-                    },
-                    path: {
-                        type: 'string',
-                        description: 'For "browse": the folder path to list contents of (e.g., "assets/tokens", "systems/dnd5e/icons"). For "search": the folder name or partial name to find (e.g., "tokens", "portraits").',
-                    },
-                    source: {
-                        type: 'string',
-                        enum: ['data', 'public', 'all'],
-                        default: 'data',
-                        description: 'The data source to operate on: "data" for User Data (uploaded assets), "public" for Foundry Core data, or "all" (search only — browse requires a specific source). Defaults to "data".',
-                    },
-                },
-                required: ['action', 'path'],
-            }
-        );
+  constructor() {
+    super(
+      'browse_folders',
+      BASE_DESCRIPTION, // Will be overridden by getter
+      {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['browse', 'search'],
+            description:
+              'The operation to perform: "browse" lists the subfolders and files at the path specified by `path`. "search" finds folders whose name matches `path` as a search query.',
+          },
+          path: {
+            type: 'string',
+            description:
+              'For "browse": the folder path to list contents of (e.g., "assets/tokens", "systems/dnd5e/icons"). For "search": the folder name or partial name to find (e.g., "tokens", "portraits").',
+          },
+          source: {
+            type: 'string',
+            enum: ['data', 'public', 'all'],
+            default: 'data',
+            description:
+              'The data source to operate on: "data" for User Data (uploaded assets), "public" for Foundry Core data, or "all" (search only — browse requires a specific source). Defaults to "data".',
+          },
+        },
+        required: ['action', 'path'],
+      }
+    );
+  }
 
+  /**
+   * Dynamic description based on index availability
+   */
+  get description() {
+    const availability = assetIndexService.getAvailability();
+    if (!availability.available) {
+      return `${BASE_DESCRIPTION} [Search unavailable: ${availability.reason}. Browse still works.]`;
     }
+    const stats = assetIndexService.getStats();
+    return `${BASE_DESCRIPTION} Index contains ${stats.folderCount} folders.`;
+  }
 
-    /**
-     * Dynamic description based on index availability
-     */
-    get description() {
+  // Prevent setting description (it's computed)
+  set description(_value) {
+    // no-op
+  }
+
+  async execute(params) {
+    const { action, path, source = 'data' } = params;
+
+    try {
+      if (action === 'browse') {
+        // Browse doesn't need the index - uses FilePicker directly
+        return await this._browse(path, source);
+      } else if (action === 'search') {
+        // Search requires the index
         const availability = assetIndexService.getAvailability();
         if (!availability.available) {
-            return `${BASE_DESCRIPTION} [Search unavailable: ${availability.reason}. Browse still works.]`;
+          return {
+            content: `Folder search unavailable: ${availability.reason}. Use "browse" action instead.`,
+            display: `Folder search unavailable: ${availability.reason}`,
+            error: { message: availability.reason, type: 'INDEX_UNAVAILABLE' },
+          };
         }
-        const stats = assetIndexService.getStats();
-        return `${BASE_DESCRIPTION} Index contains ${stats.folderCount} folders.`;
-    }
-
-    // Prevent setting description (it's computed)
-    set description(_value) {
-        // no-op
-    }
-
-    async execute(params) {
-        const { action, path, source = 'data' } = params;
-
-        try {
-            if (action === 'browse') {
-                // Browse doesn't need the index - uses FilePicker directly
-                return await this._browse(path, source);
-            } else if (action === 'search') {
-                // Search requires the index
-                const availability = assetIndexService.getAvailability();
-                if (!availability.available) {
-                    return {
-                        content: `Folder search unavailable: ${availability.reason}. Use "browse" action instead.`,
-                        display: `Folder search unavailable: ${availability.reason}`,
-                        error: { message: availability.reason, type: 'INDEX_UNAVAILABLE' },
-                    };
-                }
-                return await this._search(path, source);
-            } else {
-                return {
-                    content: `Unknown action: ${action}`,
-                    display: `Unknown action: ${action}`,
-                    error: { message: `Unknown action: ${action}`, type: 'INVALID_ACTION' },
-                };
-            }
-        } catch (error) {
-            return {
-                content: `Failed to ${action} folders: ${error.message}`,
-                display: `Error: ${error.message}`,
-                error: { message: error.message, type: 'BROWSE_FAILED' },
-            };
-        }
-    }
-
-    async _browse(path, source) {
-        const result = await assetIndexService.browseFolder(path, source === 'all' ? 'data' : source);
-        
-        const folderCount = result.folders.length;
-        const fileCount = result.files.length;
-
-        if (folderCount === 0 && fileCount === 0) {
-            return {
-                content: `Folder "${path}" is empty.`,
-                display: `Folder "${path}" is empty`
-            };
-        }
-
-        // Format for AI - full details
-        const content = {
-            path: path,
-            folders: result.folders,
-            files: result.files
-        };
-
-        // Format for user - just counts
-        const display = `${folderCount} folder${folderCount !== 1 ? 's' : ''}, ${fileCount} file${fileCount !== 1 ? 's' : ''} in "${path}"`;
-
+        return await this._search(path, source);
+      } else {
         return {
-            content: JSON.stringify(content, null, 2),
-            display: display
+          content: `Unknown action: ${action}`,
+          display: `Unknown action: ${action}`,
+          error: { message: `Unknown action: ${action}`, type: 'INVALID_ACTION' },
         };
+      }
+    } catch (error) {
+      return {
+        content: `Failed to ${action} folders: ${error.message}`,
+        display: `Error: ${error.message}`,
+        error: { message: error.message, type: 'BROWSE_FAILED' },
+      };
+    }
+  }
+
+  async _browse(path, source) {
+    const result = await assetIndexService.browseFolder(path, source === 'all' ? 'data' : source);
+
+    const folderCount = result.folders.length;
+    const fileCount = result.files.length;
+
+    if (folderCount === 0 && fileCount === 0) {
+      return {
+        content: `Folder "${path}" is empty.`,
+        display: `Folder "${path}" is empty`,
+      };
     }
 
-    async _search(query, source) {
-        const sourceFilter = source === 'all' ? 'all' : (source === 'public' ? 'core' : 'user');
-        const results = await assetIndexService.searchFolders(query, sourceFilter);
-        const stats = assetIndexService.getStats();
+    // Format for AI - full details
+    const content = {
+      path: path,
+      folders: result.folders,
+      files: result.files,
+    };
 
-        if (results.length === 0) {
-            return {
-                content: `No folders found matching "${query}".`,
-                display: `No folders found matching "${query}". (Index: ${stats.folderCount} folders)`
-            };
-        }
+    // Format for user - just counts
+    const display = `${folderCount} folder${folderCount !== 1 ? 's' : ''}, ${fileCount} file${fileCount !== 1 ? 's' : ''} in "${path}"`;
 
-        const count = results.length;
-        const display = `Found ${count} folder${count !== 1 ? 's' : ''} matching "${query}"`;
+    return {
+      content: JSON.stringify(content, null, 2),
+      display: display,
+    };
+  }
 
-        return {
-            content: JSON.stringify(results, null, 2),
-            display: display
-        };
+  async _search(query, source) {
+    const sourceFilter = source === 'all' ? 'all' : source === 'public' ? 'core' : 'user';
+    const results = await assetIndexService.searchFolders(query, sourceFilter);
+    const stats = assetIndexService.getStats();
+
+    if (results.length === 0) {
+      return {
+        content: `No folders found matching "${query}".`,
+        display: `No folders found matching "${query}". (Index: ${stats.folderCount} folders)`,
+      };
     }
+
+    const count = results.length;
+    const display = `Found ${count} folder${count !== 1 ? 's' : ''} matching "${query}"`;
+
+    return {
+      content: JSON.stringify(results, null, 2),
+      display: display,
+    };
+  }
 }

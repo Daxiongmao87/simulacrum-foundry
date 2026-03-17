@@ -18,12 +18,12 @@ const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
  * Supports both flat and nested paths (dot notation)
  */
 const CONTEXT_LIMIT_KEYS = [
-  'context_length',              // OpenRouter
-  'context_window',              // Some providers
-  'inputTokenLimit',             // Gemini
-  'max_context_length',          // Alternative naming
+  'context_length', // OpenRouter
+  'context_window', // Some providers
+  'inputTokenLimit', // Gemini
+  'max_context_length', // Alternative naming
   'top_provider.context_length', // OpenRouter nested
-  'max_model_len',               // vLLM style
+  'max_model_len', // vLLM style
 ];
 
 class ModelService {
@@ -61,8 +61,12 @@ class ModelService {
     const apiKey = game.settings.get(MODULE_ID, 'apiKey');
 
     // Check if cache is valid
-    if (!forceRefresh && this.#cachedModels.length > 0 &&
-      this.#cachedBaseURL === baseURL && this.#cachedApiKey === apiKey) {
+    if (
+      !forceRefresh &&
+      this.#cachedModels.length > 0 &&
+      this.#cachedBaseURL === baseURL &&
+      this.#cachedApiKey === apiKey
+    ) {
       return this.#cachedModels;
     }
 
@@ -119,7 +123,6 @@ class ModelService {
 
       logger.debug(`Fetched ${models.length} models from endpoint`);
       return models;
-
     } catch (e) {
       logger.warn('Failed to fetch models:', e.message);
       return [];
@@ -350,7 +353,7 @@ class ModelService {
       try {
         const response = await fetch(OPENROUTER_MODELS_URL, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
         });
 
         if (!response.ok) {

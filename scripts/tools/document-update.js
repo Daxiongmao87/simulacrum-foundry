@@ -39,43 +39,52 @@ class DocumentUpdateTool extends BaseTool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'The document class to update (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
+            description:
+              'The document class to update (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
           },
           documentId: {
             type: 'string',
-            description: 'The ID of the document to update. The document must have been read first via `read_document`.',
+            description:
+              'The ID of the document to update. The document must have been read first via `read_document`.',
           },
           updates: {
             type: 'object',
-            description: 'An object of field paths and values to merge into the document. Supports dot notation for nested fields (e.g., `{"system.hp.value": 25, "name": "New Name"}`). Use this for simple field changes.',
+            description:
+              'An object of field paths and values to merge into the document. Supports dot notation for nested fields (e.g., `{"system.hp.value": 25, "name": "New Name"}`). Use this for simple field changes.',
             additionalProperties: true,
           },
           operations: {
             type: 'array',
-            description: 'An ordered list of mutations for arrays and embedded collections. Use this instead of `updates` when adding, replacing, or removing entries in collections like pages, items, or effects.',
+            description:
+              'An ordered list of mutations for arrays and embedded collections. Use this instead of `updates` when adding, replacing, or removing entries in collections like pages, items, or effects.',
             items: {
               type: 'object',
               properties: {
                 action: {
                   type: 'string',
                   enum: ['insert', 'replace', 'delete'],
-                  description: 'The mutation to perform: "insert" adds a new entry, "replace" overwrites an existing entry, "delete" removes an entry.',
+                  description:
+                    'The mutation to perform: "insert" adds a new entry, "replace" overwrites an existing entry, "delete" removes an entry.',
                 },
                 path: {
                   type: 'string',
-                  description: 'The dot-notation path to the target array or embedded collection (e.g., "pages", "items", "effects", "system.activities").',
+                  description:
+                    'The dot-notation path to the target array or embedded collection (e.g., "pages", "items", "effects", "system.activities").',
                 },
                 index: {
                   type: 'integer',
-                  description: 'The 0-based position for plain array operations. Required for insert/replace/delete on arrays.',
+                  description:
+                    'The 0-based position for plain array operations. Required for insert/replace/delete on arrays.',
                 },
                 id: {
                   type: 'string',
-                  description: 'The ID of the embedded document to target. Required for replace/delete on embedded collections (pages, items, effects).',
+                  description:
+                    'The ID of the embedded document to target. Required for replace/delete on embedded collections (pages, items, effects).',
                 },
                 value: {
                   type: 'object',
-                  description: 'The data object to insert or replace with. Not needed for delete operations.',
+                  description:
+                    'The data object to insert or replace with. Not needed for delete operations.',
                 },
               },
               required: ['action', 'path'],
@@ -83,7 +92,8 @@ class DocumentUpdateTool extends BaseTool {
           },
           pack: {
             type: 'string',
-            description: 'The compendium pack ID if updating in a compendium (e.g., "simulacrum.simulacrum-tools"). The pack must be unlocked via `configure_compendium` first. Omit to update in the world.',
+            description:
+              'The compendium pack ID if updating in a compendium (e.g., "simulacrum.simulacrum-tools"). The pack must be unlocked via `configure_compendium` first. Omit to update in the world.',
           },
         },
         required: ['documentType', 'documentId'],
@@ -161,8 +171,10 @@ class DocumentUpdateTool extends BaseTool {
       if (normalizedParams.operations) await this.validateImageUrls(normalizedParams.operations);
 
       // Correct malformed UUIDs using schema-derived reference fields
-      if (normalizedParams.updates) this.validateUuids(documentType, normalizedParams.updates, pack);
-      if (normalizedParams.operations) this.validateUuids(documentType, normalizedParams.operations, pack);
+      if (normalizedParams.updates)
+        this.validateUuids(documentType, normalizedParams.updates, pack);
+      if (normalizedParams.operations)
+        this.validateUuids(documentType, normalizedParams.operations, pack);
 
       const plan = await this.#buildOperationPlan(normalizedParams);
       const { updates, embeddedOperations } = plan;
@@ -229,18 +241,25 @@ class DocumentUpdateTool extends BaseTool {
     if (Object.keys(updates).length) {
       if (isDebugEnabled())
         this.logger.info('Calling DocumentAPI.updateDocument() with updates:', updates);
-      await DocumentAPI.updateDocument(params.documentType, params.documentId, updates, { pack: params.pack });
+      await DocumentAPI.updateDocument(params.documentType, params.documentId, updates, {
+        pack: params.pack,
+      });
     }
   }
 
   async #buildSuccessResponse(params) {
     const opts = { includeEmbedded: true };
     if (params.pack) opts.pack = params.pack;
-    const latestDocument = await DocumentAPI.getDocument(params.documentType, params.documentId, opts);
+    const latestDocument = await DocumentAPI.getDocument(
+      params.documentType,
+      params.documentId,
+      opts
+    );
     const id = latestDocument.name || latestDocument._id || latestDocument.id;
 
     // Update the registry with the new document state so subsequent edits don't fail
-    const data = typeof latestDocument?.toObject === 'function' ? latestDocument.toObject() : latestDocument;
+    const data =
+      typeof latestDocument?.toObject === 'function' ? latestDocument.toObject() : latestDocument;
     documentReadRegistry.registerRead(params.documentType, params.documentId, data);
 
     return {
@@ -278,18 +297,18 @@ class DocumentUpdateTool extends BaseTool {
         { includeEmbedded: true, pack: params.pack }
       );
       workingDocument = DocumentUpdateLogic.cloneValue(documentSnapshot);
-      // Note: getDocumentInstance might not support pack yet? check API. 
+      // Note: getDocumentInstance might not support pack yet? check API.
       // Re-checked API: getDocumentInstance looks like it only supports collections.
       // However, for updates (merging objects), workingDocument (snapshot) is the most critical part.
       // docInstance is used for isEmbeddedCollection checks.
       // Ideally we shouldn't fail if docInstance is missing for compendium?
-      // Or we should update getDocumentInstance too? 
-      // For now, let's try to fetch it, but if it fails (because it only looks in collections), 
+      // Or we should update getDocumentInstance too?
+      // For now, let's try to fetch it, but if it fails (because it only looks in collections),
       // we might have issues with embedded operations logic.
       // But standard updates rely on workingDocument.
 
       // Let's modify getDocumentInstance call or accept that embedded logic might be limited for packs.
-      // Actually DocumentAPI.getDocumentInstance logic is: Resolves collection -> collection.get(). 
+      // Actually DocumentAPI.getDocumentInstance logic is: Resolves collection -> collection.get().
       // So it strictly requires World collection.
       // We should probably skip getDocumentInstance for packs and rely on schema introspection if possible,
       // OR update DocumentAPI to return a dummy instance or the real one if Pack supports it.

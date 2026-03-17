@@ -18,20 +18,24 @@ class DocumentListTool extends BaseTool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'The document class to list (e.g., Actor, Item, JournalEntry, RollTable, Folder). Omit to list all available document types with counts. Pass "Compendium" to list compendium packs.',
+            description:
+              'The document class to list (e.g., Actor, Item, JournalEntry, RollTable, Folder). Omit to list all available document types with counts. Pass "Compendium" to list compendium packs.',
           },
           filters: {
             type: 'object',
-            description: 'An object of filter criteria to narrow results (e.g., `{"name": "Goblin", "folder": "folderId"}`). Applied as field-level matches.',
+            description:
+              'An object of filter criteria to narrow results (e.g., `{"name": "Goblin", "folder": "folderId"}`). Applied as field-level matches.',
           },
           includeCompendiums: {
             type: 'boolean',
             default: false,
-            description: 'Whether to also include documents from compendium packs in the results. Defaults to false. Prefer using the `pack` parameter to target a specific compendium.',
+            description:
+              'Whether to also include documents from compendium packs in the results. Defaults to false. Prefer using the `pack` parameter to target a specific compendium.',
           },
           pack: {
             type: 'string',
-            description: 'A specific compendium pack ID to list documents from (e.g., "dnd5e.monsters"). When set, only documents from this pack are returned.',
+            description:
+              'A specific compendium pack ID to list documents from (e.g., "dnd5e.monsters"). When set, only documents from this pack are returned.',
           },
         },
       }
@@ -71,7 +75,7 @@ class DocumentListTool extends BaseTool {
     try {
       const documents = await DocumentAPI.listDocuments(params.documentType, {
         filters: params.filters,
-        pack: params.pack
+        pack: params.pack,
       });
 
       return {

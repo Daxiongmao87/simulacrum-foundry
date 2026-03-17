@@ -5,7 +5,11 @@
 
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import { transformThinkTags, hasThinkTags } from '../utils/content-processor.js';
-import { formatToolCallDisplay, groupConsecutiveMessages, getToolDisplayContent } from '../utils/message-utils.js';
+import {
+  formatToolCallDisplay,
+  groupConsecutiveMessages,
+  getToolDisplayContent,
+} from '../utils/message-utils.js';
 import { ChatHandler } from '../core/chat-handler.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -95,7 +99,8 @@ export async function syncMessagesFromCore(conversationManager) {
       // Pattern: "(Response rejected: ...)" from appendEmptyContentCorrection
       if (content.startsWith('(Response rejected:')) return false;
       // Pattern: "Previous tool call ... failed" from appendToolFailureCorrection
-      if (content.startsWith('Previous tool call') && content.includes('malformed arguments')) return false;
+      if (content.startsWith('Previous tool call') && content.includes('malformed arguments'))
+        return false;
     }
 
     return true;
@@ -115,9 +120,10 @@ export async function syncMessagesFromCore(conversationManager) {
 
         // Extract justification per tool call
         try {
-          const args = typeof tc.function?.arguments === 'string'
-            ? JSON.parse(tc.function.arguments)
-            : tc.function?.arguments;
+          const args =
+            typeof tc.function?.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function?.arguments;
 
           if (args && args.justification && tc.id) {
             toolCallJustifications.set(tc.id, args.justification);
@@ -142,7 +148,9 @@ export async function syncMessagesFromCore(conversationManager) {
         try {
           const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
           isSilent = parsed?._silent === true;
-        } catch (_e) { /* not JSON, not silent */ }
+        } catch (_e) {
+          /* not JSON, not silent */
+        }
       }
 
       if (isSilent) {
@@ -162,7 +170,8 @@ export async function syncMessagesFromCore(conversationManager) {
 
           // Task-Fix: Explicitly enrich the content since processMessageForDisplay (which usually does it)
           // is skipped when providing a direct 'display' value.
-          const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+          const TextEditorImpl =
+            foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
           preRendered = await TextEditorImpl.enrichHTML(preRendered, {
             secrets: game.user?.isGM ?? false,
             documents: true,

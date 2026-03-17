@@ -15,15 +15,18 @@ export class ExecuteMacroTool extends BaseTool {
         properties: {
           name: {
             type: 'string',
-            description: 'The name of the macro to execute. Searches world macros first, then compendium packs. Use `uuid` instead when multiple macros share the same name.',
+            description:
+              'The name of the macro to execute. Searches world macros first, then compendium packs. Use `uuid` instead when multiple macros share the same name.',
           },
           uuid: {
             type: 'string',
-            description: 'The UUID of the macro to execute (e.g., "Macro.abc123def456"). More precise than `name` — use when the exact macro identity is known.',
+            description:
+              'The UUID of the macro to execute (e.g., "Macro.abc123def456"). More precise than `name` — use when the exact macro identity is known.',
           },
           args: {
             type: 'object',
-            description: 'An object of arguments to pass to the macro. The macro accesses these via the `scope` parameter in its code.',
+            description:
+              'An object of arguments to pass to the macro. The macro accesses these via the `scope` parameter in its code.',
           },
         },
       }
@@ -43,7 +46,10 @@ export class ExecuteMacroTool extends BaseTool {
    */
   async execute({ name, uuid, args = {} } = {}) {
     if (!game.user.isGM) {
-      return this.handleError('Permission denied: Only GMs can execute macros via Simulacrum.', 'PermissionError');
+      return this.handleError(
+        'Permission denied: Only GMs can execute macros via Simulacrum.',
+        'PermissionError'
+      );
     }
 
     let macro;
@@ -80,7 +86,10 @@ export class ExecuteMacroTool extends BaseTool {
       const display = `Executed macro: ${macro.name}`;
       return this.createSuccessResponse(content, display);
     } catch (err) {
-      return this.handleError(`Error executing macro '${macro.name}': ${err.message}`, err.constructor.name);
+      return this.handleError(
+        `Error executing macro '${macro.name}': ${err.message}`,
+        err.constructor.name
+      );
     }
   }
 }

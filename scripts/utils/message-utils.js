@@ -91,7 +91,8 @@ export function getToolDisplayContent(toolResult) {
   if (!isSuccess) return null;
 
   try {
-    const content = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+    const content =
+      typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
     if (content && typeof content.display === 'string' && content.display.trim().length > 0) {
       return content.display;
     }
@@ -108,7 +109,8 @@ export function getToolDisplayContent(toolResult) {
  */
 export function getToolContentSummary(toolResult) {
   try {
-    const parsed = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+    const parsed =
+      typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
     if (parsed && typeof parsed.content === 'string') {
       return parsed.content;
     }
@@ -129,20 +131,28 @@ export function getToolContentSummary(toolResult) {
  * @param {string} [justification=''] - Optional justification for why the tool was used
  * @returns {string} HTML string for display
  */
-export function formatToolCallDisplay(toolResult, toolName = null, preRenderedContent = null, justification = '') {
+export function formatToolCallDisplay(
+  toolResult,
+  toolName = null,
+  preRenderedContent = null,
+  justification = ''
+) {
   let isSuccess = !toolResult.isError && !toolResult.error;
 
   // Enhance success detection by checking content for error signatures
   // (BaseTool returns success:false in content but doesn't set isError on the message object)
   if (isSuccess && typeof toolResult.content === 'string') {
     try {
-      if (toolResult.content.includes('"success":false') || toolResult.content.includes('"error":')) {
+      if (
+        toolResult.content.includes('"success":false') ||
+        toolResult.content.includes('"error":')
+      ) {
         const parsed = JSON.parse(toolResult.content);
         if (parsed && (parsed.success === false || parsed.error)) {
           isSuccess = false;
         }
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   const statusClass = isSuccess ? 'tool-success' : 'tool-failure';
@@ -196,9 +206,7 @@ export function formatPendingToolCall(toolName, justification = '', toolCallId =
 
   // If localization key not found, fall back to formatting the tool name
   if (actionText === locKey) {
-    actionText = toolName
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+    actionText = toolName.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   const justificationHtml = justification
@@ -211,11 +219,11 @@ export function formatPendingToolCall(toolName, justification = '', toolCallId =
 }
 
 /**
-   * Get human-readable action text for a tool
-   * @param {string} toolName - The tool name
-   * @param {Object} toolResult - The tool result for context
-   * @returns {string} Human-readable action text
-   */
+ * Get human-readable action text for a tool
+ * @param {string} toolName - The tool name
+ * @param {Object} toolResult - The tool result for context
+ * @returns {string} Human-readable action text
+ */
 export function getToolActionText(toolName, toolResult) {
   // Try to get localized tool name from en.json
   const locKey = `SIMULACRUM.Tools.${toolName}`;
@@ -224,9 +232,7 @@ export function getToolActionText(toolName, toolResult) {
   // If localization key not found, game.i18n.localize returns the key itself
   // In that case, fall back to formatting the tool name
   if (action === locKey) {
-    action = toolName
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+    action = toolName.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   const docType = toolResult.documentType || '';

@@ -15,11 +15,13 @@ class DocumentSchemaTool extends BaseTool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'The document class to inspect (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
+            description:
+              'The document class to inspect (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
           },
           subtype: {
             type: 'string',
-            description: 'The document subtype for game-system-specific fields (e.g., "npc", "character", "weapon", "spell"). Omit to see only base document fields. Use `list_document_schemas` to discover available subtypes.',
+            description:
+              'The document subtype for game-system-specific fields (e.g., "npc", "character", "weapon", "spell"). Omit to see only base document fields. Use `list_document_schemas` to discover available subtypes.',
           },
         },
         required: ['documentType'],
@@ -41,9 +43,8 @@ class DocumentSchemaTool extends BaseTool {
       : params.documentType;
 
     const fieldCount = schema.fields?.length || 0;
-    const systemCount = (schema.systemFields && schema.systemFields[0] !== '$ref')
-      ? schema.systemFields.length
-      : 0;
+    const systemCount =
+      schema.systemFields && schema.systemFields[0] !== '$ref' ? schema.systemFields.length : 0;
     const embeddedCount = schema.embedded?.length || 0;
 
     let display = `**${label}** — ${fieldCount} fields`;

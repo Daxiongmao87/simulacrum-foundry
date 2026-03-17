@@ -43,15 +43,18 @@ class DocumentDeleteTool extends BaseTool {
         properties: {
           documentType: {
             type: 'string',
-            description: 'The document class to delete (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
+            description:
+              'The document class to delete (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
           },
           documentId: {
             type: 'string',
-            description: 'The ID of the document to delete. The document must have been read first via `read_document`.',
+            description:
+              'The ID of the document to delete. The document must have been read first via `read_document`.',
           },
           pack: {
             type: 'string',
-            description: 'The compendium pack ID to delete from (e.g., "dnd5e.items"). The pack must be unlocked. Omit to delete from the world.',
+            description:
+              'The compendium pack ID to delete from (e.g., "dnd5e.items"). The pack must be unlocked. Omit to delete from the world.',
           },
         },
         required: ['documentType', 'documentId'],

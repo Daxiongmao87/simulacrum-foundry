@@ -1,6 +1,10 @@
 /* eslint-disable max-depth */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
-import { formatToolCallDisplay, getToolDisplayContent, getToolContentSummary } from '../utils/message-utils.js';
+import {
+  formatToolCallDisplay,
+  getToolDisplayContent,
+  getToolContentSummary,
+} from '../utils/message-utils.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
 import { retrieveToolJustification } from './tool-loop-handler.js';
 /**
@@ -80,10 +84,15 @@ class ChatHandler {
       let displayMessage = `${error.message}`;
 
       if (error.message.includes('503') || error.message.includes('Service Unavailable')) {
-        friendlyMessage = 'The AI service is currently unavailable (503). This is typically a temporary issue with the AI provider. Please try again in a few moments.';
+        friendlyMessage =
+          'The AI service is currently unavailable (503). This is typically a temporary issue with the AI provider. Please try again in a few moments.';
         displayMessage = `⚠️ **AI Service Unavailable**\n\nThe AI endpoint is experiencing issues (503). This is usually temporary.\n\n*Error details: ${error.message}*`;
-      } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        friendlyMessage = 'Network connection failed. Please check your internet connection and API settings.';
+      } else if (
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('NetworkError')
+      ) {
+        friendlyMessage =
+          'Network connection failed. Please check your internet connection and API settings.';
         displayMessage = `**Network Error**\n\nFailed to connect to the AI service.\n\n*Error details: ${error.message}*`;
       }
 
@@ -119,7 +128,13 @@ class ChatHandler {
     }
 
     // Add assistant response to conversation
-    this.addMessageToConversation('assistant', aiResponse.content, aiResponse.toolCalls, null, aiResponse.provider_metadata);
+    this.addMessageToConversation(
+      'assistant',
+      aiResponse.content,
+      aiResponse.toolCalls,
+      null,
+      aiResponse.provider_metadata
+    );
 
     // Add to UI
     await this.addMessageToUI(
@@ -230,7 +245,13 @@ class ChatHandler {
       const lastMessage =
         this.conversationManager.messages[this.conversationManager.messages.length - 1];
       if (lastMessage?.role !== 'assistant' || lastMessage?.content !== finalResponse.content) {
-        this.addMessageToConversation('assistant', finalResponse.content, null, null, finalResponse.provider_metadata);
+        this.addMessageToConversation(
+          'assistant',
+          finalResponse.content,
+          null,
+          null,
+          finalResponse.provider_metadata
+        );
         this.addMessageToUI(
           {
             role: 'assistant',
@@ -362,9 +383,14 @@ class ChatHandler {
       let isSilent = hiddenTools.includes(toolResult.toolName);
       if (!isSilent) {
         try {
-          const parsed = typeof toolResult.content === 'string' ? JSON.parse(toolResult.content) : toolResult.content;
+          const parsed =
+            typeof toolResult.content === 'string'
+              ? JSON.parse(toolResult.content)
+              : toolResult.content;
           isSilent = parsed?._silent === true;
-        } catch (_e) { /* not JSON, not silent */ }
+        } catch (_e) {
+          /* not JSON, not silent */
+        }
       }
 
       // Task-09: Format tool result with rich HTML display if it has a toolName (and is not silent)
@@ -433,7 +459,7 @@ class ChatHandler {
               try {
                 JSON.parse(content);
                 isJson = true;
-              } catch (e) { }
+              } catch (e) {}
             }
 
             if (!isJson) {
@@ -444,7 +470,12 @@ class ChatHandler {
           this.logger.warn('Failed to pre-render tool content', e);
         }
 
-        const formattedDisplay = formatToolCallDisplay(toolResult, toolResult.toolName, preRendered, justification);
+        const formattedDisplay = formatToolCallDisplay(
+          toolResult,
+          toolResult.toolName,
+          preRendered,
+          justification
+        );
 
         const payload = {
           toolCallId: toolResult.toolCallId,

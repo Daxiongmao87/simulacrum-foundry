@@ -17,17 +17,17 @@ export class ValidationErrorHandler {
   static parseFoundryValidationError(error) {
     // Check for DataModelValidationError by name
     const isDataModelValidationError = error.name === 'DataModelValidationError';
-    
+
     // Also check for validation errors by message pattern (some systems wrap errors)
-    const hasValidationPattern = error.message && (
-      error.message.includes('validation errors:') ||
-      error.message.includes('Validation failed') ||
-      error.message.includes('validation failed')
-    );
-    
+    const hasValidationPattern =
+      error.message &&
+      (error.message.includes('validation errors:') ||
+        error.message.includes('Validation failed') ||
+        error.message.includes('validation failed'));
+
     // Check for Foundry's getAllFailures method (definitive sign of validation error)
     const hasGetAllFailures = error.getAllFailures && typeof error.getAllFailures === 'function';
-    
+
     if (!isDataModelValidationError && !hasValidationPattern && !hasGetAllFailures) {
       return null;
     }
@@ -389,7 +389,7 @@ export class ValidationErrorHandler {
 
     // Add document-type specific instructions
     const instructions = this.getDocumentTypeInstructions(documentType, enhancedSuggestions);
-    
+
     // Include schema reference to help AI self-correct
     const schemaRef = this.getSchemaReference(documentType);
 
@@ -452,15 +452,22 @@ export class ValidationErrorHandler {
       instructions += '\n• For required fields: Ensure all mandatory fields have non-empty values.';
     }
     if (hasChoiceErrors) {
-      instructions += '\n• For choice fields: Use inspect_document_schema to discover valid enum values.';
+      instructions +=
+        '\n• For choice fields: Use inspect_document_schema to discover valid enum values.';
     }
 
     // Dynamic hints based on error patterns (no hardcoded document types)
-    if (suggestions.some(s => s.field.includes('pages') || s.field.includes('items') || s.field.includes('effects'))) {
-      instructions += '\n• For embedded documents: Each entry needs name, type, and appropriate content fields. Use inspect_document_schema to see the structure.';
+    if (
+      suggestions.some(
+        s => s.field.includes('pages') || s.field.includes('items') || s.field.includes('effects')
+      )
+    ) {
+      instructions +=
+        '\n• For embedded documents: Each entry needs name, type, and appropriate content fields. Use inspect_document_schema to see the structure.';
     }
     if (suggestions.some(s => s.issue.includes('type') || s.field === 'type')) {
-      instructions += '\n• For type fields: Use inspect_document_schema to discover valid subtypes for this document.';
+      instructions +=
+        '\n• For type fields: Use inspect_document_schema to discover valid subtypes for this document.';
     }
 
     return instructions;

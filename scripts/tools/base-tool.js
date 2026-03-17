@@ -19,7 +19,13 @@ export class BaseTool {
    * @param {boolean} requiresConfirmation - Whether tool requires user confirmation
    * @param {boolean} responseRequired - Whether the response parameter is required (for user-facing message)
    */
-  constructor(name, description, schema = null, requiresConfirmation = false, responseRequired = false) {
+  constructor(
+    name,
+    description,
+    schema = null,
+    requiresConfirmation = false,
+    responseRequired = false
+  ) {
     this.name = name;
     this.description = description;
     this.schema = schema;
@@ -115,9 +121,7 @@ export class BaseTool {
    * @returns {Object} Parameter schema definition
    */
   getParameterSchema() {
-    return this._addResponseParam(
-      this.schema || { type: 'object', properties: {}, required: [] }
-    );
+    return this._addResponseParam(this.schema || { type: 'object', properties: {}, required: [] });
   }
 
   /**
@@ -137,7 +141,8 @@ export class BaseTool {
     // Add response property
     result.properties.response = {
       type: 'string',
-      description: 'Your message to the user explaining what you are doing or have done. Required for models that cannot send text alongside tool calls.',
+      description:
+        'Your message to the user explaining what you are doing or have done. Required for models that cannot send text alongside tool calls.',
     };
 
     // If responseRequired is set, add to required array
@@ -242,12 +247,16 @@ export class BaseTool {
     if (entries.length === 0) return [];
 
     const warnings = [];
-    await Promise.all(entries.map(async ({ parentObj, key, url }) => {
-      if (this.#isSimpleInvalidCheck(url) || !(await this.#checkUrlExists(url))) {
-        delete parentObj[key];
-        warnings.push(`'${key}' image '${url}' does not exist — removed. Foundry will use its default icon.`);
-      }
-    }));
+    await Promise.all(
+      entries.map(async ({ parentObj, key, url }) => {
+        if (this.#isSimpleInvalidCheck(url) || !(await this.#checkUrlExists(url))) {
+          delete parentObj[key];
+          warnings.push(
+            `'${key}' image '${url}' does not exist — removed. Foundry will use its default icon.`
+          );
+        }
+      })
+    );
     return warnings;
   }
 
@@ -283,9 +292,7 @@ export class BaseTool {
   #validateSchemaUuids(schema, data, pack, pathPrefix, warnings) {
     if (!schema?.fields || !data) return;
 
-    const fields = schema.fields instanceof Map
-      ? Object.fromEntries(schema.fields)
-      : schema.fields;
+    const fields = schema.fields instanceof Map ? Object.fromEntries(schema.fields) : schema.fields;
 
     for (const [fieldName, field] of Object.entries(fields)) {
       const value = data[fieldName];

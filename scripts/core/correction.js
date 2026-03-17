@@ -16,9 +16,10 @@ export function appendEmptyContentCorrection(conversationManager, errorResponse)
   if (!conversationManager) return;
 
   // Support both object and string inputs
-  const content = typeof errorResponse === 'string'
-    ? errorResponse
-    : errorResponse?.content || 'No tool call detected';
+  const content =
+    typeof errorResponse === 'string'
+      ? errorResponse
+      : errorResponse?.content || 'No tool call detected';
 
   // Reconstruct the assistant's failed message as a combined content turn.
   // NOTE: We intentionally do NOT include tool_calls in the correction message.

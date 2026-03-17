@@ -81,7 +81,12 @@ export function isRetryableError(error, status = null) {
   // Error message-based check (for Gemini/fetch errors)
   if (error?.message) {
     const msg = error.message;
-    if (msg.includes('429') || msg.includes('500') || msg.includes('503') || msg.includes('fetch failed')) {
+    if (
+      msg.includes('429') ||
+      msg.includes('500') ||
+      msg.includes('503') ||
+      msg.includes('fetch failed')
+    ) {
       return true;
     }
   }

@@ -14,7 +14,7 @@ export class DocumentReadTool extends BaseTool {
   constructor() {
     super(
       'read_document',
-      'Read a document\'s full data by type and ID. Returns the complete JSON representation including all fields and, optionally, embedded documents (items, pages, effects, etc.). Use `list_documents` or `search_documents` to discover document IDs. This tool must be called before `update_document` or `delete_document` can modify the same document.'
+      "Read a document's full data by type and ID. Returns the complete JSON representation including all fields and, optionally, embedded documents (items, pages, effects, etc.). Use `list_documents` or `search_documents` to discover document IDs. This tool must be called before `update_document` or `delete_document` can modify the same document."
     );
     this.logger = createLogger('DocumentReadTool');
     this.schema = {
@@ -22,28 +22,34 @@ export class DocumentReadTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          description: 'The document class to read (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
+          description:
+            'The document class to read (e.g., Actor, Item, JournalEntry, RollTable, Scene).',
         },
         documentId: {
           type: 'string',
-          description: 'The ID of the document to read (e.g., "BtDHCHehjqLjmMpV"). Obtain IDs from `list_documents` or `search_documents`.',
+          description:
+            'The ID of the document to read (e.g., "BtDHCHehjqLjmMpV"). Obtain IDs from `list_documents` or `search_documents`.',
         },
         includeEmbedded: {
           type: 'boolean',
           default: true,
-          description: 'Whether to include embedded documents such as items, pages, effects, and tokens in the response. Defaults to true.',
+          description:
+            'Whether to include embedded documents such as items, pages, effects, and tokens in the response. Defaults to true.',
         },
         pack: {
           type: 'string',
-          description: 'The compendium pack ID if reading from a compendium (e.g., "dnd5e.monsters"). Omit to read from the world.',
+          description:
+            'The compendium pack ID if reading from a compendium (e.g., "dnd5e.monsters"). Omit to read from the world.',
         },
         startLine: {
           type: 'integer',
-          description: 'The starting line number for paginated reading of large documents (1-indexed). Omit to return the full document.',
+          description:
+            'The starting line number for paginated reading of large documents (1-indexed). Omit to return the full document.',
         },
         endLine: {
           type: 'integer',
-          description: 'The ending line number for paginated reading (1-indexed, inclusive). Omit to return the full document.',
+          description:
+            'The ending line number for paginated reading (1-indexed, inclusive). Omit to return the full document.',
         },
       },
       required: ['documentType', 'documentId'],

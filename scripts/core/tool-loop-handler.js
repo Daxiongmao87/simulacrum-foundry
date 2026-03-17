@@ -89,15 +89,20 @@ async function _runLoopIteration(context) {
 
     // Circuit breaker check: detect if AI is generating same text-only response repeatedly
     const currentContent = currentResponse.content?.trim() || '';
-    const hasToolCalls = Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
+    const hasToolCalls =
+      Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
 
     if (!hasToolCalls && currentContent.length > 0) {
       if (currentContent === lastResponseContent) {
         consecutiveRepeats++;
-        logger.warn(`Circuit breaker: identical text-only response detected (${consecutiveRepeats}/${CIRCUIT_BREAKER_THRESHOLD})`);
+        logger.warn(
+          `Circuit breaker: identical text-only response detected (${consecutiveRepeats}/${CIRCUIT_BREAKER_THRESHOLD})`
+        );
 
         if (consecutiveRepeats >= CIRCUIT_BREAKER_THRESHOLD) {
-          logger.error(`Circuit breaker triggered: AI repeated same response ${consecutiveRepeats} times without tool call`);
+          logger.error(
+            `Circuit breaker triggered: AI repeated same response ${consecutiveRepeats} times without tool call`
+          );
 
           // Emit error to user via hook
           Hooks.callAll('simulacrumNotifyUser', {
@@ -134,7 +139,8 @@ async function _runLoopIteration(context) {
     // We must ensure an assistant message bubble exists even if content is empty (pure tool call)
     // otherwise the pending tool card will attach to the *previous* assistant message (floating bug).
     const hasContent = currentResponse.content && currentResponse.content.trim().length > 0;
-    const hasTools = Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
+    const hasTools =
+      Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
 
     if (hasContent || hasTools) {
       await _notifyAssistantMessage(currentResponse, context);
@@ -145,7 +151,8 @@ async function _runLoopIteration(context) {
     if (Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0) {
       for (const toolCall of currentResponse.toolCalls) {
         const toolName = toolCall.function?.name || toolCall.name || 'Unknown Tool';
-        const toolCallId = toolCall.id || `pending_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const toolCallId =
+          toolCall.id || `pending_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         let justification = '';
 
         try {
@@ -260,7 +267,8 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   // 3.5 FIX: Add assistant message with tool_calls to conversation BEFORE executing tools
   // This ensures the tool result messages have a matching parent assistant message with IDs
   // Required by Mistral and other strict APIs for tool_call_id validation
-  const addedToolCallsToConversation = context.currentToolSupport === true && currentResponse.toolCalls.length > 0;
+  const addedToolCallsToConversation =
+    context.currentToolSupport === true && currentResponse.toolCalls.length > 0;
   if (addedToolCallsToConversation) {
     const content = currentResponse.content || null;
     const metadata = currentResponse.provider_metadata || null;
@@ -269,7 +277,13 @@ You cannot respond without a tool call. Either continue with the next tool in yo
     // consumed for display before this point (justification for pending cards, response
     // for message content). Original toolCalls are preserved for _executeToolCalls below.
     const sanitizedToolCalls = _sanitizeToolCallsForHistory(currentResponse.toolCalls);
-    context.conversationManager.addMessage('assistant', content, sanitizedToolCalls, null, metadata);
+    context.conversationManager.addMessage(
+      'assistant',
+      content,
+      sanitizedToolCalls,
+      null,
+      metadata
+    );
     await context.conversationManager.save();
   }
 
@@ -290,10 +304,16 @@ You cannot respond without a tool call. Either continue with the next tool in yo
       };
       for (const toolCall of currentResponse.toolCalls) {
         // Check if a response was already added for this tool call
-        const messages = context.conversationManager.getMessages?.() ?? context.conversationManager.messages ?? [];
+        const messages =
+          context.conversationManager.getMessages?.() ?? context.conversationManager.messages ?? [];
         const hasResponse = messages.some(m => m.role === 'tool' && m.tool_call_id === toolCall.id);
         if (!hasResponse) {
-          context.conversationManager.addMessage('tool', JSON.stringify(cancelledResult), null, toolCall.id);
+          context.conversationManager.addMessage(
+            'tool',
+            JSON.stringify(cancelledResult),
+            null,
+            toolCall.id
+          );
         }
       }
       await context.conversationManager.save();
@@ -309,7 +329,9 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   }
 
   // 5.5 Check for end_loop tool - terminate the loop
-  const endLoopResult = toolResults.find(r => r.result?._endLoop === true || r.result?.data?._endLoop === true);
+  const endLoopResult = toolResults.find(
+    r => r.result?._endLoop === true || r.result?.data?._endLoop === true
+  );
   if (endLoopResult) {
     if (isDebugEnabled()) logger.debug('end_loop tool detected; terminating loop');
 
@@ -335,7 +357,10 @@ You cannot respond without a tool call. Either continue with the next tool in yo
       const response = await _getNextAIResponse(toolResults, context);
       return { action: 'continue', response, repeatCount, toolFailureAttempts };
     } catch (error) {
-      logger.error(`API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`, error);
+      logger.error(
+        `API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`,
+        error
+      );
       if (apiAttempt + 1 >= MAX_TOOL_FAILURE_ATTEMPTS) {
         return { action: 'return', value: await _runToolFailureFallback(context) };
       }
@@ -400,7 +425,11 @@ async function _executeToolCalls(toolCalls, context) {
 
       // Warn if justification is missing — the AI-facing schema marks it required, but
       // models (especially smaller ones) may skip it. Log a warning but still execute.
-      if (!parsedArgs.justification || typeof parsedArgs.justification !== 'string' || !parsedArgs.justification.trim()) {
+      if (
+        !parsedArgs.justification ||
+        typeof parsedArgs.justification !== 'string' ||
+        !parsedArgs.justification.trim()
+      ) {
         logger.warn(`Tool call "${toolName}" missing justification parameter`);
       }
 
@@ -411,7 +440,8 @@ async function _executeToolCalls(toolCalls, context) {
         if (permission === PermissionState.DENY) {
           // Tool is blacklisted - deny without prompting
           result = {
-            error: game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
+            error:
+              game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
               'Tool is blacklisted and cannot be executed',
             denied: true,
             toolName,
@@ -426,18 +456,29 @@ async function _executeToolCalls(toolCalls, context) {
           const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
           results.push(resultObj);
           if (onToolResult) {
-            await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+            await onToolResult({
+              role: 'tool',
+              content: JSON.stringify(result),
+              toolCallId: toolCall.id,
+              toolName,
+            });
           }
           continue;
         }
 
         if (permission === PermissionState.ASK) {
           // Need to prompt user for confirmation
-          const confirmResult = await _promptToolConfirmation(toolName, parsedArgs, toolCall.id, context);
+          const confirmResult = await _promptToolConfirmation(
+            toolName,
+            parsedArgs,
+            toolCall.id,
+            context
+          );
 
           if (confirmResult === 'deny') {
             result = {
-              error: game.i18n?.localize('SIMULACRUM.ToolConfirmation.Denied') ||
+              error:
+                game.i18n?.localize('SIMULACRUM.ToolConfirmation.Denied') ||
                 'Tool execution denied by user',
               denied: true,
               toolName,
@@ -452,7 +493,12 @@ async function _executeToolCalls(toolCalls, context) {
             const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
             results.push(resultObj);
             if (onToolResult) {
-              await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+              await onToolResult({
+                role: 'tool',
+                content: JSON.stringify(result),
+                toolCallId: toolCall.id,
+                toolName,
+              });
             }
             continue;
           }
@@ -460,7 +506,8 @@ async function _executeToolCalls(toolCalls, context) {
           if (confirmResult === 'blacklist') {
             await toolPermissionManager.setPermission(toolName, PermissionState.DENY);
             result = {
-              error: game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
+              error:
+                game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
                 'Tool is blacklisted and cannot be executed',
               denied: true,
               toolName,
@@ -475,7 +522,12 @@ async function _executeToolCalls(toolCalls, context) {
             const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
             results.push(resultObj);
             if (onToolResult) {
-              await onToolResult({ role: 'tool', content: JSON.stringify(result), toolCallId: toolCall.id, toolName });
+              await onToolResult({
+                role: 'tool',
+                content: JSON.stringify(result),
+                toolCallId: toolCall.id,
+                toolName,
+              });
             }
             continue;
           }
@@ -502,7 +554,11 @@ async function _executeToolCalls(toolCalls, context) {
       const TOKEN_THRESHOLD = 1000; // ~4000 chars
       const estimatedTokens = Math.ceil(resultStr.length / 4);
 
-      if (toolName !== 'read_tool_output' && estimatedTokens > TOKEN_THRESHOLD && conversationManager.toolOutputBuffer) {
+      if (
+        toolName !== 'read_tool_output' &&
+        estimatedTokens > TOKEN_THRESHOLD &&
+        conversationManager.toolOutputBuffer
+      ) {
         // Store the FULL content before truncation (preserves newlines for pagination)
         const contentToStore = typeof result.content === 'string' ? result.content : resultStr;
         conversationManager.toolOutputBuffer.set(toolCall.id, contentToStore);
@@ -525,7 +581,12 @@ async function _executeToolCalls(toolCalls, context) {
       }
 
       if (currentToolSupport === true) {
-        conversationManager.addMessage('tool', JSON.stringify(resultForConversation), null, toolCall.id);
+        conversationManager.addMessage(
+          'tool',
+          JSON.stringify(resultForConversation),
+          null,
+          toolCall.id
+        );
         await conversationManager.save();
       }
 
@@ -578,7 +639,7 @@ async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context
   const meta = toolPermissionManager.getDestructiveToolMeta(toolName);
 
   // Emit a hook that the UI can listen to
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const hookId = Hooks.on('simulacrumToolConfirmationResponse', (responseToolCallId, action) => {
       if (responseToolCallId === toolCallId) {
         Hooks.off('simulacrumToolConfirmationResponse', hookId);
@@ -598,14 +659,17 @@ async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context
 
     // Handle cancellation via signal
     if (context.signal) {
-      context.signal.addEventListener('abort', () => {
-        Hooks.off('simulacrumToolConfirmationResponse', hookId);
-        resolve('deny');
-      }, { once: true });
+      context.signal.addEventListener(
+        'abort',
+        () => {
+          Hooks.off('simulacrumToolConfirmationResponse', hookId);
+          resolve('deny');
+        },
+        { once: true }
+      );
     }
   });
 }
-
 
 // eslint-disable-next-line no-unused-vars
 async function _getNextAIResponse(toolResults, context) {
@@ -676,9 +740,10 @@ function _truncateInitialResult(result, toolName) {
     const lineCount = truncatedContent.split('\n').length;
 
     // Add pagination hint for read_document tool
-    const paginationHint = toolName === 'read_document'
-      ? ` Use startLine/endLine parameters to read specific sections (e.g., if search found match at line 500, use startLine: 480, endLine: 520).`
-      : '';
+    const paginationHint =
+      toolName === 'read_document'
+        ? ` Use startLine/endLine parameters to read specific sections (e.g., if search found match at line 500, use startLine: 480, endLine: 520).`
+        : '';
 
     result.content =
       truncatedContent +
@@ -793,7 +858,11 @@ async function _notifyAssistantMessage(response, context) {
     // We emit if content is new OR if it's the first emission (even if empty) to serve as tool anchor
     if (content !== context.lastEmittedContent || !response._emitted) {
       // Pass content (even if empty) to UI. SidebarEventHandlers/ChatHandler must handle empty accordingly.
-      await context.onToolResult({ role: 'assistant', content: response.content || undefined, _fromToolLoop: true });
+      await context.onToolResult({
+        role: 'assistant',
+        content: response.content || undefined,
+        _fromToolLoop: true,
+      });
       context.lastEmittedContent = content;
     }
     // Flag as emitted to prevent duplication in ConversationEngine

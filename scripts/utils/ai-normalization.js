@@ -188,9 +188,9 @@ function _handleResponsesAPIFormat(raw) {
   const parts = raw.output[0].content;
   const text = Array.isArray(parts)
     ? parts
-      .map(p => p?.text ?? '')
-      .filter(Boolean)
-      .join('\n')
+        .map(p => p?.text ?? '')
+        .filter(Boolean)
+        .join('\n')
     : '';
 
   return _attachProviderMetadata(

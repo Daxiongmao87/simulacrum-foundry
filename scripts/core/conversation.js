@@ -127,9 +127,7 @@ class ConversationManager {
    * @private
    */
   _buildSummarizationPrompt(messages) {
-    const currentSaga = this.rollingSummary
-      ? `Current Summary:\n${this.rollingSummary}\n\n`
-      : '';
+    const currentSaga = this.rollingSummary ? `Current Summary:\n${this.rollingSummary}\n\n` : '';
 
     const newContent = messages
       .map(m => `[${m.role}]: ${m.content?.substring(0, 500) || '[tool call]'}`)
@@ -147,9 +145,7 @@ class ConversationManager {
       (acc, msg) => acc + this._estimateTokens(msg),
       0
     );
-    const summaryTokens = this.rollingSummary
-      ? Math.ceil(this.rollingSummary.length / 4)
-      : 0;
+    const summaryTokens = this.rollingSummary ? Math.ceil(this.rollingSummary.length / 4) : 0;
     this.sessionTokens = messageTokens + summaryTokens;
   }
 
@@ -168,8 +164,7 @@ class ConversationManager {
 
     // Extract oldest messages to compact (keep system message)
     // Extract oldest messages to compact (keep system message)
-    const systemMsg =
-      this.activeMessages[0]?.role === 'system' ? this.activeMessages[0] : null;
+    const systemMsg = this.activeMessages[0]?.role === 'system' ? this.activeMessages[0] : null;
     const startIdx = systemMsg ? 1 : 0;
 
     // Define initial chunk size
@@ -180,10 +175,7 @@ class ConversationManager {
     // we must include it in the compaction batch (consume it).
     // We implicitly assume that if we are compacting the parent Assistant message,
     // we must also compact its children Tool messages.
-    while (
-      chunkEnd < this.activeMessages.length &&
-      this.activeMessages[chunkEnd].role === 'tool'
-    ) {
+    while (chunkEnd < this.activeMessages.length && this.activeMessages[chunkEnd].role === 'tool') {
       chunkEnd++;
     }
 
@@ -218,11 +210,9 @@ class ConversationManager {
     const prompt = this._buildSummarizationPrompt(messagesToCompact);
 
     try {
-      const response = await aiClient.chat(
-        [{ role: 'user', content: prompt }],
-        null,
-        { isBackground: true }
-      );
+      const response = await aiClient.chat([{ role: 'user', content: prompt }], null, {
+        isBackground: true,
+      });
 
       const newSummary = response?.choices?.[0]?.message?.content || '';
       if (newSummary) {
@@ -534,7 +524,7 @@ class ConversationManager {
    * Sanitize messages to ensure tool call/response parity.
    * This is critical for Mistral and other strict APIs that require every
    * tool_call to have a corresponding tool response.
-   * 
+   *
    * Handles:
    * - Old conversations with incomplete tool executions
    * - Conversations interrupted during tool execution
@@ -566,9 +556,7 @@ class ConversationManager {
     const missingResponses = [...expectedToolResponses.keys()].filter(
       id => !receivedToolResponses.has(id)
     );
-    const orphanResponses = [...receivedToolResponses].filter(
-      id => !expectedToolResponses.has(id)
-    );
+    const orphanResponses = [...receivedToolResponses].filter(id => !expectedToolResponses.has(id));
 
     if (missingResponses.length === 0 && orphanResponses.length === 0) {
       return; // No issues to fix
@@ -583,7 +571,8 @@ class ConversationManager {
     // Find where to insert them (after the assistant message with the tool_calls)
     if (missingResponses.length > 0) {
       const stubResponse = {
-        error: 'Tool execution was interrupted or the conversation was restored from a previous session.',
+        error:
+          'Tool execution was interrupted or the conversation was restored from a previous session.',
         stale: true,
       };
 

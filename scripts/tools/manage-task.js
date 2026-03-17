@@ -12,7 +12,8 @@ export class ManageTaskTool extends BaseTool {
           action: {
             type: 'string',
             enum: ['start_task', 'update_task', 'finish_task'],
-            description: 'The lifecycle action: "start_task" creates a new task with a name, goal, and step list. "update_task" advances to a step and reports progress. "finish_task" completes the task and displays a summary.',
+            description:
+              'The lifecycle action: "start_task" creates a new task with a name, goal, and step list. "update_task" advances to a step and reports progress. "finish_task" completes the task and displays a summary.',
           },
           taskName: {
             type: 'string',
@@ -20,7 +21,8 @@ export class ManageTaskTool extends BaseTool {
           },
           taskGoal: {
             type: 'string',
-            description: 'A brief description of what the task aims to accomplish (required for start_task).',
+            description:
+              'A brief description of what the task aims to accomplish (required for start_task).',
           },
           steps: {
             type: 'array',
@@ -29,7 +31,8 @@ export class ManageTaskTool extends BaseTool {
               properties: {
                 title: {
                   type: 'string',
-                  description: 'A short label for the step (e.g., "Research", "Implement", "Verify", "Summary").',
+                  description:
+                    'A short label for the step (e.g., "Research", "Implement", "Verify", "Summary").',
                 },
                 description: {
                   type: 'string',
@@ -38,19 +41,23 @@ export class ManageTaskTool extends BaseTool {
               },
               required: ['title', 'description'],
             },
-            description: 'The ordered list of steps for the task (required for start_task). Each step has a `title` and `description`. The last step must have title "Summary".',
+            description:
+              'The ordered list of steps for the task (required for start_task). Each step has a `title` and `description`. The last step must have title "Summary".',
           },
           currentStep: {
             type: 'integer',
-            description: 'The 0-indexed step number to advance to (for update_task). All steps before this index are marked completed.',
+            description:
+              'The 0-indexed step number to advance to (for update_task). All steps before this index are marked completed.',
           },
           status: {
             type: 'string',
-            description: 'A human-readable progress message for the current step (e.g., "Researching existing documents", "Creating the NPC actor"). Do not use machine-style values like "in_progress" or "completed".',
+            description:
+              'A human-readable progress message for the current step (e.g., "Researching existing documents", "Creating the NPC actor"). Do not use machine-style values like "in_progress" or "completed".',
           },
           summary: {
             type: 'string',
-            description: 'A concise summary of what was accomplished (required for finish_task). This text is displayed as the final Summary step content.',
+            description:
+              'A concise summary of what was accomplished (required for finish_task). This text is displayed as the final Summary step content.',
           },
         },
         required: ['action'],
@@ -78,18 +85,27 @@ export class ManageTaskTool extends BaseTool {
 
   _startTask({ taskName, taskGoal, steps }) {
     if (!taskName || !taskGoal || !steps) {
-      return this.handleError('start_task requires taskName, taskGoal, and steps.', 'ValidationError');
+      return this.handleError(
+        'start_task requires taskName, taskGoal, and steps.',
+        'ValidationError'
+      );
     }
 
     // Validate step structure
     if (!Array.isArray(steps) || steps.length === 0) {
-      return this.handleError('Task rejected: steps must be a non-empty array of {title, description} objects.', 'ValidationError');
+      return this.handleError(
+        'Task rejected: steps must be a non-empty array of {title, description} objects.',
+        'ValidationError'
+      );
     }
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       if (!step || typeof step.title !== 'string' || typeof step.description !== 'string') {
-        return this.handleError(`Task rejected: Step ${i} must be an object with "title" and "description" string properties.`, 'ValidationError');
+        return this.handleError(
+          `Task rejected: Step ${i} must be an object with "title" and "description" string properties.`,
+          'ValidationError'
+        );
       }
     }
 
@@ -98,7 +114,7 @@ export class ManageTaskTool extends BaseTool {
     if (lastStep.title !== 'Summary') {
       return this.handleError(
         'Task rejected: The final step must have title "Summary". ' +
-        'Please restructure your task list so the last step is { title: "Summary", description: "<placeholder or actual summary>" }.',
+          'Please restructure your task list so the last step is { title: "Summary", description: "<placeholder or actual summary>" }.',
         'ValidationError'
       );
     }
@@ -147,7 +163,8 @@ export class ManageTaskTool extends BaseTool {
     // Emit hook to update task tracker
     Hooks.callAll(SimulacrumHooks.TASK_UPDATED, this._getTaskState());
 
-    const currentStepTitle = this.currentTask.steps[this.currentTask.currentStepIndex]?.title || 'Unknown';
+    const currentStepTitle =
+      this.currentTask.steps[this.currentTask.currentStepIndex]?.title || 'Unknown';
     const stepNum = this.currentTask.currentStepIndex + 1;
     const totalSteps = this.currentTask.steps.length;
     const taskName = this.currentTask.name;
@@ -175,7 +192,7 @@ export class ManageTaskTool extends BaseTool {
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
       return this.handleError(
         'finish_task rejected: You MUST provide a "summary" parameter describing what was accomplished. ' +
-        'Example: { action: "finish_task", summary: "Deleted the accidental human race item and updated the Shym races journal with all canonical FR 2e races." }',
+          'Example: { action: "finish_task", summary: "Deleted the accidental human race item and updated the Shym races journal with all canonical FR 2e races." }',
         'ValidationError'
       );
     }

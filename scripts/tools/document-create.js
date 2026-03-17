@@ -22,7 +22,7 @@ export class DocumentCreateTool extends BaseTool {
   constructor() {
     super(
       'create_document',
-      'Create a new document in the world or a compendium pack. The `data` parameter must contain the document\'s fields (e.g., `name`, `type`, and any system-specific fields nested under `system`). Use `inspect_document_schema` to discover required fields and valid structure for a given document type. Use `list_document_schemas` to discover available document types and subtypes.'
+      "Create a new document in the world or a compendium pack. The `data` parameter must contain the document's fields (e.g., `name`, `type`, and any system-specific fields nested under `system`). Use `inspect_document_schema` to discover required fields and valid structure for a given document type. Use `list_document_schemas` to discover available document types and subtypes."
     );
     this.requiresConfirmation = true;
     this.schema = {
@@ -30,19 +30,23 @@ export class DocumentCreateTool extends BaseTool {
       properties: {
         documentType: {
           type: 'string',
-          description: 'The document class to create (e.g., Actor, Item, JournalEntry, RollTable, Scene). Use `list_document_schemas` to discover available types.',
+          description:
+            'The document class to create (e.g., Actor, Item, JournalEntry, RollTable, Scene). Use `list_document_schemas` to discover available types.',
         },
         data: {
           type: 'object',
-          description: 'The document\'s field data as a JSON object. Must include at least `name` and, for typed documents, a `type` field (e.g., "npc", "weapon"). Structure varies by document type — use `inspect_document_schema` to discover valid fields. Embedded documents go in their respective arrays (e.g., `pages` for JournalEntry, `items` for Actor).',
+          description:
+            'The document\'s field data as a JSON object. Must include at least `name` and, for typed documents, a `type` field (e.g., "npc", "weapon"). Structure varies by document type — use `inspect_document_schema` to discover valid fields. Embedded documents go in their respective arrays (e.g., `pages` for JournalEntry, `items` for Actor).',
         },
         folder: {
           type: 'string',
-          description: 'The ID of an existing Folder to place the document in. Omit to create at root level.',
+          description:
+            'The ID of an existing Folder to place the document in. Omit to create at root level.',
         },
         pack: {
           type: 'string',
-          description: 'The compendium pack ID to create the document in (e.g., "dnd5e.items"). The pack must be unlocked and match the document type. Omit to create in the world.',
+          description:
+            'The compendium pack ID to create the document in (e.g., "dnd5e.items"). The pack must be unlocked and match the document type. Omit to create in the world.',
         },
       },
       required: ['documentType', 'data'],
@@ -137,8 +141,12 @@ export class DocumentCreateTool extends BaseTool {
       if (!unknownFieldsResult.valid && unknownFieldsResult.unknownFields.length > 0) {
         // Build the full schema response including embedded document schemas
         const { DocumentAPI } = await import('../core/document-api.js');
-        const schemaResponse = await this.#buildSchemaResponse(documentType, unknownFieldsResult, DocumentAPI);
-        
+        const schemaResponse = await this.#buildSchemaResponse(
+          documentType,
+          unknownFieldsResult,
+          DocumentAPI
+        );
+
         return {
           content: schemaResponse.message,
           display: `Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}`,
@@ -176,7 +184,7 @@ export class DocumentCreateTool extends BaseTool {
           return {
             content: `Compendium pack "${parameters.pack}" not found`,
             display: `Pack not found: ${parameters.pack}`,
-            error: { message: `pack "${parameters.pack}" not found`, type: 'PACK_NOT_FOUND' }
+            error: { message: `pack "${parameters.pack}" not found`, type: 'PACK_NOT_FOUND' },
           };
         }
 
@@ -185,7 +193,7 @@ export class DocumentCreateTool extends BaseTool {
           return {
             content: `Compendium pack "${parameters.pack}" is locked. Cannot create document.`,
             display: `Pack is locked: ${parameters.pack}`,
-            error: { message: `pack "${parameters.pack}" is locked`, type: 'PACK_LOCKED' }
+            error: { message: `pack "${parameters.pack}" is locked`, type: 'PACK_LOCKED' },
           };
         }
 
@@ -194,7 +202,7 @@ export class DocumentCreateTool extends BaseTool {
           return {
             content: `Pack "${parameters.pack}" contains ${packCollection.documentName} documents, but you requested ${documentType}`,
             display: `Type mismatch: Pack contains ${packCollection.documentName}`,
-            error: { message: `Type mismatch`, type: 'TYPE_MISMATCH' }
+            error: { message: `Type mismatch`, type: 'TYPE_MISMATCH' },
           };
         }
 
@@ -225,10 +233,10 @@ export class DocumentCreateTool extends BaseTool {
         return {
           content: `Document creation failed. The document could not be created. Check that all required fields are provided and all values are valid for the ${documentType} document type.`,
           display: `Failed to create ${documentType} document`,
-          error: { 
+          error: {
             message: 'Document creation failed - no document returned',
             type: 'CREATE_FAILED',
-            hint: 'Check browser console for additional Foundry validation errors'
+            hint: 'Check browser console for additional Foundry validation errors',
           },
         };
       }
@@ -485,9 +493,8 @@ export class DocumentCreateTool extends BaseTool {
   #resolveFolderByName(value, documentType) {
     if (!value || typeof value !== 'string') return null;
     try {
-      const folder = game.folders?.find(f =>
-        f.name?.toLowerCase() === value.toLowerCase() &&
-        f.type === documentType
+      const folder = game.folders?.find(
+        f => f.name?.toLowerCase() === value.toLowerCase() && f.type === documentType
       );
       return folder?.id ?? null;
     } catch {
@@ -535,7 +542,7 @@ export class DocumentCreateTool extends BaseTool {
   async #buildSchemaResponse(documentType, unknownFieldsResult, DocumentAPI) {
     const schema = DocumentAPI.getDocumentSchema(documentType);
     const embeddedSchemas = {};
-    
+
     // Get schemas for all embedded document types
     if (schema?.embeddedSchemas) {
       for (const [fieldName, embeddedInfo] of Object.entries(schema.embeddedSchemas)) {
@@ -559,15 +566,15 @@ export class DocumentCreateTool extends BaseTool {
     message += `Unknown fields: ${unknownFieldsResult.unknownFields.join(', ')}\n\n`;
     message += `--- ${documentType} Schema ---\n`;
     message += `Valid top-level fields: ${schema?.fields?.join(', ') || 'none'}\n`;
-    
+
     if (schema?.embedded?.length > 0) {
       message += `\nEmbedded document fields: ${schema.embedded.join(', ')}\n`;
-      
+
       // Include the embedded document schemas
       for (const [fieldName, embeddedSchema] of Object.entries(embeddedSchemas)) {
         message += `\n--- ${embeddedSchema.documentType} Schema (for "${fieldName}" array) ---\n`;
         message += `Fields: ${embeddedSchema.fields?.join(', ') || 'none'}\n`;
-        
+
         // Include field details for key fields
         if (embeddedSchema.fieldDetails) {
           const keyFields = ['name', 'type', 'text', 'content', 'system'];
@@ -621,7 +628,7 @@ export class DocumentCreateTool extends BaseTool {
 
     let output = `--- ${documentType} Schema Reference ---\n`;
     output += `Top-level fields: ${schema.fields?.join(', ') || 'none'}\n`;
-    
+
     if (schema.systemFields?.length > 0) {
       output += `System fields (inside "system"): ${schema.systemFields.join(', ')}\n`;
     }

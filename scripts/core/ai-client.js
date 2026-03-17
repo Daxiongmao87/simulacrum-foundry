@@ -174,7 +174,9 @@ export class AIClient {
     }
 
     // Check for mismatches
-    const missingResponses = [...expectedToolResponses].filter(id => !receivedToolResponses.has(id));
+    const missingResponses = [...expectedToolResponses].filter(
+      id => !receivedToolResponses.has(id)
+    );
     const orphanResponses = [...receivedToolResponses].filter(id => !expectedToolResponses.has(id));
 
     if (missingResponses.length === 0 && orphanResponses.length === 0) {
@@ -189,13 +191,16 @@ export class AIClient {
 
     // Log detailed message structure for debugging
     if (isDebugEnabled()) {
-      logger.debug('Message structure before repair:', messages.map((m, i) => ({
-        index: i,
-        role: m.role,
-        hasContent: !!m.content,
-        toolCallIds: m.tool_calls?.map(tc => tc.id) || [],
-        toolCallId: m.tool_call_id || null,
-      })));
+      logger.debug(
+        'Message structure before repair:',
+        messages.map((m, i) => ({
+          index: i,
+          role: m.role,
+          hasContent: !!m.content,
+          toolCallIds: m.tool_calls?.map(tc => tc.id) || [],
+          toolCallId: m.tool_call_id || null,
+        }))
+      );
     }
 
     // Create a mutable copy
@@ -204,7 +209,8 @@ export class AIClient {
     // Strategy 1: Add stub responses for missing tool responses
     if (missingResponses.length > 0) {
       const stubResponse = {
-        error: 'Tool execution was interrupted or the conversation was restored from a previous session.',
+        error:
+          'Tool execution was interrupted or the conversation was restored from a previous session.',
         stale: true,
       };
 
@@ -222,14 +228,16 @@ export class AIClient {
       }
 
       // Insert stub responses (in reverse order to avoid index shifting)
-      const insertions = missingResponses.map(id => ({
-        afterIndex: toolCallToAssistantIdx.get(id),
-        message: {
-          role: 'tool',
-          content: JSON.stringify(stubResponse),
-          tool_call_id: id,
-        },
-      })).sort((a, b) => b.afterIndex - a.afterIndex);
+      const insertions = missingResponses
+        .map(id => ({
+          afterIndex: toolCallToAssistantIdx.get(id),
+          message: {
+            role: 'tool',
+            content: JSON.stringify(stubResponse),
+            tool_call_id: id,
+          },
+        }))
+        .sort((a, b) => b.afterIndex - a.afterIndex);
 
       for (const ins of insertions) {
         let insertPos = ins.afterIndex + 1;
@@ -360,7 +368,11 @@ export class AIClient {
         if (shouldRetry && attempt < MAX_RETRIES) {
           const delay = calculateRetryDelay(attempt, INITIAL_DELAY_MS, true);
           const retryCallId = `api-retry-openai-${Date.now()}`;
-          emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1));
+          emitRetryStatus(
+            'start',
+            retryCallId,
+            buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1)
+          );
           if (isDebugEnabled()) {
             createLogger('AIDiagnostics').info('Retrying API request', {
               attempt: attempt + 1,
@@ -384,7 +396,11 @@ export class AIClient {
         }
         const delay = calculateRetryDelay(attempt, INITIAL_DELAY_MS, true);
         const retryCallId = `api-retry-fetch-${Date.now()}`;
-        emitRetryStatus('start', retryCallId, buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1));
+        emitRetryStatus(
+          'start',
+          retryCallId,
+          buildConnectionRetryLabel(attempt + 2, MAX_RETRIES + 1)
+        );
         await executeRetryDelay(delay, signal, retryCallId);
         emitRetryStatus('end', retryCallId);
       }

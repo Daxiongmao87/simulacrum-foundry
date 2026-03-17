@@ -150,8 +150,7 @@ function _registerLegacySettings() {
   });
 }
 
-function _registerContextSettings() {
-}
+function _registerContextSettings() {}
 
 function _registerStylingSettings() {
   game.settings.register('simulacrum', 'customSystemPrompt', {

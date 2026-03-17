@@ -252,7 +252,11 @@ export class ToolRegistry {
       const raw =
         (typeof tool.getParameterSchema === 'function' ? tool.getParameterSchema() : null) ||
         (tool.schema
-          ? { ...tool.schema, properties: { ...tool.schema.properties }, required: [...(tool.schema.required || [])] }
+          ? {
+              ...tool.schema,
+              properties: { ...tool.schema.properties },
+              required: [...(tool.schema.required || [])],
+            }
           : {});
       let parameters = raw;
       if (!raw || typeof raw !== 'object' || raw.type !== 'object') {

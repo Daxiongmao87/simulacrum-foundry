@@ -95,7 +95,9 @@ export class SchemaValidator {
         if (configChoices && configChoices.length > 0) {
           analysis.choices = configChoices;
           analysis.choicesSource = 'CONFIG';
-          analysis.suggestions.push(`Valid values: ${configChoices.slice(0, 10).join(', ')}${configChoices.length > 10 ? '...' : ''}`);
+          analysis.suggestions.push(
+            `Valid values: ${configChoices.slice(0, 10).join(', ')}${configChoices.length > 10 ? '...' : ''}`
+          );
         }
       }
 
@@ -318,7 +320,7 @@ export class SchemaValidator {
     }
 
     const schemaFields = new Set(Object.keys(schemaInfo.fields));
-    
+
     // Common meta-fields that Foundry accepts but may not be in schema.fields
     const metaFields = new Set(['_id', 'type', 'sort', 'ownership', 'flags', '_stats']);
 
@@ -332,15 +334,11 @@ export class SchemaValidator {
 
     if (result.unknownFields.length > 0) {
       result.valid = false;
-      
+
       // Build helpful suggestions
       const availableFieldsList = Array.from(schemaFields).sort().join(', ');
-      result.suggestions.push(
-        `Unknown fields will be ignored: ${result.unknownFields.join(', ')}`
-      );
-      result.suggestions.push(
-        `Valid top-level fields for ${documentType}: ${availableFieldsList}`
-      );
+      result.suggestions.push(`Unknown fields will be ignored: ${result.unknownFields.join(', ')}`);
+      result.suggestions.push(`Valid top-level fields for ${documentType}: ${availableFieldsList}`);
 
       // Check for common mistakes and provide specific guidance
       for (const unknownField of result.unknownFields) {
@@ -368,9 +366,7 @@ export class SchemaValidator {
     if (systemFields) {
       // Try to access nested system field info
       try {
-        const systemSchema = systemFields.model?.schema?.fields || 
-                            systemFields.fields || 
-                            {};
+        const systemSchema = systemFields.model?.schema?.fields || systemFields.fields || {};
         if (Object.keys(systemSchema).includes(fieldName)) {
           return `Field "${fieldName}" should be inside "system": { "${fieldName}": ... }`;
         }
@@ -381,18 +377,19 @@ export class SchemaValidator {
 
     // Check for embedded collection fields that need special handling
     // Dynamically detect if a field should be in an embedded collection
-    const embeddedCollections = Object.entries(schemaInfo.fields || {}).filter(
-      ([, field]) => field.isCollection || field.elementType
-    ).map(([name]) => name);
-    
+    const embeddedCollections = Object.entries(schemaInfo.fields || {})
+      .filter(([, field]) => field.isCollection || field.elementType)
+      .map(([name]) => name);
+
     if (embeddedCollections.length > 0 && fieldName === 'content') {
       return `Field "content" is not valid at the top level for ${documentType}. This document uses embedded collections: ${embeddedCollections.join(', ')}. Use inspect_document_schema to see the correct structure.`;
     }
 
     // Check for common field name variations
-    const similarFields = Array.from(Object.keys(schemaInfo.fields)).filter(f => 
-      f.toLowerCase().includes(fieldName.toLowerCase()) ||
-      fieldName.toLowerCase().includes(f.toLowerCase())
+    const similarFields = Array.from(Object.keys(schemaInfo.fields)).filter(
+      f =>
+        f.toLowerCase().includes(fieldName.toLowerCase()) ||
+        fieldName.toLowerCase().includes(f.toLowerCase())
     );
     if (similarFields.length > 0) {
       return `Did you mean one of these fields? ${similarFields.join(', ')}`;
@@ -412,26 +409,26 @@ export class SchemaValidator {
 
     // Dynamically find the system's CONFIG namespace
     const systemId = game.system.id;
-    const systemConfig = CONFIG[systemId.toUpperCase()] || 
-                         CONFIG[systemId.toLowerCase()] || 
-                         CONFIG[systemId];
-    
+    const systemConfig =
+      CONFIG[systemId.toUpperCase()] || CONFIG[systemId.toLowerCase()] || CONFIG[systemId];
+
     if (!systemConfig || typeof systemConfig !== 'object') return null;
 
     // Pure fuzzy search - no hardcoded mappings
     const lowerFieldName = fieldName.toLowerCase();
-    
+
     for (const [key, value] of Object.entries(systemConfig)) {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
-      
+
       const lowerKey = key.toLowerCase();
-      
+
       // Match patterns like "actorSizes" for field "size"
-      const isMatch = lowerKey === lowerFieldName ||
-                      lowerKey === lowerFieldName + 's' ||
-                      lowerKey.endsWith(lowerFieldName + 's') ||
-                      lowerKey.endsWith(lowerFieldName);
-      
+      const isMatch =
+        lowerKey === lowerFieldName ||
+        lowerKey === lowerFieldName + 's' ||
+        lowerKey.endsWith(lowerFieldName + 's') ||
+        lowerKey.endsWith(lowerFieldName);
+
       if (isMatch) {
         const keys = this.#extractConfigKeys(value);
         if (keys && keys.length > 0 && keys.length < 50) {

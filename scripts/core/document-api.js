@@ -57,16 +57,14 @@ export class DocumentAPI {
     const packs = Array.from(game.packs);
 
     // Filter if type specified
-    const filtered = documentType
-      ? packs.filter(p => p.documentName === documentType)
-      : packs;
+    const filtered = documentType ? packs.filter(p => p.documentName === documentType) : packs;
 
     // Map to simplified objects
     return filtered.map(p => ({
       id: p.metadata.id, // e.g., "dnd5e.heroes"
       title: p.metadata.title || p.title,
       documentName: p.documentName,
-      count: p.index.size // Note: index size is O(1), efficient
+      count: p.index.size, // Note: index size is O(1), efficient
     }));
   }
 
@@ -424,9 +422,7 @@ export class DocumentAPI {
   static #extractSystemFieldsForSubtype(documentType, subtype, definitions, definitionMap) {
     const dataModel = CONFIG[documentType]?.dataModels?.[subtype];
     if (!dataModel?.schema?.fields) {
-      documentLogger.debug(
-        `No dataModel found for ${documentType}.${subtype}`
-      );
+      documentLogger.debug(`No dataModel found for ${documentType}.${subtype}`);
       return null;
     }
 
@@ -517,7 +513,10 @@ export class DocumentAPI {
       // Extract system fields — subtype-aware when subtype is provided
       if (subtype) {
         const subtypeResult = this.#extractSystemFieldsForSubtype(
-          documentType, subtype, definitions, definitionMap
+          documentType,
+          subtype,
+          definitions,
+          definitionMap
         );
         if (subtypeResult) {
           schema.systemFields = subtypeResult.systemFields;
@@ -563,8 +562,9 @@ export class DocumentAPI {
       try {
         schema.relationships = this.getDocumentRelationships(documentClass);
         schema.references = this.getDocumentReferences(documentClass);
-      } catch (relationError) { /* ignore */ }
-
+      } catch (relationError) {
+        /* ignore */
+      }
     } catch (error) {
       documentLogger.error(`Schema field extraction failed for "${documentType}":`, error);
       throw error;
@@ -586,7 +586,11 @@ export class DocumentAPI {
       schema.fieldDetails = trimmedDetails;
 
       // Remove _stats and flags from systemFieldDetails if present
-      if (schema.systemFieldDetails && typeof schema.systemFieldDetails === 'object' && !schema.systemFieldDetails.$ref) {
+      if (
+        schema.systemFieldDetails &&
+        typeof schema.systemFieldDetails === 'object' &&
+        !schema.systemFieldDetails.$ref
+      ) {
         delete schema.systemFieldDetails._stats;
         delete schema.systemFieldDetails.flags;
       }
@@ -609,7 +613,7 @@ export class DocumentAPI {
 
     // Helper to recurse via ref
     const getRef = (modelClass, baseName) => {
-      // ... (Same getRef logic, duplicated locally or class method? 
+      // ... (Same getRef logic, duplicated locally or class method?
       // Duplicate for now to keep strict context or use definitionMap logic inline)
 
       // RE-USE LOGIC:
@@ -627,7 +631,11 @@ export class DocumentAPI {
       const schema = { fields: [], fieldDetails: {} };
       if (modelClass.schema?.fields) {
         schema.fields = Object.keys(modelClass.schema.fields);
-        schema.fieldDetails = this.#extractFieldDetails(modelClass.schema.fields, definitions, definitionMap);
+        schema.fieldDetails = this.#extractFieldDetails(
+          modelClass.schema.fields,
+          definitions,
+          definitionMap
+        );
       }
       definitions[refName] = schema;
       return `#/definitions/${refName}`;
@@ -662,7 +670,7 @@ export class DocumentAPI {
           // Or just treat as nested object if it doesn't have a named class?
           // SchemaFields often are ad-hoc.
           // We can inline them or define them. Inlining is safer for unique structures.
-          // But if huge, we might want to define. 
+          // But if huge, we might want to define.
           // Let's inline simple ones, ref complex ones?
           // For simplicity in this logic: Inline, but use same recursion
           fieldInfo.nested = this.#extractFieldDetails(field.fields, definitions, definitionMap);
@@ -682,7 +690,7 @@ export class DocumentAPI {
             const ch = typeof field.choices === 'function' ? field.choices() : field.choices;
             if (Array.isArray(ch)) fieldInfo.choices = ch.slice(0, 20);
             else if (typeof ch === 'object') fieldInfo.choices = Object.keys(ch).slice(0, 20);
-          } catch (e) { }
+          } catch (e) {}
         }
 
         // CONFIG-based enum lookup for fields without explicit choices
@@ -750,30 +758,30 @@ export class DocumentAPI {
     // Dynamically find the system's CONFIG namespace
     // Try multiple naming conventions: uppercase, lowercase, original
     const systemId = game.system.id;
-    const systemConfig = CONFIG[systemId.toUpperCase()] || 
-                         CONFIG[systemId.toLowerCase()] || 
-                         CONFIG[systemId];
-    
+    const systemConfig =
+      CONFIG[systemId.toUpperCase()] || CONFIG[systemId.toLowerCase()] || CONFIG[systemId];
+
     if (!systemConfig || typeof systemConfig !== 'object') return null;
 
     // Pure fuzzy search - no hardcoded mappings
     // Look for CONFIG keys that might match this field name
     const lowerFieldName = fieldName.toLowerCase();
-    
+
     for (const [key, value] of Object.entries(systemConfig)) {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
-      
+
       const lowerKey = key.toLowerCase();
-      
+
       // Match patterns like:
       // - "actorSizes" for field "size" (key ends with fieldName + 's')
       // - "spellSchools" for field "school" (key ends with fieldName + 's')
       // - Direct match: key === fieldName
-      const isMatch = lowerKey === lowerFieldName ||
-                      lowerKey === lowerFieldName + 's' ||
-                      lowerKey.endsWith(lowerFieldName + 's') ||
-                      lowerKey.endsWith(lowerFieldName);
-      
+      const isMatch =
+        lowerKey === lowerFieldName ||
+        lowerKey === lowerFieldName + 's' ||
+        lowerKey.endsWith(lowerFieldName + 's') ||
+        lowerKey.endsWith(lowerFieldName);
+
       if (isMatch) {
         const keys = this.#extractConfigKeys(value);
         // Sanity check: only return if it looks like an enum (reasonable number of values)
@@ -1134,13 +1142,13 @@ export class DocumentAPI {
       } catch (createError) {
         // Re-throw validation errors to be handled by the calling tool
         // Check by name OR by message pattern OR by getAllFailures method
-        const isValidationError = createError.name === 'DataModelValidationError' ||
-          (createError.message && (
-            createError.message.includes('validation errors:') ||
-            createError.message.includes('Validation failed')
-          )) ||
+        const isValidationError =
+          createError.name === 'DataModelValidationError' ||
+          (createError.message &&
+            (createError.message.includes('validation errors:') ||
+              createError.message.includes('Validation failed'))) ||
           (createError.getAllFailures && typeof createError.getAllFailures === 'function');
-        
+
         if (isValidationError) {
           throw createError;
         }
@@ -1176,7 +1184,9 @@ export class DocumentAPI {
 
       // If documentType is provided, verify it matches
       if (documentType && collection.documentName !== documentType) {
-        throw new Error(`Pack '${pack}' contains '${collection.documentName}', not '${documentType}'`);
+        throw new Error(
+          `Pack '${pack}' contains '${collection.documentName}', not '${documentType}'`
+        );
       }
 
       doc = await collection.getDocument(id);
@@ -1236,13 +1246,13 @@ export class DocumentAPI {
         await doc.update(updates);
       } catch (updateError) {
         // Check by name OR by message pattern OR by getAllFailures method
-        const isValidationError = updateError.name === 'DataModelValidationError' ||
-          (updateError.message && (
-            updateError.message.includes('validation errors:') ||
-            updateError.message.includes('Validation failed')
-          )) ||
+        const isValidationError =
+          updateError.name === 'DataModelValidationError' ||
+          (updateError.message &&
+            (updateError.message.includes('validation errors:') ||
+              updateError.message.includes('Validation failed'))) ||
           (updateError.getAllFailures && typeof updateError.getAllFailures === 'function');
-        
+
         if (isValidationError) {
           throw updateError;
         }
@@ -1388,10 +1398,13 @@ export class DocumentAPI {
       if (!packCollection) throw new Error(`Compendium pack not found: ${options.pack}`);
       if (packCollection.locked) throw new Error(`Compendium pack is locked: ${options.pack}`);
       if (packCollection.documentName !== documentType) {
-        throw new Error(`Pack ${options.pack} contains ${packCollection.documentName}, not ${documentType}`);
+        throw new Error(
+          `Pack ${options.pack} contains ${packCollection.documentName}, not ${documentType}`
+        );
       }
       doc = await packCollection.getDocument(id);
-      if (!doc) throw new Error(`Document not found in pack: @UUID[Compendium.${options.pack}.${id}]`);
+      if (!doc)
+        throw new Error(`Document not found in pack: @UUID[Compendium.${options.pack}.${id}]`);
     } else {
       const collection = this.#resolveCollection(documentType);
       if (!collection) throw new Error(`Unknown document type: ${documentType}`);
@@ -1425,13 +1438,13 @@ export class DocumentAPI {
         await doc.delete();
       } catch (deleteError) {
         // Check by name OR by message pattern OR by getAllFailures method
-        const isValidationError = deleteError.name === 'DataModelValidationError' ||
-          (deleteError.message && (
-            deleteError.message.includes('validation errors:') ||
-            deleteError.message.includes('Validation failed')
-          )) ||
+        const isValidationError =
+          deleteError.name === 'DataModelValidationError' ||
+          (deleteError.message &&
+            (deleteError.message.includes('validation errors:') ||
+              deleteError.message.includes('Validation failed'))) ||
           (deleteError.getAllFailures && typeof deleteError.getAllFailures === 'function');
-        
+
         if (isValidationError) {
           throw deleteError;
         }
@@ -1465,7 +1478,7 @@ export class DocumentAPI {
     const q = String(query || '').toLowerCase();
 
     // Helper to check match
-    const isMatch = (obj) => {
+    const isMatch = obj => {
       const hay = fields
         .map(f => String(DocumentAPI.#get(obj, f) ?? ''))
         .join(' ')
@@ -1493,7 +1506,9 @@ export class DocumentAPI {
           readable = collection.contents.filter(
             doc =>
               game.user?.isGM ||
-              (typeof doc.canUserModify === 'function' ? doc.canUserModify(game.user, 'READ') : true)
+              (typeof doc.canUserModify === 'function'
+                ? doc.canUserModify(game.user, 'READ')
+                : true)
           );
         }
 
@@ -1514,7 +1529,7 @@ export class DocumentAPI {
       for (const pack of packs) {
         if (results.length >= maxResults) break;
         // Check pack visibility/permission (User can generally read visible packs)
-        if (!pack.testUserPermission(game.user, "READ")) continue;
+        if (!pack.testUserPermission(game.user, 'READ')) continue;
 
         // Use index for speed
         const index = await pack.getIndex({ fields });
@@ -1526,7 +1541,7 @@ export class DocumentAPI {
               _id: idx._id,
               name: idx.name,
               pack: pack.collection,
-              uuid: idx.uuid // Index usually has uuid
+              uuid: idx.uuid, // Index usually has uuid
             });
             if (results.length >= maxResults) break;
           }

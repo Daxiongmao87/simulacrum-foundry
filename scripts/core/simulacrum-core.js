@@ -205,7 +205,7 @@ class SimulacrumCore {
             fromOptions: options.tools !== undefined,
           });
         }
-      } catch { }
+      } catch {}
 
       // Filter blacklisted tools - Ensure AI doesn't see tools explicitly denied
       if (Array.isArray(tools)) {
@@ -216,7 +216,9 @@ class SimulacrumCore {
         });
 
         if (isDebugEnabled() && tools.length < originalCount) {
-          this.logger.debug(`Filtered ${originalCount - tools.length} blacklisted tools from context`);
+          this.logger.debug(
+            `Filtered ${originalCount - tools.length} blacklisted tools from context`
+          );
         }
       }
 
@@ -282,7 +284,7 @@ class SimulacrumCore {
             sendingTools: !!sendTools,
           });
         }
-      } catch { }
+      } catch {}
 
       // Check for cancellation before making request
       if (signal.aborted) {
@@ -295,16 +297,16 @@ class SimulacrumCore {
 
       const raw = useNativeTools
         ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, {
-          signal,
-        })
+            signal,
+          })
         : await this.aiClient.chat(
-          sanitizeMessagesForFallback([
-            { role: 'system', content: systemPrompt },
-            ...limitedMessages,
-          ]),
-          sendTools,
-          { signal }
-        );
+            sanitizeMessagesForFallback([
+              { role: 'system', content: systemPrompt },
+              ...limitedMessages,
+            ]),
+            sendTools,
+            { signal }
+          );
       if (raw == null) {
         throw new Error('Empty AI response');
       }
