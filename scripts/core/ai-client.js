@@ -289,13 +289,31 @@ export class AIClient {
     const body = {
       model: this.model,
       // Sanitize messages to remove internal fields (like provider_metadata) that cause 400 errors
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        ...(m.name ? { name: m.name } : {}),
-        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-      })),
+      messages: messages.map((m, i) => {
+        let role = m.role;
+        let content = m.content;
+        const isOpenAI = this.detectProvider(this.baseURL) === 'openai';
+        // Downgrade 'developer' role for providers that don't support it.
+        // OpenAI supports 'developer'; local/unknown backends get 'user' with prefix.
+        if (role === 'developer' && !isOpenAI) {
+          role = 'user';
+          content = `[DEVELOPER CORRECTION] ${content}`;
+        }
+        // Downgrade mid-conversation 'system' messages to 'user'.
+        // Many model templates (Qwen, etc.) reject system messages after position 0.
+        // This handles stale persisted conversations from before the developer role migration.
+        if (role === 'system' && i > 0) {
+          role = 'user';
+          content = `[SYSTEM CORRECTION] ${content}`;
+        }
+        return {
+          role,
+          content,
+          ...(m.name ? { name: m.name } : {}),
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        };
+      }),
     };
 
     if (tools) {

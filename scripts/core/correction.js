@@ -1,11 +1,15 @@
 /**
  * Shared correction helpers for empty-content assistant responses.
- * Ensures the conversation captures a failed assistant turn and a system
+ * Ensures the conversation captures a failed assistant turn and a developer
  * instruction before retrying, so the next AI call receives corrective context.
+ *
+ * Uses 'developer' role for correction instructions (industry standard for
+ * programmatic mid-conversation directives). The AI client downgrades to 'user'
+ * with a DEVELOPER CORRECTION prefix for backends that don't support it.
  */
 
 /**
- * Append assistant+system correction messages for a text-only response (missing tool call).
+ * Append assistant + developer correction messages for a text-only response (missing tool call).
  * In the autonomous tool loop, the AI MUST respond with a tool call - text-only responses
  * are rejected. To exit the loop, the AI must call `end_loop`.
  *
@@ -32,14 +36,14 @@ export function appendEmptyContentCorrection(conversationManager, errorResponse)
   // Mark as _internal so it's not displayed to users on reload
   conversationManager.addMessage('assistant', combinedContent, null, null, { _internal: true });
 
-  // Add a system instruction explicitly requiring tool call to exit
-  const systemInstruction =
+  // Add a developer instruction explicitly requiring tool call to exit
+  const correctionInstruction =
     'Your previous response was rejected because it contained no tool call. You are in an autonomous tool execution loop - text-only responses are NOT valid. To exit this loop, you MUST call the `end_loop` tool. Your text is already displayed to the user.';
-  conversationManager.addMessage('system', systemInstruction);
+  conversationManager.addMessage('developer', correctionInstruction);
 }
 
 /**
- * Append assistant/system correction messages for malformed tool call responses.
+ * Append assistant + developer correction messages for malformed tool call responses.
  * Ensures the next retry has natural-language context instead of repeating the
  * invalid tool invocation.
  *
@@ -73,7 +77,7 @@ export function appendToolFailureCorrection(conversationManager, errorResponse) 
   // Mark as _internal so it's not displayed to users on reload
   conversationManager.addMessage('assistant', assistantSummary, null, null, { _internal: true });
 
-  const systemInstruction =
+  const correctionInstruction =
     'Your last reply attempted to call a tool with invalid or malformed arguments. Provide corrected arguments if a tool call is still required, or respond in plain language without using tools.';
-  conversationManager.addMessage('system', systemInstruction);
+  conversationManager.addMessage('developer', correctionInstruction);
 }

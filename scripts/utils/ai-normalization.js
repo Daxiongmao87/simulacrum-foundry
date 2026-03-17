@@ -13,11 +13,21 @@ export function sanitizeMessagesForFallback(messages) {
     return (messages || [])
       .filter(m => {
         const r = m && m.role;
-        if (r !== 'system' && r !== 'user' && r !== 'assistant') return false;
+        if (r !== 'system' && r !== 'user' && r !== 'assistant' && r !== 'developer') return false;
         const c = typeof m.content === 'string' ? m.content.trim() : '';
         return c.length > 0;
       })
-      .map(m => ({ role: m.role, content: String(m.content) }));
+      .map((m, i) => {
+        // Downgrade 'developer' to 'user' in fallback mode (no provider detection available)
+        if (m.role === 'developer') {
+          return { role: 'user', content: `[DEVELOPER CORRECTION] ${String(m.content)}` };
+        }
+        // Downgrade mid-conversation 'system' to 'user' (position 0 is fine)
+        if (m.role === 'system' && i > 0) {
+          return { role: 'user', content: `[SYSTEM CORRECTION] ${String(m.content)}` };
+        }
+        return { role: m.role, content: String(m.content) };
+      });
   } catch {
     return [];
   }
