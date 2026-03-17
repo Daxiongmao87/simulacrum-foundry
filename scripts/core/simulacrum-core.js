@@ -463,7 +463,11 @@ class SimulacrumCore {
   }
 
   static async getSystemPrompt() {
-    return buildSystemPrompt();
+    let prompt = await buildSystemPrompt();
+    if (this.conversationManager?.rollingSummary) {
+      prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n\n${prompt}`;
+    }
+    return prompt;
   }
 }
 // Export the SimulacrumCore class

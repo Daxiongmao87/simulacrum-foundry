@@ -277,30 +277,11 @@ class ConversationManager {
   }
 
   /**
-   * Returns the synthesized message array for AI consumption.
-   * Injects rollingSummary as a system message if present.
+   * Returns the message array for AI consumption.
    * @returns {Array<object>} The array of messages.
    */
   getMessages() {
-    if (!this.rollingSummary) {
-      return this.activeMessages;
-    }
-
-    // Find system message position
-    const systemIdx = this.activeMessages.findIndex(m => m.role === 'system');
-    const insertIdx = systemIdx >= 0 ? systemIdx + 1 : 0;
-
-    // Inject summary after system message
-    const summaryMsg = {
-      role: 'system',
-      content: `### PREVIOUS CONVERSATION SUMMARY\n${this.rollingSummary}`,
-    };
-
-    return [
-      ...this.activeMessages.slice(0, insertIdx),
-      summaryMsg,
-      ...this.activeMessages.slice(insertIdx),
-    ];
+    return this.activeMessages;
   }
 
   /**
