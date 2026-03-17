@@ -17,6 +17,11 @@ module.exports = {
     ecmaVersion: 2022,
     sourceType: 'module'
   },
+  settings: {
+    jest: {
+      version: 29
+    }
+  },
   overrides: [
     {
       files: ['**/*.json'],
@@ -62,7 +67,8 @@ module.exports = {
     renderTemplate: 'readonly',
     Folder: 'readonly',
     Macro: 'readonly',
-    fromUuid: 'readonly'
+    fromUuid: 'readonly',
+    CompendiumCollection: 'readonly'
   },
   rules: {
     // Line length limit
