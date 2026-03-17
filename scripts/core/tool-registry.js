@@ -13,6 +13,8 @@ import { DocumentUpdateTool } from '../tools/document-update.js';
 import { DocumentDeleteTool } from '../tools/document-delete.js';
 import { DocumentListTool } from '../tools/document-list.js';
 import { DocumentSearchTool } from '../tools/document-search.js';
+import { DocumentCopyTool } from '../tools/document-copy.js';
+import { DocumentMoveTool } from '../tools/document-move.js';
 import { AssetSearchTool } from '../tools/asset-search.js';
 import { BrowseFoldersTool } from '../tools/browse-folders.js';
 import { DocumentSchemaTool } from '../tools/document-schema.js';
@@ -71,6 +73,8 @@ export class ToolRegistry {
         new DocumentDeleteTool(),
         new DocumentListTool(),
         new DocumentSearchTool(),
+        new DocumentCopyTool(),
+        new DocumentMoveTool(),
         new AssetSearchTool(),
         new BrowseFoldersTool(),
         new DocumentSchemaTool(),
