@@ -22,7 +22,7 @@ export class DocumentCreateTool extends BaseTool {
   constructor() {
     super(
       'create_document',
-      "Create a new document in the world or a compendium pack. The `data` parameter must contain the document's fields (e.g., `name`, `type`, and any system-specific fields nested under `system`). Use `inspect_document_schema` to discover required fields and valid structure for a given document type. Use `list_document_schemas` to discover available document types and subtypes."
+      "Create a new document in the world or a compendium pack. The `data` parameter must contain the document's fields (e.g., `name`, `type`, and any system-specific fields nested under `system`). Use `inspect_document_schema` to discover required fields and valid structure for a given document type. Use `list_document_schemas` to discover available document types and subtypes. Pass `documentType` as \"Compendium\" to create a new world compendium pack (requires `data.name`, `data.label`, and `data.type`)."
     );
     this.requiresConfirmation = true;
     this.schema = {
@@ -78,6 +78,64 @@ export class DocumentCreateTool extends BaseTool {
     };
   }
 
+  /**
+   * Create a new world compendium pack
+   * @param {Object} params - Tool parameters with data.name, data.label, data.type
+   * @returns {Promise<Object>} Creation result
+   */
+  async _createCompendium(params) {
+    const { data } = params;
+
+    if (!game.user?.isGM) {
+      return {
+        content: 'Only GMs can create compendium packs',
+        display: 'Permission denied: GM required',
+        error: { message: 'Only GMs can create compendium packs', type: 'PERMISSION_DENIED' },
+      };
+    }
+
+    if (!data?.name || !data?.label || !data?.type) {
+      return {
+        content:
+          'Creating a Compendium requires `data.name` (lowercase pack name with hyphens), `data.label` (display name), and `data.type` (document type the pack stores, e.g. Actor, Item, JournalEntry).',
+        display: 'Missing required fields for compendium creation',
+        error: { message: 'Missing name, label, or type', type: 'VALIDATION_ERROR' },
+      };
+    }
+
+    const fullPackId = data.name.includes('.') ? data.name : `world.${data.name}`;
+    if (game.packs.has(fullPackId)) {
+      return {
+        content: `Compendium pack "${fullPackId}" already exists`,
+        display: `Pack already exists: ${fullPackId}`,
+        error: { message: `Pack "${fullPackId}" already exists`, type: 'CONFLICT' },
+      };
+    }
+
+    try {
+      const packName = data.name.includes('.') ? data.name.split('.')[1] : data.name;
+      const newPack = await CompendiumCollection.createCompendium({
+        name: packName,
+        label: data.label,
+        type: data.type,
+        packageType: 'world',
+      });
+
+      const packId = newPack.metadata.id;
+      const msg = `Created compendium pack "${newPack.metadata.label}" (${packId}) for ${data.type} documents`;
+      return {
+        content: JSON.stringify({ message: msg, packId, metadata: newPack.metadata }, null, 2),
+        display: `Created compendium **${newPack.metadata.label}** (${packId})`,
+      };
+    } catch (error) {
+      return {
+        content: `Failed to create compendium: ${error.message}`,
+        display: `Compendium creation failed: ${error.message}`,
+        error: { message: error.message, type: 'CREATE_FAILED' },
+      };
+    }
+  }
+
   async _promoteSystemFields(documentType, data) {
     try {
       const { DocumentAPI } = await import('../core/document-api.js');
@@ -119,6 +177,11 @@ export class DocumentCreateTool extends BaseTool {
   async execute(parameters) {
     try {
       const { documentType, data } = parameters;
+
+      // Compendium creation branch — early return before normal document flow
+      if (documentType === 'Compendium') {
+        return this._createCompendium(parameters);
+      }
 
       // Check if document type is valid
       if (!this.isValidDocumentType(documentType)) {

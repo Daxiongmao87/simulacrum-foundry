@@ -33,7 +33,7 @@ class DocumentUpdateTool extends BaseTool {
   constructor() {
     super(
       'update_document',
-      'Update an existing document by merging field changes or performing array/embedded collection operations. The document must be read with `read_document` before it can be updated (stale-check enforced). Use `updates` for simple field changes with dot notation (e.g., `"system.hp.value": 25`). Use `operations` to insert, replace, or delete entries in arrays and embedded collections (e.g., pages, items, effects).',
+      'Update an existing document by merging field changes or performing array/embedded collection operations. The document must be read with `read_document` before it can be updated (stale-check enforced). Use `updates` for simple field changes with dot notation (e.g., `"system.hp.value": 25`). Use `operations` to insert, replace, or delete entries in arrays and embedded collections (e.g., pages, items, effects). Pass `documentType` as "Compendium" with `documentId` as the pack ID to configure pack settings (locked, folder, sort, ownership).',
       {
         type: 'object',
         properties: {
@@ -93,7 +93,7 @@ class DocumentUpdateTool extends BaseTool {
           pack: {
             type: 'string',
             description:
-              'The compendium pack ID if updating in a compendium (e.g., "simulacrum.simulacrum-tools"). The pack must be unlocked via `configure_compendium` first. Omit to update in the world.',
+              'The compendium pack ID if updating a document inside a compendium (e.g., "simulacrum.simulacrum-tools"). The pack must be unlocked first (use `update_document` with `documentType="Compendium"` to unlock). Omit to update in the world.',
           },
         },
         required: ['documentType', 'documentId'],
@@ -135,6 +135,11 @@ class DocumentUpdateTool extends BaseTool {
     }
 
     try {
+      // Compendium configure branch — early return before normal document flow
+      if (normalizedParams.documentType === 'Compendium') {
+        return this._configureCompendium(normalizedParams);
+      }
+
       this._validateBasicParams(normalizedParams);
       const { documentType, documentId, pack } = normalizedParams;
 
@@ -150,7 +155,7 @@ class DocumentUpdateTool extends BaseTool {
         }
         if (packCollection.locked) {
           return {
-            content: `Compendium pack "${pack}" is locked. Use compendium_config to unlock it first.`,
+            content: `Compendium pack "${pack}" is locked. Use update_document with documentType="Compendium" to unlock it first.`,
             display: `Pack is locked: ${pack}`,
             error: { message: `pack "${pack}" is locked`, type: 'PACK_LOCKED' },
           };
@@ -188,6 +193,85 @@ class DocumentUpdateTool extends BaseTool {
       return await this.#buildSuccessResponse(normalizedParams);
     } catch (error) {
       return this.#handleExecuteError(error, normalizedParams);
+    }
+  }
+
+  /**
+   * Configure a compendium pack (lock/unlock, folder, sort, ownership)
+   * @param {Object} params - Tool parameters with documentId as pack ID, updates as config fields
+   * @returns {Promise<Object>} Configuration result
+   */
+  async _configureCompendium(params) {
+    const { documentId, updates } = params;
+
+    if (!game.user?.isGM) {
+      return {
+        content: 'Only GMs can configure compendium packs',
+        display: 'Permission denied: GM required',
+        error: { message: 'Only GMs can configure compendium packs', type: 'PERMISSION_DENIED' },
+      };
+    }
+
+    if (typeof documentId !== 'string' || documentId === '') {
+      return {
+        content: 'Parameter "documentId" must be a non-empty pack ID (e.g., "world.my-pack")',
+        display: 'Missing documentId',
+        error: { message: 'documentId is required', type: 'VALIDATION_ERROR' },
+      };
+    }
+
+    const pack = game.packs.get(documentId);
+    if (!pack) {
+      return {
+        content: `Compendium pack "${documentId}" not found`,
+        display: `Pack not found: ${documentId}`,
+        error: { message: `Pack "${documentId}" not found`, type: 'PACK_NOT_FOUND' },
+      };
+    }
+
+    if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+      return {
+        content:
+          'Provide `updates` with compendium config fields: `locked` (boolean), `folder` (string|null), `sort` (number), `ownership` (object mapping role names to permission level names).',
+        display: 'No updates provided',
+        error: { message: 'No updates provided', type: 'VALIDATION_ERROR' },
+      };
+    }
+
+    // Only pass through fields that CompendiumCollection.configure() accepts
+    const allowedFields = ['locked', 'folder', 'sort', 'ownership'];
+    const configData = {};
+    for (const key of allowedFields) {
+      if (key in updates) {
+        configData[key] = updates[key];
+      }
+    }
+
+    if (Object.keys(configData).length === 0) {
+      return {
+        content: `No valid compendium config fields in updates. Accepted fields: ${allowedFields.join(', ')}`,
+        display: 'No valid config fields',
+        error: { message: 'No valid config fields', type: 'VALIDATION_ERROR' },
+      };
+    }
+
+    try {
+      await pack.configure(configData);
+      const label = pack.metadata.label;
+      const summary = Object.entries(configData)
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+        .join(', ');
+      const msg = `Configured compendium "${label}" (${documentId}): ${summary}`;
+      return {
+        content: JSON.stringify({ message: msg, packId: documentId, applied: configData }, null, 2),
+        display: `Configured **${label}** (${summary})`,
+      };
+    } catch (error) {
+      return {
+        content: `Failed to configure compendium: ${error.message}`,
+        display: `Configuration failed: ${error.message}`,
+        error: { message: error.message, type: 'CONFIGURE_FAILED' },
+      };
     }
   }
 

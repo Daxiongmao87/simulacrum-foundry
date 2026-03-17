@@ -33,10 +33,10 @@ class DocumentSearchTool extends BaseTool {
             description:
               'Restrict the search to specific document fields (e.g., ["name", "system.description.value"]). Omit to search all fields.',
           },
-          maxResults: {
-            type: 'number',
-            default: 20,
-            description: 'The maximum number of results to return. Defaults to 20.',
+          pack: {
+            type: 'string',
+            description:
+              'Restrict the search to a specific compendium pack (e.g., "dnd5e.monsters"). Omit to search the world and all packs.',
           },
         },
         required: ['query'],
@@ -56,15 +56,13 @@ class DocumentSearchTool extends BaseTool {
         types: params.documentTypes,
         fields: params.fields,
         maxResults: params.maxResults,
+        pack: params.pack,
       });
 
-      // Ensure results are limited even if API returns more
-      const limitedResults = params.maxResults ? results.slice(0, params.maxResults) : results;
-
-      const resultCount = limitedResults.length;
+      const resultCount = results.length;
       const summary = `Found ${resultCount} document${resultCount !== 1 ? 's' : ''} matching "${params.query}"`;
       return {
-        content: this.formatSearchResults(limitedResults, params.query),
+        content: this.formatSearchResults(results, params.query),
         display: `<p><strong>${summary}</strong></p>`,
       };
     } catch (error) {

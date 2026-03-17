@@ -23,7 +23,6 @@ import { ExecuteMacroTool } from '../tools/execute-macro.js';
 import { ManageTaskTool } from '../tools/manage-task.js';
 import { RunJavascriptTool } from '../tools/run-javascript.js';
 import { ReadToolOutputTool } from '../tools/read-tool-output.js';
-import { DocumentCompendiumConfigTool } from '../tools/document-compendium-config.js';
 import { DocumentOwnershipTool } from '../tools/document-ownership.js';
 import { NotifyUserTool } from '../tools/notify-user.js';
 import { DocumentAPI } from './document-api.js';
@@ -83,7 +82,6 @@ export class ToolRegistry {
         new ManageTaskTool(),
         new RunJavascriptTool(),
         new ReadToolOutputTool(),
-        new DocumentCompendiumConfigTool(),
         new DocumentOwnershipTool(),
         new NotifyUserTool(),
       ];

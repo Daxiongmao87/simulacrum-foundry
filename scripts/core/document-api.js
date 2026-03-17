@@ -1467,13 +1467,12 @@ export class DocumentAPI {
    * @param {number} [params.maxResults=50]
    * @returns {Promise<object[]>} Result objects with minimal info
    */
-  static async searchDocuments({ types, query, fields = ['name'], maxResults = 50 }) {
+  static async searchDocuments({ types, query, fields = ['name'], pack } = {}) {
     // Normalize fields: null/empty from LLM tool calls should fall back to default
     if (!Array.isArray(fields) || fields.length === 0) {
       fields = ['name'];
     }
 
-    const searchTypes = Array.isArray(types) && types.length ? types : this.getAllDocumentTypes();
     const results = [];
     const q = String(query || '').toLowerCase();
 
@@ -1486,9 +1485,30 @@ export class DocumentAPI {
       return hay.includes(q);
     };
 
-    for (const t of searchTypes) {
-      if (results.length >= maxResults) break;
+    // Search a specific compendium pack
+    if (pack) {
+      const packObj = game.packs.get(pack);
+      if (!packObj) throw new Error(`Unknown compendium pack: ${pack}`);
+      if (!packObj.testUserPermission(game.user, 'READ')) return results;
 
+      const index = await packObj.getIndex({ fields });
+      for (const idx of index) {
+        if (isMatch(idx)) {
+          results.push({
+            type: packObj.documentName,
+            _id: idx._id,
+            name: idx.name,
+            pack: packObj.collection,
+            uuid: idx.uuid,
+          });
+        }
+      }
+      return results;
+    }
+
+    const searchTypes = Array.isArray(types) && types.length ? types : this.getAllDocumentTypes();
+
+    for (const t of searchTypes) {
       // 1. Search World Collection
       const collection = this.#resolveCollection(t);
       if (collection) {
@@ -1516,23 +1536,19 @@ export class DocumentAPI {
           const obj = doc.toObject();
           if (isMatch(obj)) {
             results.push({ type: t, _id: obj._id, name: obj.name, uuid: doc.uuid });
-            if (results.length >= maxResults) break;
           }
         }
       }
 
-      if (results.length >= maxResults) break;
-
       // 2. Search Compendium Packs
       // Only search packs that contain this document type
       const packs = game.packs.filter(p => p.documentName === t);
-      for (const pack of packs) {
-        if (results.length >= maxResults) break;
+      for (const p of packs) {
         // Check pack visibility/permission (User can generally read visible packs)
-        if (!pack.testUserPermission(game.user, 'READ')) continue;
+        if (!p.testUserPermission(game.user, 'READ')) continue;
 
         // Use index for speed
-        const index = await pack.getIndex({ fields });
+        const index = await p.getIndex({ fields });
         for (const idx of index) {
           // idx is a plain object with fields
           if (isMatch(idx)) {
@@ -1540,10 +1556,9 @@ export class DocumentAPI {
               type: t,
               _id: idx._id,
               name: idx.name,
-              pack: pack.collection,
+              pack: p.collection,
               uuid: idx.uuid, // Index usually has uuid
             });
-            if (results.length >= maxResults) break;
           }
         }
       }

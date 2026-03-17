@@ -37,7 +37,7 @@ class DocumentDeleteTool extends BaseTool {
   constructor() {
     super(
       'delete_document',
-      'Permanently delete a document from the world or a compendium pack. The document must be read with `read_document` before it can be deleted (stale-check enforced). This action is irreversible — the document and all its embedded content (pages, items, effects) will be destroyed.',
+      'Permanently delete a document from the world or a compendium pack. The document must be read with `read_document` before it can be deleted (stale-check enforced). This action is irreversible — the document and all its embedded content (pages, items, effects) will be destroyed. Pass `documentType` as "Compendium" with `documentId` as the pack ID (e.g., "world.my-pack") to delete a world-level compendium pack.',
       {
         type: 'object',
         properties: {
@@ -89,6 +89,11 @@ class DocumentDeleteTool extends BaseTool {
     }
 
     try {
+      // Compendium deletion branch — early return before normal document flow
+      if (params.documentType === 'Compendium') {
+        return this._deleteCompendium(params);
+      }
+
       // Validate document type exists
       if (!this.isValidDocumentType(params.documentType)) {
         return this.#buildErrorResponse(
@@ -123,6 +128,43 @@ class DocumentDeleteTool extends BaseTool {
         params.documentType,
         params.documentId
       );
+    }
+  }
+
+  /**
+   * Delete a world-level compendium pack
+   * @param {Object} params - Tool parameters with documentId as the pack ID
+   * @returns {Promise<Object>} Deletion result
+   */
+  async _deleteCompendium(params) {
+    const { documentId } = params;
+
+    if (!game.user?.isGM) {
+      return this.#buildErrorResponse(params, 'PERMISSION_DENIED', 'Only GMs can delete compendium packs');
+    }
+
+    const pack = game.packs.get(documentId);
+    if (!pack) {
+      return this.#buildErrorResponse(params, 'PACK_NOT_FOUND', `Compendium pack "${documentId}" not found`);
+    }
+
+    if (pack.metadata.packageType !== 'world') {
+      return this.#buildErrorResponse(
+        params,
+        'PERMISSION_DENIED',
+        `Cannot delete pack "${documentId}" — only world-level compendiums can be deleted`
+      );
+    }
+
+    try {
+      const label = pack.metadata.label;
+      await pack.deleteCompendium();
+      return {
+        content: `Deleted compendium pack "${label}" (${documentId})`,
+        display: `Deleted compendium **${label}** (${documentId})`,
+      };
+    } catch (error) {
+      return this.#buildErrorResponse(params, 'DELETE_FAILED', `Failed to delete compendium: ${error.message}`);
     }
   }
 

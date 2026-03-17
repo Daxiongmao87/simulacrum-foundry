@@ -177,17 +177,13 @@ class DocumentListTool extends BaseTool {
       }
     });
 
-    const docsToShow = formattedDocs.slice(0, 20);
-    const moreText =
-      formattedDocs.length > 20 ? '\n... and ' + (formattedDocs.length - 20) + ' more' : '';
     return (
       '**' +
       documentType +
       ' Documents** (' +
       documents.length +
       ' total):\n' +
-      docsToShow.join('\n') +
-      moreText
+      formattedDocs.join('\n')
     );
   }
 

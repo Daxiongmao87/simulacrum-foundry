@@ -46,12 +46,7 @@ const DESTRUCTIVE_TOOL_META = {
     explainer: 'SIMULACRUM.ToolExplainer.RunJavascript',
     defaultState: PermissionState.ASK,
   },
-  configure_compendium: {
-    displayName: 'SIMULACRUM.Tools.configure_compendium',
-    explainer: 'SIMULACRUM.ToolExplainer.ConfigureCompendium',
-    defaultState: PermissionState.ASK,
-  },
-  set_document_ownership: {
+set_document_ownership: {
     displayName: 'SIMULACRUM.Tools.set_document_ownership',
     explainer: 'SIMULACRUM.ToolExplainer.SetDocumentOwnership',
     defaultState: PermissionState.ASK,

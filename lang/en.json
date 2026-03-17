@@ -86,7 +86,6 @@
       "execute_macro": "Execute Macro",
       "manage_task": "Manage Task",
       "run_javascript": "Run Script",
-      "configure_compendium": "Configure Compendium",
       "set_document_ownership": "Set Ownership",
       "end_loop": "End Loop"
     },
@@ -134,7 +133,6 @@
       "ExecuteMacro": "Allows the AI to run macros, which can execute arbitrary code defined in your world.",
       "RunJavascript": "Allows the AI to execute any JavaScript code with full access to your game session.",
       "MacroGeneric": "Allows the AI to execute this macro, which may contain arbitrary code.",
-      "ConfigureCompendium": "Allows the AI to lock or unlock compendium packs, controlling whether they can be modified.",
       "SetDocumentOwnership": "Allows the AI to change who can view or edit documents by modifying their ownership permissions."
     },
     "ModelSelector": {
