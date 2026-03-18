@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.0.9] - 2026-03-18
+
+### Changed
+- refactor: remove maxResults caps and merge compendium management into document tools
+- feat: add document copy and move tools
+- feat: add compendium create action and rename pack_id to packId
+- refactor: move rolling summary injection from getMessages to system prompt
+- refactor: migrate correction messages from system to developer role
+- style: format codebase with prettier
+- fix: sanitize innerHTML usage in sidebar tab (Fixes #112)
+- fix: resolve null derefs, dead code, API key leak, and game.packs guards
+- fix(ci): fix Discord announcement exceeding embed field char limit
+
 ## [1.0.8] - 2026-02-08
 
 ### Changed
