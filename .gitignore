@@ -125,4 +125,4 @@ vector_store.json
 
 workspace/.foundry-test-data/
 .github/copilot-instructions.md
-package-lock.json
+# package-lock.json
