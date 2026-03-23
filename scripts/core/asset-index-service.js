@@ -99,7 +99,19 @@ class AssetIndexService {
     if (!this.db) return false;
 
     try {
-      // Check for stored lastIndexTime - only exists after successful complete index
+      const hasEverIndexed = await new Promise((resolve, reject) => {
+        const tx = this.db.transaction('meta', 'readonly');
+        const request = tx.objectStore('meta').get('hasEverIndexed');
+        request.onsuccess = () => resolve(request.result?.value ?? false);
+        request.onerror = () => reject(request.error);
+      });
+
+      if (!hasEverIndexed) {
+        this.logger.debug('No persisted index flag found - first index not started yet');
+        return false;
+      }
+
+      // Restore last successful completion timestamp when available.
       const storedTime = await new Promise((resolve, reject) => {
         const tx = this.db.transaction('meta', 'readonly');
         const request = tx.objectStore('meta').get('lastIndexTime');
@@ -107,14 +119,11 @@ class AssetIndexService {
         request.onerror = () => reject(request.error);
       });
 
-      if (!storedTime) {
-        this.logger.debug('No lastIndexTime found - index incomplete or never finished');
-        return false;
+      if (storedTime) {
+        this.lastIndexTime = new Date(storedTime);
       }
 
-      this.lastIndexTime = new Date(storedTime);
-
-      // Get counts for stats
+      // Count cached records so availability can reflect the existing index state.
       const counts = await new Promise((resolve, reject) => {
         const tx = this.db.transaction(['files', 'folders'], 'readonly');
         let fileCount = 0;
@@ -310,6 +319,14 @@ class AssetIndexService {
     // Clear stores before streaming new data
     if (this.db) {
       try {
+        if (isInitialIndex) {
+          await new Promise((resolve, reject) => {
+            const tx = this.db.transaction('meta', 'readwrite');
+            tx.objectStore('meta').put({ key: 'hasEverIndexed', value: true });
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+          });
+        }
         await this._clearStores();
       } catch (err) {
         this.logger.error('Failed to clear IndexedDB stores', err);
@@ -683,7 +700,7 @@ class AssetIndexService {
     if (!this._initialIndexComplete) {
       return { available: false, reason: 'Initial indexing in progress' };
     }
-    if (this._fileCount === 0 && this._folderCount === 0) {
+    if (!this.isIndexing && this._fileCount === 0 && this._folderCount === 0) {
       return { available: false, reason: 'No files indexed' };
     }
     return { available: true };
