@@ -32,6 +32,14 @@
 - Conversation persistence must go through `ConversationManager` using `game.user.setFlag`
 - AI response normalization is handled by `ai-normalization.js` — do not add provider-specific format handling elsewhere
 
+## Testing Requirements (flag as errors)
+
+- All new features and bug fixes MUST include tests that verify the code actually works — tests should assert real, observable behavior, not just that functions exist or return without error
+- Tests must exercise meaningful scenarios: valid inputs producing correct outputs, edge cases, and error conditions
+- Do not accept tests that are superficial stubs, mock everything away, or only check that no exception is thrown — tests must prove functional correctness
+- E2E tests use Playwright (`tests/e2e/`) — see `tests/e2e/fixtures/test-base.js` for available fixtures
+- If a PR modifies tool behavior, it should include or update tests exercising the tool's `execute()` method with realistic inputs and expected outputs
+
 ## PR Conventions (flag as comments)
 
 - Commit messages must follow Conventional Commits: `type: description (Fixes #N)`
