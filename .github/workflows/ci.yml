@@ -1,9 +1,10 @@
 # CI checks for pull requests
-# Runs lint, formatting, and dead code checks on every PR targeting main
+# Runs lint and formatting on changed files; runs dead code checks when JS files change
+# Falls back to full project checks when lint/format config files are modified
 
 name: CI
 
-"on":
+'on':
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -16,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -26,11 +29,60 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: ESLint check
+      - name: Get changed files
+        id: changed
+        run: |
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+
+          # Check if lint/format config files changed (triggers full project checks)
+          CONFIG_CHANGED=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- '.eslintrc.cjs' '.prettierrc.json' 'knip.json' | tr '\n' ' ')
+          if [ -n "$CONFIG_CHANGED" ]; then
+            echo "config_changed=true" >> $GITHUB_OUTPUT
+            echo "Config files changed: $CONFIG_CHANGED — will run full project checks"
+          else
+            echo "config_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Get list of changed JS files (scripts and tests)
+          CHANGED_JS=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' | tr '\n' ' ')
+          CHANGED_ALL=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' '*.json' '*.md' | tr '\n' ' ')
+
+          echo "js_files=$CHANGED_JS" >> $GITHUB_OUTPUT
+          echo "all_files=$CHANGED_ALL" >> $GITHUB_OUTPUT
+
+          if [ -z "$CHANGED_JS" ]; then
+            echo "has_js=false" >> $GITHUB_OUTPUT
+            echo "No JS files changed"
+          else
+            echo "has_js=true" >> $GITHUB_OUTPUT
+            echo "Changed JS files: $CHANGED_JS"
+          fi
+
+          if [ -z "$CHANGED_ALL" ]; then
+            echo "has_any=false" >> $GITHUB_OUTPUT
+            echo "No formattable files changed"
+          else
+            echo "has_any=true" >> $GITHUB_OUTPUT
+            echo "Changed files for formatting: $CHANGED_ALL"
+          fi
+
+      - name: ESLint check (full — config changed)
+        if: steps.changed.outputs.config_changed == 'true'
         run: npm run lint:check
 
-      - name: Prettier check
+      - name: ESLint check (changed files only)
+        if: steps.changed.outputs.config_changed == 'false' && steps.changed.outputs.has_js == 'true'
+        run: npx eslint ${{ steps.changed.outputs.js_files }}
+
+      - name: Prettier check (full — config changed)
+        if: steps.changed.outputs.config_changed == 'true'
         run: npm run format:check
 
+      - name: Prettier check (changed files only)
+        if: steps.changed.outputs.config_changed == 'false' && steps.changed.outputs.has_any == 'true'
+        run: npx prettier --check ${{ steps.changed.outputs.all_files }}
+
       - name: Dead code check
+        if: steps.changed.outputs.has_js == 'true' || steps.changed.outputs.config_changed == 'true'
         run: npm run dead-code

@@ -112,6 +112,7 @@ deploy_package.sh
 
 # AI Tool Working Directories
 .gemini/
+!.gemini/styleguide.md
 .claude/
 .qwen/
 
@@ -124,5 +125,5 @@ memory_event_log.json
 vector_store.json
 
 workspace/.foundry-test-data/
-.github/copilot-instructions.md
+# .github/copilot-instructions.md
 # package-lock.json
