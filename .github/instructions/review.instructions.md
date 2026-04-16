@@ -1,3 +1,8 @@
+---
+applyTo: '**'
+excludeAgent: 'cloud-agent'
+---
+
 # Simulacrum Code Review Instructions
 
 ## Critical Rules (flag as errors)
@@ -34,11 +39,10 @@
 
 ## Testing Requirements (flag as errors)
 
-- All new features and bug fixes MUST include tests that verify the code actually works — tests MUST assert real, observable behavior, not just that functions exist or return without error
-- Tests MUST exercise meaningful scenarios: valid inputs producing correct outputs, edge cases, and error conditions
-- Do not accept tests that are superficial stubs, mock everything away, or only check that no exception is thrown — tests MUST prove functional correctness
-- E2E tests MUST use Playwright (`tests/e2e/`) — see `tests/e2e/fixtures/test-base.js` for available fixtures
-- If a PR modifies tool behavior, it MUST include or update tests exercising the tool's `execute()` method with realistic inputs and expected outputs
+- **CRITICAL GATE:** You MUST verify the pull request description contains a properly filled out `## Empirical Verification (UTRs)` section.
+- If the PR description is missing this section, the section is empty, or the section contains static file names instead of empirical execution logs, you MUST reject the PR immediately.
+- You must verify that the pasted test logs indicate that the tests actually passed (`PASS`, `OK`, etc.) and logically cover the systems modified in the PR.
+- **Exception:** PRs that exclusively modify documentation (`*.md`), CI configuration (`.github/**`), or other non-runtime assets (no changes under `scripts/**` or `tests/**`) cannot produce meaningful runtime test output. For these, UTR output may be omitted or replaced with the output of the relevant CI check (e.g. the lint/knip run that exercises the change). Verify the exception applies by inspecting the file list — if any runtime code is touched, the standard UTR requirement still applies.
 
 ## PR Conventions (flag as comments)
 
