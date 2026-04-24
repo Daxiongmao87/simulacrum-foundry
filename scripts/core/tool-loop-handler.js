@@ -1,6 +1,6 @@
 /* eslint-disable complexity, max-len, no-console */
 // TODO: Refactor into modular helpers to resolve deep complexity debt (Tracked in #147)
-/* eslint-disable max-lines, max-lines-per-function, max-statements, max-depth */
+/* eslint-disable max-lines, max-depth */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -71,6 +71,7 @@ export async function processToolCallLoop(options) {
 
 // --- Internal Loop Logic ---
 
+// eslint-disable-next-line max-lines-per-function -- Refactor tracked in #147
 async function _runLoopIteration(context) {
   let currentResponse = context.initialResponse;
 
@@ -218,6 +219,7 @@ async function _runLoopIteration(context) {
   return currentResponse;
 }
 
+// eslint-disable-next-line max-lines-per-function -- Refactor tracked in #147
 async function _processLoopCycle(currentResponse, context, state) {
   let { toolFailureAttempts, repeatCount } = state; // eslint-disable-line prefer-const
   const { REPEAT_LIMIT } = state;
@@ -405,7 +407,7 @@ async function _handleToolRefusal(response, context, attempts) {
   }
 }
 
-// eslint-disable-next-line complexity, max-lines-per-function -- Refactor tracked in #147
+// eslint-disable-next-line complexity, max-lines-per-function, max-statements -- Refactor tracked in #147
 async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
   const results = [];
@@ -796,7 +798,7 @@ function _sanitizeToolCallsForHistory(toolCalls) {
 
   return toolCalls.map(tc => {
     // Access arguments from either location (standard or legacy)
-    const argsRaw = tc.function?.arguments || tc.arguments;
+    const argsRaw = tc.function?.arguments ?? tc.arguments;
 
     // Ensure stored history always has valid-JSON arguments. If the model
     // emitted a malformed string that slipped through normalization, replace

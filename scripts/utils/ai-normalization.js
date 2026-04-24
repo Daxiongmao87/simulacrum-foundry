@@ -267,17 +267,11 @@ function _extractOpenAIData(raw) {
  * @param {object} tc - The tool call object
  * @returns {object} The normalized tool call
  */
+// eslint-disable-next-line complexity -- Tracked in #145
 export function normalizeToolCallArguments(tc) {
   if (!tc) return tc;
   const fn = tc.function;
   const rawArgs = fn?.arguments ?? tc.arguments;
-
-  // Handle null/undefined by coercing to empty object string
-  if (rawArgs == null) {
-    const emptyArgs = '{}';
-    if (fn) return { ...tc, function: { ...fn, arguments: emptyArgs } };
-    return { ...tc, arguments: emptyArgs };
-  }
 
   const outcome = repairToolCallArguments(rawArgs);
 
@@ -299,8 +293,8 @@ export function normalizeToolCallArguments(tc) {
 function _logToolCallRepair(name, outcome) {
   try {
     const diag = createLogger('AIDiagnostics');
-    if (outcome.ok && isDebugEnabled()) {
-      diag.warn('tool_call.args.repaired', { name });
+    if (outcome.ok && outcome.repaired && isDebugEnabled()) {
+      diag.info('tool_call.args.repaired', { name });
     } else if (!outcome.ok) {
       diag.warn('tool_call.args.unrecoverable', { name, error: outcome.parseError });
     }
@@ -333,7 +327,7 @@ function _failResult(argsString, parseError) {
  * Returns an outcome object; never throws.
  */
 export function repairToolCallArguments(raw) {
-  if (raw == null) return _okResult({}, '{}', true);
+  if (raw == null) return _failResult('', 'Missing tool call arguments');
   if (typeof raw !== 'string') {
     try {
       return _okResult(raw, JSON.stringify(raw), false);
