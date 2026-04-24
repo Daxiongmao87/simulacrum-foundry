@@ -17,6 +17,9 @@
 
 set -Eeuo pipefail
 
+export NO_COLOR=1
+export FORCE_COLOR=0
+
 BASE_SHA="${1:?base SHA required}"
 HEAD_OUT=/tmp/knip-head.out
 BASE_OUT=/tmp/knip-base.out
