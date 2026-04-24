@@ -126,4 +126,10 @@ vector_store.json
 
 workspace/.foundry-test-data/
 .github/copilot-instructions.md
-# package-lock.json
+
+# Foundry Pack LevelDB internals
+packs/**/LOG
+packs/**/LOCK
+packs/**/CURRENT
+packs/**/MANIFEST-*
+
