@@ -263,7 +263,7 @@ function _extractOpenAIData(raw) {
 
 /**
  * Normalizes tool-call arguments by attempting repair and ensuring they
- * are stored/sent as valid JSON strings.
+ * are stored/sent as valid JSON strings. (Tracked in #145)
  * @param {object} tc - The tool call object
  * @returns {object} The normalized tool call
  */
