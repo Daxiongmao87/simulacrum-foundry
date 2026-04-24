@@ -651,6 +651,10 @@ function _parseToolCallArguments(toolArgs, toolName) {
     if (toolArgs && toolArgs.__simulacrumParseError === true) {
       return { parsedArgs: null, error: toolArgs.parseError || 'malformed tool call arguments' };
     }
+    // Already parsed object - validate it is a true object (not null/array)
+    if (toolArgs === null || Array.isArray(toolArgs) || typeof toolArgs !== 'object') {
+      return { parsedArgs: null, error: 'Arguments must be a JSON object' };
+    }
     return { parsedArgs: toolArgs, error: null };
   }
   const outcome = repairToolCallArguments(toolArgs);
@@ -664,6 +668,12 @@ function _parseToolCallArguments(toolArgs, toolName) {
   if (parsed && parsed.__simulacrumParseError === true) {
     return { parsedArgs: null, error: parsed.parseError || 'malformed tool call arguments' };
   }
+
+  // Validate parsed result is an object (not null, array, or other literal)
+  if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+    return { parsedArgs: null, error: 'Arguments must be a JSON object' };
+  }
+
   return { parsedArgs: parsed, error: null };
 }
 
@@ -805,7 +815,8 @@ function _sanitizeToolCallsForHistory(toolCalls) {
       };
     }
 
-    let changed = !outcome.ok || outcome.repaired;
+    // Treat non-string args as a change to force re-serialization (ensures string storage)
+    let changed = !outcome.ok || outcome.repaired || typeof argsRaw !== 'string';
 
     // Strip transient fields if result is an object.
     // Guard against primitives (e.g. parsed being "null", 42, etc) to avoid TypeError on 'in' operator.

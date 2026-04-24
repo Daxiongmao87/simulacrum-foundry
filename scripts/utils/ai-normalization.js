@@ -274,7 +274,9 @@ export function normalizeToolCallArguments(tc) {
   if (rawArgs == null) return tc;
 
   const outcome = repairToolCallArguments(rawArgs);
-  if (outcome.ok && !outcome.repaired) return tc;
+
+  // If already a valid JSON string and not repaired, early return
+  if (typeof rawArgs === 'string' && outcome.ok && !outcome.repaired) return tc;
 
   const name = fn?.name || tc.name || 'unknown';
   const nextArgsString = outcome.ok
