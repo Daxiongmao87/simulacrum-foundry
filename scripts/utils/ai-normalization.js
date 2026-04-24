@@ -271,7 +271,13 @@ export function normalizeToolCallArguments(tc) {
   if (!tc) return tc;
   const fn = tc.function;
   const rawArgs = fn?.arguments ?? tc.arguments;
-  if (rawArgs == null) return tc;
+
+  // Handle null/undefined by coercing to empty object string
+  if (rawArgs == null) {
+    const emptyArgs = '{}';
+    if (fn) return { ...tc, function: { ...fn, arguments: emptyArgs } };
+    return { ...tc, arguments: emptyArgs };
+  }
 
   const outcome = repairToolCallArguments(rawArgs);
 
