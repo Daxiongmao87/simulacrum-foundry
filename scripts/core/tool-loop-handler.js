@@ -21,6 +21,7 @@ import {
   buildRetryLabel,
   getRetryDelayMs,
   delayWithSignal,
+  throwIfAborted,
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus, SimulacrumHooks } from './hook-manager.js';
 import { toolPermissionManager, PermissionState } from './tool-permission-manager.js';
@@ -413,10 +414,10 @@ async function _executeToolCalls(toolCalls, context) {
   const results = [];
 
   for (const toolCall of toolCalls) {
-    if (signal?.aborted) throw new Error('Process was cancelled');
+    throwIfAborted(signal);
 
     const toolName = toolCall?.function?.name || toolCall?.name;
-    const toolArgs = toolCall?.function?.arguments || toolCall?.arguments;
+    const toolArgs = toolCall?.function?.arguments ?? toolCall?.arguments;
     let result = null;
     let isSuccess = false;
     let error = null;
@@ -821,14 +822,25 @@ function _sanitizeToolCallsForHistory(toolCalls) {
     let changed = !outcome.ok || outcome.repaired || typeof argsRaw !== 'string';
 
     // Strip transient fields if result is an object.
-    // Guard against primitives (e.g. parsed being "null", 42, etc) to avoid TypeError on 'in' operator.
+    // Create a shallow copy if it is an object to avoid mutating the original tool call.
     if (parsed && typeof parsed === 'object') {
+      let workingParsed = parsed;
+      let hasTransientField = false;
       for (const field of TRANSIENT_FIELDS) {
         if (field in parsed) {
-          delete parsed[field];
-          changed = true;
+          hasTransientField = true;
+          break;
         }
       }
+
+      if (hasTransientField) {
+        workingParsed = { ...parsed };
+        for (const field of TRANSIENT_FIELDS) {
+          delete workingParsed[field];
+        }
+        changed = true;
+      }
+      parsed = workingParsed;
     }
 
     if (!changed) return tc;

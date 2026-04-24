@@ -130,6 +130,4 @@ workspace/.foundry-test-data/
 # Foundry Pack LevelDB internals
 packs/**/LOG
 packs/**/LOCK
-packs/**/CURRENT
-packs/**/MANIFEST-*
 
