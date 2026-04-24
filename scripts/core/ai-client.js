@@ -6,7 +6,7 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
-import { normalizeAIResponse, repairToolCallArguments } from '../utils/ai-normalization.js';
+import { normalizeAIResponse, repairToolCallArguments, normalizeToolCallArguments } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
   createAbortError,
@@ -308,34 +308,9 @@ export class AIClient {
         }
 
         // Sanitize tool calls to ensure valid JSON arguments (fixes issue #145 for historical/persisted messages)
-        let tool_calls = m.tool_calls;
-        if (tool_calls && Array.isArray(tool_calls)) {
-          tool_calls = tool_calls.map(tc => {
-            if (!tc?.function) return tc;
-            const rawArgs = tc.function.arguments;
-            if (typeof rawArgs !== 'string') return tc;
-
-            const outcome = repairToolCallArguments(rawArgs);
-            if (outcome.ok && !outcome.repaired) return tc;
-
-            // If repaired or failed, use the repaired string or the sentinel
-            const nextArgs = outcome.ok
-              ? outcome.argsString
-              : JSON.stringify({
-                  __simulacrumParseError: true,
-                  parseError: outcome.parseError || 'malformed JSON',
-                  rawFragment: rawArgs.slice(0, 500),
-                });
-
-            return {
-              ...tc,
-              function: {
-                ...tc.function,
-                arguments: nextArgs,
-              },
-            };
-          });
-        }
+        const tool_calls = Array.isArray(m.tool_calls)
+          ? m.tool_calls.map(normalizeToolCallArguments)
+          : m.tool_calls;
 
         return {
           role,

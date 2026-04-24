@@ -257,11 +257,17 @@ function _extractOpenAIData(raw) {
   // Repair malformed tool-call arguments before they enter history. Truncated
   // JSON here would otherwise cause a provider 500 on the next turn when the
   // assistant message is replayed.
-  toolCalls = Array.isArray(toolCalls) ? toolCalls.map(_normalizeToolCallArguments) : toolCalls;
+  toolCalls = Array.isArray(toolCalls) ? toolCalls.map(normalizeToolCallArguments) : toolCalls;
   return { content, toolCalls };
 }
 
-function _normalizeToolCallArguments(tc) {
+/**
+ * Normalizes tool-call arguments by attempting repair and ensuring they
+ * are stored/sent as valid JSON strings.
+ * @param {object} tc - The tool call object
+ * @returns {object} The normalized tool call
+ */
+export function normalizeToolCallArguments(tc) {
   if (!tc) return tc;
   const fn = tc.function;
   const rawArgs = fn?.arguments ?? tc.arguments;
@@ -324,19 +330,21 @@ export function repairToolCallArguments(raw) {
     try {
       return _okResult(raw, JSON.stringify(raw), false);
     } catch (e) {
-      return _failResult(String(raw), e.message);
+      return _failResult(String(raw), e?.message ?? String(e));
     }
   }
 
   const trimmed = raw.trim();
-  if (trimmed === '') return _okResult({}, '{}', true);
+  if (trimmed === '') {
+    return _failResult('', 'Empty tool call arguments');
+  }
 
   try {
     return _okResult(JSON.parse(trimmed), trimmed, false);
   } catch (e) {
     const repaired = _tryLenientOrEofRepair(trimmed);
     if (repaired) return _okResult(repaired, JSON.stringify(repaired), true);
-    return _failResult(trimmed, e.message);
+    return _failResult(trimmed, e?.message ?? String(e));
   }
 }
 

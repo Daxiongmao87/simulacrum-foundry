@@ -783,8 +783,8 @@ function _sanitizeToolCallsForHistory(toolCalls) {
   const TRANSIENT_FIELDS = ['response'];
 
   return toolCalls.map(tc => {
+    // Access arguments from either location (standard or legacy)
     const argsRaw = tc.function?.arguments || tc.arguments;
-    if (!argsRaw) return tc;
 
     // Ensure stored history always has valid-JSON arguments. If the model
     // emitted a malformed string that slipped through normalization, replace
@@ -804,12 +804,18 @@ function _sanitizeToolCallsForHistory(toolCalls) {
     }
 
     let changed = !outcome.ok || outcome.repaired;
-    for (const field of TRANSIENT_FIELDS) {
-      if (field in parsed) {
-        delete parsed[field];
-        changed = true;
+
+    // Strip transient fields if result is an object.
+    // Guard against primitives (e.g. parsed being "null", 42, etc) to avoid TypeError on 'in' operator.
+    if (parsed && typeof parsed === 'object') {
+      for (const field of TRANSIENT_FIELDS) {
+        if (field in parsed) {
+          delete parsed[field];
+          changed = true;
+        }
       }
     }
+
     if (!changed) return tc;
 
     const cleanArgs = JSON.stringify(parsed);
