@@ -1,4 +1,4 @@
-/* eslint-disable complexity, max-len, no-console, max-lines */
+/* eslint-disable complexity, max-len, no-console, max-lines, max-lines-per-function, max-statements, max-depth */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler

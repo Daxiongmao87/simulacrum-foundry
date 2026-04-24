@@ -6,7 +6,11 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
-import { normalizeAIResponse, repairToolCallArguments, normalizeToolCallArguments } from '../utils/ai-normalization.js';
+import {
+  normalizeAIResponse,
+  repairToolCallArguments,
+  normalizeToolCallArguments,
+} from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
   createAbortError,
