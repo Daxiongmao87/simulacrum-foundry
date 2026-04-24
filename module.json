@@ -20,12 +20,8 @@
     "conflicts": [],
     "flags": {}
   },
-  "esmodules": [
-    "scripts/simulacrum.js"
-  ],
-  "styles": [
-    "styles/simulacrum.css"
-  ],
+  "esmodules": ["scripts/simulacrum.js"],
+  "styles": ["styles/simulacrum.css"],
   "languages": [
     {
       "lang": "en",
