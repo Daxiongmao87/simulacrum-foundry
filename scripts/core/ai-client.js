@@ -1,4 +1,6 @@
-/* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params, max-lines */
+/* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params */
+// TODO: Split into provider-specific handlers and reduce total file length (Tracked in #148)
+/* eslint-disable max-lines */
 /**
  * AI Client - Abstraction layer for AI provider interactions
  * Handles different AI providers with a common interface

@@ -1,4 +1,6 @@
-/* eslint-disable complexity, max-len, no-console, max-lines, max-lines-per-function, max-statements, max-depth */
+/* eslint-disable complexity, max-len, no-console */
+// TODO: Refactor into modular helpers to resolve deep complexity debt (Tracked in #147)
+/* eslint-disable max-lines, max-lines-per-function, max-statements, max-depth */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -403,7 +405,7 @@ async function _handleToolRefusal(response, context, attempts) {
   }
 }
 
-// eslint-disable-next-line complexity, max-lines-per-function
+// eslint-disable-next-line complexity, max-lines-per-function -- Refactor tracked in #147
 async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
   const results = [];
