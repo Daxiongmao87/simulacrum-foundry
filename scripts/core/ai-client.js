@@ -1,4 +1,4 @@
-/* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params */
+/* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params, max-lines */
 /**
  * AI Client - Abstraction layer for AI provider interactions
  * Handles different AI providers with a common interface
@@ -6,7 +6,7 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
-import { normalizeAIResponse } from '../utils/ai-normalization.js';
+import { normalizeAIResponse, repairToolCallArguments } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
   createAbortError,
@@ -306,11 +306,42 @@ export class AIClient {
           role = 'user';
           content = `[SYSTEM CORRECTION] ${content}`;
         }
+
+        // Sanitize tool calls to ensure valid JSON arguments (fixes issue #145 for historical/persisted messages)
+        let tool_calls = m.tool_calls;
+        if (tool_calls && Array.isArray(tool_calls)) {
+          tool_calls = tool_calls.map(tc => {
+            if (!tc?.function) return tc;
+            const rawArgs = tc.function.arguments;
+            if (typeof rawArgs !== 'string') return tc;
+
+            const outcome = repairToolCallArguments(rawArgs);
+            if (outcome.ok && !outcome.repaired) return tc;
+
+            // If repaired or failed, use the repaired string or the sentinel
+            const nextArgs = outcome.ok
+              ? outcome.argsString
+              : JSON.stringify({
+                  __simulacrumParseError: true,
+                  parseError: outcome.parseError || 'malformed JSON',
+                  rawFragment: rawArgs.slice(0, 500),
+                });
+
+            return {
+              ...tc,
+              function: {
+                ...tc.function,
+                arguments: nextArgs,
+              },
+            };
+          });
+        }
+
         return {
           role,
           content,
           ...(m.name ? { name: m.name } : {}),
-          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(tool_calls ? { tool_calls } : {}),
           ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
         };
       }),

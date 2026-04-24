@@ -253,7 +253,163 @@ function _extractOpenAIData(raw) {
       },
     ];
   }
+
+  // Repair malformed tool-call arguments before they enter history. Truncated
+  // JSON here would otherwise cause a provider 500 on the next turn when the
+  // assistant message is replayed.
+  toolCalls = Array.isArray(toolCalls) ? toolCalls.map(_normalizeToolCallArguments) : toolCalls;
   return { content, toolCalls };
+}
+
+function _normalizeToolCallArguments(tc) {
+  if (!tc) return tc;
+  const fn = tc.function;
+  const rawArgs = fn?.arguments ?? tc.arguments;
+  if (rawArgs == null) return tc;
+
+  const outcome = repairToolCallArguments(rawArgs);
+  if (outcome.ok && !outcome.repaired) return tc;
+
+  const name = fn?.name || tc.name || 'unknown';
+  const nextArgsString = outcome.ok
+    ? outcome.argsString
+    : _makeMalformedArgumentSentinelString(outcome.parseError, rawArgs);
+  _logToolCallRepair(name, outcome);
+
+  if (fn) {
+    return { ...tc, function: { ...fn, arguments: nextArgsString } };
+  }
+  return { ...tc, arguments: nextArgsString };
+}
+
+function _logToolCallRepair(name, outcome) {
+  try {
+    const diag = createLogger('AIDiagnostics');
+    if (outcome.ok && isDebugEnabled()) {
+      diag.warn('tool_call.args.repaired', { name });
+    } else if (!outcome.ok) {
+      diag.warn('tool_call.args.unrecoverable', { name, error: outcome.parseError });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function _makeMalformedArgumentSentinelString(parseError, rawFragment) {
+  const raw = typeof rawFragment === 'string' ? rawFragment : '';
+  const sentinel = {
+    __simulacrumParseError: true,
+    parseError: String(parseError || 'unknown parse error'),
+    rawFragment: raw.slice(0, 500),
+  };
+  return JSON.stringify(sentinel);
+}
+
+function _okResult(argsObject, argsString, repaired) {
+  return { ok: true, argsObject, argsString, repaired, parseError: null };
+}
+
+function _failResult(argsString, parseError) {
+  return { ok: false, argsObject: null, argsString, repaired: false, parseError };
+}
+
+/**
+ * Attempt to parse tool-call arguments, applying narrow repairs for common
+ * malformed outputs (trailing commas, single quotes, truncated closers).
+ * Returns an outcome object; never throws.
+ */
+export function repairToolCallArguments(raw) {
+  if (raw == null) return _okResult({}, '{}', true);
+  if (typeof raw !== 'string') {
+    try {
+      return _okResult(raw, JSON.stringify(raw), false);
+    } catch (e) {
+      return _failResult(String(raw), e.message);
+    }
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed === '') return _okResult({}, '{}', true);
+
+  try {
+    return _okResult(JSON.parse(trimmed), trimmed, false);
+  } catch (e) {
+    const repaired = _tryLenientOrEofRepair(trimmed);
+    if (repaired) return _okResult(repaired, JSON.stringify(repaired), true);
+    return _failResult(trimmed, e.message);
+  }
+}
+
+function _tryLenientOrEofRepair(trimmed) {
+  const lenient = _tryParseJSON(trimmed);
+  if (lenient && typeof lenient === 'object') return lenient;
+  const eof = _tryEofRepair(trimmed);
+  if (eof && typeof eof === 'object') return eof;
+  return null;
+}
+
+/**
+ * Narrow repair for tool-call arguments truncated before their closing
+ * `}`/`]`. Only applies when bracket balancing is unambiguous and the
+ * truncation is not inside a string literal or dangling after a `:`/`,`.
+ */
+function _tryEofRepair(s) {
+  if (typeof s !== 'string' || s.length === 0) return null;
+
+  const scan = _scanBrackets(s);
+  if (!scan) return null;
+  const { stack, inStr } = scan;
+  if (inStr || stack.length === 0) return null;
+
+  const candidate = s.replace(/,\s*$/, '');
+  const lastNonWs = candidate.replace(/\s+$/, '').slice(-1);
+  if (lastNonWs === ':' || lastNonWs === ',') return null;
+
+  const suffix = _buildClosingSuffix(stack);
+  try {
+    return JSON.parse(candidate + suffix);
+  } catch {
+    return null;
+  }
+}
+
+function _scanBrackets(s) {
+  const state = { stack: [], inStr: false, esc: false, invalid: false };
+  for (let i = 0; i < s.length && !state.invalid; i++) {
+    _advanceBracketState(state, s[i]);
+  }
+  if (state.invalid) return null;
+  return { stack: state.stack, inStr: state.inStr };
+}
+
+function _advanceBracketState(state, c) {
+  if (state.inStr) {
+    _advanceStringState(state, c);
+    return;
+  }
+  _advanceStructuralState(state, c);
+}
+
+function _advanceStringState(state, c) {
+  if (state.esc) state.esc = false;
+  else if (c === '\\') state.esc = true;
+  else if (c === '"') state.inStr = false;
+}
+
+function _advanceStructuralState(state, c) {
+  if (c === '"') state.inStr = true;
+  else if (c === '{' || c === '[') state.stack.push(c);
+  else if (c === '}' && state.stack.pop() !== '{') state.invalid = true;
+  else if (c === ']' && state.stack.pop() !== '[') state.invalid = true;
+}
+
+function _buildClosingSuffix(stack) {
+  const closers = { '{': '}', '[': ']' };
+  let suffix = '';
+  for (let i = stack.length - 1; i >= 0; i--) {
+    suffix += closers[stack[i]];
+  }
+  return suffix;
 }
 
 function _applyInlineFallback(normalized) {

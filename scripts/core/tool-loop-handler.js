@@ -1,4 +1,4 @@
-/* eslint-disable complexity, max-len, no-console */
+/* eslint-disable complexity, max-len, no-console, max-lines */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -11,6 +11,7 @@ import {
   sanitizeMessagesForFallback,
   normalizeAIResponse,
   parseInlineToolCall,
+  repairToolCallArguments,
 } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
@@ -415,10 +416,26 @@ async function _executeToolCalls(toolCalls, context) {
     let result = null;
     let isSuccess = false;
     let error = null;
+    let executionStart = 0;
 
     try {
-      const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
-      const executionStart = Date.now();
+      const parseOutcome = _parseToolCallArguments(toolArgs, toolName);
+      if (parseOutcome.error) {
+        await _recordInvalidArgsResult({
+          toolCall,
+          toolName,
+          toolArgs,
+          parseError: parseOutcome.error,
+          currentToolSupport,
+          conversationManager,
+          onToolResult,
+          results,
+        });
+        continue;
+      }
+      const parsedArgs = parseOutcome.parsedArgs;
+
+      executionStart = Date.now();
 
       // Log tool call before execution (must happen before any early-exit so rejections appear in logs)
       interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
@@ -612,7 +629,7 @@ async function _executeToolCalls(toolCalls, context) {
     results.push(resultObj);
 
     // Log tool result with execution duration
-    const durationMs = typeof executionStart !== 'undefined' ? Date.now() - executionStart : 0;
+    const durationMs = executionStart > 0 ? Date.now() - executionStart : 0;
     interactionLogger.logToolResult(toolCall.id, result, isSuccess, durationMs);
 
     if (onToolResult) {
@@ -625,6 +642,67 @@ async function _executeToolCalls(toolCalls, context) {
     }
   }
   return results;
+}
+
+function _parseToolCallArguments(toolArgs, toolName) {
+  if (typeof toolArgs !== 'string') {
+    if (toolArgs && toolArgs.__simulacrumParseError === true) {
+      return { parsedArgs: null, error: toolArgs.parseError || 'malformed tool call arguments' };
+    }
+    return { parsedArgs: toolArgs, error: null };
+  }
+  const outcome = repairToolCallArguments(toolArgs);
+  if (!outcome.ok) return { parsedArgs: null, error: outcome.parseError };
+  if (outcome.repaired) {
+    logger.warn(
+      `Tool call "${toolName}" had malformed JSON arguments; recovered via narrow repair.`
+    );
+  }
+  const parsed = outcome.argsObject;
+  if (parsed && parsed.__simulacrumParseError === true) {
+    return { parsedArgs: null, error: parsed.parseError || 'malformed tool call arguments' };
+  }
+  return { parsedArgs: parsed, error: null };
+}
+
+async function _recordInvalidArgsResult(opts) {
+  const {
+    toolCall,
+    toolName,
+    toolArgs,
+    parseError,
+    currentToolSupport,
+    conversationManager,
+    onToolResult,
+    results,
+  } = opts;
+  const errMsg = `Tool call arguments for "${toolName}" were not valid JSON and could not be recovered (${parseError}). Retry with a single complete JSON object containing all required arguments; do not truncate the output.`;
+  logger.warn(errMsg);
+  interactionLogger.logToolCall(
+    toolName,
+    { __simulacrumParseError: true, parseError },
+    toolCall.id
+  );
+  const result = {
+    error: errMsg,
+    toolName,
+    invalidArgs: true,
+    arguments: typeof toolArgs === 'string' ? toolArgs.slice(0, 500) : toolArgs,
+  };
+  if (currentToolSupport === true) {
+    conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+    await conversationManager.save();
+  }
+  results.push({ toolCall, toolName, result, success: false, error: null });
+  interactionLogger.logToolResult(toolCall.id, result, false, 0);
+  if (onToolResult) {
+    await onToolResult({
+      role: 'tool',
+      content: JSON.stringify(result),
+      toolCallId: toolCall.id,
+      toolName,
+    });
+  }
 }
 
 /**
@@ -708,28 +786,38 @@ function _sanitizeToolCallsForHistory(toolCalls) {
     const argsRaw = tc.function?.arguments || tc.arguments;
     if (!argsRaw) return tc;
 
-    try {
-      const parsed = typeof argsRaw === 'string' ? JSON.parse(argsRaw) : argsRaw;
-      let changed = false;
-      for (const field of TRANSIENT_FIELDS) {
-        if (field in parsed) {
-          delete parsed[field];
-          changed = true;
-        }
-      }
-      if (!changed) return tc;
-
-      const cleanArgs = JSON.stringify(parsed);
-
-      // Rebuild tool call with cleaned arguments, preserving structure
-      if (tc.function) {
-        return { ...tc, function: { ...tc.function, arguments: cleanArgs } };
-      }
-      return { ...tc, arguments: cleanArgs };
-    } catch (_e) {
-      // If arguments can't be parsed, return as-is
-      return tc;
+    // Ensure stored history always has valid-JSON arguments. If the model
+    // emitted a malformed string that slipped through normalization, replace
+    // it with a sentinel payload so replaying the conversation does not
+    // trigger provider-side parse 500s.
+    const outcome = repairToolCallArguments(argsRaw);
+    let parsed;
+    if (outcome.ok) {
+      parsed = outcome.argsObject;
+    } else {
+      parsed = {
+        __simulacrumParseError: true,
+        parseError: outcome.parseError,
+        rawFragment:
+          typeof argsRaw === 'string' ? argsRaw.slice(0, 500) : String(argsRaw).slice(0, 500),
+      };
     }
+
+    let changed = !outcome.ok || outcome.repaired;
+    for (const field of TRANSIENT_FIELDS) {
+      if (field in parsed) {
+        delete parsed[field];
+        changed = true;
+      }
+    }
+    if (!changed) return tc;
+
+    const cleanArgs = JSON.stringify(parsed);
+
+    if (tc.function) {
+      return { ...tc, function: { ...tc.function, arguments: cleanArgs } };
+    }
+    return { ...tc, arguments: cleanArgs };
   });
 }
 
