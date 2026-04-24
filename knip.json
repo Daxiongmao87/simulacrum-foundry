@@ -1,5 +1,5 @@
 {
-  "entry": ["scripts/**/*.js", "tests/**/*.js"],
+  "entry": ["scripts/simulacrum.js", "scripts/**/*.js", "tests/**/*.js"],
   "project": ["scripts/**/*.js", "tests/**/*.js"],
   "ignore": [
     "node_modules/**",
@@ -12,6 +12,6 @@
     "tools/**",
     "*.md"
   ],
-  "ignoreDependencies": ["@types/*", "foundry-vtt-types", "playwright", "jsonc-eslint-parser"],
+  "ignoreDependencies": ["@types/*", "foundry-vtt-types"],
   "includeEntryExports": true
 }
