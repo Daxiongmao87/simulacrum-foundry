@@ -24,6 +24,8 @@ import {
   getAvailableMacrosList as getMacros,
 } from './system-prompt-builder.js';
 
+const MAX_COMPACTION_ROUNDS = 10;
+
 class SimulacrumCore {
   static logger = createLogger('Core');
   static currentAbortController = null; // Track current cancellation controller
@@ -226,47 +228,34 @@ class SimulacrumCore {
       // const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
 
       // Get system prompt early so compaction can account for its token overhead
-      const systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
+      const useCustomPrompt = !!options.systemPrompt;
+      let systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
       const getSystemPromptFn = () => systemPrompt;
 
-      // Trigger compaction if approaching token limit (Context Compaction feature)
+      // Trigger compaction if approaching token limit, looping until within budget
       if (this.conversationManager && this.aiClient) {
         try {
-          const systemPromptTokens = this.conversationManager._estimateTokens({
+          let sysTokens = this.conversationManager.estimateTokens({
             role: 'system',
             content: systemPrompt,
           });
-          let compacted = true;
-          let anyCompacted = false;
-          while (compacted) {
-            compacted = await this.conversationManager.compactHistory(
-              this.aiClient,
-              systemPromptTokens
-            );
+          let compacted = await this.conversationManager.compactHistory(this.aiClient, sysTokens);
+          let rounds = 0;
+          let anyCompacted = compacted;
+
+          while (compacted && rounds < MAX_COMPACTION_ROUNDS) {
+            rounds++;
+            systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
+            sysTokens = this.conversationManager.estimateTokens({
+              role: 'system',
+              content: systemPrompt,
+            });
+            compacted = await this.conversationManager.compactHistory(this.aiClient, sysTokens);
             anyCompacted = anyCompacted || compacted;
           }
+
           if (anyCompacted) {
-            if (isDebugEnabled()) {
-              this.logger.debug('Conversation history compacted via rollingSummary');
-            }
-            // UX: Show compaction as a simulated tool call
-            if (options.onAssistantMessage) {
-              const displayHtml = formatToolCallDisplay(
-                {
-                  toolName: 'optimize_memory',
-                  content: JSON.stringify({
-                    display: 'Compacted conversation history into working memory summary.',
-                  }),
-                  isError: false,
-                },
-                'optimize_memory'
-              );
-              options.onAssistantMessage({
-                role: 'assistant',
-                content: 'System Event: Conversation history compacted to rolling summary.', // Persist to history
-                display: displayHtml,
-              });
-            }
+            this._notifyCompactionOccurred(options);
           }
         } catch (compactionError) {
           // Non-fatal: log and continue with uncompacted history
@@ -480,6 +469,29 @@ class SimulacrumCore {
       prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n\n${prompt}`;
     }
     return prompt;
+  }
+
+  static _notifyCompactionOccurred(options) {
+    if (isDebugEnabled()) {
+      this.logger.debug('Conversation history compacted via rollingSummary');
+    }
+    if (options.onAssistantMessage) {
+      const displayHtml = formatToolCallDisplay(
+        {
+          toolName: 'optimize_memory',
+          content: JSON.stringify({
+            display: 'Compacted conversation history into working memory summary.',
+          }),
+          isError: false,
+        },
+        'optimize_memory'
+      );
+      options.onAssistantMessage({
+        role: 'assistant',
+        content: 'System Event: Conversation history compacted to rolling summary.',
+        display: displayHtml,
+      });
+    }
   }
 }
 // Export the SimulacrumCore class

@@ -30,6 +30,7 @@ import { interactionLogger } from './interaction-logger.js';
 const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
+const MAX_COMPACTION_ROUNDS = 10;
 
 // Store justifications keyed by toolCallId for retrieval when result is ready
 const toolJustifications = new Map();
@@ -770,21 +771,21 @@ async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context
 async function _getNextAIResponse(toolResults, context) {
   const { getSystemPrompt, conversationManager, aiClient } = context;
 
-  const systemPrompt = await getSystemPrompt();
+  let systemPrompt = await getSystemPrompt();
 
-  // Context Compaction: account for system prompt overhead and loop until under budget
+  // Context Compaction: account for system prompt overhead and loop until within budget
   if (conversationManager && aiClient) {
     try {
-      const systemPromptTokens = conversationManager._estimateTokens({
-        role: 'system',
-        content: systemPrompt,
-      });
-      let compacted = true;
-      while (compacted) {
-        compacted = await conversationManager.compactHistory(aiClient, systemPromptTokens);
-        if (compacted && isDebugEnabled()) {
-          logger.debug('Conversation history compacted during tool loop');
-        }
+      let sysTokens = conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
+      let compacted = await conversationManager.compactHistory(aiClient, sysTokens);
+      let rounds = 0;
+
+      while (compacted && rounds < MAX_COMPACTION_ROUNDS) {
+        rounds++;
+        if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
+        systemPrompt = await getSystemPrompt();
+        sysTokens = conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
+        compacted = await conversationManager.compactHistory(aiClient, sysTokens);
       }
     } catch (err) {
       logger.warn('Compaction failed during tool loop:', err);
