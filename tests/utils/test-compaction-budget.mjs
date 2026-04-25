@@ -63,6 +63,19 @@ function testTruncateToCompactionBudgetDropsOldestMessages() {
   assert.equal(conversation.getMessages()[0].content.startsWith('0:'), false);
 }
 
+function testContextWindowAllowsConservativeBudgetOverflow() {
+  const conversation = createConversation(1000);
+  conversation.addMessage('user', 'x'.repeat(800));
+
+  assert.equal(conversation.isWithinCompactionBudget(0), false);
+  assert.equal(conversation.isWithinContextWindow(0), true);
+
+  const changed = conversation.truncateToContextWindow(0);
+
+  assert.equal(changed, false);
+  assert.equal(conversation.getMessages().length, 1);
+}
+
 async function testCompactionFailureReturnsExplicitStatus() {
   const conversation = createConversation(1000);
   for (let i = 0; i < 10; i++) {
@@ -84,6 +97,7 @@ testPromptOverheadDoesNotDoubleCountRollingSummary();
 testCustomPromptBudgetDoesNotCountUnsentRollingSummary();
 testThresholdIsClampedWhenPromptConsumesContext();
 testTruncateToCompactionBudgetDropsOldestMessages();
+testContextWindowAllowsConservativeBudgetOverflow();
 await testCompactionFailureReturnsExplicitStatus();
 
 console.log('compaction budget tests passed');

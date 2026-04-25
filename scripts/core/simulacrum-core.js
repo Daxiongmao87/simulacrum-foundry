@@ -501,12 +501,17 @@ class SimulacrumCore {
       return;
     }
 
-    this.logger.warn('Compaction round limit reached; truncating oldest conversation history');
-    this.conversationManager.truncateToCompactionBudget(promptOverhead, includeRollingSummary);
+    this.logger.warn('Compaction round limit reached; checking hard context window');
+    if (this.conversationManager.isWithinContextWindow(promptOverhead, includeRollingSummary)) {
+      return;
+    }
 
-    if (!this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)) {
+    this.logger.warn('Conversation exceeds context window; truncating oldest conversation history');
+    this.conversationManager.truncateToContextWindow(promptOverhead, includeRollingSummary);
+
+    if (!this.conversationManager.isWithinContextWindow(promptOverhead, includeRollingSummary)) {
       throw new ValidationError(
-        'Conversation still exceeds context budget after compaction and truncation',
+        'Conversation still exceeds context window after compaction and truncation',
         'contextBudget',
         { promptOverhead, maxTokens: this.conversationManager.maxTokens }
       );

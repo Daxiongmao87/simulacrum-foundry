@@ -820,12 +820,15 @@ function _ensureConversationFitsAfterCompaction(conversationManager, promptOverh
   _assertPromptFitsContext(conversationManager, promptOverhead);
   if (conversationManager.isWithinCompactionBudget(promptOverhead)) return;
 
-  logger.warn('Compaction round limit reached; truncating oldest conversation history');
-  conversationManager.truncateToCompactionBudget(promptOverhead);
+  logger.warn('Compaction round limit reached; checking hard context window');
+  if (conversationManager.isWithinContextWindow(promptOverhead)) return;
 
-  if (!conversationManager.isWithinCompactionBudget(promptOverhead)) {
+  logger.warn('Conversation exceeds context window; truncating oldest conversation history');
+  conversationManager.truncateToContextWindow(promptOverhead);
+
+  if (!conversationManager.isWithinContextWindow(promptOverhead)) {
     throw new ValidationError(
-      'Conversation still exceeds context budget after compaction and truncation',
+      'Conversation still exceeds context window after compaction and truncation',
       'contextBudget',
       { promptOverhead, maxTokens: conversationManager.maxTokens }
     );
