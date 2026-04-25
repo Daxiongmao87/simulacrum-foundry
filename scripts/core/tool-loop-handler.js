@@ -9,6 +9,7 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
+import { MAX_COMPACTION_ROUNDS } from './conversation.js';
 import {
   sanitizeMessagesForFallback,
   normalizeAIResponse,
@@ -31,7 +32,6 @@ import { interactionLogger } from './interaction-logger.js';
 const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
-const MAX_COMPACTION_ROUNDS = 10;
 
 // Store justifications keyed by toolCallId for retrieval when result is ready
 const toolJustifications = new Map();

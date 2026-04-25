@@ -4,7 +4,7 @@
  */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
-import { ConversationManager } from './conversation.js';
+import { ConversationManager, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
 import { documentReadRegistry } from '../utils/document-read-registry.js';
 import { toolPermissionManager } from './tool-permission-manager.js';
@@ -24,8 +24,6 @@ import {
   getDocumentTypesInfo as getDocTypesInfo,
   getAvailableMacrosList as getMacros,
 } from './system-prompt-builder.js';
-
-const MAX_COMPACTION_ROUNDS = 10;
 
 class SimulacrumCore {
   static logger = createLogger('Core');
@@ -446,8 +444,8 @@ class SimulacrumCore {
     return prompt;
   }
 
-  static _estimatePromptOverhead(systemPrompt, useCustomPrompt) {
-    return this.conversationManager.estimatePromptOverhead(systemPrompt, !useCustomPrompt);
+  static _estimatePromptOverhead(systemPrompt, includeRollingSummary = true) {
+    return this.conversationManager.estimatePromptOverhead(systemPrompt, includeRollingSummary);
   }
 
   static async _compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options) {
@@ -455,7 +453,7 @@ class SimulacrumCore {
       let rounds = 0;
       let anyCompacted = false;
       const includeRollingSummary = !useCustomPrompt;
-      let promptOverhead = this._estimatePromptOverhead(systemPrompt, useCustomPrompt);
+      let promptOverhead = this._estimatePromptOverhead(systemPrompt, includeRollingSummary);
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
         this._assertPromptFitsContext(promptOverhead);
@@ -475,7 +473,7 @@ class SimulacrumCore {
 
         anyCompacted = true;
         systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
-        promptOverhead = this._estimatePromptOverhead(systemPrompt, useCustomPrompt);
+        promptOverhead = this._estimatePromptOverhead(systemPrompt, includeRollingSummary);
       }
 
       if (anyCompacted) this._notifyCompactionOccurred(options);

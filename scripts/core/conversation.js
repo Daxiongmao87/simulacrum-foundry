@@ -11,6 +11,7 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { interactionLogger } from './interaction-logger.js';
 
 const logger = createLogger('Conversation');
+const MAX_COMPACTION_ROUNDS = 10;
 
 class ConversationManager {
   /**
@@ -312,8 +313,10 @@ class ConversationManager {
         ...this.activeMessages.slice(chunkEnd),
       ];
       changed = true;
-      this._sanitizeMessages();
-      this._recalculateTokens();
+      const sanitized = this._sanitizeMessages();
+      if (!sanitized) {
+        this._recalculateTokens();
+      }
     }
 
     if (changed) {
@@ -597,10 +600,11 @@ class ConversationManager {
    * - Old conversations with incomplete tool executions
    * - Conversations interrupted during tool execution
    * - Tool changes (additions/removals) between sessions
+   * @returns {boolean} Whether the history was modified
    * @private
    */
   _sanitizeMessages() {
-    if (!this.activeMessages || this.activeMessages.length === 0) return;
+    if (!this.activeMessages || this.activeMessages.length === 0) return false;
 
     const expectedToolResponses = new Map();
     const receivedToolResponses = new Set();
@@ -622,7 +626,7 @@ class ConversationManager {
     );
     const orphanResponses = [...receivedToolResponses].filter(id => !expectedToolResponses.has(id));
 
-    if (missingResponses.length === 0 && orphanResponses.length === 0) return;
+    if (missingResponses.length === 0 && orphanResponses.length === 0) return false;
 
     logger.warn('Sanitizing conversation history:', {
       missingToolResponses: missingResponses.length,
@@ -639,6 +643,7 @@ class ConversationManager {
     this.messages = [...this.activeMessages];
     this._recalculateTokens();
     if (isDebugEnabled()) logger.debug('Conversation history sanitized successfully');
+    return true;
   }
 
   /** @private */
@@ -677,4 +682,4 @@ class ConversationManager {
   }
 }
 
-export { ConversationManager };
+export { ConversationManager, MAX_COMPACTION_ROUNDS };
