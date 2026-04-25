@@ -9,6 +9,7 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
+import { COMPACTION_STATUS, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import {
   sanitizeMessagesForFallback,
   normalizeAIResponse,
@@ -770,12 +771,23 @@ async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context
 async function _getNextAIResponse(toolResults, context) {
   const { getSystemPrompt, conversationManager, aiClient } = context;
 
-  // Context Compaction: Trigger before next AI call
+  let systemPrompt = await getSystemPrompt();
+
+  // Context Compaction: account for system prompt overhead and loop until within budget
   if (conversationManager && aiClient) {
     try {
-      const compacted = await conversationManager.compactHistory(aiClient);
-      if (compacted && isDebugEnabled()) {
-        logger.debug('Conversation history compacted during tool loop');
+      let rounds = 0;
+      let promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
+
+      while (rounds < MAX_COMPACTION_ROUNDS) {
+        const compactionStatus = await conversationManager.compactHistory(aiClient, promptOverhead);
+        rounds++;
+        if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
+        if (compactionStatus === COMPACTION_STATUS.FAILED) break;
+
+        if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
+        systemPrompt = await getSystemPrompt();
+        promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
       }
     } catch (err) {
       logger.warn('Compaction failed during tool loop:', err);
@@ -783,7 +795,6 @@ async function _getNextAIResponse(toolResults, context) {
   }
 
   const messages = _getConversationMessages(context);
-  const systemPrompt = await getSystemPrompt();
   return _chatWithAI(messages, systemPrompt, context);
 }
 

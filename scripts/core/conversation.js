@@ -11,6 +11,12 @@ import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { interactionLogger } from './interaction-logger.js';
 
 const logger = createLogger('Conversation');
+const MAX_COMPACTION_ROUNDS = 10;
+const COMPACTION_STATUS = Object.freeze({
+  WITHIN_BUDGET: 'within_budget',
+  COMPACTED: 'compacted',
+  FAILED: 'failed',
+});
 
 class ConversationManager {
   /**
@@ -62,8 +68,9 @@ class ConversationManager {
       if (metadata._internal === true) {
         message._internal = true;
       }
-      // Store provider metadata separately
-      const { _internal, ...providerMeta } = metadata;
+      // Store provider metadata separately (strip _internal which is internal-only)
+      const providerMeta = Object.assign({}, metadata);
+      delete providerMeta._internal;
       if (Object.keys(providerMeta).length > 0) {
         message.provider_metadata = providerMeta;
       }
@@ -109,15 +116,52 @@ class ConversationManager {
   }
 
   /**
+   * Estimate tokens for a message. Public wrapper for external callers.
+   * @param {object} message
+   * @returns {number}
+   */
+  estimateTokens(message) {
+    return this._estimateTokens(message);
+  }
+
+  /**
+   * Estimate system prompt overhead that is not already represented in sessionTokens.
+   * getSystemPrompt() embeds rollingSummary, while sessionTokens also tracks it.
+   * Uses the same tokenizer for both terms so the subtraction is internally consistent.
+   * @param {string} systemPrompt
+   * @param {boolean} [includeRollingSummary=true]
+   * @returns {number}
+   */
+  estimatePromptOverhead(systemPrompt, includeRollingSummary = true) {
+    const promptTokens = this.estimateTokens({ role: 'system', content: systemPrompt });
+    const summaryTokens =
+      includeRollingSummary && this.rollingSummary
+        ? this.estimateTokens({ role: 'system', content: this.rollingSummary })
+        : 0;
+    return Math.max(0, promptTokens - summaryTokens);
+  }
+
+  /**
    * Calculate the compaction threshold based on model context window
+   * @param {number} [overhead=0] - Additional token overhead to reserve (e.g. system prompt tokens)
    * @returns {number} Token threshold for triggering compaction
    * @private
    */
-  _getCompactionThreshold() {
-    const contextWindow = this.maxTokens;
-    const contextTarget = Math.floor(contextWindow * 0.33); // 33% for working memory
+  _getCompactionThreshold(overhead = 0) {
+    // Re-read current limit so runtime changes to fallbackContextLimit take effect without reload
+    let contextWindow = this.maxTokens;
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        const current = game.settings.get('simulacrum', 'fallbackContextLimit');
+        if (current && current > 0) contextWindow = current;
+      }
+    } catch {
+      // Ignore — fall back to initialised maxTokens
+    }
+    const available = Math.max(0, contextWindow - Math.max(0, overhead));
+    const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
-    return contextWindow - contextTarget - compactionPromptSize;
+    return Math.max(0, available - contextTarget - compactionPromptSize);
   }
 
   /**
@@ -145,48 +189,36 @@ class ConversationManager {
       (acc, msg) => acc + this._estimateTokens(msg),
       0
     );
-    const summaryTokens = this.rollingSummary ? Math.ceil(this.rollingSummary.length / 4) : 0;
-    this.sessionTokens = messageTokens + summaryTokens;
+    this.sessionTokens = messageTokens + this._estimateRollingSummaryTokens();
   }
 
   /**
-   * Compact history using AI-driven summarization
-   * @param {object} aiClient - AI client for summarization calls
-   * @returns {Promise<boolean>} Whether compaction occurred
+   * Estimate rolling summary tokens using the same accounting as sessionTokens.
+   * @returns {number}
+   * @private
    */
-  async compactHistory(aiClient) {
-    const threshold = this._getCompactionThreshold();
-    const currentTokens = this.sessionTokens;
+  _estimateRollingSummaryTokens() {
+    return this.rollingSummary ? Math.ceil(this.rollingSummary.length / 4) : 0;
+  }
 
-    if (currentTokens <= threshold) {
-      return false; // No compaction needed
-    }
-
-    // Extract oldest messages to compact (keep system message)
-    // Extract oldest messages to compact (keep system message)
-    const systemMsg = this.activeMessages[0]?.role === 'system' ? this.activeMessages[0] : null;
-    const startIdx = systemMsg ? 1 : 0;
-
-    // Define initial chunk size
+  /**
+   * Find the end index of the chunk to compact, respecting tool call/response pairing.
+   * @param {number} startIdx - Index of first non-system message
+   * @returns {number} Exclusive end index of the chunk
+   * @private
+   */
+  _findCompactionChunkEnd(startIdx) {
     let chunkEnd = startIdx + 5;
 
-    // Boundary Check 1: prevent stranding a tool message as an orphan
-    // If the message that would become the new head (at chunkEnd) is a 'tool' message,
-    // we must include it in the compaction batch (consume it).
-    // We implicitly assume that if we are compacting the parent Assistant message,
-    // we must also compact its children Tool messages.
+    // Don't strand a tool response as the new head — consume it with its parent
     while (chunkEnd < this.activeMessages.length && this.activeMessages[chunkEnd].role === 'tool') {
       chunkEnd++;
     }
 
-    // Boundary Check 2: If the last message we're keeping (at chunkEnd - 1) is an assistant
-    // message with tool_calls, we need to include all its corresponding tool responses.
-    // Otherwise, we'd leave orphaned tool responses in the remaining messages.
-    while (chunkEnd > startIdx) {
+    // If the last compacted message has tool_calls, include all its tool responses
+    if (chunkEnd > startIdx) {
       const lastCompacted = this.activeMessages[chunkEnd - 1];
       if (lastCompacted?.role === 'assistant' && lastCompacted?.tool_calls?.length > 0) {
-        // This assistant has tool_calls - we must include its tool responses
-        // Count how many tool responses follow
         const toolCallIds = new Set(lastCompacted.tool_calls.map(tc => tc.id));
         while (
           chunkEnd < this.activeMessages.length &&
@@ -195,18 +227,31 @@ class ConversationManager {
         ) {
           chunkEnd++;
         }
-        break; // Only need to check the last message once
       }
-      break;
     }
 
+    return chunkEnd;
+  }
+
+  /**
+   * Compact history using AI-driven summarization
+   * @param {object} aiClient - AI client for summarization calls
+   * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
+   * @returns {Promise<string>} Compaction status
+   */
+  async compactHistory(aiClient, overhead = 0) {
+    if (this.sessionTokens <= this._getCompactionThreshold(overhead)) {
+      return COMPACTION_STATUS.WITHIN_BUDGET;
+    }
+
+    const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
+    const chunkEnd = this._findCompactionChunkEnd(startIdx);
     const messagesToCompact = this.activeMessages.slice(startIdx, chunkEnd);
 
     if (messagesToCompact.length === 0) {
-      return false;
+      return COMPACTION_STATUS.FAILED;
     }
 
-    // Build summarization prompt
     const prompt = this._buildSummarizationPrompt(messagesToCompact);
 
     try {
@@ -217,25 +262,20 @@ class ConversationManager {
       const newSummary = response?.choices?.[0]?.message?.content || '';
       if (newSummary) {
         this.rollingSummary = newSummary;
-
-        // 4. Update state: remove compacted messages, keep system + summary + remaining
         this.activeMessages = [
           ...this.activeMessages.slice(0, startIdx),
           ...this.activeMessages.slice(chunkEnd),
         ];
-
-        // Sync messages array for backward compatibility
         this.messages = [...this.activeMessages];
-
         this._recalculateTokens();
         this._triggerStateChange();
-        return true;
+        return COMPACTION_STATUS.COMPACTED;
       }
     } catch (error) {
       logger.warn('Compaction failed:', error);
     }
 
-    return false;
+    return COMPACTION_STATUS.FAILED;
   }
 
   /**
@@ -510,22 +550,20 @@ class ConversationManager {
    * - Old conversations with incomplete tool executions
    * - Conversations interrupted during tool execution
    * - Tool changes (additions/removals) between sessions
+   * @returns {boolean} Whether the history was modified
    * @private
    */
   _sanitizeMessages() {
-    if (!this.activeMessages || this.activeMessages.length === 0) return;
+    if (!this.activeMessages || this.activeMessages.length === 0) return false;
 
-    // Build sets of expected tool responses and received tool responses
-    const expectedToolResponses = new Map(); // tool_call_id -> index of assistant message
+    const expectedToolResponses = new Map();
     const receivedToolResponses = new Set();
 
     for (let i = 0; i < this.activeMessages.length; i++) {
       const msg = this.activeMessages[i];
       if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
         for (const tc of msg.tool_calls) {
-          if (tc.id) {
-            expectedToolResponses.set(tc.id, i);
-          }
+          if (tc.id) expectedToolResponses.set(tc.id, i);
         }
       }
       if (msg.role === 'tool' && msg.tool_call_id) {
@@ -533,76 +571,65 @@ class ConversationManager {
       }
     }
 
-    // Find mismatches
     const missingResponses = [...expectedToolResponses.keys()].filter(
       id => !receivedToolResponses.has(id)
     );
     const orphanResponses = [...receivedToolResponses].filter(id => !expectedToolResponses.has(id));
 
-    if (missingResponses.length === 0 && orphanResponses.length === 0) {
-      return; // No issues to fix
-    }
+    if (missingResponses.length === 0 && orphanResponses.length === 0) return false;
 
     logger.warn('Sanitizing conversation history:', {
       missingToolResponses: missingResponses.length,
       orphanToolResponses: orphanResponses.length,
     });
 
-    // Strategy 1: Add stub responses for missing tool responses
-    // Find where to insert them (after the assistant message with the tool_calls)
     if (missingResponses.length > 0) {
-      const stubResponse = {
-        error:
-          'Tool execution was interrupted or the conversation was restored from a previous session.',
-        stale: true,
-      };
-
-      // Group missing responses by their assistant message index
-      const insertions = [];
-      for (const toolCallId of missingResponses) {
-        const assistantIdx = expectedToolResponses.get(toolCallId);
-        insertions.push({
-          afterIndex: assistantIdx,
-          message: {
-            role: 'tool',
-            content: JSON.stringify(stubResponse),
-            tool_call_id: toolCallId,
-          },
-        });
-      }
-
-      // Sort by index descending so we can insert without shifting indices
-      insertions.sort((a, b) => b.afterIndex - a.afterIndex);
-
-      for (const ins of insertions) {
-        // Find the correct position: after the assistant message and any existing tool responses
-        let insertPos = ins.afterIndex + 1;
-        while (
-          insertPos < this.activeMessages.length &&
-          this.activeMessages[insertPos].role === 'tool'
-        ) {
-          insertPos++;
-        }
-        this.activeMessages.splice(insertPos, 0, ins.message);
-      }
+      this._stubMissingToolResponses(missingResponses, expectedToolResponses);
     }
-
-    // Strategy 2: Remove orphan tool responses (responses without matching tool_calls)
     if (orphanResponses.length > 0) {
-      this.activeMessages = this.activeMessages.filter(msg => {
-        if (msg.role === 'tool' && msg.tool_call_id) {
-          return !orphanResponses.includes(msg.tool_call_id);
-        }
-        return true;
-      });
+      this._pruneOrphanToolResponses(orphanResponses);
     }
 
-    // Sync messages array
     this.messages = [...this.activeMessages];
     this._recalculateTokens();
-
     if (isDebugEnabled()) logger.debug('Conversation history sanitized successfully');
+    return true;
+  }
+
+  /** @private */
+  _stubMissingToolResponses(missingResponses, expectedToolResponses) {
+    const stubContent = JSON.stringify({
+      error:
+        'Tool execution was interrupted or the conversation was restored from a previous session.',
+      stale: true,
+    });
+
+    const insertions = missingResponses.map(toolCallId => ({
+      afterIndex: expectedToolResponses.get(toolCallId),
+      message: { role: 'tool', content: stubContent, tool_call_id: toolCallId },
+    }));
+
+    insertions.sort((a, b) => b.afterIndex - a.afterIndex);
+
+    for (const ins of insertions) {
+      let insertPos = ins.afterIndex + 1;
+      while (
+        insertPos < this.activeMessages.length &&
+        this.activeMessages[insertPos].role === 'tool'
+      ) {
+        insertPos++;
+      }
+      this.activeMessages.splice(insertPos, 0, ins.message);
+    }
+  }
+
+  /** @private */
+  _pruneOrphanToolResponses(orphanResponses) {
+    this.activeMessages = this.activeMessages.filter(
+      msg =>
+        !(msg.role === 'tool' && msg.tool_call_id && orphanResponses.includes(msg.tool_call_id))
+    );
   }
 }
 
-export { ConversationManager };
+export { ConversationManager, MAX_COMPACTION_ROUNDS, COMPACTION_STATUS };

@@ -4,7 +4,7 @@
  */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
-import { ConversationManager } from './conversation.js';
+import { COMPACTION_STATUS, ConversationManager, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
 import { documentReadRegistry } from '../utils/document-read-registry.js';
 import { toolPermissionManager } from './tool-permission-manager.js';
@@ -225,37 +225,14 @@ class SimulacrumCore {
       // Get context length setting and limit conversation history
       // const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
 
-      // Trigger compaction if approaching token limit (Context Compaction feature)
+      // Get system prompt early so compaction can account for its token overhead
+      const useCustomPrompt = !!options.systemPrompt;
+      let systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
+      const getSystemPromptFn = () => systemPrompt;
+
+      // Trigger compaction if approaching token limit, looping until within budget
       if (this.conversationManager && this.aiClient) {
-        try {
-          const compacted = await this.conversationManager.compactHistory(this.aiClient);
-          if (compacted) {
-            if (isDebugEnabled()) {
-              this.logger.debug('Conversation history compacted via rollingSummary');
-            }
-            // UX: Show compaction as a simulated tool call
-            if (options.onAssistantMessage) {
-              const displayHtml = formatToolCallDisplay(
-                {
-                  toolName: 'optimize_memory',
-                  content: JSON.stringify({
-                    display: 'Compacted conversation history into working memory summary.',
-                  }),
-                  isError: false,
-                },
-                'optimize_memory'
-              );
-              options.onAssistantMessage({
-                role: 'assistant',
-                content: 'System Event: Conversation history compacted to rolling summary.', // Persist to history
-                display: displayHtml,
-              });
-            }
-          }
-        } catch (compactionError) {
-          // Non-fatal: log and continue with uncompacted history
-          this.logger.warn('Compaction failed, continuing with full history:', compactionError);
-        }
+        systemPrompt = await this._compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options);
       }
 
       // Legacy capping removed in favor of Tiered Context Compaction
@@ -290,10 +267,6 @@ class SimulacrumCore {
       if (signal.aborted) {
         throw new Error('Process was cancelled');
       }
-
-      // Get system prompt (use provided or default)
-      const systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
-      const getSystemPromptFn = () => systemPrompt;
 
       const raw = useNativeTools
         ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, {
@@ -465,9 +438,70 @@ class SimulacrumCore {
   static async getSystemPrompt() {
     let prompt = await buildSystemPrompt();
     if (this.conversationManager?.rollingSummary) {
-      prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n\n${prompt}`;
+      prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n### END OF SUMMARY\n\n${prompt}`;
     }
     return prompt;
+  }
+
+  static _estimatePromptOverhead(systemPrompt, includeRollingSummary = true) {
+    return this.conversationManager.estimatePromptOverhead(systemPrompt, includeRollingSummary);
+  }
+
+  static async _compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options) {
+    try {
+      let rounds = 0;
+      let anyCompacted = false;
+      const includeRollingSummary = !useCustomPrompt;
+      let promptOverhead = this._estimatePromptOverhead(systemPrompt, includeRollingSummary);
+
+      while (rounds < MAX_COMPACTION_ROUNDS) {
+        const compactionStatus = await this.conversationManager.compactHistory(
+          this.aiClient,
+          promptOverhead
+        );
+        rounds++;
+        if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
+        if (compactionStatus === COMPACTION_STATUS.FAILED) break;
+
+        anyCompacted = true;
+        systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
+        promptOverhead = this._estimatePromptOverhead(systemPrompt, includeRollingSummary);
+      }
+
+      if (anyCompacted) this._notifyCompactionOccurred(options);
+      return systemPrompt;
+    } catch (compactionError) {
+      this.logger.warn('Compaction failed:', compactionError);
+      return systemPrompt;
+    }
+  }
+
+  static _notifyCompactionOccurred(options) {
+    if (isDebugEnabled()) {
+      this.logger.debug('Conversation history compacted via rollingSummary');
+    }
+
+    if (!options?.onAssistantMessage) return;
+
+    try {
+      const displayHtml = formatToolCallDisplay(
+        {
+          toolName: 'optimize_memory',
+          content: JSON.stringify({
+            display: 'Compacted conversation history into working memory summary.',
+          }),
+          isError: false,
+        },
+        'optimize_memory'
+      );
+      options.onAssistantMessage({
+        role: 'assistant',
+        content: 'System Event: Conversation history compacted to rolling summary.',
+        display: displayHtml,
+      });
+    } catch (notificationError) {
+      this.logger.warn('Compaction notification failed:', notificationError);
+    }
   }
 }
 // Export the SimulacrumCore class
