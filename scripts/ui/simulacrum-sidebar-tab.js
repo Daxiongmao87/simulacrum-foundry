@@ -13,7 +13,7 @@ import { SidebarEventHandlers } from './sidebar-event-handlers.js';
 import { syncMessagesFromCore, processMessageForDisplay } from './sidebar-state-syncer.js';
 import { modelService } from '../core/model-service.js';
 import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
-import { SimulacrumHooks } from '../core/hook-manager.js';
+import { emitProcessCancelled, SimulacrumHooks } from '../core/hook-manager.js';
 import { SequentialQueue } from '../utils/sequential-queue.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
@@ -1005,6 +1005,15 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     return this.#currentAbortController.signal;
   }
 
+  isCurrentProcess(signal) {
+    return (
+      !!signal &&
+      !signal.aborted &&
+      !!this.#currentAbortController &&
+      this.#currentAbortController.signal === signal
+    );
+  }
+
   finishProcess(signal) {
     if (this.#currentAbortController && this.#currentAbortController.signal === signal) {
       this.setProcessing(false);
@@ -1018,8 +1027,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       this.#currentAbortController.abort();
       this.#currentAbortController = null;
     }
+    this.#isRetrying = false;
+    this.#retryLabel = null;
     this._activeProcesses.clear();
+    emitProcessCancelled();
     this.setProcessing(false);
+    this._updateRetryStatusInDOM(false);
     this._updateTaskTracker(null, false);
     return true;
   }

@@ -45,6 +45,7 @@ export class SidebarEventHandlers {
         );
 
         if (commandResult.isCommand) {
+          if (!app.isCurrentProcess(signal)) return;
           await app.addMessage('assistant', commandResult.message, commandResult.message);
           return;
         }
@@ -61,11 +62,13 @@ export class SidebarEventHandlers {
       /* eslint-enable no-unused-vars */
 
       const onAssistantMessage = async response => {
+        if (!app.isCurrentProcess(signal)) return;
         // Apply markdown rendering and enrichment before display
         // processMessageForDisplay handles null/undefined content by defaulting to '&nbsp;'
         const processedDisplay = await processMessageForDisplay(
           response.display || response.content
         );
+        if (!app.isCurrentProcess(signal)) return;
         await app.addMessage('assistant', response.content, processedDisplay, response.noGroup);
       };
 
@@ -82,6 +85,7 @@ export class SidebarEventHandlers {
         signal,
       });
     } catch (error) {
+      if (signal.aborted) return;
       createLogger('SidebarEventHandlers').error('Error processing message', error);
       ui.notifications?.error(`Simulacrum: ${error.message}`, { permanent: false });
     } finally {
