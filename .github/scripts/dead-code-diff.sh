@@ -71,10 +71,11 @@ looks_like_findings() {
 # - trim leading/trailing whitespace
 normalize() {
   awk '
+    /^Configuration hints *\([0-9]+\)[[:space:]]*$/ { in_section = 0; next }
     /^[A-Z][A-Za-z][A-Za-z ]*\([0-9]+\)[[:space:]]*$/ { in_section = 1; next }
     /^[-—─=]+$/ { next }
     /^[[:space:]]*$/ { in_section = 0; next }
-    in_section && !/Remove redundant entry pattern/ {
+    in_section {
       gsub(/:[0-9]+:[0-9]+/, "")
       gsub(/[[:space:]]+/, " ")
       sub(/^ /, "")
