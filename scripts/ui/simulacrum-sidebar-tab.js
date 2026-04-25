@@ -1369,11 +1369,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   async _saveContextLimit(value) {
     const limit = this._parseContextLimit(value);
     if (limit) {
+      // Update fallback setting
       await game.settings.set('simulacrum', 'fallbackContextLimit', limit);
-      // Propagate to the running ConversationManager so compaction uses the new limit immediately
-      if (SimulacrumCore.conversationManager) {
-        SimulacrumCore.conversationManager.maxTokens = limit;
-      }
       this.logger.info(`Context limit updated to: ${limit}`);
     }
   }
