@@ -540,7 +540,10 @@ class SimulacrumCore {
     if (isDebugEnabled()) {
       this.logger.debug('Conversation history compacted via rollingSummary');
     }
-    if (options.onAssistantMessage) {
+
+    if (!options?.onAssistantMessage) return;
+
+    try {
       const displayHtml = formatToolCallDisplay(
         {
           toolName: 'optimize_memory',
@@ -556,6 +559,8 @@ class SimulacrumCore {
         content: 'System Event: Conversation history compacted to rolling summary.',
         display: displayHtml,
       });
+    } catch (notificationError) {
+      this.logger.warn('Compaction notification failed:', notificationError);
     }
   }
 }
