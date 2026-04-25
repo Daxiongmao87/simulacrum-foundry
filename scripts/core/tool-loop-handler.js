@@ -770,12 +770,21 @@ async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context
 async function _getNextAIResponse(toolResults, context) {
   const { getSystemPrompt, conversationManager, aiClient } = context;
 
-  // Context Compaction: Trigger before next AI call
+  const systemPrompt = await getSystemPrompt();
+
+  // Context Compaction: account for system prompt overhead and loop until under budget
   if (conversationManager && aiClient) {
     try {
-      const compacted = await conversationManager.compactHistory(aiClient);
-      if (compacted && isDebugEnabled()) {
-        logger.debug('Conversation history compacted during tool loop');
+      const systemPromptTokens = conversationManager._estimateTokens({
+        role: 'system',
+        content: systemPrompt,
+      });
+      let compacted = true;
+      while (compacted) {
+        compacted = await conversationManager.compactHistory(aiClient, systemPromptTokens);
+        if (compacted && isDebugEnabled()) {
+          logger.debug('Conversation history compacted during tool loop');
+        }
       }
     } catch (err) {
       logger.warn('Compaction failed during tool loop:', err);
@@ -783,7 +792,6 @@ async function _getNextAIResponse(toolResults, context) {
   }
 
   const messages = _getConversationMessages(context);
-  const systemPrompt = await getSystemPrompt();
   return _chatWithAI(messages, systemPrompt, context);
 }
 

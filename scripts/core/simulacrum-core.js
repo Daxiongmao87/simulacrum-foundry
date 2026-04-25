@@ -225,11 +225,27 @@ class SimulacrumCore {
       // Get context length setting and limit conversation history
       // const contextLength = game?.settings?.get('simulacrum', 'contextLength') || 20;
 
+      // Get system prompt early so compaction can account for its token overhead
+      const systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
+      const getSystemPromptFn = () => systemPrompt;
+
       // Trigger compaction if approaching token limit (Context Compaction feature)
       if (this.conversationManager && this.aiClient) {
         try {
-          const compacted = await this.conversationManager.compactHistory(this.aiClient);
-          if (compacted) {
+          const systemPromptTokens = this.conversationManager._estimateTokens({
+            role: 'system',
+            content: systemPrompt,
+          });
+          let compacted = true;
+          let anyCompacted = false;
+          while (compacted) {
+            compacted = await this.conversationManager.compactHistory(
+              this.aiClient,
+              systemPromptTokens
+            );
+            anyCompacted = anyCompacted || compacted;
+          }
+          if (anyCompacted) {
             if (isDebugEnabled()) {
               this.logger.debug('Conversation history compacted via rollingSummary');
             }
@@ -290,10 +306,6 @@ class SimulacrumCore {
       if (signal.aborted) {
         throw new Error('Process was cancelled');
       }
-
-      // Get system prompt (use provided or default)
-      const systemPrompt = options.systemPrompt || (await this.getSystemPrompt());
-      const getSystemPromptFn = () => systemPrompt;
 
       const raw = useNativeTools
         ? await this.aiClient.chatWithSystem(limitedMessages, getSystemPromptFn, sendTools, {

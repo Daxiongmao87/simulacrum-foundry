@@ -110,14 +110,16 @@ class ConversationManager {
 
   /**
    * Calculate the compaction threshold based on model context window
+   * @param {number} [overhead=0] - Additional token overhead to reserve (e.g. system prompt tokens)
    * @returns {number} Token threshold for triggering compaction
    * @private
    */
-  _getCompactionThreshold() {
+  _getCompactionThreshold(overhead = 0) {
     const contextWindow = this.maxTokens;
-    const contextTarget = Math.floor(contextWindow * 0.33); // 33% for working memory
+    const available = contextWindow - overhead;
+    const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
-    return contextWindow - contextTarget - compactionPromptSize;
+    return available - contextTarget - compactionPromptSize;
   }
 
   /**
@@ -152,10 +154,11 @@ class ConversationManager {
   /**
    * Compact history using AI-driven summarization
    * @param {object} aiClient - AI client for summarization calls
+   * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
    * @returns {Promise<boolean>} Whether compaction occurred
    */
-  async compactHistory(aiClient) {
-    const threshold = this._getCompactionThreshold();
+  async compactHistory(aiClient, overhead = 0) {
+    const threshold = this._getCompactionThreshold(overhead);
     const currentTokens = this.sessionTokens;
 
     if (currentTokens <= threshold) {
