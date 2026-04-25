@@ -4,7 +4,7 @@
  */
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { AIClient } from './ai-client.js';
-import { ConversationManager, MAX_COMPACTION_ROUNDS } from './conversation.js';
+import { COMPACTION_STATUS, ConversationManager, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import { toolRegistry } from './tool-registry.js';
 import { documentReadRegistry } from '../utils/document-read-registry.js';
 import { toolPermissionManager } from './tool-permission-manager.js';
@@ -457,19 +457,19 @@ class SimulacrumCore {
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
         this._assertPromptFitsContext(promptOverhead);
-        const compacted = await this.conversationManager.compactHistory(
+        const compactionStatus = await this.conversationManager.compactHistory(
           this.aiClient,
           promptOverhead,
           includeRollingSummary
         );
         rounds++;
-        if (
-          !compacted &&
-          this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)
-        ) {
+        if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) {
           break;
         }
-        if (!compacted) continue;
+        if (compactionStatus === COMPACTION_STATUS.FAILED) {
+          this._ensureContextWindowAfterCompactionFailure(promptOverhead, includeRollingSummary);
+          return systemPrompt;
+        }
 
         anyCompacted = true;
         systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
@@ -507,6 +507,24 @@ class SimulacrumCore {
     if (!this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)) {
       throw new ValidationError(
         'Conversation still exceeds context budget after compaction and truncation',
+        'contextBudget',
+        { promptOverhead, maxTokens: this.conversationManager.maxTokens }
+      );
+    }
+  }
+
+  static _ensureContextWindowAfterCompactionFailure(promptOverhead, includeRollingSummary = true) {
+    this._assertPromptFitsContext(promptOverhead);
+    if (this.conversationManager.isWithinContextWindow(promptOverhead, includeRollingSummary)) {
+      return;
+    }
+
+    this.logger.warn('Compaction failed; truncating oldest conversation history to context window');
+    this.conversationManager.truncateToContextWindow(promptOverhead, includeRollingSummary);
+
+    if (!this.conversationManager.isWithinContextWindow(promptOverhead, includeRollingSummary)) {
+      throw new ValidationError(
+        'Conversation still exceeds context window after failed compaction and truncation',
         'contextBudget',
         { promptOverhead, maxTokens: this.conversationManager.maxTokens }
       );

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 
 globalThis.FormApplication = class {};
 
-const { ConversationManager } = await import('../../scripts/core/conversation.js');
+const { COMPACTION_STATUS, ConversationManager } =
+  await import('../../scripts/core/conversation.js');
 
 const tokenizer = {
   estimateMessageTokens(message) {
@@ -62,9 +63,27 @@ function testTruncateToCompactionBudgetDropsOldestMessages() {
   assert.equal(conversation.getMessages()[0].content.startsWith('0:'), false);
 }
 
+async function testCompactionFailureReturnsExplicitStatus() {
+  const conversation = createConversation(1000);
+  for (let i = 0; i < 10; i++) {
+    conversation.addMessage('user', `${i}: ${'x'.repeat(100)}`);
+  }
+
+  const failingClient = {
+    async chat() {
+      throw new Error('background compaction unavailable');
+    },
+  };
+
+  const status = await conversation.compactHistory(failingClient, 0);
+
+  assert.equal(status, COMPACTION_STATUS.FAILED);
+}
+
 testPromptOverheadDoesNotDoubleCountRollingSummary();
 testCustomPromptBudgetDoesNotCountUnsentRollingSummary();
 testThresholdIsClampedWhenPromptConsumesContext();
 testTruncateToCompactionBudgetDropsOldestMessages();
+await testCompactionFailureReturnsExplicitStatus();
 
 console.log('compaction budget tests passed');

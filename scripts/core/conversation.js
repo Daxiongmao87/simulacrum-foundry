@@ -12,6 +12,11 @@ import { interactionLogger } from './interaction-logger.js';
 
 const logger = createLogger('Conversation');
 const MAX_COMPACTION_ROUNDS = 10;
+const COMPACTION_STATUS = Object.freeze({
+  WITHIN_BUDGET: 'within_budget',
+  COMPACTED: 'compacted',
+  FAILED: 'failed',
+});
 
 class ConversationManager {
   /**
@@ -152,17 +157,36 @@ class ConversationManager {
   }
 
   /**
+   * Check whether the current request fits within the model context window.
+   * @param {number} [overhead=0]
+   * @param {boolean} [includeRollingSummary=true]
+   * @returns {boolean}
+   */
+  isWithinContextWindow(overhead = 0, includeRollingSummary = true) {
+    return this._getBudgetTokens(includeRollingSummary) <= this._getContextWindowBudget(overhead);
+  }
+
+  /**
    * Calculate the compaction threshold based on model context window
    * @param {number} [overhead=0] - Additional token overhead to reserve (e.g. system prompt tokens)
    * @returns {number} Token threshold for triggering compaction
    * @private
    */
   _getCompactionThreshold(overhead = 0) {
-    const contextWindow = this.maxTokens;
-    const available = Math.max(0, contextWindow - Math.max(0, overhead));
+    const available = this._getContextWindowBudget(overhead);
     const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
     return Math.max(0, available - contextTarget - compactionPromptSize);
+  }
+
+  /**
+   * Calculate the absolute conversation budget left after prompt overhead.
+   * @param {number} [overhead=0]
+   * @returns {number}
+   * @private
+   */
+  _getContextWindowBudget(overhead = 0) {
+    return Math.max(0, this.maxTokens - Math.max(0, overhead));
   }
 
   /**
@@ -250,11 +274,11 @@ class ConversationManager {
    * @param {object} aiClient - AI client for summarization calls
    * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
    * @param {boolean} [includeRollingSummary=true] - Whether request prompt includes rolling summary
-   * @returns {Promise<boolean>} Whether compaction occurred
+   * @returns {Promise<string>} Compaction status
    */
   async compactHistory(aiClient, overhead = 0, includeRollingSummary = true) {
     if (this.isWithinCompactionBudget(overhead, includeRollingSummary)) {
-      return false;
+      return COMPACTION_STATUS.WITHIN_BUDGET;
     }
 
     const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
@@ -262,7 +286,7 @@ class ConversationManager {
     const messagesToCompact = this.activeMessages.slice(startIdx, chunkEnd);
 
     if (messagesToCompact.length === 0) {
-      return false;
+      return COMPACTION_STATUS.FAILED;
     }
 
     const prompt = this._buildSummarizationPrompt(messagesToCompact);
@@ -282,13 +306,13 @@ class ConversationManager {
         this.messages = [...this.activeMessages];
         this._recalculateTokens();
         this._triggerStateChange();
-        return true;
+        return COMPACTION_STATUS.COMPACTED;
       }
     } catch (error) {
       logger.warn('Compaction failed:', error);
     }
 
-    return false;
+    return COMPACTION_STATUS.FAILED;
   }
 
   /**
@@ -299,9 +323,33 @@ class ConversationManager {
    * @returns {boolean} Whether any messages were removed
    */
   truncateToCompactionBudget(overhead = 0, includeRollingSummary = true) {
+    return this._truncateUntilWithin(() =>
+      this.isWithinCompactionBudget(overhead, includeRollingSummary)
+    );
+  }
+
+  /**
+   * Deterministically drop oldest active messages until the request fits the context window.
+   * @param {number} [overhead=0]
+   * @param {boolean} [includeRollingSummary=true]
+   * @returns {boolean} Whether any messages were removed
+   */
+  truncateToContextWindow(overhead = 0, includeRollingSummary = true) {
+    return this._truncateUntilWithin(() =>
+      this.isWithinContextWindow(overhead, includeRollingSummary)
+    );
+  }
+
+  /**
+   * Deterministically drop oldest active messages until a supplied budget predicate is satisfied.
+   * @param {Function} isWithinBudget
+   * @returns {boolean} Whether any messages were removed
+   * @private
+   */
+  _truncateUntilWithin(isWithinBudget) {
     let changed = false;
 
-    while (!this.isWithinCompactionBudget(overhead, includeRollingSummary)) {
+    while (!isWithinBudget()) {
       const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
       if (this.activeMessages.length <= startIdx) break;
 
@@ -682,4 +730,4 @@ class ConversationManager {
   }
 }
 
-export { ConversationManager, MAX_COMPACTION_ROUNDS };
+export { ConversationManager, MAX_COMPACTION_ROUNDS, COMPACTION_STATUS };

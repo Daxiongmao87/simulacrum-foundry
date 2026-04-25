@@ -9,7 +9,7 @@
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
 import { performPostToolVerification } from './tool-verification.js';
-import { MAX_COMPACTION_ROUNDS } from './conversation.js';
+import { COMPACTION_STATUS, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import {
   sanitizeMessagesForFallback,
   normalizeAIResponse,
@@ -782,10 +782,13 @@ async function _getNextAIResponse(toolResults, context) {
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
         _assertPromptFitsContext(conversationManager, promptOverhead);
-        const compacted = await conversationManager.compactHistory(aiClient, promptOverhead);
+        const compactionStatus = await conversationManager.compactHistory(aiClient, promptOverhead);
         rounds++;
-        if (!compacted && conversationManager.isWithinCompactionBudget(promptOverhead)) break;
-        if (!compacted) continue;
+        if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
+        if (compactionStatus === COMPACTION_STATUS.FAILED) {
+          _ensureContextWindowAfterCompactionFailure(conversationManager, promptOverhead);
+          break;
+        }
 
         if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
         systemPrompt = await getSystemPrompt();
@@ -823,6 +826,22 @@ function _ensureConversationFitsAfterCompaction(conversationManager, promptOverh
   if (!conversationManager.isWithinCompactionBudget(promptOverhead)) {
     throw new ValidationError(
       'Conversation still exceeds context budget after compaction and truncation',
+      'contextBudget',
+      { promptOverhead, maxTokens: conversationManager.maxTokens }
+    );
+  }
+}
+
+function _ensureContextWindowAfterCompactionFailure(conversationManager, promptOverhead) {
+  _assertPromptFitsContext(conversationManager, promptOverhead);
+  if (conversationManager.isWithinContextWindow(promptOverhead)) return;
+
+  logger.warn('Compaction failed; truncating oldest conversation history to context window');
+  conversationManager.truncateToContextWindow(promptOverhead);
+
+  if (!conversationManager.isWithinContextWindow(promptOverhead)) {
+    throw new ValidationError(
+      'Conversation still exceeds context window after failed compaction and truncation',
       'contextBudget',
       { promptOverhead, maxTokens: conversationManager.maxTokens }
     );
