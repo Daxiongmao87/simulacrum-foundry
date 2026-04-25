@@ -16,6 +16,7 @@ import {
   sanitizeMessagesForFallback,
 } from '../utils/ai-normalization.js';
 import { smartSliceMessages, formatToolCallDisplay } from '../utils/message-utils.js';
+import { ValidationError } from '../utils/errors.js';
 import { processToolCallLoop } from './tool-loop-handler.js';
 import { emitProcessCancelled } from './hook-manager.js';
 import {
@@ -446,10 +447,7 @@ class SimulacrumCore {
   }
 
   static _estimatePromptOverhead(systemPrompt, useCustomPrompt) {
-    if (useCustomPrompt) {
-      return this.conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
-    }
-    return this.conversationManager.estimatePromptOverhead(systemPrompt);
+    return this.conversationManager.estimatePromptOverhead(systemPrompt, !useCustomPrompt);
   }
 
   static async _compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options) {
@@ -462,7 +460,8 @@ class SimulacrumCore {
         this._assertPromptFitsContext(promptOverhead);
         const compacted = await this.conversationManager.compactHistory(
           this.aiClient,
-          promptOverhead
+          promptOverhead,
+          !useCustomPrompt
         );
         rounds++;
         if (!compacted) break;
@@ -473,7 +472,7 @@ class SimulacrumCore {
       }
 
       if (anyCompacted) this._notifyCompactionOccurred(options);
-      this._ensureConversationFitsAfterCompaction(promptOverhead);
+      this._ensureConversationFitsAfterCompaction(promptOverhead, !useCustomPrompt);
       return systemPrompt;
     } catch (compactionError) {
       this.logger.warn('Compaction failed:', compactionError);
@@ -483,19 +482,29 @@ class SimulacrumCore {
 
   static _assertPromptFitsContext(promptOverhead) {
     if (!this.conversationManager.hasAvailableContext(promptOverhead)) {
-      throw new Error('System prompt exceeds the configured context window before conversation history');
+      throw new ValidationError(
+        'System prompt exceeds the configured context window before conversation history',
+        'contextBudget',
+        { promptOverhead, maxTokens: this.conversationManager.maxTokens }
+      );
     }
   }
 
-  static _ensureConversationFitsAfterCompaction(promptOverhead) {
+  static _ensureConversationFitsAfterCompaction(promptOverhead, includeRollingSummary = true) {
     this._assertPromptFitsContext(promptOverhead);
-    if (this.conversationManager.isWithinCompactionBudget(promptOverhead)) return;
+    if (this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)) {
+      return;
+    }
 
     this.logger.warn('Compaction round limit reached; truncating oldest conversation history');
-    this.conversationManager.truncateToCompactionBudget(promptOverhead);
+    this.conversationManager.truncateToCompactionBudget(promptOverhead, includeRollingSummary);
 
-    if (!this.conversationManager.isWithinCompactionBudget(promptOverhead)) {
-      throw new Error('Conversation still exceeds context budget after compaction and truncation');
+    if (!this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)) {
+      throw new ValidationError(
+        'Conversation still exceeds context budget after compaction and truncation',
+        'contextBudget',
+        { promptOverhead, maxTokens: this.conversationManager.maxTokens }
+      );
     }
   }
 

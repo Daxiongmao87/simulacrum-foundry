@@ -15,6 +15,7 @@ import {
   parseInlineToolCall,
   repairToolCallArguments,
 } from '../utils/ai-normalization.js';
+import { ValidationError } from '../utils/errors.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
   isToolCallFailure,
@@ -803,7 +804,11 @@ async function _getNextAIResponse(toolResults, context) {
 
 function _assertPromptFitsContext(conversationManager, promptOverhead) {
   if (!conversationManager.hasAvailableContext(promptOverhead)) {
-    throw new Error('System prompt exceeds the configured context window before conversation history');
+    throw new ValidationError(
+      'System prompt exceeds the configured context window before conversation history',
+      'contextBudget',
+      { promptOverhead, maxTokens: conversationManager.maxTokens }
+    );
   }
 }
 
@@ -815,7 +820,11 @@ function _ensureConversationFitsAfterCompaction(conversationManager, promptOverh
   conversationManager.truncateToCompactionBudget(promptOverhead);
 
   if (!conversationManager.isWithinCompactionBudget(promptOverhead)) {
-    throw new Error('Conversation still exceeds context budget after compaction and truncation');
+    throw new ValidationError(
+      'Conversation still exceeds context budget after compaction and truncation',
+      'contextBudget',
+      { promptOverhead, maxTokens: conversationManager.maxTokens }
+    );
   }
 }
 

@@ -27,6 +27,18 @@ function testPromptOverheadDoesNotDoubleCountRollingSummary() {
   assert.equal(conversation.estimatePromptOverhead(systemPrompt), fullPromptTokens - 25);
 }
 
+function testCustomPromptBudgetDoesNotCountUnsentRollingSummary() {
+  const conversation = createConversation(600);
+  conversation.rollingSummary = 'a'.repeat(2000);
+  conversation._recalculateTokens();
+
+  const customPrompt = 'short custom prompt';
+  const promptOverhead = conversation.estimatePromptOverhead(customPrompt, false);
+
+  assert.equal(conversation.isWithinCompactionBudget(promptOverhead, true), false);
+  assert.equal(conversation.isWithinCompactionBudget(promptOverhead, false), true);
+}
+
 function testThresholdIsClampedWhenPromptConsumesContext() {
   const conversation = createConversation(100);
 
@@ -51,6 +63,7 @@ function testTruncateToCompactionBudgetDropsOldestMessages() {
 }
 
 testPromptOverheadDoesNotDoubleCountRollingSummary();
+testCustomPromptBudgetDoesNotCountUnsentRollingSummary();
 testThresholdIsClampedWhenPromptConsumesContext();
 testTruncateToCompactionBudgetDropsOldestMessages();
 

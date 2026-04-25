@@ -122,20 +122,23 @@ class ConversationManager {
    * Estimate system prompt overhead that is not already represented in sessionTokens.
    * getSystemPrompt() embeds rollingSummary, while sessionTokens also tracks it.
    * @param {string} systemPrompt
+   * @param {boolean} [includesRollingSummary=true]
    * @returns {number}
    */
-  estimatePromptOverhead(systemPrompt) {
+  estimatePromptOverhead(systemPrompt, includesRollingSummary = true) {
     const promptTokens = this.estimateTokens({ role: 'system', content: systemPrompt });
-    return Math.max(0, promptTokens - this._estimateRollingSummaryTokens());
+    const countedSummaryTokens = includesRollingSummary ? this._estimateRollingSummaryTokens() : 0;
+    return Math.max(0, promptTokens - countedSummaryTokens);
   }
 
   /**
    * Check whether the current conversation is within the compaction budget.
    * @param {number} [overhead=0]
+   * @param {boolean} [includeRollingSummary=true]
    * @returns {boolean}
    */
-  isWithinCompactionBudget(overhead = 0) {
-    return this.sessionTokens <= this._getCompactionThreshold(overhead);
+  isWithinCompactionBudget(overhead = 0, includeRollingSummary = true) {
+    return this._getBudgetTokens(includeRollingSummary) <= this._getCompactionThreshold(overhead);
   }
 
   /**
@@ -199,6 +202,17 @@ class ConversationManager {
   }
 
   /**
+   * Get conversation tokens relevant to the request budget.
+   * @param {boolean} includeRollingSummary
+   * @returns {number}
+   * @private
+   */
+  _getBudgetTokens(includeRollingSummary) {
+    if (includeRollingSummary) return this.sessionTokens;
+    return Math.max(0, this.sessionTokens - this._estimateRollingSummaryTokens());
+  }
+
+  /**
    * Find the end index of the chunk to compact, respecting tool call/response pairing.
    * @param {number} startIdx - Index of first non-system message
    * @returns {number} Exclusive end index of the chunk
@@ -234,10 +248,11 @@ class ConversationManager {
    * Compact history using AI-driven summarization
    * @param {object} aiClient - AI client for summarization calls
    * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
+   * @param {boolean} [includeRollingSummary=true] - Whether request prompt includes rolling summary
    * @returns {Promise<boolean>} Whether compaction occurred
    */
-  async compactHistory(aiClient, overhead = 0) {
-    if (this.isWithinCompactionBudget(overhead)) {
+  async compactHistory(aiClient, overhead = 0, includeRollingSummary = true) {
+    if (this.isWithinCompactionBudget(overhead, includeRollingSummary)) {
       return false;
     }
 
@@ -279,12 +294,13 @@ class ConversationManager {
    * Deterministically drop oldest active messages until the request is within budget.
    * Used only after AI compaction hits its safety cap.
    * @param {number} [overhead=0]
+   * @param {boolean} [includeRollingSummary=true]
    * @returns {boolean} Whether any messages were removed
    */
-  truncateToCompactionBudget(overhead = 0) {
+  truncateToCompactionBudget(overhead = 0, includeRollingSummary = true) {
     let changed = false;
 
-    while (!this.isWithinCompactionBudget(overhead)) {
+    while (!this.isWithinCompactionBudget(overhead, includeRollingSummary)) {
       const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
       if (this.activeMessages.length <= startIdx) break;
 
@@ -302,7 +318,6 @@ class ConversationManager {
 
     if (changed) {
       this.messages = [...this.activeMessages];
-      this._recalculateTokens();
       this._triggerStateChange();
       logger.warn('Conversation history truncated after compaction round limit');
     }
@@ -656,7 +671,8 @@ class ConversationManager {
   /** @private */
   _pruneOrphanToolResponses(orphanResponses) {
     this.activeMessages = this.activeMessages.filter(
-      msg => !(msg.role === 'tool' && msg.tool_call_id && orphanResponses.includes(msg.tool_call_id))
+      msg =>
+        !(msg.role === 'tool' && msg.tool_call_id && orphanResponses.includes(msg.tool_call_id))
     );
   }
 }
