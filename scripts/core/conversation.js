@@ -127,14 +127,18 @@ class ConversationManager {
   /**
    * Estimate system prompt overhead that is not already represented in sessionTokens.
    * getSystemPrompt() embeds rollingSummary, while sessionTokens also tracks it.
+   * Uses the same tokenizer for both terms so the subtraction is internally consistent.
    * @param {string} systemPrompt
-   * @param {boolean} [includesRollingSummary=true]
+   * @param {boolean} [includeRollingSummary=true]
    * @returns {number}
    */
-  estimatePromptOverhead(systemPrompt, includesRollingSummary = true) {
+  estimatePromptOverhead(systemPrompt, includeRollingSummary = true) {
     const promptTokens = this.estimateTokens({ role: 'system', content: systemPrompt });
-    const countedSummaryTokens = includesRollingSummary ? this._estimateRollingSummaryTokens() : 0;
-    return Math.max(0, promptTokens - countedSummaryTokens);
+    const summaryTokens =
+      includeRollingSummary && this.rollingSummary
+        ? this.estimateTokens({ role: 'system', content: this.rollingSummary })
+        : 0;
+    return Math.max(0, promptTokens - summaryTokens);
   }
 
   /**
@@ -370,7 +374,7 @@ class ConversationManager {
     if (changed) {
       this.messages = [...this.activeMessages];
       this._triggerStateChange();
-      logger.warn('Conversation history truncated after compaction round limit');
+      logger.warn('Conversation history truncated to fit context window');
     }
 
     return changed;
