@@ -454,6 +454,7 @@ class SimulacrumCore {
     try {
       let rounds = 0;
       let anyCompacted = false;
+      const includeRollingSummary = !useCustomPrompt;
       let promptOverhead = this._estimatePromptOverhead(systemPrompt, useCustomPrompt);
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
@@ -461,10 +462,16 @@ class SimulacrumCore {
         const compacted = await this.conversationManager.compactHistory(
           this.aiClient,
           promptOverhead,
-          !useCustomPrompt
+          includeRollingSummary
         );
         rounds++;
-        if (!compacted) break;
+        if (
+          !compacted &&
+          this.conversationManager.isWithinCompactionBudget(promptOverhead, includeRollingSummary)
+        ) {
+          break;
+        }
+        if (!compacted) continue;
 
         anyCompacted = true;
         systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
@@ -472,7 +479,7 @@ class SimulacrumCore {
       }
 
       if (anyCompacted) this._notifyCompactionOccurred(options);
-      this._ensureConversationFitsAfterCompaction(promptOverhead, !useCustomPrompt);
+      this._ensureConversationFitsAfterCompaction(promptOverhead, includeRollingSummary);
       return systemPrompt;
     } catch (compactionError) {
       this.logger.warn('Compaction failed:', compactionError);

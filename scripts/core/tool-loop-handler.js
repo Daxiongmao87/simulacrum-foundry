@@ -784,7 +784,8 @@ async function _getNextAIResponse(toolResults, context) {
         _assertPromptFitsContext(conversationManager, promptOverhead);
         const compacted = await conversationManager.compactHistory(aiClient, promptOverhead);
         rounds++;
-        if (!compacted) break;
+        if (!compacted && conversationManager.isWithinCompactionBudget(promptOverhead)) break;
+        if (!compacted) continue;
 
         if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
         systemPrompt = await getSystemPrompt();
