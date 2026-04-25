@@ -119,6 +119,35 @@ class ConversationManager {
   }
 
   /**
+   * Estimate system prompt overhead that is not already represented in sessionTokens.
+   * getSystemPrompt() embeds rollingSummary, while sessionTokens also tracks it.
+   * @param {string} systemPrompt
+   * @returns {number}
+   */
+  estimatePromptOverhead(systemPrompt) {
+    const promptTokens = this.estimateTokens({ role: 'system', content: systemPrompt });
+    return Math.max(0, promptTokens - this._estimateRollingSummaryTokens());
+  }
+
+  /**
+   * Check whether the current conversation is within the compaction budget.
+   * @param {number} [overhead=0]
+   * @returns {boolean}
+   */
+  isWithinCompactionBudget(overhead = 0) {
+    return this.sessionTokens <= this._getCompactionThreshold(overhead);
+  }
+
+  /**
+   * Check whether non-conversation prompt overhead leaves any context for messages.
+   * @param {number} [overhead=0]
+   * @returns {boolean}
+   */
+  hasAvailableContext(overhead = 0) {
+    return Math.max(0, overhead) < this.maxTokens;
+  }
+
+  /**
    * Calculate the compaction threshold based on model context window
    * @param {number} [overhead=0] - Additional token overhead to reserve (e.g. system prompt tokens)
    * @returns {number} Token threshold for triggering compaction
@@ -126,10 +155,10 @@ class ConversationManager {
    */
   _getCompactionThreshold(overhead = 0) {
     const contextWindow = this.maxTokens;
-    const available = Math.max(0, contextWindow - overhead);
+    const available = Math.max(0, contextWindow - Math.max(0, overhead));
     const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
-    return available - contextTarget - compactionPromptSize;
+    return Math.max(0, available - contextTarget - compactionPromptSize);
   }
 
   /**
@@ -157,8 +186,16 @@ class ConversationManager {
       (acc, msg) => acc + this._estimateTokens(msg),
       0
     );
-    const summaryTokens = this.rollingSummary ? Math.ceil(this.rollingSummary.length / 4) : 0;
-    this.sessionTokens = messageTokens + summaryTokens;
+    this.sessionTokens = messageTokens + this._estimateRollingSummaryTokens();
+  }
+
+  /**
+   * Estimate rolling summary tokens using the same accounting as sessionTokens.
+   * @returns {number}
+   * @private
+   */
+  _estimateRollingSummaryTokens() {
+    return this.rollingSummary ? Math.ceil(this.rollingSummary.length / 4) : 0;
   }
 
   /**
@@ -200,7 +237,7 @@ class ConversationManager {
    * @returns {Promise<boolean>} Whether compaction occurred
    */
   async compactHistory(aiClient, overhead = 0) {
-    if (this.sessionTokens <= this._getCompactionThreshold(overhead)) {
+    if (this.isWithinCompactionBudget(overhead)) {
       return false;
     }
 
@@ -236,6 +273,41 @@ class ConversationManager {
     }
 
     return false;
+  }
+
+  /**
+   * Deterministically drop oldest active messages until the request is within budget.
+   * Used only after AI compaction hits its safety cap.
+   * @param {number} [overhead=0]
+   * @returns {boolean} Whether any messages were removed
+   */
+  truncateToCompactionBudget(overhead = 0) {
+    let changed = false;
+
+    while (!this.isWithinCompactionBudget(overhead)) {
+      const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
+      if (this.activeMessages.length <= startIdx) break;
+
+      const chunkEnd = this._findCompactionChunkEnd(startIdx);
+      if (chunkEnd <= startIdx) break;
+
+      this.activeMessages = [
+        ...this.activeMessages.slice(0, startIdx),
+        ...this.activeMessages.slice(chunkEnd),
+      ];
+      changed = true;
+      this._sanitizeMessages();
+      this._recalculateTokens();
+    }
+
+    if (changed) {
+      this.messages = [...this.activeMessages];
+      this._recalculateTokens();
+      this._triggerStateChange();
+      logger.warn('Conversation history truncated after compaction round limit');
+    }
+
+    return changed;
   }
 
   /**

@@ -776,24 +776,47 @@ async function _getNextAIResponse(toolResults, context) {
   // Context Compaction: account for system prompt overhead and loop until within budget
   if (conversationManager && aiClient) {
     try {
-      let sysTokens = conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
-      let compacted = await conversationManager.compactHistory(aiClient, sysTokens);
       let rounds = 0;
+      let promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
 
-      while (compacted && rounds < MAX_COMPACTION_ROUNDS) {
+      while (rounds < MAX_COMPACTION_ROUNDS) {
+        _assertPromptFitsContext(conversationManager, promptOverhead);
+        const compacted = await conversationManager.compactHistory(aiClient, promptOverhead);
         rounds++;
+        if (!compacted) break;
+
         if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
         systemPrompt = await getSystemPrompt();
-        sysTokens = conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
-        compacted = await conversationManager.compactHistory(aiClient, sysTokens);
+        promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
       }
+
+      _ensureConversationFitsAfterCompaction(conversationManager, promptOverhead);
     } catch (err) {
       logger.warn('Compaction failed during tool loop:', err);
+      throw err;
     }
   }
 
   const messages = _getConversationMessages(context);
   return _chatWithAI(messages, systemPrompt, context);
+}
+
+function _assertPromptFitsContext(conversationManager, promptOverhead) {
+  if (!conversationManager.hasAvailableContext(promptOverhead)) {
+    throw new Error('System prompt exceeds the configured context window before conversation history');
+  }
+}
+
+function _ensureConversationFitsAfterCompaction(conversationManager, promptOverhead) {
+  _assertPromptFitsContext(conversationManager, promptOverhead);
+  if (conversationManager.isWithinCompactionBudget(promptOverhead)) return;
+
+  logger.warn('Compaction round limit reached; truncating oldest conversation history');
+  conversationManager.truncateToCompactionBudget(promptOverhead);
+
+  if (!conversationManager.isWithinCompactionBudget(promptOverhead)) {
+    throw new Error('Conversation still exceeds context budget after compaction and truncation');
+  }
 }
 
 // --- Utilities ---

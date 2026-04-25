@@ -234,33 +234,7 @@ class SimulacrumCore {
 
       // Trigger compaction if approaching token limit, looping until within budget
       if (this.conversationManager && this.aiClient) {
-        try {
-          let sysTokens = this.conversationManager.estimateTokens({
-            role: 'system',
-            content: systemPrompt,
-          });
-          let compacted = await this.conversationManager.compactHistory(this.aiClient, sysTokens);
-          let rounds = 0;
-          let anyCompacted = compacted;
-
-          while (compacted && rounds < MAX_COMPACTION_ROUNDS) {
-            rounds++;
-            systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
-            sysTokens = this.conversationManager.estimateTokens({
-              role: 'system',
-              content: systemPrompt,
-            });
-            compacted = await this.conversationManager.compactHistory(this.aiClient, sysTokens);
-            anyCompacted = anyCompacted || compacted;
-          }
-
-          if (anyCompacted) {
-            this._notifyCompactionOccurred(options);
-          }
-        } catch (compactionError) {
-          // Non-fatal: log and continue with uncompacted history
-          this.logger.warn('Compaction failed, continuing with full history:', compactionError);
-        }
+        systemPrompt = await this._compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options);
       }
 
       // Legacy capping removed in favor of Tiered Context Compaction
@@ -469,6 +443,60 @@ class SimulacrumCore {
       prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n\n${prompt}`;
     }
     return prompt;
+  }
+
+  static _estimatePromptOverhead(systemPrompt, useCustomPrompt) {
+    if (useCustomPrompt) {
+      return this.conversationManager.estimateTokens({ role: 'system', content: systemPrompt });
+    }
+    return this.conversationManager.estimatePromptOverhead(systemPrompt);
+  }
+
+  static async _compactHistoryIfNeeded(systemPrompt, useCustomPrompt, options) {
+    try {
+      let rounds = 0;
+      let anyCompacted = false;
+      let promptOverhead = this._estimatePromptOverhead(systemPrompt, useCustomPrompt);
+
+      while (rounds < MAX_COMPACTION_ROUNDS) {
+        this._assertPromptFitsContext(promptOverhead);
+        const compacted = await this.conversationManager.compactHistory(
+          this.aiClient,
+          promptOverhead
+        );
+        rounds++;
+        if (!compacted) break;
+
+        anyCompacted = true;
+        systemPrompt = useCustomPrompt ? systemPrompt : await this.getSystemPrompt();
+        promptOverhead = this._estimatePromptOverhead(systemPrompt, useCustomPrompt);
+      }
+
+      if (anyCompacted) this._notifyCompactionOccurred(options);
+      this._ensureConversationFitsAfterCompaction(promptOverhead);
+      return systemPrompt;
+    } catch (compactionError) {
+      this.logger.warn('Compaction failed:', compactionError);
+      throw compactionError;
+    }
+  }
+
+  static _assertPromptFitsContext(promptOverhead) {
+    if (!this.conversationManager.hasAvailableContext(promptOverhead)) {
+      throw new Error('System prompt exceeds the configured context window before conversation history');
+    }
+  }
+
+  static _ensureConversationFitsAfterCompaction(promptOverhead) {
+    this._assertPromptFitsContext(promptOverhead);
+    if (this.conversationManager.isWithinCompactionBudget(promptOverhead)) return;
+
+    this.logger.warn('Compaction round limit reached; truncating oldest conversation history');
+    this.conversationManager.truncateToCompactionBudget(promptOverhead);
+
+    if (!this.conversationManager.isWithinCompactionBudget(promptOverhead)) {
+      throw new Error('Conversation still exceeds context budget after compaction and truncation');
+    }
   }
 
   static _notifyCompactionOccurred(options) {
