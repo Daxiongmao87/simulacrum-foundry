@@ -148,7 +148,17 @@ class ConversationManager {
    * @private
    */
   _getCompactionThreshold(overhead = 0) {
-    const available = Math.max(0, this.maxTokens - Math.max(0, overhead));
+    // Re-read current limit so runtime changes to fallbackContextLimit take effect without reload
+    let contextWindow = this.maxTokens;
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        const current = game.settings.get('simulacrum', 'fallbackContextLimit');
+        if (current && current > 0) contextWindow = current;
+      }
+    } catch {
+      // Ignore — fall back to initialised maxTokens
+    }
+    const available = Math.max(0, contextWindow - Math.max(0, overhead));
     const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
     return Math.max(0, available - contextTarget - compactionPromptSize);
