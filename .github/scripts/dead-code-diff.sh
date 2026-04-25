@@ -17,6 +17,9 @@
 
 set -Eeuo pipefail
 
+export NO_COLOR=1
+export FORCE_COLOR=0
+
 BASE_SHA="${1:?base SHA required}"
 HEAD_OUT=/tmp/knip-head.out
 BASE_OUT=/tmp/knip-base.out
@@ -68,6 +71,7 @@ looks_like_findings() {
 # - trim leading/trailing whitespace
 normalize() {
   awk '
+    /^Configuration hints *\([0-9]+\)[[:space:]]*$/ { in_section = 0; next }
     /^[A-Z][A-Za-z][A-Za-z ]*\([0-9]+\)[[:space:]]*$/ { in_section = 1; next }
     /^[-—─=]+$/ { next }
     /^[[:space:]]*$/ { in_section = 0; next }

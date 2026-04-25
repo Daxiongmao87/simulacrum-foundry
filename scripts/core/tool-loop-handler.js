@@ -1,4 +1,6 @@
 /* eslint-disable complexity, max-len, no-console */
+// TODO: Refactor into modular helpers to resolve deep complexity debt (Tracked in #147)
+/* eslint-disable max-lines */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -11,6 +13,7 @@ import {
   sanitizeMessagesForFallback,
   normalizeAIResponse,
   parseInlineToolCall,
+  repairToolCallArguments,
 } from '../utils/ai-normalization.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
@@ -18,6 +21,7 @@ import {
   buildRetryLabel,
   getRetryDelayMs,
   delayWithSignal,
+  throwIfAborted,
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus, SimulacrumHooks } from './hook-manager.js';
 import { toolPermissionManager, PermissionState } from './tool-permission-manager.js';
@@ -68,6 +72,7 @@ export async function processToolCallLoop(options) {
 
 // --- Internal Loop Logic ---
 
+// eslint-disable-next-line max-lines-per-function -- Refactor tracked in #147
 async function _runLoopIteration(context) {
   let currentResponse = context.initialResponse;
 
@@ -215,6 +220,7 @@ async function _runLoopIteration(context) {
   return currentResponse;
 }
 
+// eslint-disable-next-line max-lines-per-function -- Refactor tracked in #147
 async function _processLoopCycle(currentResponse, context, state) {
   let { toolFailureAttempts, repeatCount } = state; // eslint-disable-line prefer-const
   const { REPEAT_LIMIT } = state;
@@ -402,23 +408,40 @@ async function _handleToolRefusal(response, context, attempts) {
   }
 }
 
-// eslint-disable-next-line complexity, max-lines-per-function
+/* eslint-disable max-depth */ // Refactor tracked in #147
+// eslint-disable-next-line complexity, max-lines-per-function, max-statements -- Refactor tracked in #147
 async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
   const results = [];
 
   for (const toolCall of toolCalls) {
-    if (signal?.aborted) throw new Error('Process was cancelled');
+    throwIfAborted(signal);
 
     const toolName = toolCall?.function?.name || toolCall?.name;
-    const toolArgs = toolCall?.function?.arguments || toolCall?.arguments;
+    const toolArgs = toolCall?.function?.arguments ?? toolCall?.arguments;
     let result = null;
     let isSuccess = false;
     let error = null;
+    let executionStart = 0;
 
     try {
-      const parsedArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
-      const executionStart = Date.now();
+      const parseOutcome = _parseToolCallArguments(toolArgs, toolName);
+      if (parseOutcome.error) {
+        await _recordInvalidArgsResult({
+          toolCall,
+          toolName,
+          toolArgs,
+          parseError: parseOutcome.error,
+          currentToolSupport,
+          conversationManager,
+          onToolResult,
+          results,
+        });
+        continue;
+      }
+      const parsedArgs = parseOutcome.parsedArgs;
+
+      executionStart = Date.now();
 
       // Log tool call before execution (must happen before any early-exit so rejections appear in logs)
       interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
@@ -612,7 +635,7 @@ async function _executeToolCalls(toolCalls, context) {
     results.push(resultObj);
 
     // Log tool result with execution duration
-    const durationMs = typeof executionStart !== 'undefined' ? Date.now() - executionStart : 0;
+    const durationMs = executionStart > 0 ? Date.now() - executionStart : 0;
     interactionLogger.logToolResult(toolCall.id, result, isSuccess, durationMs);
 
     if (onToolResult) {
@@ -625,6 +648,78 @@ async function _executeToolCalls(toolCalls, context) {
     }
   }
   return results;
+}
+/* eslint-enable max-depth */
+
+function _parseToolCallArguments(toolArgs, toolName) {
+  if (typeof toolArgs !== 'string') {
+    if (toolArgs && toolArgs.__simulacrumParseError === true) {
+      return { parsedArgs: null, error: toolArgs.parseError || 'malformed tool call arguments' };
+    }
+    // Already parsed object - validate it is a true object (not null/array)
+    if (toolArgs === null || Array.isArray(toolArgs) || typeof toolArgs !== 'object') {
+      return { parsedArgs: null, error: 'Arguments must be a JSON object' };
+    }
+    return { parsedArgs: toolArgs, error: null };
+  }
+  const outcome = repairToolCallArguments(toolArgs);
+  if (!outcome.ok) return { parsedArgs: null, error: outcome.parseError };
+  if (outcome.repaired) {
+    logger.warn(
+      `Tool call "${toolName}" had malformed JSON arguments; recovered via narrow repair.`
+    );
+  }
+  const parsed = outcome.argsObject;
+  if (parsed && parsed.__simulacrumParseError === true) {
+    return { parsedArgs: null, error: parsed.parseError || 'malformed tool call arguments' };
+  }
+
+  // Validate parsed result is an object (not null, array, or other literal)
+  if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+    return { parsedArgs: null, error: 'Arguments must be a JSON object' };
+  }
+
+  return { parsedArgs: parsed, error: null };
+}
+
+async function _recordInvalidArgsResult(opts) {
+  const {
+    toolCall,
+    toolName,
+    toolArgs,
+    parseError,
+    currentToolSupport,
+    conversationManager,
+    onToolResult,
+    results,
+  } = opts;
+  const errMsg = `Tool call arguments for "${toolName}" must be a single JSON object but could not be recovered (${parseError}). Retry with a single complete JSON object containing all required arguments; do not truncate the output.`;
+  logger.warn(errMsg);
+  interactionLogger.logToolCall(
+    toolName,
+    { __simulacrumParseError: true, parseError },
+    toolCall.id
+  );
+  const result = {
+    error: errMsg,
+    toolName,
+    invalidArgs: true,
+    arguments: typeof toolArgs === 'string' ? toolArgs.slice(0, 500) : toolArgs,
+  };
+  if (currentToolSupport === true) {
+    conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
+    await conversationManager.save();
+  }
+  results.push({ toolCall, toolName, result, success: false, error: null });
+  interactionLogger.logToolResult(toolCall.id, result, false, 0);
+  if (onToolResult) {
+    await onToolResult({
+      role: 'tool',
+      content: JSON.stringify(result),
+      toolCallId: toolCall.id,
+      toolName,
+    });
+  }
 }
 
 /**
@@ -705,31 +800,59 @@ function _sanitizeToolCallsForHistory(toolCalls) {
   const TRANSIENT_FIELDS = ['response'];
 
   return toolCalls.map(tc => {
-    const argsRaw = tc.function?.arguments || tc.arguments;
-    if (!argsRaw) return tc;
+    // Access arguments from either location (standard or legacy)
+    const argsRaw = tc.function?.arguments ?? tc.arguments;
 
-    try {
-      const parsed = typeof argsRaw === 'string' ? JSON.parse(argsRaw) : argsRaw;
-      let changed = false;
+    // Ensure stored history always has valid-JSON arguments. If the model
+    // emitted a malformed string that slipped through normalization, replace
+    // it with a sentinel payload so replaying the conversation does not
+    // trigger provider-side parse 500s.
+    const outcome = repairToolCallArguments(argsRaw);
+    let parsed;
+    if (outcome.ok) {
+      parsed = outcome.argsObject;
+    } else {
+      parsed = {
+        __simulacrumParseError: true,
+        parseError: outcome.parseError,
+        rawFragment:
+          typeof argsRaw === 'string' ? argsRaw.slice(0, 500) : String(argsRaw).slice(0, 500),
+      };
+    }
+
+    // Treat non-string args as a change to force re-serialization (ensures string storage)
+    let changed = !outcome.ok || outcome.repaired || typeof argsRaw !== 'string';
+
+    // Strip transient fields if result is an object.
+    // Create a shallow copy if it is an object to avoid mutating the original tool call.
+    if (parsed && typeof parsed === 'object') {
+      let workingParsed = parsed;
+      let hasTransientField = false;
       for (const field of TRANSIENT_FIELDS) {
         if (field in parsed) {
-          delete parsed[field];
-          changed = true;
+          hasTransientField = true;
+          break;
         }
       }
-      if (!changed) return tc;
 
-      const cleanArgs = JSON.stringify(parsed);
-
-      // Rebuild tool call with cleaned arguments, preserving structure
-      if (tc.function) {
-        return { ...tc, function: { ...tc.function, arguments: cleanArgs } };
+      if (hasTransientField) {
+        workingParsed = { ...parsed };
+        for (const field of TRANSIENT_FIELDS) {
+          delete workingParsed[field];
+        }
+        changed = true;
       }
-      return { ...tc, arguments: cleanArgs };
-    } catch (_e) {
-      // If arguments can't be parsed, return as-is
-      return tc;
+      parsed = workingParsed;
     }
+
+    if (!changed) return tc;
+
+    const cleanArgs = JSON.stringify(parsed);
+
+    if (tc.function) {
+      return { ...tc, function: { ...tc.function, arguments: cleanArgs } };
+    }
+    return { ...tc, arguments: cleanArgs };
   });
 }
 

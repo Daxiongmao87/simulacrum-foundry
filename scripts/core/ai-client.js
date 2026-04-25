@@ -1,4 +1,6 @@
 /* eslint-disable complexity, max-lines-per-function, max-statements, max-depth, no-unused-vars, no-empty, camelcase, no-console, no-unreachable, max-params */
+// TODO: Split into provider-specific handlers and reduce total file length (Tracked in #148)
+/* eslint-disable max-lines */
 /**
  * AI Client - Abstraction layer for AI provider interactions
  * Handles different AI providers with a common interface
@@ -6,7 +8,7 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SimulacrumError, APIError } from '../utils/errors.js';
-import { normalizeAIResponse } from '../utils/ai-normalization.js';
+import { normalizeAIResponse, normalizeToolCallArguments } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
   createAbortError,
@@ -306,11 +308,17 @@ export class AIClient {
           role = 'user';
           content = `[SYSTEM CORRECTION] ${content}`;
         }
+
+        // Sanitize tool calls to ensure valid JSON arguments (fixes issue #145 for historical/persisted messages)
+        const tool_calls = Array.isArray(m.tool_calls)
+          ? m.tool_calls.map(normalizeToolCallArguments)
+          : m.tool_calls;
+
         return {
           role,
           content,
           ...(m.name ? { name: m.name } : {}),
-          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(tool_calls ? { tool_calls } : {}),
           ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
         };
       }),
