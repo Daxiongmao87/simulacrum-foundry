@@ -16,7 +16,6 @@ import {
   parseInlineToolCall,
   repairToolCallArguments,
 } from '../utils/ai-normalization.js';
-import { ValidationError } from '../utils/errors.js';
 import { appendEmptyContentCorrection, appendToolFailureCorrection } from './correction.js';
 import {
   isToolCallFailure,
@@ -781,74 +780,22 @@ async function _getNextAIResponse(toolResults, context) {
       let promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
-        _assertPromptFitsContext(conversationManager, promptOverhead);
         const compactionStatus = await conversationManager.compactHistory(aiClient, promptOverhead);
         rounds++;
         if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
-        if (compactionStatus === COMPACTION_STATUS.FAILED) {
-          _ensureContextWindowAfterCompactionFailure(conversationManager, promptOverhead);
-          break;
-        }
+        if (compactionStatus === COMPACTION_STATUS.FAILED) break;
 
         if (isDebugEnabled()) logger.debug('Conversation history compacted during tool loop');
         systemPrompt = await getSystemPrompt();
         promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
       }
-
-      _ensureConversationFitsAfterCompaction(conversationManager, promptOverhead);
     } catch (err) {
       logger.warn('Compaction failed during tool loop:', err);
-      throw err;
     }
   }
 
   const messages = _getConversationMessages(context);
   return _chatWithAI(messages, systemPrompt, context);
-}
-
-function _assertPromptFitsContext(conversationManager, promptOverhead) {
-  if (!conversationManager.hasAvailableContext(promptOverhead)) {
-    throw new ValidationError(
-      'System prompt exceeds the configured context window before conversation history',
-      'contextBudget',
-      { promptOverhead, maxTokens: conversationManager.maxTokens }
-    );
-  }
-}
-
-function _ensureConversationFitsAfterCompaction(conversationManager, promptOverhead) {
-  _assertPromptFitsContext(conversationManager, promptOverhead);
-  if (conversationManager.isWithinCompactionBudget(promptOverhead)) return;
-
-  logger.warn('Compaction round limit reached; checking hard context window');
-  if (conversationManager.isWithinContextWindow(promptOverhead)) return;
-
-  logger.warn('Conversation exceeds context window; truncating oldest conversation history');
-  conversationManager.truncateToContextWindow(promptOverhead);
-
-  if (!conversationManager.isWithinContextWindow(promptOverhead)) {
-    throw new ValidationError(
-      'Conversation still exceeds context window after compaction and truncation',
-      'contextBudget',
-      { promptOverhead, maxTokens: conversationManager.maxTokens }
-    );
-  }
-}
-
-function _ensureContextWindowAfterCompactionFailure(conversationManager, promptOverhead) {
-  _assertPromptFitsContext(conversationManager, promptOverhead);
-  if (conversationManager.isWithinContextWindow(promptOverhead)) return;
-
-  logger.warn('Compaction failed; truncating oldest conversation history to context window');
-  conversationManager.truncateToContextWindow(promptOverhead);
-
-  if (!conversationManager.isWithinContextWindow(promptOverhead)) {
-    throw new ValidationError(
-      'Conversation still exceeds context window after failed compaction and truncation',
-      'contextBudget',
-      { promptOverhead, maxTokens: conversationManager.maxTokens }
-    );
-  }
 }
 
 // --- Utilities ---

@@ -142,55 +142,16 @@ class ConversationManager {
   }
 
   /**
-   * Check whether the current conversation is within the compaction budget.
-   * @param {number} [overhead=0]
-   * @param {boolean} [includeRollingSummary=true]
-   * @returns {boolean}
-   */
-  isWithinCompactionBudget(overhead = 0, includeRollingSummary = true) {
-    return this._getBudgetTokens(includeRollingSummary) <= this._getCompactionThreshold(overhead);
-  }
-
-  /**
-   * Check whether non-conversation prompt overhead leaves any context for messages.
-   * @param {number} [overhead=0]
-   * @returns {boolean}
-   */
-  hasAvailableContext(overhead = 0) {
-    return Math.max(0, overhead) < this.maxTokens;
-  }
-
-  /**
-   * Check whether the current request fits within the model context window.
-   * @param {number} [overhead=0]
-   * @param {boolean} [includeRollingSummary=true]
-   * @returns {boolean}
-   */
-  isWithinContextWindow(overhead = 0, includeRollingSummary = true) {
-    return this._getBudgetTokens(includeRollingSummary) <= this._getContextWindowBudget(overhead);
-  }
-
-  /**
    * Calculate the compaction threshold based on model context window
    * @param {number} [overhead=0] - Additional token overhead to reserve (e.g. system prompt tokens)
    * @returns {number} Token threshold for triggering compaction
    * @private
    */
   _getCompactionThreshold(overhead = 0) {
-    const available = this._getContextWindowBudget(overhead);
+    const available = Math.max(0, this.maxTokens - Math.max(0, overhead));
     const contextTarget = Math.floor(available * 0.33); // 33% of available space for working memory
     const compactionPromptSize = 500; // Overhead for summarization prompt
     return Math.max(0, available - contextTarget - compactionPromptSize);
-  }
-
-  /**
-   * Calculate the absolute conversation budget left after prompt overhead.
-   * @param {number} [overhead=0]
-   * @returns {number}
-   * @private
-   */
-  _getContextWindowBudget(overhead = 0) {
-    return Math.max(0, this.maxTokens - Math.max(0, overhead));
   }
 
   /**
@@ -231,17 +192,6 @@ class ConversationManager {
   }
 
   /**
-   * Get conversation tokens relevant to the request budget.
-   * @param {boolean} includeRollingSummary
-   * @returns {number}
-   * @private
-   */
-  _getBudgetTokens(includeRollingSummary) {
-    if (includeRollingSummary) return this.sessionTokens;
-    return Math.max(0, this.sessionTokens - this._estimateRollingSummaryTokens());
-  }
-
-  /**
    * Find the end index of the chunk to compact, respecting tool call/response pairing.
    * @param {number} startIdx - Index of first non-system message
    * @returns {number} Exclusive end index of the chunk
@@ -277,11 +227,10 @@ class ConversationManager {
    * Compact history using AI-driven summarization
    * @param {object} aiClient - AI client for summarization calls
    * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
-   * @param {boolean} [includeRollingSummary=true] - Whether request prompt includes rolling summary
    * @returns {Promise<string>} Compaction status
    */
-  async compactHistory(aiClient, overhead = 0, includeRollingSummary = true) {
-    if (this.isWithinCompactionBudget(overhead, includeRollingSummary)) {
+  async compactHistory(aiClient, overhead = 0) {
+    if (this.sessionTokens <= this._getCompactionThreshold(overhead)) {
       return COMPACTION_STATUS.WITHIN_BUDGET;
     }
 
@@ -317,67 +266,6 @@ class ConversationManager {
     }
 
     return COMPACTION_STATUS.FAILED;
-  }
-
-  /**
-   * Deterministically drop oldest active messages until the request is within budget.
-   * Used only after AI compaction hits its safety cap.
-   * @param {number} [overhead=0]
-   * @param {boolean} [includeRollingSummary=true]
-   * @returns {boolean} Whether any messages were removed
-   */
-  truncateToCompactionBudget(overhead = 0, includeRollingSummary = true) {
-    return this._truncateUntilWithin(() =>
-      this.isWithinCompactionBudget(overhead, includeRollingSummary)
-    );
-  }
-
-  /**
-   * Deterministically drop oldest active messages until the request fits the context window.
-   * @param {number} [overhead=0]
-   * @param {boolean} [includeRollingSummary=true]
-   * @returns {boolean} Whether any messages were removed
-   */
-  truncateToContextWindow(overhead = 0, includeRollingSummary = true) {
-    return this._truncateUntilWithin(() =>
-      this.isWithinContextWindow(overhead, includeRollingSummary)
-    );
-  }
-
-  /**
-   * Deterministically drop oldest active messages until a supplied budget predicate is satisfied.
-   * @param {Function} isWithinBudget
-   * @returns {boolean} Whether any messages were removed
-   * @private
-   */
-  _truncateUntilWithin(isWithinBudget) {
-    let changed = false;
-
-    while (!isWithinBudget()) {
-      const startIdx = this.activeMessages[0]?.role === 'system' ? 1 : 0;
-      if (this.activeMessages.length <= startIdx) break;
-
-      const chunkEnd = this._findCompactionChunkEnd(startIdx);
-      if (chunkEnd <= startIdx) break;
-
-      this.activeMessages = [
-        ...this.activeMessages.slice(0, startIdx),
-        ...this.activeMessages.slice(chunkEnd),
-      ];
-      changed = true;
-      const sanitized = this._sanitizeMessages();
-      if (!sanitized) {
-        this._recalculateTokens();
-      }
-    }
-
-    if (changed) {
-      this.messages = [...this.activeMessages];
-      this._triggerStateChange();
-      logger.warn('Conversation history truncated to fit context window');
-    }
-
-    return changed;
   }
 
   /**
