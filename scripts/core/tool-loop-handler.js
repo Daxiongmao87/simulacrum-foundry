@@ -1,6 +1,6 @@
 /* eslint-disable complexity, max-len, no-console */
 // TODO: Refactor into modular helpers to resolve deep complexity debt (Tracked in #147)
-/* eslint-disable max-lines, max-depth */
+/* eslint-disable max-lines */
 /**
  * Simplified tool execution handler - pure tool execution logic
  * No conversation management - that's handled by ChatHandler
@@ -408,6 +408,7 @@ async function _handleToolRefusal(response, context, attempts) {
   }
 }
 
+/* eslint-disable max-depth */ // Refactor tracked in #147
 // eslint-disable-next-line complexity, max-lines-per-function, max-statements -- Refactor tracked in #147
 async function _executeToolCalls(toolCalls, context) {
   const { onToolResult, signal, currentToolSupport, conversationManager } = context;
@@ -648,6 +649,7 @@ async function _executeToolCalls(toolCalls, context) {
   }
   return results;
 }
+/* eslint-enable max-depth */
 
 function _parseToolCallArguments(toolArgs, toolName) {
   if (typeof toolArgs !== 'string') {
@@ -691,7 +693,7 @@ async function _recordInvalidArgsResult(opts) {
     onToolResult,
     results,
   } = opts;
-  const errMsg = `Tool call arguments for "${toolName}" were not valid JSON and could not be recovered (${parseError}). Retry with a single complete JSON object containing all required arguments; do not truncate the output.`;
+  const errMsg = `Tool call arguments for "${toolName}" must be a single JSON object but could not be recovered (${parseError}). Retry with a single complete JSON object containing all required arguments; do not truncate the output.`;
   logger.warn(errMsg);
   interactionLogger.logToolCall(
     toolName,

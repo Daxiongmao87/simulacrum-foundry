@@ -304,7 +304,7 @@ function _logToolCallRepair(name, outcome) {
 }
 
 function _makeMalformedArgumentSentinelString(parseError, rawFragment) {
-  const raw = typeof rawFragment === 'string' ? rawFragment : '';
+  const raw = typeof rawFragment === 'string' ? rawFragment : String(rawFragment ?? '');
   const sentinel = {
     __simulacrumParseError: true,
     parseError: String(parseError || 'unknown parse error'),
