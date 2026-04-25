@@ -438,7 +438,7 @@ class SimulacrumCore {
   static async getSystemPrompt() {
     let prompt = await buildSystemPrompt();
     if (this.conversationManager?.rollingSummary) {
-      prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n\n${prompt}`;
+      prompt = `### PREVIOUS CONVERSATION SUMMARY\n${this.conversationManager.rollingSummary}\n### END OF SUMMARY\n\n${prompt}`;
     }
     return prompt;
   }
