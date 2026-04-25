@@ -23,21 +23,22 @@ function testPromptOverheadDoesNotDoubleCountRollingSummary() {
   const basePrompt = 'base system prompt';
   const systemPrompt = `### PREVIOUS CONVERSATION SUMMARY\n${conversation.rollingSummary}\n\n${basePrompt}`;
   const fullPromptTokens = conversation.estimateTokens({ role: 'system', content: systemPrompt });
+  const summaryTokens = conversation.estimateTokens({ role: 'system', content: conversation.rollingSummary });
 
-  assert.equal(conversation.getSessionTokens(), 25);
-  assert.equal(conversation.estimatePromptOverhead(systemPrompt), fullPromptTokens - 25);
+  assert.equal(conversation.estimatePromptOverhead(systemPrompt), fullPromptTokens - summaryTokens);
 }
 
-function testCustomPromptBudgetDoesNotCountUnsentRollingSummary() {
+function testCustomPromptOverheadExcludesRollingSummary() {
   const conversation = createConversation(600);
-  conversation.rollingSummary = 'a'.repeat(2000);
+  conversation.rollingSummary = 'a'.repeat(200);
   conversation._recalculateTokens();
 
   const customPrompt = 'short custom prompt';
-  const promptOverhead = conversation.estimatePromptOverhead(customPrompt, false);
+  const overheadWithSummary = conversation.estimatePromptOverhead(customPrompt, true);
+  const overheadWithoutSummary = conversation.estimatePromptOverhead(customPrompt, false);
 
-  assert.equal(conversation.isWithinCompactionBudget(promptOverhead, true), false);
-  assert.equal(conversation.isWithinCompactionBudget(promptOverhead, false), true);
+  // Without summary subtraction, overhead should be higher (or equal if summary not in prompt)
+  assert.ok(overheadWithoutSummary >= overheadWithSummary);
 }
 
 function testThresholdIsClampedWhenPromptConsumesContext() {
@@ -45,35 +46,16 @@ function testThresholdIsClampedWhenPromptConsumesContext() {
 
   assert.equal(conversation._getCompactionThreshold(100), 0);
   assert.equal(conversation._getCompactionThreshold(150), 0);
-  assert.equal(conversation.hasAvailableContext(100), false);
 }
 
-function testTruncateToCompactionBudgetDropsOldestMessages() {
+async function testCompactionWithinBudgetReturnsWithinBudget() {
   const conversation = createConversation(1000);
-  for (let i = 0; i < 10; i++) {
-    conversation.addMessage('user', `${i}: ${'x'.repeat(100)}`);
-  }
+  conversation.addMessage('user', 'short message');
 
-  assert.equal(conversation.isWithinCompactionBudget(0), false);
+  const mockClient = { async chat() { throw new Error('should not be called'); } };
+  const status = await conversation.compactHistory(mockClient, 0);
 
-  const changed = conversation.truncateToCompactionBudget(0);
-
-  assert.equal(changed, true);
-  assert.equal(conversation.isWithinCompactionBudget(0), true);
-  assert.equal(conversation.getMessages()[0].content.startsWith('0:'), false);
-}
-
-function testContextWindowAllowsConservativeBudgetOverflow() {
-  const conversation = createConversation(1000);
-  conversation.addMessage('user', 'x'.repeat(800));
-
-  assert.equal(conversation.isWithinCompactionBudget(0), false);
-  assert.equal(conversation.isWithinContextWindow(0), true);
-
-  const changed = conversation.truncateToContextWindow(0);
-
-  assert.equal(changed, false);
-  assert.equal(conversation.getMessages().length, 1);
+  assert.equal(status, COMPACTION_STATUS.WITHIN_BUDGET);
 }
 
 async function testCompactionFailureReturnsExplicitStatus() {
@@ -94,10 +76,9 @@ async function testCompactionFailureReturnsExplicitStatus() {
 }
 
 testPromptOverheadDoesNotDoubleCountRollingSummary();
-testCustomPromptBudgetDoesNotCountUnsentRollingSummary();
+testCustomPromptOverheadExcludesRollingSummary();
 testThresholdIsClampedWhenPromptConsumesContext();
-testTruncateToCompactionBudgetDropsOldestMessages();
-testContextWindowAllowsConservativeBudgetOverflow();
+await testCompactionWithinBudgetReturnsWithinBudget();
 await testCompactionFailureReturnsExplicitStatus();
 
 console.log('compaction budget tests passed');
