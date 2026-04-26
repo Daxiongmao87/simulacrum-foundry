@@ -8,6 +8,7 @@ import { createLogger } from '../utils/logger.js';
 import { processMessageForDisplay } from './sidebar-state-syncer.js';
 
 export class SidebarEventHandlers {
+  /* eslint-disable-next-line max-lines-per-function */
   static async handleSendMessage(app, event, target) {
     const form = target.closest('form');
     const input = form.querySelector('textarea[name="message"]');
@@ -22,6 +23,9 @@ export class SidebarEventHandlers {
 
     // Clear input immediately
     input.value = '';
+
+    // Record process ownership for this request
+    const signal = app.startProcess();
 
     // Set processing state immediately and trigger render
     app.setProcessing(true);
@@ -41,6 +45,7 @@ export class SidebarEventHandlers {
         );
 
         if (commandResult.isCommand) {
+          if (!app.isCurrentProcess(signal)) return;
           await app.addMessage('assistant', commandResult.message, commandResult.message);
           return;
         }
@@ -57,16 +62,16 @@ export class SidebarEventHandlers {
       /* eslint-enable no-unused-vars */
 
       const onAssistantMessage = async response => {
+        const isErrorResponse = !!response?.error;
+        if (!isErrorResponse && !app.isCurrentProcess(signal)) return;
         // Apply markdown rendering and enrichment before display
         // processMessageForDisplay handles null/undefined content by defaulting to '&nbsp;'
         const processedDisplay = await processMessageForDisplay(
           response.display || response.content
         );
+        if (!isErrorResponse && !app.isCurrentProcess(signal)) return;
         await app.addMessage('assistant', response.content, processedDisplay, response.noGroup);
       };
-
-      // Get abort signal from the app
-      const signal = app.startProcess();
 
       // Process message through ChatHandler
       await app.chatHandler.processUserMessage(message, game.user, {
@@ -81,10 +86,11 @@ export class SidebarEventHandlers {
         signal,
       });
     } catch (error) {
+      if (signal.aborted) return;
       createLogger('SidebarEventHandlers').error('Error processing message', error);
       ui.notifications?.error(`Simulacrum: ${error.message}`, { permanent: false });
     } finally {
-      app.setProcessing(false);
+      app.finishProcess(signal);
     }
   }
 

@@ -45,7 +45,7 @@ run_knip() {
   local dir="$1" out="$2" rc=0
   # knip exits non-zero on findings; don't let errexit abort us here.
   set +e
-  (cd "$dir" && npm run --silent dead-code) > "$out" 2>&1
+  (cd "$dir" && NO_COLOR=1 npm run --silent dead-code) > "$out" 2>&1
   rc=$?
   set -e
   return $rc
@@ -62,6 +62,9 @@ looks_like_findings() {
 # top-level console.log in tests/e2e/playwright.config.js). Lines outside
 # any section are discarded, so stray log lines cannot be misinterpreted
 # as new findings by `comm`.
+#
+# "Configuration hints" are advisory suggestions about knip.json, not dead
+# code findings — they are excluded from the diff entirely.
 #
 # Within a section:
 # - strip :line:col locators (positions shift with edits)

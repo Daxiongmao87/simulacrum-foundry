@@ -3,12 +3,17 @@
  * Replaces the panel interface with a proper FoundryVTT v13 sidebar integration
  */
 
+/* eslint-disable max-lines */
+// TODO(#141): Split this file. At 1000+ LOC it exceeds the 500-line limit; the
+// split is out of scope for the #134 race-condition fix. Only `max-lines` is
+// suppressed here — all per-method rules remain enforced.
+
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SidebarEventHandlers } from './sidebar-event-handlers.js';
 import { syncMessagesFromCore, processMessageForDisplay } from './sidebar-state-syncer.js';
 import { modelService } from '../core/model-service.js';
 import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
-import { SimulacrumHooks } from '../core/hook-manager.js';
+import { emitProcessCancelled, SimulacrumHooks } from '../core/hook-manager.js';
 import { SequentialQueue } from '../utils/sequential-queue.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
@@ -158,7 +163,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     const labelEl = processStatusMsg.querySelector('.process-status .label');
     const spinnerEl = processStatusMsg.querySelector('.simulacrum-process-spinner');
-    const contentEl = processStatusMsg.querySelector('.message-content');
 
     if (isRetrying) {
       processStatusMsg.classList.add('retry-warning');
@@ -250,10 +254,13 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       return;
     }
 
-    // Show the tracker
     tracker.style.display = '';
+    this._updateTaskTrackerHeader(tracker, taskState);
+    this._updateTaskTrackerBody(tracker, taskState);
+    this._attachTaskTrackerToggle(tracker);
+  }
 
-    // Update header
+  _updateTaskTrackerHeader(tracker, taskState) {
     const currentStep = taskState.steps[taskState.currentStepIndex];
     const stepTitle = currentStep?.title || 'Working...';
     const iconEl = tracker.querySelector('.task-tracker-icon');
@@ -261,7 +268,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const progressEl = tracker.querySelector('.task-tracker-progress');
 
     if (iconEl) {
-      // Update icon based on status
       iconEl.className =
         currentStep?.status === 'completed'
           ? 'fa-solid fa-circle-check task-tracker-icon'
@@ -270,53 +276,53 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (stepEl) stepEl.textContent = `Step ${taskState.currentStepIndex + 1}: ${stepTitle}`;
     if (progressEl)
       progressEl.textContent = `(${taskState.currentStepIndex + 1}/${taskState.totalSteps})`;
+  }
 
-    // Update body
+  _updateTaskTrackerBody(tracker, taskState) {
     const titleEl = tracker.querySelector('.task-tracker-title');
     const goalEl = tracker.querySelector('.task-tracker-goal');
     const stepsEl = tracker.querySelector('.task-tracker-steps');
 
     if (titleEl) titleEl.textContent = taskState.name;
     if (goalEl) goalEl.textContent = taskState.goal;
+    if (!stepsEl) return;
 
-    if (stepsEl) {
-      stepsEl.innerHTML = '';
-      taskState.steps.forEach((step, index) => {
-        let iconClass = 'fa-regular fa-square';
-        let liClass = '';
-        if (step.status === 'completed') {
-          iconClass = 'fa-solid fa-circle-check';
-          liClass = 'completed-step';
-        } else if (step.status === 'in_progress') {
-          iconClass = 'fa-solid fa-circle-notch fa-spin';
-          liClass = 'current-step';
-        }
-        if (index === taskState.currentStepIndex) liClass = 'current-step';
+    stepsEl.innerHTML = '';
+    taskState.steps.forEach((step, index) => {
+      stepsEl.appendChild(this._buildTaskStepItem(step, index === taskState.currentStepIndex));
+    });
+  }
 
-        const li = document.createElement('li');
-        if (liClass) li.className = liClass;
-
-        const i = document.createElement('i');
-        i.className = iconClass;
-
-        const span = document.createElement('span');
-        span.textContent = step.title;
-
-        li.appendChild(i);
-        li.appendChild(span);
-        stepsEl.appendChild(li);
-      });
+  _buildTaskStepItem(step, isCurrent) {
+    let iconClass = 'fa-regular fa-square';
+    let liClass = '';
+    if (step.status === 'completed') {
+      iconClass = 'fa-solid fa-circle-check';
+      liClass = 'completed-step';
+    } else if (step.status === 'in_progress') {
+      iconClass = 'fa-solid fa-circle-notch fa-spin';
+      liClass = 'current-step';
     }
+    if (isCurrent) liClass = 'current-step';
 
-    // Set up toggle button click handler (only once)
-    const toggleBtn = tracker.querySelector('.task-tracker-toggle');
+    const li = document.createElement('li');
+    if (liClass) li.className = liClass;
+    const i = document.createElement('i');
+    i.className = iconClass;
+    const span = document.createElement('span');
+    span.textContent = step.title;
+    li.appendChild(i);
+    li.appendChild(span);
+    return li;
+  }
+
+  _attachTaskTrackerToggle(tracker) {
     const header = tracker.querySelector('.task-tracker-header');
-    if (header && !header.dataset.listenerAttached) {
-      header.addEventListener('click', () => {
-        tracker.classList.toggle('expanded');
-      });
-      header.dataset.listenerAttached = 'true';
-    }
+    if (!header || header.dataset.listenerAttached) return;
+    header.addEventListener('click', () => {
+      tracker.classList.toggle('expanded');
+    });
+    header.dataset.listenerAttached = 'true';
   }
 
   _render(optionsOrForce) {
@@ -420,7 +426,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Check for derived limit first
     const { limit, source } = modelService.getContextLimit(modelId);
 
-    console.log(`[Simulacrum] Derived limit for ${modelId}: ${limit} (source: ${source})`);
+    this.logger.debug(`Derived limit for ${modelId}: ${limit} (source: ${source})`);
 
     if (limit > 0 && (source === 'derived' || source === 'openrouter')) {
       return this._formatLimitValue(limit);
@@ -490,10 +496,10 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         const limitInput = this.element.querySelector('.context-limit-input');
         if (limitInput) {
           const newVal = this._getFormattedContextLimit(model);
-          console.log(`[Simulacrum] Updating input to: ${newVal}`);
+          this.logger.debug(`Updating input to: ${newVal}`);
           limitInput.value = newVal;
         } else {
-          console.warn('[Simulacrum] Could not find .context-limit-input to update');
+          this.logger.warn('Could not find .context-limit-input to update');
         }
       } catch (e) {
         this.logger.warn('Failed to save model selection:', e);
@@ -713,74 +719,77 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   async addMessage(role, content, display = null, noGroup = false) {
     // Queue the message addition to prevent race conditions
-    return this._messageQueue.add(async () => {
-      const processedDisplay = display || (await processMessageForDisplay(content));
+    return this._messageQueue.add(() => this._addMessageImpl(role, content, display, noGroup));
+  }
 
-      // Check for grouping (skip if noGroup flag is set)
-      if (!noGroup && this.messages.length > 0 && role === 'assistant') {
-        const lastMsg = this.messages[this.messages.length - 1];
-        if (lastMsg.role === 'assistant') {
-          // Merge with proper HTML separation to prevent content running together
-          lastMsg.content += '\n\n' + content;
-          const existingDisplay = lastMsg.display || lastMsg.content;
-          // Wrap new content in a div to ensure proper block-level separation
-          lastMsg.display =
-            existingDisplay + `<div class="merged-content">${processedDisplay}</div>`;
+  async _addMessageImpl(role, content, display, noGroup) {
+    const processedDisplay = display || (await processMessageForDisplay(content));
 
-          // Attempt to update DOM using Block Architecture (Non-destructive)
-          const updated = this._updateMessageInDOM(lastMsg.id, processedDisplay);
+    if (this._tryMergeAssistantMessage(role, content, processedDisplay, noGroup)) return;
 
-          if (!updated) {
-            // Fallback to render if element not found (rare)
-            // Note: This fallback is destructive, but should only happen if the DOM disappeared
-            this.#needsScroll = true;
-            this.render({ parts: ['log'] });
-          } else {
-            this._scrollToBottom();
-          }
-          return;
-        }
-      }
+    await this._appendNewMessage(role, content, processedDisplay);
+  }
 
-      const msg = {
-        role,
-        content,
-        // Wrap initial display in a content block for consistency
-        display: `<div class="content-block text">${processedDisplay}</div>`,
-        timestamp: new Date(),
-        user: role === 'user' ? game.user : undefined,
-        id: foundry.utils.randomID(),
-        pending: false,
-      };
-      this.messages.push(msg);
+  _tryMergeAssistantMessage(role, content, processedDisplay, noGroup) {
+    if (noGroup || this.messages.length === 0 || role !== 'assistant') return false;
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (lastMsg.role !== 'assistant') return false;
 
-      // Render the single message template and append to DOM
-      const templatePath = 'modules/simulacrum/templates/simulacrum/message.hbs';
-      const html = await foundry.applications.handlebars.renderTemplate(templatePath, msg);
+    // Merge with proper HTML separation to prevent content running together
+    lastMsg.content += '\n\n' + content;
+    const existingDisplay = lastMsg.display || lastMsg.content;
+    lastMsg.display = existingDisplay + `<div class="merged-content">${processedDisplay}</div>`;
 
-      const chatScroll =
-        this.element?.[0]?.querySelector('.chat-scroll') ||
-        this.element?.querySelector?.('.chat-scroll');
+    // Attempt to update DOM using Block Architecture (Non-destructive)
+    const updated = this._updateMessageInDOM(lastMsg.id, processedDisplay);
+    if (!updated) {
+      // Fallback to render if DOM element disappeared (rare, destructive)
+      this.#needsScroll = true;
+      this.render({ parts: ['log'] });
+    } else {
+      this._scrollToBottom();
+    }
+    return true;
+  }
 
-      if (chatScroll) {
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        const messageEl = div.firstElementChild;
-        const chatLog = chatScroll.querySelector('.chat-log');
-        if (chatLog) {
-          const processStatus = chatLog.querySelector(':scope > .process-status-message');
-          if (processStatus) {
-            chatLog.insertBefore(messageEl, processStatus);
-          } else {
-            chatLog.appendChild(messageEl);
-          }
-        }
-        this._scrollToBottom();
+  async _appendNewMessage(role, content, processedDisplay) {
+    const msg = {
+      role,
+      content,
+      display: `<div class="content-block text">${processedDisplay}</div>`,
+      timestamp: new Date(),
+      user: role === 'user' ? game.user : undefined,
+      id: foundry.utils.randomID(),
+      pending: false,
+    };
+    this.messages.push(msg);
+
+    const templatePath = 'modules/simulacrum/templates/simulacrum/message.hbs';
+    const html = await foundry.applications.handlebars.renderTemplate(templatePath, msg);
+
+    const chatScroll =
+      this.element?.[0]?.querySelector('.chat-scroll') ||
+      this.element?.querySelector?.('.chat-scroll');
+
+    if (!chatScroll) {
+      this.#needsScroll = true;
+      this.render({ parts: ['log'] });
+      return;
+    }
+
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const messageEl = div.firstElementChild;
+    const chatLog = chatScroll.querySelector('.chat-log');
+    if (chatLog) {
+      const processStatus = chatLog.querySelector(':scope > .process-status-message');
+      if (processStatus) {
+        chatLog.insertBefore(messageEl, processStatus);
       } else {
-        this.#needsScroll = true;
-        this.render({ parts: ['log'] });
+        chatLog.appendChild(messageEl);
       }
-    });
+    }
+    this._scrollToBottom();
   }
 
   /**
@@ -801,55 +810,37 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Find the last assistant message (assumed target for streaming)
     const messages = chatScroll.querySelectorAll('.chat-message.simulacrum-role-assistant');
     if (messages.length === 0) return false;
-    const msgEl = messages[messages.length - 1];
 
-    const contentEl = msgEl.querySelector('.message-content');
-    if (contentEl) {
-      // BLOCK 1: Check if the last child is a text block
-      const lastChild = contentEl.lastElementChild;
-      const isTextBlock =
-        lastChild &&
-        lastChild.classList.contains('content-block') &&
-        lastChild.classList.contains('text');
+    const contentEl = messages[messages.length - 1].querySelector('.message-content');
+    if (!contentEl) return false;
 
-      if (isTextBlock) {
-        // Safe to append to the existing text block's innerHTML?
-        // Yes, because processDisplay returns safe HTML and we are only modifying this specific block.
-        // And we know this block is PURE text/html content, not a tool card.
-        // However, user complained about inconsistency.
-        // If we strictly *append*, we never overwrite.
-        // But for *streaming text*, we usually want to append to the text node.
-
-        // Sanitize the chunk before inserting
-        const sanitizedChunk = globalThis.DOMPurify
-          ? globalThis.DOMPurify.sanitize(newContentChunk)
-          : newContentChunk;
-
-        // Use insertAdjacentHTML to append to the end of the text block
-        lastChild.insertAdjacentHTML('beforeend', sanitizedChunk);
-      } else {
-        // Last child is NOT a text block (might be a tool card or nothing)
-        // Create a NEW text block
-        const newBlock = document.createElement('div');
-        newBlock.className = 'content-block text';
-        // Sanitize the chunk before inserting
-        newBlock.innerHTML = globalThis.DOMPurify
-          ? globalThis.DOMPurify.sanitize(newContentChunk)
-          : newContentChunk;
-        contentEl.appendChild(newBlock);
-      }
-      return true;
-    }
-    return false;
+    this._appendChunkToContent(contentEl, newContentChunk);
+    return true;
   }
 
-  _scrollToBottom() {
-    const chatScroll =
-      this.element?.[0]?.querySelector('.chat-scroll') ||
-      this.element?.querySelector?.('.chat-scroll');
-    if (chatScroll) {
-      chatScroll.scrollTop = chatScroll.scrollHeight;
+  _appendChunkToContent(contentEl, newContentChunk) {
+    const sanitized = globalThis.DOMPurify
+      ? globalThis.DOMPurify.sanitize(newContentChunk)
+      : newContentChunk;
+
+    const lastChild = contentEl.lastElementChild;
+    const isTextBlock =
+      lastChild &&
+      lastChild.classList.contains('content-block') &&
+      lastChild.classList.contains('text');
+
+    if (isTextBlock) {
+      // Append to the existing text block — processDisplay returns safe HTML
+      // and this block is known pure text/html, not a tool card.
+      lastChild.insertAdjacentHTML('beforeend', sanitized);
+      return;
     }
+
+    // Last child is not a text block (tool card or empty) — start a new one
+    const newBlock = document.createElement('div');
+    newBlock.className = 'content-block text';
+    newBlock.innerHTML = sanitized;
+    contentEl.appendChild(newBlock);
   }
 
   /**
@@ -1014,14 +1005,34 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     return this.#currentAbortController.signal;
   }
 
+  isCurrentProcess(signal) {
+    return (
+      !!signal &&
+      !signal.aborted &&
+      !!this.#currentAbortController &&
+      this.#currentAbortController.signal === signal
+    );
+  }
+
+  finishProcess(signal) {
+    if (this.#currentAbortController && this.#currentAbortController.signal === signal) {
+      this.setProcessing(false);
+      this.#currentAbortController = null;
+    }
+  }
+
   async cancelCurrentProcesses() {
     // Abort the current operation if running
     if (this.#currentAbortController) {
       this.#currentAbortController.abort();
       this.#currentAbortController = null;
     }
+    this.#isRetrying = false;
+    this.#retryLabel = null;
     this._activeProcesses.clear();
+    emitProcessCancelled();
     this.setProcessing(false);
+    this._updateRetryStatusInDOM(false);
     this._updateTaskTracker(null, false);
     return true;
   }
@@ -1179,86 +1190,55 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const wrapper = element.querySelector('.model-selector-wrapper');
     const modelInput = element.querySelector('.model-selector-input');
     const dropdown = element.querySelector('.model-dropdown');
-    const hintEl = element.querySelector('.model-autocomplete-hint');
-
     if (!modelInput || !dropdown || !wrapper) return;
 
-    // Input event - filter dropdown, update autocomplete hint, and trigger debounced save
+    const ctx = { wrapper, modelInput, dropdown };
+    this._attachModelInputEvents(ctx);
+    this._attachModelKeyboardEvents(ctx);
+    this._attachDropdownClickEvents(ctx);
+    this._attachContextLimitListeners(element);
+
+    // Initialize logic
+    this._loadAvailableModels();
+  }
+
+  _attachModelInputEvents({ wrapper, modelInput, dropdown }) {
     modelInput.addEventListener('input', () => {
-      this._filterAndShowDropdown(modelInput, dropdown, hintEl);
-      // Debounced save: save model selection 500ms after user stops typing
+      this._filterAndShowDropdown(modelInput, dropdown);
       this._debouncedSaveModel(modelInput.value);
     });
 
-    // Context limit input events
-    const limitInput = element.querySelector('.context-limit-input');
-    if (limitInput) {
-      // Debounced save on input (500ms)
-      limitInput.addEventListener('input', () => {
-        // Cancel existing timer
-        if (this.#contextLimitDebounceTimer) {
-          clearTimeout(this.#contextLimitDebounceTimer);
-        }
-        // Start new debounce timer
-        this.#contextLimitDebounceTimer = setTimeout(() => {
-          this._saveContextLimit(limitInput.value);
-        }, 500);
-      });
-
-      // Auto-format on blur (e.g. 1000 -> 1k)
-      limitInput.addEventListener('blur', () => {
-        // Cancel any pending debounced save and save immediately
-        if (this.#contextLimitDebounceTimer) {
-          clearTimeout(this.#contextLimitDebounceTimer);
-          this.#contextLimitDebounceTimer = null;
-        }
-        const parsed = this._parseContextLimit(limitInput.value);
-        if (parsed) {
-          limitInput.value = this._formatLimitValue(parsed);
-          this._saveContextLimit(limitInput.value);
-        }
-      });
-    }
-
-    // Focus event - show dropdown
     modelInput.addEventListener('focus', async () => {
-      await this._loadAvailableModels(); // Changed from ensureModelsLoaded
-      this._filterAndShowDropdown(modelInput, dropdown, hintEl);
+      await this._loadAvailableModels();
+      this._filterAndShowDropdown(modelInput, dropdown);
       wrapper.classList.add('dropdown-open');
     });
 
-    // Blur event - save and close dropdown (with delay for click handling)
     modelInput.addEventListener('blur', () => {
       setTimeout(() => {
-        this._closeDropdown(wrapper, dropdown, hintEl);
+        this._closeDropdown(wrapper, dropdown);
         this._saveModelSelection(modelInput.value);
       }, 150);
     });
+  }
 
-    // Keydown event - handle Tab, Enter, Escape, Arrow keys
+  _attachModelKeyboardEvents({ wrapper, modelInput, dropdown }) {
     modelInput.addEventListener('keydown', e => {
       const isOpen = !dropdown.classList.contains('hidden');
-
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (isOpen && this.#modelDropdownHighlightIndex >= 0) {
-          const items = dropdown.querySelectorAll('li:not(.no-models)');
-          const selected = items[this.#modelDropdownHighlightIndex];
-          if (selected) {
-            modelInput.value = selected.dataset.model;
-          }
-        }
-        this._closeDropdown(wrapper, dropdown, hintEl);
+        this._commitHighlightedModel(modelInput, dropdown, isOpen);
+        this._closeDropdown(wrapper, dropdown);
         this._saveModelSelection(modelInput.value);
         modelInput.blur();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        this._closeDropdown(wrapper, dropdown, hintEl);
+        this._closeDropdown(wrapper, dropdown);
         modelInput.blur();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (!isOpen) {
-          this._filterAndShowDropdown(modelInput, dropdown, hintEl);
+          this._filterAndShowDropdown(modelInput, dropdown);
           wrapper.classList.add('dropdown-open');
         }
         this._navigateDropdown(dropdown, 1);
@@ -1267,25 +1247,53 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         this._navigateDropdown(dropdown, -1);
       }
     });
+  }
 
-    // Click on dropdown item - save immediately (cancel any pending debounce)
+  _commitHighlightedModel(modelInput, dropdown, isOpen) {
+    if (!isOpen || this.#modelDropdownHighlightIndex < 0) return;
+    const items = dropdown.querySelectorAll('li:not(.no-models)');
+    const selected = items[this.#modelDropdownHighlightIndex];
+    if (selected) modelInput.value = selected.dataset.model;
+  }
+
+  _attachDropdownClickEvents({ wrapper, modelInput, dropdown }) {
     dropdown.addEventListener('mousedown', e => {
       const li = e.target.closest('li:not(.no-models)');
-      if (li && li.dataset.model) {
-        e.preventDefault();
-        modelInput.value = li.dataset.model;
-        this._closeDropdown(wrapper, dropdown, hintEl);
-        // Cancel any pending debounced save and save immediately
-        if (this.#modelSaveDebounceTimer) {
-          clearTimeout(this.#modelSaveDebounceTimer);
-          this.#modelSaveDebounceTimer = null;
-        }
-        this._saveModelSelection(li.dataset.model);
+      if (!li || !li.dataset.model) return;
+      e.preventDefault();
+      modelInput.value = li.dataset.model;
+      this._closeDropdown(wrapper, dropdown);
+      if (this.#modelSaveDebounceTimer) {
+        clearTimeout(this.#modelSaveDebounceTimer);
+        this.#modelSaveDebounceTimer = null;
       }
+      this._saveModelSelection(li.dataset.model);
+    });
+  }
+
+  _attachContextLimitListeners(element) {
+    const limitInput = element.querySelector('.context-limit-input');
+    if (!limitInput) return;
+
+    limitInput.addEventListener('input', () => {
+      if (this.#contextLimitDebounceTimer) clearTimeout(this.#contextLimitDebounceTimer);
+      this.#contextLimitDebounceTimer = setTimeout(() => {
+        this._saveContextLimit(limitInput.value);
+      }, 500);
     });
 
-    // Initialize logic
-    this._loadAvailableModels();
+    // Auto-format on blur (e.g. 1000 -> 1k)
+    limitInput.addEventListener('blur', () => {
+      if (this.#contextLimitDebounceTimer) {
+        clearTimeout(this.#contextLimitDebounceTimer);
+        this.#contextLimitDebounceTimer = null;
+      }
+      const parsed = this._parseContextLimit(limitInput.value);
+      if (parsed) {
+        limitInput.value = this._formatLimitValue(parsed);
+        this._saveContextLimit(limitInput.value);
+      }
+    });
   }
 
   /**
@@ -1328,7 +1336,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
   /**
    * Invalidate the cached model list so the next focus triggers a fresh fetch.
-   * Called from settings onChange handlers when apiKey or baseURL change.
    * @param {boolean} [forceRefresh=false] - If true, immediately re-fetch models
    */
   invalidateModelList(forceRefresh = false) {
@@ -1379,9 +1386,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    * Filter dropdown based on input and show matching models
    * @param {HTMLInputElement} input - The model input element
    * @param {HTMLUListElement} dropdown - The dropdown element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
    */
-  _filterAndShowDropdown(input, dropdown, hintEl) {
+  _filterAndShowDropdown(input, dropdown) {
     const query = input.value.toLowerCase();
     const currentModel = game.settings.get('simulacrum', 'model');
 
@@ -1412,8 +1418,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     // Show dropdown
     dropdown.classList.remove('hidden');
     this.#modelDropdownHighlightIndex = -1;
-
-    // Update autocomplete hint
   }
 
   /**
@@ -1465,12 +1469,10 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
    * Close the dropdown
    * @param {HTMLElement} wrapper - The wrapper element
    * @param {HTMLUListElement} dropdown - The dropdown element
-   * @param {HTMLElement} hintEl - The autocomplete hint element
    */
-  _closeDropdown(wrapper, dropdown, hintEl) {
+  _closeDropdown(wrapper, dropdown) {
     dropdown.classList.add('hidden');
     wrapper.classList.remove('dropdown-open');
-    if (hintEl) hintEl.textContent = '';
     this.#modelDropdownHighlightIndex = -1;
   }
 }

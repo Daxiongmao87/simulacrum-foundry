@@ -18,6 +18,7 @@ class MessageQueueManager {
   init() {
     // Listen for AI process status
     Hooks.on(SimulacrumHooks.PROCESS_STATUS, this._onProcessStatus.bind(this));
+    Hooks.on(SimulacrumHooks.PROCESS_CANCELLED, this._onProcessCancelled.bind(this));
 
     // Listen for chat message interception
     Hooks.on('chatMessage', this._onChatMessage.bind(this));
@@ -50,6 +51,11 @@ class MessageQueueManager {
       // Actually, if processing ends, we should probably allow the user to send the queued messages easily.
       this._renderQueue();
     }
+  }
+
+  _onProcessCancelled() {
+    this.isProcessing = false;
+    this._renderQueue();
   }
 
   /**
