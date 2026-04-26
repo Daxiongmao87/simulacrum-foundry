@@ -62,13 +62,14 @@ export class SidebarEventHandlers {
       /* eslint-enable no-unused-vars */
 
       const onAssistantMessage = async response => {
-        if (!app.isCurrentProcess(signal)) return;
+        const isErrorResponse = !!response?.error;
+        if (!isErrorResponse && !app.isCurrentProcess(signal)) return;
         // Apply markdown rendering and enrichment before display
         // processMessageForDisplay handles null/undefined content by defaulting to '&nbsp;'
         const processedDisplay = await processMessageForDisplay(
           response.display || response.content
         );
-        if (!app.isCurrentProcess(signal)) return;
+        if (!isErrorResponse && !app.isCurrentProcess(signal)) return;
         await app.addMessage('assistant', response.content, processedDisplay, response.noGroup);
       };
 

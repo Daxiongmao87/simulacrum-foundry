@@ -67,7 +67,7 @@ class ChatHandler {
           display: '🛑 Process cancelled',
           noGroup: true,
         };
-        await this.addMessageToUI(cancelMessage, options);
+        this.addMessageToUI(cancelMessage, options);
         return cancelMessage;
       }
 
@@ -112,7 +112,7 @@ class ChatHandler {
       };
 
       // Ensure the error is displayed in the chat interface
-      await this.addMessageToUI(errorMessage, options);
+      this.addMessageToUI(errorMessage, options);
 
       return errorMessage;
     }
