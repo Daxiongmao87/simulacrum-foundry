@@ -31,6 +31,26 @@ This E2E test suite provides comprehensive testing of Simulacrum within an actua
 1. Kills any orphaned processes on ports 30000-30010
 2. Cleans up any orphaned test directories
 
+## Multi-Version Testing
+
+Drop multiple Foundry VTT zips into `vendor/foundry/` and tests run against each
+version automatically. The major version is parsed from the filename
+(`FoundryVTT-13.351.zip` → v13, `FoundryVTT-14.359.zip` → v14).
+
+Playwright builds a project per `(systemId × foundryVersion)`. With
+`TEST_SYSTEM_IDS=dnd5e,pf2e` and both v13 and v14 zips present, you'll get
+projects: `chromium-dnd5e-v13`, `chromium-pf2e-v13`, `chromium-dnd5e-v14`,
+`chromium-pf2e-v14`.
+
+System caches are namespaced per version under `.foundry-system-cache/v{N}/{systemId}/`
+so a v13 install never gets reused on v14.
+
+To target a single version, run:
+
+```bash
+npm run test:e2e -- --project='chromium-dnd5e-v14'
+```
+
 ## Multi-System Testing
 
 Tests automatically run against each configured game system. This ensures Simulacrum works correctly across different RPG systems.
@@ -86,13 +106,17 @@ test('system-specific test', async ({ gamePage, systemId, worldId }) => {
 
 You need a valid Foundry VTT license. The license key should be added to your `.env.test` file.
 
-### 2. Foundry VTT Installation File
+### 2. Foundry VTT Installation File(s)
 
-Place your Foundry VTT installation zip file in:
+Place one or more Foundry VTT installation zip files in:
 
 ```
 vendor/foundry/FoundryVTT-XX.XXX.zip
 ```
+
+The filename must contain a `major.minor` token (e.g., `13.351`, `14.359`) so the
+test runner can detect the version. If multiple zips are present, tests are run
+against each version automatically — see [Multi-Version Testing](#multi-version-testing).
 
 > ⚠️ This folder is gitignored. You must provide your own licensed copy.
 

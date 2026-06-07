@@ -26,6 +26,7 @@
   "devDependencies": {
     "@foundryvtt/foundryvtt-cli": "^3.0.2",
     "@playwright/test": "^1.50.0",
+    "adm-zip": "^0.5.17",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jest": "^29.12.1",

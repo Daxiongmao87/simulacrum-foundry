@@ -2,11 +2,12 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
 const TEST_ENV_PATH = join(__dirname, '.env.test');
+const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
 
 /**
  * Load environment variables from .env.test
@@ -48,65 +49,69 @@ function parseSystemIds(env) {
   return systemIdsRaw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
-/**
- * Build Playwright projects - one per system + browser combination
- * 
- * Test Routing:
- * - specs/common/*.spec.js → runs for ALL systems
- * - specs/systems/{systemId}/*.spec.js → runs ONLY for that system
- */
-function buildProjects(systemIds) {
-  const projects = [];
-  
-  for (const systemId of systemIds) {
-    // Chromium project for each system
-    projects.push({
-      name: `chromium-${systemId}`,
-      testDir: './specs',
-      // testMatch controls which files run for this project
-      testMatch: [
-        // All common tests
-        'common/**/*.spec.js',
-        // System-specific tests (only matching system)
-        `systems/${systemId}/**/*.spec.js`,
-      ],
-      // Per-test setup can take a while (extracting, starting server, installing system)
-      timeout: 180000, // 3 minutes per test
-      use: {
-        ...devices['Desktop Chrome'],
-        // Foundry requires minimum 1366x768 resolution
-        viewport: { width: 1920, height: 1080 },
-        // Pass system ID to tests via custom fixture
-        systemId,
-        // Action/navigation timeouts
-        actionTimeout: 30000,
-        navigationTimeout: 60000,
-      },
-      // Set metadata for this project
-      metadata: {
-        systemId,
-      },
-    });
-    
-    // Uncomment to add Firefox/WebKit per system:
-    // projects.push({
-    //   name: `firefox-${systemId}`,
-    //   testDir: './specs',
-    //   testMatch: ['common/**/*.spec.js', `systems/${systemId}/**/*.spec.js`],
-    //   use: { ...devices['Desktop Firefox'], systemId },
-    //   metadata: { systemId },
-    // });
+function discoverFoundryVersions() {
+  if (!existsSync(FOUNDRY_VENDOR_DIR)) {
+    throw new Error(`[config] Missing vendor directory: ${FOUNDRY_VENDOR_DIR}`);
   }
-  
+
+  const zips = readdirSync(FOUNDRY_VENDOR_DIR)
+    .filter(f => f.toLowerCase().endsWith('.zip'))
+    .map(f => {
+      const match = f.match(/(\d+)\.\d+/);
+      if (!match) return null;
+      return { zipPath: join(FOUNDRY_VENDOR_DIR, f), version: parseInt(match[1], 10) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.version - b.version);
+
+  if (zips.length === 0) {
+    throw new Error(`[config] No Foundry zip files found in ${FOUNDRY_VENDOR_DIR}`);
+  }
+
+  return zips;
+}
+
+function buildProjects(systemIds, foundryVersions) {
+  const projects = [];
+
+  for (const { zipPath, version } of foundryVersions) {
+    for (const systemId of systemIds) {
+      projects.push({
+        name: `chromium-${systemId}-v${version}`,
+        testDir: './specs',
+        testMatch: [
+          'common/**/*.spec.js',
+          `systems/${systemId}/**/*.spec.js`,
+        ],
+        timeout: 180000,
+        use: {
+          ...devices['Desktop Chrome'],
+          viewport: { width: 1920, height: 1080 },
+          systemId,
+          foundryVersion: version,
+          foundryZip: zipPath,
+          actionTimeout: 30000,
+          navigationTimeout: 60000,
+        },
+        metadata: {
+          systemId,
+          foundryVersion: version,
+          foundryZip: zipPath,
+        },
+      });
+    }
+  }
+
   return projects;
 }
 
-// Load env and build config
 const env = loadEnv();
 const systemIds = parseSystemIds(env);
-const projects = buildProjects(systemIds);
+const foundryVersions = discoverFoundryVersions();
+const projects = buildProjects(systemIds, foundryVersions);
 
 console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
+console.log(`[config] Testing against Foundry versions: ${foundryVersions.map(v => `v${v.version}`).join(', ')}`);
 
 /**
  * Playwright configuration for Simulacrum Foundry VTT E2E tests.
@@ -192,5 +197,4 @@ export default defineConfig({
   outputDir: join(ROOT, 'tests/e2e/test-results'),
 });
 
-// Export parsed system IDs for use in setup
-export { systemIds };
+export { systemIds, foundryVersions };

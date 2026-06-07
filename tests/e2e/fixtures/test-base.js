@@ -60,11 +60,31 @@ export const test = base.extend({
    * Current system ID being tested (from project config)
    */
   systemId: async ({}, use, testInfo) => {
-    const systemId = testInfo.project.use?.systemId || 
+    const systemId = testInfo.project.use?.systemId ||
                      testInfo.project.metadata?.systemId ||
-                     process.env.TEST_SYSTEM_ID || 
+                     process.env.TEST_SYSTEM_ID ||
                      'dnd5e';
     await use(systemId);
+  },
+
+  // eslint-disable-next-line no-empty-pattern
+  foundryVersion: async ({}, use, testInfo) => {
+    const version = testInfo.project.use?.foundryVersion ||
+                    testInfo.project.metadata?.foundryVersion;
+    if (!version) {
+      throw new Error('foundryVersion not set on Playwright project — check playwright.config.js');
+    }
+    await use(version);
+  },
+
+  // eslint-disable-next-line no-empty-pattern
+  foundryZip: async ({}, use, testInfo) => {
+    const zip = testInfo.project.use?.foundryZip ||
+                testInfo.project.metadata?.foundryZip;
+    if (!zip) {
+      throw new Error('foundryZip not set on Playwright project — check playwright.config.js');
+    }
+    await use(zip);
   },
   
   /**
@@ -88,17 +108,19 @@ export const test = base.extend({
    * 7. Yields server info to test
    * 8. On teardown: kills server, deletes all directories
    */
-  foundryServer: [async ({ systemId, testEnv }, use, testInfo) => {
+  foundryServer: [async ({ systemId, foundryVersion, foundryZip, testEnv }, use, testInfo) => {
     const testId = `test-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}`;
-    console.log(`[fixture] Starting isolated Foundry for: ${testId}`);
-    
+    console.log(`[fixture] Starting isolated Foundry v${foundryVersion} for: ${testId}`);
+
     let serverInfo = null;
-    
+
     try {
       // Setup isolated Foundry instance
       serverInfo = await foundrySetup.setupIsolatedFoundry({
         testId,
         systemId,
+        foundryVersion,
+        foundryZip,
         adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
         licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
         port: 30000 + (testInfo.parallelIndex || 0), // Unique port per worker

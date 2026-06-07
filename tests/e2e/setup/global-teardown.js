@@ -8,7 +8,7 @@
 import { existsSync, rmSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { isPortInUse } from '../fixtures/platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -21,22 +21,13 @@ export default async function globalTeardown() {
   console.log('[teardown] Simulacrum E2E Test Teardown');
   console.log('============================================================');
   
-  // Kill any orphaned Foundry processes on test ports
-  try {
-    console.log('[teardown] Checking for orphaned Foundry processes...');
-    const lsofOutput = execSync('lsof -i :30000-30010 -t 2>/dev/null || true', { encoding: 'utf-8' });
-    const pids = lsofOutput.trim().split('\n').filter(Boolean);
-    
-    for (const pid of pids) {
-      try {
-        console.log(`[teardown] Killing orphaned process: ${pid}`);
-        process.kill(parseInt(pid, 10), 'SIGKILL');
-      } catch (e) {
-        // Process may already be dead
-      }
-    }
-  } catch (e) {
-    // lsof may not be available or no processes found
+  console.log('[teardown] Checking for orphaned listeners on test ports...');
+  const stuckPorts = [];
+  for (let port = 30000; port <= 30010; port++) {
+    if (await isPortInUse(port)) stuckPorts.push(port);
+  }
+  if (stuckPorts.length > 0) {
+    console.warn(`[teardown] Ports still in use: ${stuckPorts.join(', ')} — kill orphans manually.`);
   }
   
   // Clean up any orphaned test directories

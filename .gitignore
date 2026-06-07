@@ -39,9 +39,9 @@ coverage/
 .nyc_output/
 
 # Foundry local secrets (license, creds)
-/.foundry.env.json
-/.foundry-data/
-/.foundry-cache/
+/.foundry.env.json*
+/.foundry-data*/
+/.foundry-cache*/
 vendor/foundry/*.zip
 vendor/foundry/*.ZIP
 

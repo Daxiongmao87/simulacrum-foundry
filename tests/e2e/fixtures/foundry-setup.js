@@ -17,20 +17,37 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, cpSync } fr
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
-import { 
-  pollUntil, 
-  pollForElement, 
-  pollUntilGone, 
-  pollForServer, 
+import {
+  pollUntil,
+  pollForElement,
+  pollUntilGone,
+  pollForServer,
   waitForUiSettle,
-  dismissBlockingDialog 
+  dismissBlockingDialog
 } from './poll-utils.js';
+import { extractZip, isPortInUse, waitForPortFree, killAndWait } from './platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
-const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
-const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
+const SYSTEM_CACHE_ROOT = join(ROOT, '.foundry-system-cache');
 const MODULE_DIST_DIR = join(ROOT, 'dist');
+
+function systemCacheDir(foundryVersion) {
+  return join(SYSTEM_CACHE_ROOT, `v${foundryVersion}`);
+}
+
+// Linux/Node zips put main.mjs at the root; Windows portable zips nest it.
+function findFoundryEntryPoint(extractDir) {
+  const candidates = [
+    join(extractDir, 'main.mjs'),
+    join(extractDir, 'App', 'resources', 'app', 'main.mjs'),
+    join(extractDir, 'resources', 'app', 'main.mjs'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(`Could not locate main.mjs in extracted Foundry at ${extractDir}`);
+}
 
 /**
  * Dismiss the "Allow Sharing Usage Data" dialog that appears after TOS acceptance.
@@ -109,25 +126,6 @@ async function dismissTourOverlay(page) {
 }
 
 /**
- * Find the Foundry zip file
- */
-function findFoundryZip() {
-  if (!existsSync(FOUNDRY_VENDOR_DIR)) {
-    throw new Error(`Missing ${FOUNDRY_VENDOR_DIR}`);
-  }
-  
-  const files = execSync(`ls -1 "${FOUNDRY_VENDOR_DIR}"`, { encoding: 'utf-8' })
-    .split('\n')
-    .filter(f => f.toLowerCase().endsWith('.zip'));
-  
-  if (files.length === 0) {
-    throw new Error(`No .zip file found in ${FOUNDRY_VENDOR_DIR}`);
-  }
-  
-  return join(FOUNDRY_VENDOR_DIR, files[0]);
-}
-
-/**
  * Get the base path for test directories.
  * Uses tmpfs if TEST_TMPFS_PATH is set for faster I/O.
  * @returns {string} Base path for test directories
@@ -155,13 +153,16 @@ function getTestBasePath() {
  * @param {Object} options
  * @param {string} options.testId - Unique test identifier
  * @param {string} options.systemId - Game system to install (e.g., 'dnd5e')
+ * @param {number} options.foundryVersion - Foundry major version (e.g., 13, 14)
+ * @param {string} options.foundryZip - Absolute path to the Foundry zip to extract
  * @param {string} options.adminKey - Admin password
  * @param {string} options.licenseKey - Foundry license key
  * @param {number} options.port - Port to run on
  * @returns {Promise<Object>} Server info for test use
  */
 export async function setupIsolatedFoundry(options) {
-  const { testId, systemId, adminKey, licenseKey, port } = options;
+  const { testId, systemId, foundryVersion, foundryZip, adminKey, licenseKey, port } = options;
+  const cacheDir = systemCacheDir(foundryVersion);
   
   // Get base path (tmpfs or project dir)
   const basePath = getTestBasePath();
@@ -196,9 +197,11 @@ export async function setupIsolatedFoundry(options) {
   mkdirSync(configDir, { recursive: true });
   
   // 3. Extract Foundry
-  const foundryZip = findFoundryZip();
-  console.log(`[setup:${testId}] Extracting Foundry...`);
-  execSync(`unzip -q "${foundryZip}" -d "${testDir}"`, { stdio: 'pipe' });
+  if (!foundryZip || !existsSync(foundryZip)) {
+    throw new Error(`Foundry zip not found: ${foundryZip}`);
+  }
+  console.log(`[setup:${testId}] Extracting Foundry v${foundryVersion}`);
+  extractZip(foundryZip, testDir);
   
   // 4. Package and deploy module
   console.log(`[setup:${testId}] Packaging module...`);
@@ -219,10 +222,10 @@ export async function setupIsolatedFoundry(options) {
     cpSync(join(ROOT, 'assets'), join(moduleTargetDir, 'assets'), { recursive: true });
   }
   
-  // 5. Copy cached system if available
-  const cachedSystem = join(SYSTEM_CACHE_DIR, systemId);
+  // 5. Copy cached system if available (per-version cache)
+  const cachedSystem = join(cacheDir, systemId);
   if (existsSync(cachedSystem)) {
-    console.log(`[setup:${testId}] Using cached system: ${systemId}`);
+    console.log(`[setup:${testId}] Using cached system: ${systemId} (v${foundryVersion})`);
     cpSync(cachedSystem, join(systemsDir, systemId), { recursive: true });
   }
   
@@ -235,45 +238,19 @@ export async function setupIsolatedFoundry(options) {
   };
   writeFileSync(join(configDir, 'options.json'), JSON.stringify(optionsJson, null, 2));
   
-  // 7. FORCE KILL any process already using this port (cleanup from failed previous runs)
-  console.log(`[setup:${testId}] Pre-cleanup: ensuring port ${port} is free...`);
-  try {
-    execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
-    // Poll until port is free rather than fixed wait
-    await pollUntil(
-      async () => {
-        try {
-          const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-          return !result.trim(); // Return true when port is free (no output)
-        } catch (e) {
-          return true; // If ss fails, assume port is free
-        }
-      },
-      { timeout: 5000, pollInterval: 100 }
-    ).catch(() => {}); // Ignore timeout - we'll check again below
-  } catch (e) {
-    // Ignore errors - port may already be free
-  }
-  
-  // Verify port is free before starting
-  try {
-    const portCheck = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-    if (portCheck.trim()) {
-      throw new Error(`Port ${port} is still in use after cleanup attempt: ${portCheck}`);
-    }
-  } catch (e) {
-    if (e.message && e.message.includes('still in use')) {
-      throw e;
-    }
-    // If ss fails, assume port is free
+  // 7. Verify the port is free.
+  if (!(await waitForPortFree(port, { timeoutMs: 5000 }))) {
+    throw new Error(
+      `Port ${port} is in use — likely an orphan from a previous crashed run. Kill it and retry.`
+    );
   }
   
   // 8. Start Foundry server
-  console.log(`[setup:${testId}] Starting Foundry on port ${port}...`);
-  const mainMjs = join(testDir, 'main.mjs');
-  
+  const mainMjs = findFoundryEntryPoint(testDir);
+  console.log(`[setup:${testId}] Starting Foundry on port ${port}`);
+
   const serverProcess = spawn('node', [mainMjs, `--dataPath=${dataDir}`, `--port=${port}`], {
-    cwd: testDir,
+    cwd: dirname(mainMjs),
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: false,
   });
@@ -344,12 +321,12 @@ export async function setupIsolatedFoundry(options) {
         throw installError;
       }
       
-      // Cache the installed system for future tests
+      // Cache the installed system for future tests (per-version)
       const installedSystem = join(systemsDir, systemId);
       if (existsSync(installedSystem)) {
-        mkdirSync(SYSTEM_CACHE_DIR, { recursive: true });
-        cpSync(installedSystem, join(SYSTEM_CACHE_DIR, systemId), { recursive: true });
-        console.log(`[setup:${testId}] Cached system: ${systemId}`);
+        mkdirSync(cacheDir, { recursive: true });
+        cpSync(installedSystem, join(cacheDir, systemId), { recursive: true });
+        console.log(`[setup:${testId}] Cached system: ${systemId} (v${foundryVersion})`);
       }
     } else {
       console.log(`[setup:${testId}] Using cached system: ${systemId}`);
@@ -376,86 +353,50 @@ export async function setupIsolatedFoundry(options) {
     adminKey,
     worldId,
     systemId,
+    foundryVersion,
+    foundryZip,
   };
 }
 
-/**
- * Teardown an isolated Foundry instance
- */
 export async function teardownIsolatedFoundry(serverInfo) {
   const { testId, testDir, dataDir, port, serverPid, serverProcess } = serverInfo;
-  
+
   console.log(`[teardown:${testId}] Stopping server on port ${port}...`);
-  
-  // Kill server process
-  try {
-    if (serverProcess && !serverProcess.killed) {
-      serverProcess.kill('SIGTERM');
-      // Poll until process is killed rather than fixed wait
-      await pollUntil(
-        async () => serverProcess.killed,
-        { timeout: 3000, pollInterval: 100 }
-      ).catch(() => {
-        // Process didn't terminate gracefully, force kill
-        if (!serverProcess.killed) {
-          serverProcess.kill('SIGKILL');
-        }
-      });
-    }
-  } catch (e) {
-    console.log(`[teardown:${testId}] Error stopping server: ${e.message}`);
+
+  // Await full process exit; Windows holds file handles until then.
+  await killAndWait(serverProcess, { escalateAfterMs: 2000, timeoutMs: 8000 });
+
+  if (serverPid) {
+    try { process.kill(serverPid, 'SIGKILL'); } catch { /* already dead */ }
   }
-  
-  // Also try killing by PID in case process object doesn't work
-  try {
-    process.kill(serverPid, 'SIGKILL');
-  } catch (e) {
-    // Process may already be dead
-  }
-  
-  // Force kill any process using this port
-  try {
-    execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
-  } catch (e) {
-    // Port may already be free
-  }
-  
-  // Wait for port to be free using polling
-  await pollUntil(
-    async () => {
-      try {
-        const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-        return !result.trim(); // Return true when port is free
-      } catch (e) {
-        return true; // If ss fails, assume port is free
-      }
-    },
-    { timeout: 5000, pollInterval: 200 }
-  ).then(() => {
+
+  if (await waitForPortFree(port, { timeoutMs: 5000 })) {
     console.log(`[teardown:${testId}] Port ${port} is now free`);
-  }).catch(() => {
+  } else {
     console.log(`[teardown:${testId}] Warning: Port ${port} may still be in use`);
-  });
-  
-  // Delete directories
+  }
+
   console.log(`[teardown:${testId}] Cleaning up directories...`);
-  try {
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
-    }
-  } catch (e) {
-    console.log(`[teardown:${testId}] Error removing testDir: ${e.message}`);
-  }
-  
-  try {
-    if (existsSync(dataDir)) {
-      rmSync(dataDir, { recursive: true, force: true });
-    }
-  } catch (e) {
-    console.log(`[teardown:${testId}] Error removing dataDir: ${e.message}`);
-  }
-  
+  await rmDirWithRetry(testDir, testId, 'testDir');
+  await rmDirWithRetry(dataDir, testId, 'dataDir');
+
   console.log(`[teardown:${testId}] Cleanup complete`);
+}
+
+async function rmDirWithRetry(dir, testId, label, { attempts = 25, delayMs = 400 } = {}) {
+  if (!existsSync(dir)) return;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      if (i === attempts - 1) {
+        console.log(`[teardown:${testId}] Error removing ${label}: ${err.message}`);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
 }
 
 /**
