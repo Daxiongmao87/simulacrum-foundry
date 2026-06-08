@@ -80,9 +80,11 @@ export const test = base.extend({
 
   // eslint-disable-next-line no-empty-pattern
   foundryZip: async ({}, use, testInfo) => {
-    const zip = testInfo.project.use?.foundryZip ||
-                testInfo.project.metadata?.foundryZip;
-    if (!zip) {
+    // null when using a pre-installed Foundry (FOUNDRY_INSTALL_PATH mode)
+    const zip = testInfo.project.use?.foundryZip ??
+                testInfo.project.metadata?.foundryZip ??
+                null;
+    if (!zip && !testInfo.project.use?.foundryInstallPath) {
       throw new Error('foundryZip not set on Playwright project — check playwright.config.js');
     }
     await use(zip);
@@ -117,12 +119,15 @@ export const test = base.extend({
 
     try {
       // Setup isolated Foundry instance
+      const foundryInstallPath = testInfo.project.use?.foundryInstallPath ?? null;
       const port = await getFreePort();
+
       serverInfo = await foundrySetup.setupIsolatedFoundry({
         testId,
         systemId,
         foundryVersion,
         foundryZip,
+        foundryInstallPath,
         adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
         licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
         port,

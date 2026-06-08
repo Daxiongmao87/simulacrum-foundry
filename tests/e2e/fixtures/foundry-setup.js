@@ -146,20 +146,27 @@ function getTestBasePath() {
 }
 
 /**
- * Setup an isolated Foundry instance for a single test
- * 
+ * Setup an isolated Foundry instance for a single test.
+ *
+ * Two source modes:
+ *  - foundryZip: extract a fresh copy per test (normal local dev flow)
+ *  - foundryInstallPath: share a pre-extracted install (container/CI flow);
+ *    only the data directory is isolated per test, Foundry binaries are shared
+ *
  * @param {Object} options
- * @param {string} options.testId - Unique test identifier
- * @param {string} options.systemId - Game system to install (e.g., 'dnd5e')
- * @param {number} options.foundryVersion - Foundry major version (e.g., 13, 14)
- * @param {string} options.foundryZip - Absolute path to the Foundry zip to extract
- * @param {string} options.adminKey - Admin password
- * @param {string} options.licenseKey - Foundry license key
- * @param {number} options.port - Port to run on
+ * @param {string} options.testId
+ * @param {string} options.systemId
+ * @param {number} options.foundryVersion
+ * @param {string|null} options.foundryZip
+ * @param {string|null} options.foundryInstallPath - Pre-extracted Foundry dir
+ * @param {string} options.adminKey
+ * @param {string} [options.licenseKey]
+ * @param {number} options.port
  * @returns {Promise<Object>} Server info for test use
  */
 export async function setupIsolatedFoundry(options) {
-  const { testId, systemId, foundryVersion, foundryZip, adminKey, licenseKey, port } = options;
+  const { testId, systemId, foundryVersion, foundryZip, foundryInstallPath,
+    adminKey, licenseKey, port } = options;
   const cacheDir = systemCacheDir(foundryVersion);
   
   // Get base path (tmpfs or project dir)
@@ -183,27 +190,34 @@ export async function setupIsolatedFoundry(options) {
     console.log(`[setup:${testId}] Using tmpfs: ${basePath}`);
   }
   
-  // 1. Clean any existing directories
-  if (existsSync(testDir)) {
-    rmSync(testDir, { recursive: true, force: true });
-  }
-  if (existsSync(dataDir)) {
-    rmSync(dataDir, { recursive: true, force: true });
-  }
-  
-  // 2. Create directory structure
-  mkdirSync(testDir, { recursive: true });
+  // 1. Clean any existing per-test directories
+  if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
+  if (existsSync(dataDir)) rmSync(dataDir, { recursive: true, force: true });
+
+  // 2. Create data directory structure (testDir only created in zip mode)
   mkdirSync(modulesDir, { recursive: true });
   mkdirSync(worldsDir, { recursive: true });
   mkdirSync(systemsDir, { recursive: true });
   mkdirSync(configDir, { recursive: true });
-  
-  // 3. Extract Foundry
-  if (!foundryZip || !existsSync(foundryZip)) {
-    throw new Error(`Foundry zip not found: ${foundryZip}`);
+
+  // 3. Obtain Foundry binaries
+  // foundryDir is where main.mjs lives; shared across tests in install-path mode.
+  let foundryDir;
+  if (foundryInstallPath) {
+    if (!existsSync(foundryInstallPath)) {
+      throw new Error(`FOUNDRY_INSTALL_PATH not found: ${foundryInstallPath}`);
+    }
+    foundryDir = foundryInstallPath;
+    console.log(`[setup:${testId}] Using pre-installed Foundry at ${foundryDir}`);
+  } else {
+    if (!foundryZip || !existsSync(foundryZip)) {
+      throw new Error(`Foundry zip not found: ${foundryZip}`);
+    }
+    mkdirSync(testDir, { recursive: true });
+    foundryDir = testDir;
+    console.log(`[setup:${testId}] Extracting Foundry v${foundryVersion}`);
+    extractZip(foundryZip, foundryDir);
   }
-  console.log(`[setup:${testId}] Extracting Foundry v${foundryVersion}`);
-  extractZip(foundryZip, testDir);
   
   // 4. Package and deploy module
   console.log(`[setup:${testId}] Packaging module...`);
@@ -259,9 +273,11 @@ export async function setupIsolatedFoundry(options) {
     systemVersion = sysJson.version ?? sysJson.data?.version ?? '1.0.0';
   } catch { /* use default */ }
 
-  // Derive the full Foundry build version from the zip filename (e.g. "13.351").
-  const coreVersionMatch = foundryZip.match(/(\d+\.\d+)/);
-  const coreVersion = coreVersionMatch ? coreVersionMatch[1] : String(foundryVersion);
+  // Derive the full Foundry build version from the zip filename when available.
+  const coreVersionMatch = foundryZip?.match(/(\d+\.\d+)/);
+  const coreVersion = coreVersionMatch
+    ? coreVersionMatch[1]
+    : (process.env.FOUNDRY_VERSION || String(foundryVersion));
 
   writeFileSync(join(worldDir, 'world.json'), JSON.stringify({
     id: worldId,
@@ -283,7 +299,7 @@ export async function setupIsolatedFoundry(options) {
   }
   
   // 8. Start Foundry server
-  const mainMjs = findFoundryEntryPoint(testDir);
+  const mainMjs = findFoundryEntryPoint(foundryDir);
   console.log(`[setup:${testId}] Starting Foundry on port ${port}`);
 
   const serverProcess = spawn('node', [mainMjs, `--dataPath=${dataDir}`, `--port=${port}`], {
@@ -378,7 +394,7 @@ export async function setupIsolatedFoundry(options) {
   // Return server info for test use
   return {
     testId,
-    testDir,
+    testDir: foundryInstallPath ? null : testDir,
     dataDir,
     baseUrl,
     port,
@@ -411,7 +427,8 @@ export async function teardownIsolatedFoundry(serverInfo) {
   }
 
   console.log(`[teardown:${testId}] Cleaning up directories...`);
-  await rmDirWithRetry(testDir, testId, 'testDir');
+  // testDir is null in pre-installed mode (shared Foundry binaries — never delete)
+  if (testDir) await rmDirWithRetry(testDir, testId, 'testDir');
   await rmDirWithRetry(dataDir, testId, 'dataDir');
 
   console.log(`[teardown:${testId}] Cleanup complete`);

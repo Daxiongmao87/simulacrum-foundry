@@ -11,13 +11,18 @@ import AdmZip from 'adm-zip';
  * license-entry and EULA screens entirely.
  *
  * Resolution order:
- *   1. FOUNDRY_LICENSE_JSON_PATH env var (explicit override)
- *   2. Platform default (%LOCALAPPDATA%\FoundryVTT\Config\license.json on Windows,
- *      ~/.local/share/FoundryVTT/Config/license.json on Linux/Mac)
+ *   1. FOUNDRY_LICENSE_JSON_B64 env var — base64-encoded file content,
+ *      set by CI secrets or the run-in-container.sh wrapper script
+ *   2. FOUNDRY_LICENSE_JSON_PATH env var — explicit file path
+ *   3. Platform default (%LOCALAPPDATA%\FoundryVTT\Config\license.json on
+ *      Windows, ~/Library/…/license.json on macOS, ~/.local/share/… on Linux)
  *
  * Returns the file contents as a string, or null if not found.
  */
 export function resolveLicenseJson() {
+  const b64 = process.env.FOUNDRY_LICENSE_JSON_B64;
+  if (b64) return Buffer.from(b64, 'base64').toString('utf-8');
+
   const envPath = process.env.FOUNDRY_LICENSE_JSON_PATH;
   if (envPath && existsSync(envPath)) return readFileSync(envPath, 'utf-8');
 

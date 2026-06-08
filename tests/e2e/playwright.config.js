@@ -135,13 +135,54 @@ function buildProjects(systemIds, foundryVersions) {
   return projects;
 }
 
+function buildInstallPathProjects(systemIds, installPath, foundryVersion) {
+  return systemIds.map(systemId => ({
+    name: `chromium-${systemId}-v${foundryVersion}`,
+    testDir: './specs',
+    testMatch: [
+      'common/**/*.spec.js',
+      `systems/${systemId}/**/*.spec.js`,
+    ],
+    timeout: 180000,
+    use: {
+      ...devices['Desktop Chrome'],
+      viewport: { width: 1920, height: 1080 },
+      systemId,
+      foundryVersion,
+      foundryZip: null,
+      foundryInstallPath: installPath,
+      actionTimeout: 30000,
+      navigationTimeout: 60000,
+      launchOptions: { args: gpuArgs },
+    },
+    metadata: { systemId, foundryVersion },
+  }));
+}
+
 const env = loadEnv();
 const systemIds = parseSystemIds(env);
-const foundryVersions = discoverFoundryVersions();
-const projects = buildProjects(systemIds, foundryVersions);
 
-console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
-console.log(`[config] Testing against Foundry versions: ${foundryVersions.map(v => `v${v.version}`).join(', ')}`);
+// FOUNDRY_INSTALL_PATH: pre-extracted Foundry (e.g. inside a felddy container).
+// FOUNDRY_VERSION is set by the felddy image as the full build string (e.g. "14.363");
+// parseInt gives us the major version for project naming.
+const installPath = process.env.FOUNDRY_INSTALL_PATH || env.FOUNDRY_INSTALL_PATH;
+let projects;
+
+if (installPath) {
+  const rawVersion = process.env.FOUNDRY_VERSION || env.FOUNDRY_VERSION || '';
+  const foundryVersion = parseInt(rawVersion, 10);
+  if (!foundryVersion) {
+    throw new Error('[config] FOUNDRY_VERSION must be set when FOUNDRY_INSTALL_PATH is used (e.g., 14 or 14.363)');
+  }
+  projects = buildInstallPathProjects(systemIds, installPath, foundryVersion);
+  console.log(`[config] Pre-installed Foundry mode: ${installPath} (v${foundryVersion})`);
+  console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
+} else {
+  const foundryVersions = discoverFoundryVersions();
+  projects = buildProjects(systemIds, foundryVersions);
+  console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
+  console.log(`[config] Testing against Foundry versions: ${foundryVersions.map(v => `v${v.version}`).join(', ')}`);
+}
 
 /**
  * Playwright configuration for Simulacrum Foundry VTT E2E tests.
@@ -227,4 +268,4 @@ export default defineConfig({
   outputDir: join(ROOT, 'tests/e2e/test-results'),
 });
 
-export { systemIds, foundryVersions };
+export { systemIds };
