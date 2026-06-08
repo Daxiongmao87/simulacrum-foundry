@@ -2,6 +2,7 @@ import net from 'net';
 import os from 'os';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { execSync } from 'child_process';
 import AdmZip from 'adm-zip';
 
 /**
@@ -29,6 +30,32 @@ export function resolveLicenseJson() {
   if (defaultPath && existsSync(defaultPath)) return readFileSync(defaultPath, 'utf-8');
 
   return null;
+}
+
+/**
+ * Kill whatever process is listening on a given port, then wait briefly for
+ * the OS to release file handles. No-ops if the port is free.
+ */
+export async function killProcessOnPort(port) {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano`, { encoding: 'utf-8' });
+      const pids = [
+        ...new Set(
+          out.split('\n')
+            .filter(l => l.includes(`:${port}`) && l.includes('LISTENING'))
+            .map(l => l.trim().split(/\s+/).pop())
+            .filter(Boolean)
+        ),
+      ];
+      for (const pid of pids) {
+        try { execSync(`taskkill /PID ${pid} /F`, { stdio: 'pipe' }); } catch { /* already gone */ }
+      }
+    } else {
+      execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, { stdio: 'pipe', shell: true });
+    }
+    await new Promise(r => setTimeout(r, 800));
+  } catch { /* no process on that port */ }
 }
 
 export function extractZip(zipPath, destDir) {

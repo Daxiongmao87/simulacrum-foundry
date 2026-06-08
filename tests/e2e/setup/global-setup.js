@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, cpSync, rmSync, write
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
-import { extractZip, killAndWait, resolveLicenseJson } from '../fixtures/platform-utils.js';
+import { extractZip, killAndWait, killProcessOnPort, resolveLicenseJson } from '../fixtures/platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -180,7 +180,14 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
   const systemsDir = join(dataDir, 'Data', 'systems');
   const configDir = join(dataDir, 'Config');
   
+  const cachePort = 30090 + foundryVersion;
+
   try {
+    // Kill any orphaned cache server from a previous failed run before
+    // attempting cleanup — Windows won't release .node file handles until
+    // the process that loaded them exits.
+    await killProcessOnPort(cachePort);
+
     // Clean any existing temp dirs (use retry helper — Windows holds handles briefly)
     await rmDirWithRetry(tempDir);
     await rmDirWithRetry(dataDir);
@@ -195,7 +202,6 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
     extractZip(foundryZip, tempDir);
     
     // Configure (per-version port avoids collisions if cache runs sequentially)
-    const cachePort = 30090 + foundryVersion;
     const optionsJson = {
       dataPath: dataDir,
       port: cachePort,
@@ -286,12 +292,12 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
 
   } finally {
     console.log('[cache] Cleaning up temporary directories...');
-    await rmDirWithRetry(tempDir);
-    await rmDirWithRetry(dataDir);
+    await rmDirWithRetry(tempDir, { warn: true });
+    await rmDirWithRetry(dataDir, { warn: true });
   }
 }
 
-async function rmDirWithRetry(dir, { attempts = 25, delayMs = 400 } = {}) {
+async function rmDirWithRetry(dir, { attempts = 25, delayMs = 400, warn = false } = {}) {
   if (!existsSync(dir)) return;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -299,8 +305,11 @@ async function rmDirWithRetry(dir, { attempts = 25, delayMs = 400 } = {}) {
       return;
     } catch (err) {
       if (i === attempts - 1) {
-        console.warn(`[cache] WARNING: failed to remove ${dir}: ${err.message}`);
-        return;
+        if (warn) {
+          console.warn(`[cache] WARNING: failed to remove ${dir}: ${err.message}`);
+          return;
+        }
+        throw new Error(`Failed to remove ${dir} after ${attempts} attempts — an orphaned process may still hold a file lock.\n  Last error: ${err.message}`);
       }
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
