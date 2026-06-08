@@ -3,6 +3,35 @@ import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
+import { execSync } from 'child_process';
+
+function hasGpu() {
+  try {
+    switch (process.platform) {
+      case 'win32': {
+        const out = execSync('wmic path win32_videocontroller get name', { encoding: 'utf-8' });
+        return out.split('\n').some(l => {
+          const name = l.trim();
+          return name && name !== 'Name' && !/Microsoft Basic/i.test(name);
+        });
+      }
+      case 'linux': {
+        const out = execSync('lspci 2>/dev/null | grep -i vga', { encoding: 'utf-8' });
+        return out.trim().length > 0;
+      }
+      case 'darwin':
+        return true;
+      default:
+        return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+const gpuArgs = hasGpu() ? ['--enable-gpu', '--ignore-gpu-blocklist'] : [];
+console.log(`[config] GPU acceleration: ${gpuArgs.length ? 'enabled' : 'disabled (no suitable adapter found)'}`);
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
@@ -92,6 +121,7 @@ function buildProjects(systemIds, foundryVersions) {
           foundryZip: zipPath,
           actionTimeout: 30000,
           navigationTimeout: 60000,
+          launchOptions: { args: gpuArgs },
         },
         metadata: {
           systemId,
