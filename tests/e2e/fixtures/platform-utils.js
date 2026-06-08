@@ -1,5 +1,35 @@
 import net from 'net';
+import os from 'os';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import AdmZip from 'adm-zip';
+
+/**
+ * Locate the user's Foundry license.json, which contains the signed EULA
+ * acceptance. Pre-placing this in a test instance's Config/ skips the
+ * license-entry and EULA screens entirely.
+ *
+ * Resolution order:
+ *   1. FOUNDRY_LICENSE_JSON_PATH env var (explicit override)
+ *   2. Platform default (%LOCALAPPDATA%\FoundryVTT\Config\license.json on Windows,
+ *      ~/.local/share/FoundryVTT/Config/license.json on Linux/Mac)
+ *
+ * Returns the file contents as a string, or null if not found.
+ */
+export function resolveLicenseJson() {
+  const envPath = process.env.FOUNDRY_LICENSE_JSON_PATH;
+  if (envPath && existsSync(envPath)) return readFileSync(envPath, 'utf-8');
+
+  const defaults = {
+    win32: join(process.env.LOCALAPPDATA || '', 'FoundryVTT', 'Config', 'license.json'),
+    darwin: join(os.homedir(), 'Library', 'Application Support', 'FoundryVTT', 'Config', 'license.json'),
+    linux: join(os.homedir(), '.local', 'share', 'FoundryVTT', 'Config', 'license.json'),
+  };
+  const defaultPath = defaults[process.platform];
+  if (defaultPath && existsSync(defaultPath)) return readFileSync(defaultPath, 'utf-8');
+
+  return null;
+}
 
 export function extractZip(zipPath, destDir) {
   const zip = new AdmZip(zipPath);

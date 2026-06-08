@@ -25,7 +25,7 @@ import {
   waitForUiSettle,
   dismissBlockingDialog
 } from './poll-utils.js';
-import { extractZip, isPortInUse, waitForPortFree, killAndWait } from './platform-utils.js';
+import { extractZip, isPortInUse, waitForPortFree, killAndWait, resolveLicenseJson } from './platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -237,7 +237,14 @@ export async function setupIsolatedFoundry(options) {
     adminKey: adminKey,
   };
   writeFileSync(join(configDir, 'options.json'), JSON.stringify(optionsJson, null, 2));
-  
+
+  const licenseJson = resolveLicenseJson();
+  if (licenseJson) {
+    writeFileSync(join(configDir, 'license.json'), licenseJson);
+  } else {
+    console.warn(`[setup:${testId}] No license.json found — Foundry will prompt for license/EULA`);
+  }
+
   // 7. Verify the port is free.
   if (!(await waitForPortFree(port, { timeoutMs: 5000 }))) {
     throw new Error(

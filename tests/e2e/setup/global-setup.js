@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, cpSync, rmSync, write
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
-import { extractZip, killAndWait } from '../fixtures/platform-utils.js';
+import { extractZip, killAndWait, resolveLicenseJson } from '../fixtures/platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -203,6 +203,13 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
       adminKey: env.FOUNDRY_ADMIN_KEY || 'cache-admin-key',
     };
     writeFileSync(join(configDir, 'options.json'), JSON.stringify(optionsJson, null, 2));
+
+    const licenseJson = resolveLicenseJson();
+    if (licenseJson) {
+      writeFileSync(join(configDir, 'license.json'), licenseJson);
+    } else {
+      console.warn('[cache] No license.json found — Foundry will prompt for license/EULA');
+    }
 
     const mainMjs = findFoundryEntryPoint(tempDir);
     console.log(`[cache] Starting temporary Foundry v${foundryVersion} server...`);
