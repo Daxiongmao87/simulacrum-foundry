@@ -181,9 +181,9 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
   const configDir = join(dataDir, 'Config');
   
   try {
-    // Clean any existing temp dirs
-    if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
-    if (existsSync(dataDir)) rmSync(dataDir, { recursive: true, force: true });
+    // Clean any existing temp dirs (use retry helper — Windows holds handles briefly)
+    await rmDirWithRetry(tempDir);
+    await rmDirWithRetry(dataDir);
     
     // Create directories
     mkdirSync(tempDir, { recursive: true });

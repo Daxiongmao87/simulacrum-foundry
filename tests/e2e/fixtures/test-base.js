@@ -123,7 +123,7 @@ export const test = base.extend({
         foundryZip,
         adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
         licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
-        port: 30000 + (testInfo.parallelIndex || 0), // Unique port per worker
+        port: 31000 + (testInfo.parallelIndex || 0), // Unique port per worker (base 31000 avoids Foundry's default 30000)
       });
       
       console.log(`[fixture] Foundry ready at ${serverInfo.baseUrl}`);

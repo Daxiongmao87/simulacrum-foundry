@@ -23,7 +23,7 @@ export default async function globalTeardown() {
   
   console.log('[teardown] Checking for orphaned listeners on test ports...');
   const stuckPorts = [];
-  for (let port = 30000; port <= 30010; port++) {
+  for (let port = 31000; port <= 31010; port++) {
     if (await isPortInUse(port)) stuckPorts.push(port);
   }
   if (stuckPorts.length > 0) {
