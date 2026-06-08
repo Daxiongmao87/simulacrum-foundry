@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 /**
- * Run the Simulacrum e2e test suite inside a felddy/foundryvtt container.
+ * Run the Simulacrum e2e test suite inside a pre-built e2e container image.
  *
  * Usage:
- *   node tests/e2e/scripts/run-in-container.js [release-13|release-14]
- *   npm run test:e2e:container -- release-14
+ *   node tests/e2e/scripts/run-in-container.js [13|14|14.363.0]
+ *   npm run test:e2e:container -- 14
+ *
+ * The script uses the pre-built ghcr.io image (npm + Playwright already
+ * installed) so each run only pays for npm ci and the test suite itself.
+ * On first use, or when the Dockerfile changes, rebuild locally with:
+ *   npm run test:e2e:container:build -- 14
  *
  * Optional env overrides:
- *   CONTAINER_ENGINE   — force a specific engine (podman, docker, nerdctl, finch…)
- *   FOUNDRY_ADMIN_KEY  — admin password passed to Foundry (default: test-admin-key)
- *   TEST_SYSTEM_IDS    — comma-separated system IDs (default: dnd5e)
+ *   CONTAINER_ENGINE        — force a specific engine (podman, docker, nerdctl, finch…)
+ *   E2E_IMAGE               — override the full image reference
+ *   FOUNDRY_ADMIN_KEY       — admin password passed to Foundry (default: test-admin-key)
+ *   TEST_SYSTEM_IDS         — comma-separated system IDs (default: dnd5e)
  *
  * The script auto-detects the container engine, reads the host Foundry
  * license.json, and passes it into the container as FOUNDRY_LICENSE_JSON_B64.
@@ -17,22 +23,24 @@
 
 import { execFileSync, spawnSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '../../..');
+const DOCKERFILE = join(__dirname, '../docker/Dockerfile');
 
-const tag = process.argv[2] || 'release-14';
-const majorMatch = tag.match(/(\d+)/);
+// Accept tags like: 14, 13, 14.363.0, 13.351.0
+const tag = process.argv[2] || '14';
+const majorMatch = tag.match(/^(\d+)/);
 if (!majorMatch) {
   console.error(`ERROR: Cannot parse major version from tag '${tag}'`);
-  console.error('       Expected format: release-13, release-14, etc.');
+  console.error('       Expected format: 14, 13, 14.363.0, 13.351.0');
   process.exit(1);
 }
 const FOUNDRY_MAJOR = majorMatch[1];
+const IMAGE = process.env.E2E_IMAGE || `ghcr.io/daxiongmao87/simulacrum-foundry/e2e:${FOUNDRY_MAJOR}`;
 
 // ---------------------------------------------------------------------------
 // Detect container engine
@@ -88,7 +96,7 @@ function resolveLicenseB64() {
 // ---------------------------------------------------------------------------
 const engine = detectEngine();
 console.log(`[container] Engine: ${engine}`);
-console.log(`[container] Image:  felddy/foundryvtt:${tag}`);
+console.log(`[container] Image:  ${IMAGE}`);
 
 const envArgs = [
   '--env', `FOUNDRY_INSTALL_PATH=/home/node/resources/app`,
@@ -107,20 +115,24 @@ if (licenseB64) {
 }
 
 // Pass through .env.test if present (explicit --env args above take precedence
-// because they appear later in the Docker arg list)
+// because they appear later in the arg list)
 const envTestPath = join(REPO_ROOT, 'tests/e2e/.env.test');
 if (existsSync(envTestPath)) {
   envArgs.push('--env-file', envTestPath);
 }
 
 const runArgs = [
-  'run', '--rm', '-it',
+  'run', '--rm',
+  '--user', 'root',
+  '--entrypoint', 'bash',
   '--volume', `${REPO_ROOT}:/workspace`,
+  // Anonymous volume shadows node_modules so root-owned install files don't leak to the host
+  '--volume', '/workspace/node_modules',
   '--workdir', '/workspace',
   ...envArgs,
-  `felddy/foundryvtt:${tag}`,
-  'bash', '-c',
-  'npm ci && npx playwright install chromium --with-deps && npm run test:e2e',
+  IMAGE,
+  '-c',
+  'npm ci && npx playwright install chromium && npm run test:e2e',
 ];
 
 console.log('[container] Mounting repo at /workspace and running tests...');

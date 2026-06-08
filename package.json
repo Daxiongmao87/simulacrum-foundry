@@ -22,7 +22,8 @@
     "test:e2e:ui": "npx playwright test --config=tests/e2e/playwright.config.js --ui",
     "test:e2e:headed": "npx playwright test --config=tests/e2e/playwright.config.js --headed",
     "test:e2e:debug": "npx playwright test --config=tests/e2e/playwright.config.js --debug",
-    "test:e2e:container": "node tests/e2e/scripts/run-in-container.js"
+    "test:e2e:container": "node tests/e2e/scripts/run-in-container.js",
+    "test:e2e:container:build": "node tests/e2e/scripts/build-container.js"
   },
   "devDependencies": {
     "@foundryvtt/foundryvtt-cli": "^3.0.2",
