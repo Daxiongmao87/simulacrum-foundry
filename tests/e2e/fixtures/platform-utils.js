@@ -63,6 +63,22 @@ export function extractZip(zipPath, destDir) {
   zip.extractAllTo(destDir, true);
 }
 
+/**
+ * Ask the OS for an unoccupied port by binding to 0 and reading back the
+ * assigned address. Releases the port immediately; Foundry will claim it
+ * shortly after. Race-safe for typical test parallelism.
+ */
+export function getFreePort(host = '127.0.0.1') {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, host, () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 export function isPortInUse(port, host = '127.0.0.1', timeoutMs = 1000) {
   return new Promise(resolve => {
     const socket = new net.Socket();

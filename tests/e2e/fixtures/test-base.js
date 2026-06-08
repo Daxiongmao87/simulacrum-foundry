@@ -13,6 +13,7 @@
 import { test as base, expect } from '@playwright/test';
 import * as helpers from './foundry-helpers.js';
 import * as foundrySetup from './foundry-setup.js';
+import { getFreePort } from './platform-utils.js';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -116,6 +117,7 @@ export const test = base.extend({
 
     try {
       // Setup isolated Foundry instance
+      const port = await getFreePort();
       serverInfo = await foundrySetup.setupIsolatedFoundry({
         testId,
         systemId,
@@ -123,7 +125,7 @@ export const test = base.extend({
         foundryZip,
         adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
         licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
-        port: 31000 + (testInfo.parallelIndex || 0), // Unique port per worker (base 31000 avoids Foundry's default 30000)
+        port,
       });
       
       console.log(`[fixture] Foundry ready at ${serverInfo.baseUrl}`);

@@ -8,7 +8,7 @@
 import { existsSync, rmSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { isPortInUse } from '../fixtures/platform-utils.js';
+import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -21,13 +21,23 @@ export default async function globalTeardown() {
   console.log('[teardown] Simulacrum E2E Test Teardown');
   console.log('============================================================');
   
-  console.log('[teardown] Checking for orphaned listeners on test ports...');
-  const stuckPorts = [];
-  for (let port = 31000; port <= 31010; port++) {
-    if (await isPortInUse(port)) stuckPorts.push(port);
-  }
-  if (stuckPorts.length > 0) {
-    console.warn(`[teardown] Ports still in use: ${stuckPorts.join(', ')} — kill orphans manually.`);
+  // Check for orphaned Foundry (main.mjs) processes by name — ports are dynamic
+  // so we can't scan a fixed range.
+  console.log('[teardown] Checking for orphaned Foundry processes...');
+  try {
+    let orphanPids = [];
+    if (process.platform === 'win32') {
+      const out = execSync('wmic process where "CommandLine like \'%main.mjs%\'" get ProcessId', { encoding: 'utf-8' });
+      orphanPids = out.split('\n').map(l => l.trim()).filter(l => /^\d+$/.test(l));
+    } else {
+      const out = execSync('pgrep -f main.mjs 2>/dev/null || true', { encoding: 'utf-8', shell: true });
+      orphanPids = out.split('\n').map(l => l.trim()).filter(Boolean);
+    }
+    if (orphanPids.length > 0) {
+      console.warn(`[teardown] Orphaned Foundry processes: PIDs ${orphanPids.join(', ')} — kill them manually if tests did not clean up.`);
+    }
+  } catch (e) {
+    console.warn(`[teardown] Could not scan for orphaned processes: ${e.message}`);
   }
   
   // Clean up any orphaned test directories

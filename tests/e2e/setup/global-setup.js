@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, cpSync, rmSync, write
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
-import { extractZip, killAndWait, killProcessOnPort, resolveLicenseJson } from '../fixtures/platform-utils.js';
+import { extractZip, getFreePort, killAndWait, killProcessOnPort, resolveLicenseJson } from '../fixtures/platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -126,12 +126,17 @@ export default async function globalSetup() {
     console.log(`  - v${foundryVersion}: ${zipPath}`);
   }
 
-  // 3. Validate license key exists
-  if (!env.FOUNDRY_LICENSE_KEY) {
-    console.error('[setup] ERROR: FOUNDRY_LICENSE_KEY not set in .env.test');
+  // 3. Check license availability (key in .env or license.json from local install)
+  const licenseJson = resolveLicenseJson();
+  if (licenseJson) {
+    console.log('[setup] license.json resolved from local Foundry install — FOUNDRY_LICENSE_KEY not required');
+  } else if (env.FOUNDRY_LICENSE_KEY) {
+    console.log('[setup] License key: ****' + env.FOUNDRY_LICENSE_KEY.slice(-4));
+  } else {
+    console.error('[setup] ERROR: No license.json found on this machine and FOUNDRY_LICENSE_KEY is not set in .env.test');
+    console.error('[setup] Either launch Foundry locally to generate license.json, or set FOUNDRY_LICENSE_KEY in .env.test');
     process.exit(1);
   }
-  console.log('[setup] License key: ****' + env.FOUNDRY_LICENSE_KEY.slice(-4));
 
   // 4. Package the module once (this is safe to share between tests)
   console.log('[setup] Packaging Simulacrum module...');
@@ -180,7 +185,7 @@ async function preCacheSystems(systemIds, foundryZip, foundryVersion, env) {
   const systemsDir = join(dataDir, 'Data', 'systems');
   const configDir = join(dataDir, 'Config');
   
-  const cachePort = 30090 + foundryVersion;
+  const cachePort = await getFreePort();
 
   try {
     // Kill any orphaned cache server from a previous failed run before

@@ -4,127 +4,83 @@ End-to-end testing infrastructure for the Simulacrum Foundry VTT module using [P
 
 ## Overview
 
-This E2E test suite provides comprehensive testing of Simulacrum within an actual Foundry VTT instance using **per-test isolation** - each test gets its own Foundry server instance for complete independence.
+This suite runs every test inside a **completely isolated Foundry VTT instance**: fresh extraction, clean data directory, unique port, pre-written world. Tests are independent and can run in parallel.
 
 ### Test Lifecycle
 
-**Global Setup (runs once):**
-1. Validates Foundry zip exists in `vendor/foundry/`
-2. Validates license key in `.env.test`
-3. Packages the Simulacrum module
-4. Pre-caches game systems to `.foundry-system-cache/` (avoids re-downloading per test)
+**Global Setup (runs once per `npm run test:e2e` invocation):**
+1. Validates `vendor/foundry/` contains at least one versioned zip
+2. Resolves Foundry license (from local install or `.env.test` fallback)
+3. Packages the Simulacrum module (`tools/package-module.js`)
+4. Pre-caches game systems into `.foundry-system-cache/v{N}/{systemId}/` — a one-time Playwright browser pass that downloads and installs each system, then copies it out
 
-**Per-Test Setup (via fixtures):**
+**Per-Test Setup (via Playwright fixtures):**
 1. Extracts fresh Foundry to `.foundry-test-{testId}/`
 2. Creates clean data directory `.foundry-data-{testId}/`
-3. Copies cached system and module files
-4. Starts Foundry server on unique port (`30000 + workerIndex`)
-5. Uses Playwright to handle license/EULA and create test world
-6. Launches world, joins as Gamemaster
-7. Verifies/enables Simulacrum module
+3. Copies cached system + packaged module into the data directory
+4. Pre-writes `world.json` to disk (avoids UI-based world creation; works on v13 and v14)
+5. Pre-places `license.json` in `Config/` to skip the license/EULA screens
+6. Starts Foundry on a dynamically allocated free port
+7. Launches world and joins as Gamemaster
 
 **Per-Test Teardown:**
-1. Kills server process
+1. Kills the Foundry server process
 2. Deletes `.foundry-test-{testId}/` and `.foundry-data-{testId}/`
 
 **Global Teardown:**
-1. Kills any orphaned processes on ports 30000-30010
+1. Scans for orphaned `main.mjs` (Foundry) processes and warns if any remain
 2. Cleans up any orphaned test directories
+
+---
 
 ## Multi-Version Testing
 
-Drop multiple Foundry VTT zips into `vendor/foundry/` and tests run against each
-version automatically. The major version is parsed from the filename
-(`FoundryVTT-13.351.zip` → v13, `FoundryVTT-14.359.zip` → v14).
+Drop multiple Foundry VTT zips into `vendor/foundry/` — tests run against each version automatically. The major version is parsed from the filename (`FoundryVTT-13.351.zip` → v13, `FoundryVTT-14.359.zip` → v14).
 
-Playwright builds a project per `(systemId × foundryVersion)`. With
-`TEST_SYSTEM_IDS=dnd5e,pf2e` and both v13 and v14 zips present, you'll get
-projects: `chromium-dnd5e-v13`, `chromium-pf2e-v13`, `chromium-dnd5e-v14`,
-`chromium-pf2e-v14`.
+Playwright builds one project per `(system × version)`. With `TEST_SYSTEM_IDS=dnd5e` and both v13 and v14 present, you get projects `chromium-dnd5e-v13` and `chromium-dnd5e-v14` running in parallel.
 
-System caches are namespaced per version under `.foundry-system-cache/v{N}/{systemId}/`
-so a v13 install never gets reused on v14.
-
-To target a single version, run:
+To target a single version or system:
 
 ```bash
-npm run test:e2e -- --project='chromium-dnd5e-v14'
+npm run test:e2e -- --project=chromium-dnd5e-v14
+npm run test:e2e -- --project=chromium-dnd5e-v13
 ```
 
-## Multi-System Testing
+System caches are namespaced per version (`v13/dnd5e`, `v14/dnd5e`) so a v13 install is never reused for v14.
 
-Tests automatically run against each configured game system. This ensures Simulacrum works correctly across different RPG systems.
-
-### Configuration
-
-In `.env.test`:
-
-```bash
-# Single system (default)
-TEST_SYSTEM_IDS=dnd5e
-
-# Multiple systems - tests run against EACH
-TEST_SYSTEM_IDS=dnd5e,pf2e
-
-# Any system in Foundry's package browser works!
-TEST_SYSTEM_IDS=dnd5e,pf2e,swade,coc7,wfrp4e
-```
-
-No manifest URLs needed - systems are installed via Foundry's UI using the system ID.
-
-### How It Works
-
-1. **Global Setup** pre-caches each system by:
-   - Starting a temporary Foundry server
-   - Using Playwright to install systems via Foundry's UI
-   - Copying installed systems to `.foundry-system-cache/`
-   - Killing the temporary server
-2. **Per-Test Fixtures** copy from the cache (fast local copy vs slow download)
-3. **Playwright** generates a separate project for each system (e.g., `chromium-dnd5e`, `chromium-pf2e`)
-4. **Tests** run against each system independently with full isolation
-5. **Reports** show results per system
-
-### Accessing System in Tests
-
-```javascript
-import { test, expect } from '../fixtures/test-base.js';
-
-test('system-specific test', async ({ gamePage, systemId, worldId }) => {
-  console.log(`Testing on: ${systemId}`); // e.g., "dnd5e" or "pf2e"
-  console.log(`World: ${worldId}`);       // e.g., "simulacrum-test-world-dnd5e"
-  
-  // System-specific assertions
-  if (systemId === 'pf2e') {
-    // PF2e-specific test logic
-  }
-});
-```
+---
 
 ## Prerequisites
 
 ### 1. Foundry VTT License
 
-You need a valid Foundry VTT license. The license key should be added to your `.env.test` file.
+You need a valid Foundry VTT license. If you have already launched Foundry on this machine and accepted the EULA, the suite will automatically locate `license.json` from the standard install location — no extra configuration needed:
 
-### 2. Foundry VTT Installation File(s)
+- **Windows:** `%LOCALAPPDATA%\FoundryVTT\Config\license.json`
+- **macOS:** `~/Library/Application Support/FoundryVTT/Config/license.json`
+- **Linux:** `~/.local/share/FoundryVTT/Config/license.json`
 
-Place one or more Foundry VTT installation zip files in:
+If your `license.json` is elsewhere, set `FOUNDRY_LICENSE_JSON_PATH` in `.env.test`. If you have never launched Foundry locally, set `FOUNDRY_LICENSE_KEY` as a fallback.
+
+### 2. Foundry VTT Installation Zip(s)
+
+Place one or more versioned Foundry VTT zips in:
 
 ```
-vendor/foundry/FoundryVTT-XX.XXX.zip
+vendor/foundry/FoundryVTT-13.351.zip
+vendor/foundry/FoundryVTT-14.359.zip
 ```
 
-The filename must contain a `major.minor` token (e.g., `13.351`, `14.359`) so the
-test runner can detect the version. If multiple zips are present, tests are run
-against each version automatically — see [Multi-Version Testing](#multi-version-testing).
-
-> ⚠️ This folder is gitignored. You must provide your own licensed copy.
+The filename **must** contain a `major.minor` token (e.g., `13.351`) so the runner can detect the version. This directory is gitignored — supply your own licensed copies.
 
 ### 3. Node.js Dependencies
 
 ```bash
 npm install
+npx playwright install chromium
 ```
+
+---
 
 ## Setup
 
@@ -134,275 +90,223 @@ npm install
 cp tests/e2e/.env.test.example tests/e2e/.env.test
 ```
 
-### 2. Configure Environment
+### 2. Configure `.env.test`
 
-Edit `tests/e2e/.env.test` with your:
+Edit `tests/e2e/.env.test`. The minimum required setting is an admin password:
 
-- Foundry license key
-- Admin password
-- Game system preferences
-- API keys (if testing LLM integration)
+```bash
+FOUNDRY_ADMIN_KEY=my-admin-password
+TEST_SYSTEM_IDS=dnd5e
+```
 
-### 3. Place Foundry VTT
+`FOUNDRY_LICENSE_KEY` is only needed if `license.json` cannot be auto-resolved (see above). See [Environment Variables Reference](#environment-variables-reference) for all options.
+
+### 3. Place Foundry Zip(s)
 
 ```bash
 mkdir -p vendor/foundry
-# Copy your FoundryVTT-XX.XXX.zip file here
+# Copy your FoundryVTT-XX.XXX.zip file(s) here
 ```
+
+---
 
 ## Running Tests
 
-### Full Test Suite
+### Full Suite
 
 ```bash
 npm run test:e2e
 ```
 
-### Specific Test File
+### Specific Project (version or system)
 
 ```bash
-npm run test:e2e -- --grep "Panel"
+npm run test:e2e -- --project=chromium-dnd5e-v14
+npm run test:e2e -- --project=chromium-dnd5e-v13
 ```
 
-### With UI (Debug Mode)
+### Filter by Test Name
 
 ```bash
+npm run test:e2e -- --grep "chat"
+npm run test:e2e -- --grep "sidebar"
+```
+
+### Debug / Headed Mode
+
+```bash
+# Open Playwright UI (interactive test runner)
 npm run test:e2e:ui
-```
 
-### Headed Mode (See Browser)
-
-```bash
+# Run with visible browser window
 npm run test:e2e:headed
-```
 
-### Debug Single Test
-
-```bash
+# Step through a single test
 npm run test:e2e:debug
 ```
+
+---
 
 ## Test Structure
 
 ```
 tests/e2e/
-├── playwright.config.js     # Playwright configuration
-├── .env.test               # Test environment (gitignored)
-├── .env.test.example       # Template for .env.test
-├── README.md               # This file
+├── .env.test                # Local config (gitignored)
+├── .env.test.example        # Template — copy to .env.test
+├── playwright.config.js     # Playwright config; builds projects from vendor/foundry/ zips
+├── README.md
 │
 ├── setup/
-│   ├── global-setup.js     # One-time: validate, package module, cache systems
-│   └── global-teardown.js  # Failsafe: kill orphaned processes, clean orphaned dirs
+│   ├── global-setup.js      # One-time: validate, package module, cache systems
+│   └── global-teardown.js   # Failsafe: kill orphaned processes, clean orphaned dirs
 │
 ├── fixtures/
-│   ├── foundry-helpers.js  # Foundry interaction utilities
-│   ├── foundry-setup.js    # Per-test server lifecycle (extract, start, teardown)
-│   └── test-base.js        # Extended test fixtures
+│   ├── test-base.js         # Extended test object; defines all fixtures
+│   ├── foundry-setup.js     # Per-test server lifecycle (extract → start → teardown)
+│   ├── foundry-helpers.js   # Foundry interaction utilities (login, launchWorld, etc.)
+│   ├── platform-utils.js    # Cross-platform: license resolution, port kill, zip extract
+│   └── poll-utils.js        # pollUntil, pollForElement, waitForUiSettle helpers
 │
-├── specs/
-│   ├── common/             # Tests that run for ALL systems
-│   │   ├── smoke.spec.js       # Basic sanity checks
-│   │   ├── module-load.spec.js # Module loading tests
-│   │   ├── panel.spec.js       # Panel UI tests
-│   │   └── settings.spec.js    # Settings functionality
-│   │
-│   └── systems/            # System-specific tests
-│       ├── dnd5e/          # D&D 5e specific tests
-│       │   └── integration.spec.js
-│       ├── pf2e/           # Pathfinder 2e specific tests
-│       │   └── integration.spec.js
-│       └── swade/          # Savage Worlds specific tests
-│           └── integration.spec.js
-│
-├── reports/                # HTML test reports (gitignored)
-├── screenshots/            # Failure screenshots (gitignored)
-└── test-results/           # Test artifacts (gitignored)
+└── specs/
+    └── common/              # Runs for ALL configured systems × ALL versions
+        ├── send-message.spec.js         # Sidebar renders; Simulacrum tab is accessible
+        ├── sidebar-tab.spec.js          # Sidebar tab UI smoke tests
+        └── chat-message-compat.spec.js  # v13/v14 ChatMessage API compatibility
 ```
 
-### Test Routing
+Tests placed under `specs/common/` run against every `(system × version)` combination. To add tests for a specific system only, create `specs/systems/{systemId}/your-test.spec.js`.
 
-- **`specs/common/`**: Tests run for EVERY configured system
-- **`specs/systems/{systemId}/`**: Tests run ONLY for that specific system
-
-When you configure `TEST_SYSTEM_IDS=dnd5e,pf2e`:
-- Common tests run twice (once per system)
-- `specs/systems/dnd5e/` tests run only on dnd5e
-- `specs/systems/pf2e/` tests run only on pf2e
+---
 
 ## Writing Tests
 
-### Using Fixtures
+### Basic Pattern
 
 ```javascript
-import { test, expect } from '../fixtures/test-base.js';
+import { test, expect } from '../../fixtures/test-base.js';
 
-test('my test', async ({ simulacrumPage, foundry }) => {
-  // simulacrumPage is authenticated with world loaded and module active
-  // foundry provides helper functions
-  
-  const panel = await foundry.openSimulacrumPanel(simulacrumPage);
-  await expect(panel).toBeVisible();
+test.describe('my feature', () => {
+  test('does something', async ({ simulacrumPage, foundryVersion }) => {
+    // simulacrumPage: authenticated page inside a world with Simulacrum active
+    // foundryVersion: integer (13, 14, …)
+
+    const result = await simulacrumPage.evaluate(() => {
+      return game.modules.get('simulacrum')?.active;
+    });
+    expect(result).toBe(true);
+  });
 });
 ```
 
 ### Available Fixtures
 
-| Fixture | Timeout | Description |
-|---------|---------|-------------|
-| `systemId` | — | Current system being tested (from project config) |
-| `testEnv` | — | Environment variables from `.env.test` |
-| `foundryServer` | 180s | **Core fixture**: Isolated Foundry server per test |
-| `worldId` | — | World ID from `foundryServer` |
-| `isolatedContext` | — | Fresh browser context with `baseURL` set |
-| `page` | — | Basic unauthenticated page |
-| `adminPage` | — | Authenticated page at `/setup` |
-| `gamePage` | 300s | Page inside the test world as Gamemaster |
-| `simulacrumPage` | 300s | `gamePage` with Simulacrum module verified active |
-| `foundry` | — | Helper functions from `foundry-helpers.js` |
+| Fixture | Description |
+|---------|-------------|
+| `systemId` | Game system being tested (e.g., `"dnd5e"`) |
+| `foundryVersion` | Major version integer (e.g., `13`, `14`) |
+| `foundryZip` | Absolute path to the Foundry zip for this run |
+| `testEnv` | Parsed key/value map from `.env.test` |
+| `foundryServer` | Core fixture — isolated server; yields `{ baseUrl, worldId, adminKey, port }` |
+| `worldId` | World ID for the current test (derived from `foundryServer`) |
+| `isolatedContext` | Fresh `BrowserContext` pointed at `foundryServer.baseUrl` |
+| `page` | Unauthenticated page navigated to Foundry root |
+| `adminPage` | Authenticated page at `/setup` |
+| `gamePage` | Page inside the test world, joined as Gamemaster |
+| `simulacrumPage` | `gamePage` with Simulacrum module confirmed active |
+| `foundry` | All exports from `foundry-helpers.js` |
 
-### Helper Functions
-
-```javascript
-// Authentication
-await foundry.loginAsAdmin(page, adminKey);
-await foundry.launchWorld(page, worldId);
-await foundry.joinAsUser(page, 'Gamemaster');
-
-// Module interaction
-await foundry.openSimulacrumPanel(page);
-await foundry.isSimulacrumActive(page);
-
-// Foundry utilities
-await foundry.waitForFoundryReady(page);
-await foundry.executeInFoundry(page, () => game.users.current);
-await foundry.waitForNotification(page, 'Success', 'info');
-```
-
-### Writing System-Specific Tests
-
-For tests that are unique to a specific game system's UX or features:
+### Version-Gating
 
 ```javascript
-// specs/systems/dnd5e/character-sheet.spec.js
-import { test, expect } from '../../fixtures/test-base.js';
-
-test.describe('D&D 5e Character Sheet', () => {
-  test('displays ability scores correctly', async ({ gamePage, systemId }) => {
-    // Verify we're running on the expected system
-    expect(systemId).toBe('dnd5e');
-    
-    // D&D 5e-specific test logic
-    const actorTypes = await gamePage.evaluate(() => {
-      return Object.keys(game.system.documentTypes.Actor);
-    });
-    
-    expect(actorTypes).toContain('character');
-  });
+test('v14-specific API', async ({ simulacrumPage, foundryVersion }) => {
+  test.skip(foundryVersion < 14, 'v14 only');
+  // …
 });
 ```
 
-Key patterns:
-- Place system-specific tests in `specs/systems/{systemId}/`
-- Assert `systemId` at the start if the test only makes sense for one system
-- Use system-specific selectors and assertions
+### Accessing Foundry APIs in Tests
 
-## CI/CD Integration
+Use `page.evaluate()` to run code inside the Foundry context:
 
-### GitHub Actions Example
+```javascript
+const userId = await simulacrumPage.evaluate(() => game.user.id);
 
-```yaml
-name: E2E Tests
-
-on: [push, pull_request]
-
-jobs:
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          
-      - name: Install dependencies
-        run: npm ci
-        
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-        
-      - name: Setup Foundry
-        run: |
-          mkdir -p vendor/foundry
-          # Download or restore Foundry from secure storage
-          
-      - name: Create test env
-        run: |
-          cat > tests/e2e/.env.test << EOF
-          FOUNDRY_LICENSE_KEY=${{ secrets.FOUNDRY_LICENSE_KEY }}
-          FOUNDRY_ADMIN_KEY=ci-test-admin
-          TEST_SYSTEM_IDS=dnd5e,pf2e
-          EOF
-          
-      - name: Run E2E tests
-        run: npm run test:e2e
-        
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: tests/e2e/reports/
+// v13/v14 compat pattern (same as chat-interface.js)
+const styles = await simulacrumPage.evaluate(() => {
+  return CONST.CHAT_MESSAGE_STYLES ?? CONST.CHAT_MESSAGE_TYPES;
+});
 ```
+
+---
+
+## System Caching
+
+The first run for a given `(system × version)` pair downloads and installs the system via a temporary Foundry server. The result is saved to `.foundry-system-cache/v{N}/{systemId}/`. Subsequent runs skip the download and copy from the cache.
+
+To force a re-cache (e.g., after a system update), delete the relevant cache entry:
+
+```bash
+# Windows PowerShell
+Remove-Item -Recurse -Force .foundry-system-cache/v14/dnd5e
+
+# macOS/Linux
+rm -rf .foundry-system-cache/v14/dnd5e
+```
+
+The cache directory is gitignored.
+
+---
 
 ## Troubleshooting
 
-### Foundry Won't Start
+### Tests Fail at Startup
 
-1. Check if port 30000 is in use: `lsof -i :30000`
-2. Verify the zip file is valid: `unzip -t vendor/foundry/*.zip`
-3. Check Foundry version compatibility
+Check for orphaned Foundry processes (the global teardown reports them by PID but doesn't kill them automatically):
 
-### Tests Timeout
+Clean up orphaned processes and directories, then rerun:
 
-1. Increase timeouts in `playwright.config.js`
-2. Check if Foundry is actually running: `curl http://localhost:30000`
-3. Enable debug output: `DEBUG_FOUNDRY=true npm run test:e2e`
+```bash
+# Windows PowerShell
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+Remove-Item -Recurse -Force .foundry-test-*, .foundry-data-*, .foundry-cache-*
+
+# macOS/Linux
+pkill -f "main.mjs"
+rm -rf .foundry-test-* .foundry-data-* .foundry-cache-*
+```
+
+### License / EULA Screen Still Appears
+
+The runner auto-resolves `license.json` from the standard Foundry install location. If it cannot find it, set an explicit path in `.env.test`:
+
+```bash
+FOUNDRY_LICENSE_JSON_PATH=C:\Users\You\AppData\Local\FoundryVTT\Config\license.json
+```
+
+If you have never launched Foundry locally and accepted the EULA, do that first (or set `FOUNDRY_LICENSE_KEY` as a fallback).
+
+### System Cache Not Populating
+
+Global setup installs systems via a browser-automated Foundry server. To diagnose:
+
+1. Delete the failing cache entry and rerun — a screenshot is saved to `tests/e2e/test-results/` on failure
+2. Ensure the system ID in `TEST_SYSTEM_IDS` is a valid Foundry package ID (e.g., `dnd5e`, `pf2e`)
 
 ### Module Not Loading
 
-1. Verify module.json is valid
-2. Check build: `npm run package:module`
-3. Look at Foundry console for errors
+1. Verify `tools/package-module.js` succeeds: `node tools/package-module.js`
+2. Check that `module.json` `id` is `"simulacrum"`
 
-### Cleanup Issues
-
-If tests fail to clean up properly:
-
-```bash
-# Kill any stray Foundry processes
-pkill -f "main.mjs"
-
-# Force-kill processes on test ports
-fuser -k 30000-30010/tcp 2>/dev/null || true
-
-# Remove orphaned test directories (per-test isolation pattern)
-rm -rf .foundry-test-* .foundry-data-*
-
-# Run global teardown manually
-node -e "import('./tests/e2e/setup/global-teardown.js').then(m => m.default())"
-```
+---
 
 ## Environment Variables Reference
 
+Stored in `tests/e2e/.env.test` (gitignored). Copy `.env.test.example` as a starting point.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FOUNDRY_LICENSE_KEY` | Yes | — | Foundry license key (required) |
-| `FOUNDRY_ADMIN_KEY` | No | `test-admin-key` | Admin password |
-| `DEBUG_FOUNDRY` | No | `false` | Show Foundry server output |
-| `TEST_SYSTEM_IDS` | No | `dnd5e` | Comma-separated system IDs to test |
-| `TEST_WORLD_ID` | No | `simulacrum-test-world` | Base world ID (test ID appended per test) |
-
-**Note:** `FOUNDRY_PORT` and `FOUNDRY_HOSTNAME` in `.env.test.example` are not used by the per-test isolation system. Each test automatically uses port `30000 + workerIndex` for parallel execution.
-
-Systems are installed via Foundry's UI - any system available in Foundry's package browser works.
+| `FOUNDRY_ADMIN_KEY` | No | `test-admin-key` | Admin password for all test instances |
+| `TEST_SYSTEM_IDS` | No | `dnd5e` | Comma-separated game system IDs to test against |
+| `FOUNDRY_LICENSE_KEY` | No | — | Foundry license key — only needed if `license.json` cannot be auto-resolved from a local install |
+| `FOUNDRY_LICENSE_JSON_PATH` | No | Platform default | Explicit path to `license.json` (overrides auto-resolution) |
+| `DEBUG_FOUNDRY` | No | — | Set to any non-empty value to print Foundry server stdout/stderr |

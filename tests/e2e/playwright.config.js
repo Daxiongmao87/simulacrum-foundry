@@ -150,7 +150,7 @@ console.log(`[config] Testing against Foundry versions: ${foundryVersions.map(v 
  * 1. globalSetup: Validates Foundry zip, license key, caches systems (ONE TIME)
  * 2. EACH TEST (via fixtures):
  *    - Extracts fresh Foundry to unique temp directory
- *    - Starts Foundry on unique port (31000 + workerIndex)
+ *    - Starts Foundry on a dynamically allocated free port
  *    - Installs system from cache
  *    - Creates fresh world
  *    - Runs test
