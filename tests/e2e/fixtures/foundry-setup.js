@@ -579,9 +579,9 @@ async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
   // Dismiss tour overlay before clicking Create World (tour blocks button clicks)
   await dismissTourOverlay(page);
   
-  // Click Create World button
+  // Click Create World button (force:true bypasses any lingering tour overlay)
   const createBtn = page.locator('button[data-action="worldCreate"]');
-  await createBtn.click();
+  await createBtn.click({ force: true });
   // Wait for create world dialog to appear
   await pollForElement(page, 'input[name="title"]', { timeout: 5000 });
   
