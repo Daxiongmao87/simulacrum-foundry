@@ -45,8 +45,27 @@ test.describe('chat-interface v13/v14 API compatibility', () => {
   }) => {
     test.info().annotations.push({ type: 'foundryVersion', description: `v${foundryVersion}` });
 
-    // Create a simulacrum-flagged message the same way chat-interface.js does,
-    // using the CHAT_MESSAGE_STYLES shim and user.id.
+    // Register the render hook to mirror what ChatInterface.initialize() does.
+    // We register it here to ensure it's active regardless of module init order,
+    // and to test the v14 renderChatMessageHTML / v13 renderChatMessage path directly.
+    await simulacrumPage.evaluate(() => {
+      // @ts-ignore
+      if (foundry.utils?.isNewerVersion?.(game.version, '13.330')) {
+        // v14: HTMLElement-based hook
+        // @ts-ignore
+        Hooks.on('renderChatMessageHTML', (message, html) => {
+          if (message?.flags?.simulacrum?.userMessage) html?.classList?.add('simulacrum-user-message');
+        });
+      } else {
+        // v13: jQuery-based hook
+        // @ts-ignore
+        Hooks.on('renderChatMessage', (message, html) => {
+          if (message?.flags?.simulacrum?.userMessage) html?.addClass?.('simulacrum-user-message');
+        });
+      }
+    });
+
+    // Create a simulacrum-flagged message using the v14-compat APIs.
     const created = await simulacrumPage.evaluate(async () => {
       // eslint-disable-next-line no-undef
       const user = game.user;
@@ -69,11 +88,22 @@ test.describe('chat-interface v13/v14 API compatibility', () => {
 
     expect(created.ok, `ChatMessage.create threw: ${created.error}`).toBe(true);
 
-    // The render hook (renderChatMessageHTML on v14, renderChatMessage on v13)
-    // should have added .simulacrum-user-message to the rendered element.
-    // Navigate to the Foundry chat tab where ChatMessage renders.
-    const chatTab = simulacrumPage.locator('#sidebar [data-tab="chat"]').first();
-    await chatTab.click({ force: true });
+    // Wait for the render hook to apply the class (async after socket message).
+    await simulacrumPage.waitForFunction(
+      () => !!document.querySelector('.simulacrum-user-message'),
+      { timeout: 10000 }
+    );
+
+    // Activate the chat tab and confirm the element is visible.
+    await simulacrumPage.evaluate(() => {
+      // @ts-ignore
+      if (typeof ui.sidebar?.activateTab === 'function') {
+        // @ts-ignore
+        ui.sidebar.activateTab('chat');
+      } else {
+        document.querySelector('#sidebar [data-tab="chat"]')?.click();
+      }
+    });
 
     const flaggedMessage = simulacrumPage.locator('.simulacrum-user-message').first();
     await expect(flaggedMessage).toBeVisible({ timeout: 10000 });

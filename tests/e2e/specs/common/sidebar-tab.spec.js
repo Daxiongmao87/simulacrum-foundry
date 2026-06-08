@@ -10,8 +10,16 @@ test.describe('SimulacrumSidebarTab rendering', () => {
     const errors = [];
     simulacrumPage.on('pageerror', err => errors.push(err.message));
 
-    const tabButton = simulacrumPage.locator('#sidebar [data-tab="simulacrum"]').first();
-    await tabButton.click({ force: true });
+    await simulacrumPage.evaluate(() => {
+      // @ts-ignore
+      if (typeof ui.sidebar?.activateTab === 'function') {
+        // @ts-ignore
+        ui.sidebar.activateTab('simulacrum');
+      } else {
+        const btn = document.querySelector('#sidebar [data-tab="simulacrum"], #ui-right [data-tab="simulacrum"]');
+        btn?.click();
+      }
+    });
 
     // The sidebar application element should be present and active.
     const sidebarEl = simulacrumPage.locator('#simulacrum');

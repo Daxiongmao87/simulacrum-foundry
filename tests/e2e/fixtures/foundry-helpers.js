@@ -930,15 +930,23 @@ export async function screenshot(page, name) {
 export async function waitForFoundryReady(page) {
   await page.waitForFunction(() => {
     // @ts-ignore
-    return typeof game !== 'undefined' && 
+    return typeof game !== 'undefined' &&
            // @ts-ignore
-           game.ready === true && 
+           game.ready === true &&
            // @ts-ignore
            typeof ui !== 'undefined' &&
            // @ts-ignore
            ui.sidebar !== undefined;
   }, { timeout: 60000 });
-  
+
+  // Expand the sidebar if it's collapsed (v14 collapses it by default on world join).
+  // In v14 the sidebar lives at #ui-right and uses ui.sidebar.expand().
+  await page.evaluate(() => {
+    // @ts-ignore
+    const sb = ui.sidebar;
+    if (sb?.collapsed) { try { sb.expand(); } catch { /* ignore */ } }
+  }).catch(() => {});
+
   // Dismiss any tour overlays that appear on first game load
   await dismissTourOverlay(page);
 }

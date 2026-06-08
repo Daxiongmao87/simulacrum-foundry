@@ -6,8 +6,20 @@ test('user can send a message from the Simulacrum sidebar', async ({
 }) => {
   test.info().annotations.push({ type: 'foundryVersion', description: `v${foundryVersion}` });
 
-  const tabButton = simulacrumPage.locator('#sidebar [data-tab="simulacrum"]').first();
-  await tabButton.click({ force: true });
+  // Activate Simulacrum tab — use the v14 sidebar API when available,
+  // fall back to clicking the tab button for v13.
+  await simulacrumPage.evaluate(() => {
+    // @ts-ignore
+    if (typeof ui.sidebar?.activateTab === 'function') {
+      // v14 ApplicationV2 sidebar
+      // @ts-ignore
+      ui.sidebar.activateTab('simulacrum');
+    } else {
+      // v13 fallback: click the tab button
+      const btn = document.querySelector('#sidebar [data-tab="simulacrum"], #ui-right [data-tab="simulacrum"]');
+      btn?.click();
+    }
+  });
 
   const input = simulacrumPage.locator('#simulacrum-chat-message');
   await expect(input).toBeVisible({ timeout: 10000 });

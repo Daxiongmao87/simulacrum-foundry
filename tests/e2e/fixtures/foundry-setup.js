@@ -23,14 +23,12 @@ import {
   pollUntilGone,
   pollForServer,
   waitForUiSettle,
-  dismissBlockingDialog
 } from './poll-utils.js';
 import { extractZip, isPortInUse, waitForPortFree, killAndWait, resolveLicenseJson } from './platform-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const SYSTEM_CACHE_ROOT = join(ROOT, '.foundry-system-cache');
-const MODULE_DIST_DIR = join(ROOT, 'dist');
 
 function systemCacheDir(foundryVersion) {
   return join(SYSTEM_CACHE_ROOT, `v${foundryVersion}`);
@@ -176,6 +174,10 @@ export async function setupIsolatedFoundry(options) {
   const systemsDir = join(userDataDir, 'systems');
   const configDir = join(dataDir, 'Config');
   
+  // Compute worldId up-front so it's available for disk pre-creation before server start.
+  const shortHash = testId.replace(/[^a-f0-9]/g, '').slice(-12);
+  let worldId = `w-${shortHash}`;
+
   console.log(`[setup:${testId}] Creating isolated Foundry instance`);
   if (basePath !== ROOT) {
     console.log(`[setup:${testId}] Using tmpfs: ${basePath}`);
@@ -245,6 +247,34 @@ export async function setupIsolatedFoundry(options) {
     console.warn(`[setup:${testId}] No license.json found — Foundry will prompt for license/EULA`);
   }
 
+  // 6b. Pre-create the world directory and manifest before starting the server.
+  // Foundry loads worlds from disk at startup, so creating it now ensures the
+  // world is immediately available without any HTTP/UI interaction after boot.
+  const worldDir = join(worldsDir, worldId);
+  mkdirSync(worldDir, { recursive: true });
+  // Read the installed system version so the world manifest is valid.
+  let systemVersion = '1.0.0';
+  try {
+    const sysJson = JSON.parse(readFileSync(join(systemsDir, systemId, 'system.json'), 'utf-8'));
+    systemVersion = sysJson.version ?? sysJson.data?.version ?? '1.0.0';
+  } catch { /* use default */ }
+
+  // Derive the full Foundry build version from the zip filename (e.g. "13.351").
+  const coreVersionMatch = foundryZip.match(/(\d+\.\d+)/);
+  const coreVersion = coreVersionMatch ? coreVersionMatch[1] : String(foundryVersion);
+
+  writeFileSync(join(worldDir, 'world.json'), JSON.stringify({
+    id: worldId,
+    title: worldId,
+    system: systemId,
+    coreVersion,
+    compatibility: { minimum: String(foundryVersion), verified: String(foundryVersion) },
+    systemVersion,
+    description: '',
+    flags: {},
+  }, null, 2));
+  console.log(`[setup:${testId}] Pre-created world: ${worldId}`);
+
   // 7. Verify the port is free.
   if (!(await waitForPortFree(port, { timeoutMs: 5000 }))) {
     throw new Error(
@@ -284,8 +314,6 @@ export async function setupIsolatedFoundry(options) {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
-  
-  let worldId = `world-${testId}`;
   
   try {
     // Handle license if needed
@@ -339,9 +367,8 @@ export async function setupIsolatedFoundry(options) {
       console.log(`[setup:${testId}] Using cached system: ${systemId}`);
     }
     
-    // Create world
-    console.log(`[setup:${testId}] Creating world: ${worldId}`);
-    await createWorldViaUI(page, baseUrl, worldId, systemId, adminKey);
+    // World was pre-created on disk before server start (see step 6b above).
+    // No browser interaction needed for world creation.
     
   } finally {
     await context.close();
@@ -542,61 +569,4 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
   );
   
   console.log(`[install] System ${systemId} installed successfully`);
-}
-
-/**
- * Create a world via Foundry UI
- */
-async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
-  await page.goto(`${baseUrl}/setup`);
-  await page.waitForLoadState('networkidle');
-  
-  // Dismiss usage data dialog if it appears (can appear on any /setup load)
-  await dismissUsageDataDialog(page, 'createWorld');
-  
-  // Dismiss any tour overlay that may block interactions
-  await dismissTourOverlay(page);
-  
-  // Authenticate if needed
-  const adminKeyInput = page.locator('input[name="adminKey"], input[name="adminPassword"]');
-  if (await adminKeyInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await adminKeyInput.fill(adminKey);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForLoadState('networkidle');
-  }
-  
-  // Dismiss usage data dialog again (can appear after auth)
-  await dismissUsageDataDialog(page, 'createWorld');
-  
-  // Dismiss any tour overlay again (can reappear after auth)
-  await dismissTourOverlay(page);
-  
-  // Click Worlds tab
-  const worldsTab = page.locator('[data-action="tab"][data-tab="worlds"], [data-tab="worlds"]').first();
-  await worldsTab.click({ force: true });
-  await page.waitForLoadState('networkidle');
-  
-  // Dismiss tour overlay before clicking Create World (tour blocks button clicks)
-  await dismissTourOverlay(page);
-  
-  // Click Create World button (force:true bypasses any lingering tour overlay)
-  const createBtn = page.locator('button[data-action="worldCreate"]');
-  await createBtn.click({ force: true });
-  // Wait for create world dialog to appear
-  await pollForElement(page, 'input[name="title"]', { timeout: 5000 });
-  
-  // Fill world form
-  const titleInput = page.locator('input[name="title"]');
-  await titleInput.fill(`Test World ${worldId}`);
-  
-  // Select system
-  const systemSelect = page.locator('select[name="system"]');
-  await systemSelect.selectOption(systemId);
-  
-  // Submit
-  const submitBtn = page.locator('button[type="submit"]:has-text("Create World")');
-  await submitBtn.click();
-  
-  await page.waitForLoadState('networkidle');
-  console.log(`[setup] World ${worldId} created`);
 }

@@ -46,7 +46,7 @@ vendor/foundry/*.zip
 vendor/foundry/*.ZIP
 
 # E2E Test Instance (auto-created, nuked after tests)
-.foundry-test/
+.foundry-test*/
 
 # E2E Test Artifacts
 tests/e2e/.env.test

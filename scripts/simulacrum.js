@@ -190,6 +190,8 @@ Hooks.once('init', async () => {
   // Register sidebar tab
   registerSimulacrumSidebarTab();
 
+
+
   // CRITICAL FIX (DEFECT #1): Instantiate immediately after registration
   // This ensures ui.simulacrum exists when FoundryVTT's core UI initialization runs
   if (CONFIG && CONFIG.ui && CONFIG.ui.simulacrum) {
