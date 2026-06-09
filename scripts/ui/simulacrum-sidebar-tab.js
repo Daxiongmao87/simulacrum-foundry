@@ -365,7 +365,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
 
     // SECURITY: Defensive check - GM-only access
     if (!game.user?.isGM) {
-      return foundry.utils.mergeObject(context, {
+      // NOTE: Use Object.assign (shallow), NOT foundry.utils.mergeObject. On v14 the base
+      // AbstractSidebarTab._prepareContext already places the User document at context.user,
+      // so a recursive merge of { user: game.user } recurses into the Document and throws
+      // "Cannot assign to read only property '_id'", aborting the render (blank tab, #136).
+      return Object.assign(context, {
         messages: [],
         welcomeMessage: null,
         isGM: false,
@@ -398,7 +402,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       );
     }
 
-    return foundry.utils.mergeObject(context, {
+    // Object.assign (shallow) — see note in the GM-gate branch above re: mergeObject + User._id.
+    return Object.assign(context, {
       messages: this.messages,
       isGM: game.user.isGM,
       user: game.user,
