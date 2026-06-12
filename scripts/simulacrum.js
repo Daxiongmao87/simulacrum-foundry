@@ -106,6 +106,81 @@ function scheduleSimulacrumSidebarRender() {
   }, 0);
 }
 
+function removeSimulacrumSidebarRegistration() {
+  const Sidebar = globalThis.foundry?.applications?.sidebar?.Sidebar ?? globalThis.Sidebar;
+  if (Sidebar?.TABS?.simulacrum) {
+    delete Sidebar.TABS.simulacrum;
+  }
+
+  if (CONFIG?.ui?.simulacrum) {
+    delete CONFIG.ui.simulacrum;
+  }
+}
+
+function closeSimulacrumSidebarInstance() {
+  if (!ui.simulacrum) return;
+
+  try {
+    ui.simulacrum.close?.();
+  } catch (_e) {
+    // Ignore close errors
+  }
+  delete ui.simulacrum;
+}
+
+function removeSimulacrumTabButton() {
+  const tabButton = document.querySelector('[data-tab="simulacrum"]');
+  if (!tabButton) return;
+
+  const parentLi = tabButton.closest('li');
+  if (parentLi) {
+    parentLi.remove();
+  } else {
+    tabButton.remove();
+  }
+  logger.info('Removed simulacrum tab from DOM for non-GM user');
+}
+
+function disableForNonGMUser() {
+  logger.info('Simulacrum is GM-only. Non-GM user detected, disabling module.');
+  removeSimulacrumSidebarRegistration();
+  closeSimulacrumSidebarInstance();
+  removeSimulacrumTabButton();
+}
+
+async function initializeForGMUser() {
+  scheduleSimulacrumSidebarRender();
+
+  // Validate endpoint - CSS defaults to disabled, this enables if valid
+  await validateAndUpdateTabButton();
+
+  // Expose API
+  const module = game.modules.get(MODULE_ID);
+  if (module) {
+    module.api = SimulacrumCore;
+  }
+
+  // Initialize MacroToolManager with toolRegistry for integration
+  const macroToolManager = new MacroToolManager(toolRegistry);
+  await macroToolManager.initialize();
+
+  // Expose manager on module API
+  if (module) {
+    module.api.macroToolManager = macroToolManager;
+  }
+
+  // Initialize interaction logger (loads persisted entries)
+  const { interactionLogger } = await import('./core/interaction-logger.js');
+  await interactionLogger.initialize();
+
+  // Initialize asset index service in background (non-blocking)
+  // Search tool will await the index if called before it's ready
+  assetIndexService.initialize();
+
+  const version = game.modules.get(MODULE_ID)?.version ?? 'unknown';
+  logger.info(`${MODULE_NAME} v${version} is ready! [build:${BUILD_HASH}]`);
+}
+
 // No world-level enable toggle: module activation is managed by Foundry's
 // Manage Modules (core.moduleConfiguration). Do not register a redundant toggle.
 
@@ -267,74 +342,11 @@ Hooks.once('ready', async () => {
   // GM-ONLY ACCESS GATE: Non-GM users cannot use Simulacrum
   // This is a security measure until complete permissions-based implementation is ready.
   if (!game.user?.isGM) {
-    logger.info('Simulacrum is GM-only. Non-GM user detected, disabling module.');
-
-    // Remove sidebar tab from Sidebar.TABS to hide it
-    const Sidebar = globalThis.foundry?.applications?.sidebar?.Sidebar ?? globalThis.Sidebar;
-    if (Sidebar?.TABS?.simulacrum) {
-      delete Sidebar.TABS.simulacrum;
-    }
-
-    // Destroy the sidebar tab instance if it exists
-    if (ui.simulacrum) {
-      try {
-        ui.simulacrum.close?.();
-      } catch (_e) {
-        // Ignore close errors
-      }
-      delete ui.simulacrum;
-    }
-
-    // Remove from CONFIG.ui to prevent re-instantiation
-    if (CONFIG?.ui?.simulacrum) {
-      delete CONFIG.ui.simulacrum;
-    }
-
-    // CRITICAL: Remove the tab button AND parent <li> from DOM to avoid empty gap
-    const tabButton = document.querySelector('[data-tab="simulacrum"]');
-    if (tabButton) {
-      const parentLi = tabButton.closest('li');
-      if (parentLi) {
-        parentLi.remove();
-      } else {
-        tabButton.remove();
-      }
-      logger.info('Removed simulacrum tab from DOM for non-GM user');
-    }
-
+    disableForNonGMUser();
     return; // Exit early, do not initialize any further
   }
 
-  scheduleSimulacrumSidebarRender();
-
-  // Validate endpoint - CSS defaults to disabled, this enables if valid
-  await validateAndUpdateTabButton();
-
-  // Expose API
-  const module = game.modules.get(MODULE_ID);
-  if (module) {
-    module.api = SimulacrumCore;
-  }
-
-  // Initialize MacroToolManager with toolRegistry for integration
-  const macroToolManager = new MacroToolManager(toolRegistry);
-  await macroToolManager.initialize();
-
-  // Expose manager on module API
-  if (module) {
-    module.api.macroToolManager = macroToolManager;
-  }
-
-  // Initialize interaction logger (loads persisted entries)
-  const { interactionLogger } = await import('./core/interaction-logger.js');
-  await interactionLogger.initialize();
-
-  // Initialize asset index service in background (non-blocking)
-  // Search tool will await the index if called before it's ready
-  assetIndexService.initialize();
-
-  const version = game.modules.get(MODULE_ID)?.version ?? 'unknown';
-  logger.info(`${MODULE_NAME} v${version} is ready! [build:${BUILD_HASH}]`);
+  await initializeForGMUser();
 });
 
 // Basic error handling for the module's main script

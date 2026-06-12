@@ -14,6 +14,8 @@ import { ChatHandler } from '../core/chat-handler.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('SidebarSync');
+const DISPLAY_ROLES = new Set(['user', 'assistant', 'tool']);
+const HIDDEN_TOOL_NAMES = new Set(['end_loop', 'manage_task']);
 
 export function getDisplayUser(user = game?.user) {
   if (!user) return null;
@@ -84,6 +86,119 @@ export async function createDisplayMessage(role, content, display = null) {
   };
 }
 
+function isCorrectionMessage(message) {
+  if (message.role !== 'assistant') return false;
+  if (typeof message.content !== 'string') return false;
+
+  const content = message.content.trim();
+  return (
+    content.startsWith('(Response rejected:') ||
+    (content.startsWith('Previous tool call') && content.includes('malformed arguments'))
+  );
+}
+
+function isDisplayableMessage(message) {
+  if (!message) return false;
+  if (!DISPLAY_ROLES.has(message.role)) return false;
+  if (message._internal === true) return false;
+  return !isCorrectionMessage(message);
+}
+
+function getToolCallName(toolCall) {
+  return toolCall.function?.name || toolCall.name || null;
+}
+
+function parseToolCallArguments(toolCall) {
+  if (typeof toolCall.function?.arguments === 'string') {
+    return JSON.parse(toolCall.function.arguments);
+  }
+  return toolCall.function?.arguments;
+}
+
+function cacheToolCallJustification(toolCall, toolCallJustifications) {
+  if (!toolCall.id) return;
+
+  try {
+    const args = parseToolCallArguments(toolCall);
+    if (args?.justification) {
+      toolCallJustifications.set(toolCall.id, args.justification);
+    }
+  } catch (e) {
+    // Ignore parsing errors for justification extraction
+  }
+}
+
+function cacheToolCallMetadata(message, toolCallNames, toolCallJustifications) {
+  if (message.role !== 'assistant' || !Array.isArray(message.tool_calls)) return;
+
+  for (const toolCall of message.tool_calls) {
+    const toolName = getToolCallName(toolCall);
+    if (toolCall.id && toolName) {
+      toolCallNames.set(toolCall.id, toolName);
+    }
+    cacheToolCallJustification(toolCall, toolCallJustifications);
+  }
+}
+
+function parseToolResultContent(content) {
+  if (typeof content === 'string') {
+    return JSON.parse(content);
+  }
+  return content;
+}
+
+function isSilentToolResult(message, toolName) {
+  if (HIDDEN_TOOL_NAMES.has(toolName)) return true;
+
+  try {
+    return parseToolResultContent(message.content)?._silent === true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+async function enrichRenderedToolContent(content) {
+  const TextEditorImpl = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+  return TextEditorImpl.enrichHTML(content, {
+    secrets: game.user?.isGM ?? false,
+    documents: true,
+    async: true,
+  });
+}
+
+async function renderToolDisplayContent(message) {
+  const rawDisplayContent = getToolDisplayContent(message);
+  if (!rawDisplayContent) return null;
+
+  try {
+    const rendered = await MarkdownRenderer.render(rawDisplayContent);
+    return enrichRenderedToolContent(rendered);
+  } catch (e) {
+    logger.warn('Failed to pre-render or enrich tool content', e);
+    return null;
+  }
+}
+
+async function createToolResultDisplayMessage(message, toolCallNames, toolCallJustifications) {
+  const toolName = toolCallNames.get(message.tool_call_id);
+  if (isSilentToolResult(message, toolName)) return null;
+
+  const justification = toolCallJustifications.get(message.tool_call_id) || '';
+  const preRendered = await renderToolDisplayContent(message);
+  const displayHtml = formatToolCallDisplay(message, toolName, preRendered, justification);
+  return createDisplayMessage('assistant', message.content, displayHtml);
+}
+
+async function createSyncedMessage(message, toolCallNames, toolCallJustifications) {
+  cacheToolCallMetadata(message, toolCallNames, toolCallJustifications);
+
+  if (message.role === 'tool') {
+    return createToolResultDisplayMessage(message, toolCallNames, toolCallJustifications);
+  }
+
+  return createDisplayMessage(message.role, message.content);
+}
+
 /**
  * Sync messages from ConversationManager to UI format
  * @param {object} conversationManager - The conversation manager instance
@@ -94,117 +209,17 @@ export async function syncMessagesFromCore(conversationManager) {
     return [];
   }
 
-  // Filter messages for display:
-  // 1. Only user, assistant, tool roles
-  // 2. Exclude internal correction messages (AI context, not user-facing)
-  const filtered = conversationManager.messages.filter(m => {
-    if (!m) return false;
-    if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool') return false;
-
-    // Skip internal correction messages added by correction.js
-    // These are context for the AI, not meant for user display
-    if (m._internal === true) return false;
-
-    // Also detect correction message patterns for backward compatibility
-    // with existing stored conversations that don't have the _internal flag
-    if (m.role === 'assistant' && typeof m.content === 'string') {
-      const content = m.content.trim();
-      // Pattern: "(Response rejected: ...)" from appendEmptyContentCorrection
-      if (content.startsWith('(Response rejected:')) return false;
-      // Pattern: "Previous tool call ... failed" from appendToolFailureCorrection
-      if (content.startsWith('Previous tool call') && content.includes('malformed arguments'))
-        return false;
-    }
-
-    return true;
-  });
-
   const messages = [];
   const toolCallNames = new Map();
   const toolCallJustifications = new Map();
 
-  for (const m of filtered) {
-    // Track tool call IDs from assistant messages to resolve names and justifications later
-    if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
-      for (const tc of m.tool_calls) {
-        if (tc.id && (tc.function?.name || tc.name)) {
-          toolCallNames.set(tc.id, tc.function?.name || tc.name);
-        }
-
-        // Extract justification per tool call
-        try {
-          const args =
-            typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments;
-
-          if (args && args.justification && tc.id) {
-            toolCallJustifications.set(tc.id, args.justification);
-          }
-        } catch (e) {
-          // Ignore parsing errors for justification extraction
-        }
-      }
-
-      // NOTE: We no longer build aggregate "Plan" justification HTML here.
-      // The justification is shown inside each tool-call card via formatToolCallDisplay.
-      // Building it here caused duplicate justification blocks on reload.
-    }
-
-    if (m.role === 'tool') {
-      // Check for silent/hidden tools - skip UI rendering
-      // manage_task is hidden because it has a dedicated task tracker UI at the top of the chat
-      const hiddenTools = ['end_loop', 'manage_task'];
-      const toolName = toolCallNames.get(m.tool_call_id);
-      let isSilent = hiddenTools.includes(toolName);
-      if (!isSilent) {
-        try {
-          const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
-          isSilent = parsed?._silent === true;
-        } catch (_e) {
-          /* not JSON, not silent */
-        }
-      }
-
-      if (isSilent) {
-        // Skip silent/hidden tool results entirely (matches live behavior)
-        continue;
-      }
-
-      // Reconstruct tool result display
-      // Note: toolName already declared above for hidden check
-      const justification = toolCallJustifications.get(m.tool_call_id) || '';
-
-      let preRendered = null;
-      const rawDisplayContent = getToolDisplayContent(m);
-      if (rawDisplayContent) {
-        try {
-          preRendered = await MarkdownRenderer.render(rawDisplayContent);
-
-          // Task-Fix: Explicitly enrich the content since processMessageForDisplay (which usually does it)
-          // is skipped when providing a direct 'display' value.
-          const TextEditorImpl =
-            foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
-          preRendered = await TextEditorImpl.enrichHTML(preRendered, {
-            secrets: game.user?.isGM ?? false,
-            documents: true,
-            async: true,
-          });
-        } catch (e) {
-          logger.warn('Failed to pre-render or enrich tool content', e);
-        }
-      }
-
-      const displayHtml = formatToolCallDisplay(m, toolName, preRendered, justification);
-
-      // Display tool results as assistant messages (matching ChatHandler behavior)
-      const message = await createDisplayMessage('assistant', m.content, displayHtml);
-      messages.push(message);
-    } else {
-      // Normal message processing
-      const message = await createDisplayMessage(m.role, m.content);
-      messages.push(message);
-    }
+  for (const message of conversationManager.messages.filter(isDisplayableMessage)) {
+    const displayMessage = await createSyncedMessage(
+      message,
+      toolCallNames,
+      toolCallJustifications
+    );
+    if (displayMessage) messages.push(displayMessage);
   }
 
   // Apply grouping for consecutive assistant messages
