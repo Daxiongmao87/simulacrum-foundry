@@ -1,6 +1,6 @@
 /**
  * Playwright Global Teardown - MINIMAL
- * 
+ *
  * Per-test cleanup is handled by fixtures.
  * This just does final cleanup of any orphaned resources.
  */
@@ -20,13 +20,15 @@ export default async function globalTeardown() {
   console.log('============================================================');
   console.log('[teardown] Simulacrum E2E Test Teardown');
   console.log('============================================================');
-  
+
   // Kill any orphaned Foundry processes on test ports
   try {
     console.log('[teardown] Checking for orphaned Foundry processes...');
-    const lsofOutput = execSync('lsof -i :30000-30010 -t 2>/dev/null || true', { encoding: 'utf-8' });
+    const lsofOutput = execSync('lsof -i :30000-30010 -t 2>/dev/null || true', {
+      encoding: 'utf-8',
+    });
     const pids = lsofOutput.trim().split('\n').filter(Boolean);
-    
+
     for (const pid of pids) {
       try {
         console.log(`[teardown] Killing orphaned process: ${pid}`);
@@ -38,7 +40,7 @@ export default async function globalTeardown() {
   } catch (e) {
     // lsof may not be available or no processes found
   }
-  
+
   // Clean up any orphaned test directories
   console.log('[teardown] Cleaning up orphaned test directories...');
   try {
@@ -57,7 +59,7 @@ export default async function globalTeardown() {
   } catch (e) {
     console.warn(`[teardown] Error scanning for orphaned directories: ${e.message}`);
   }
-  
+
   // Also clean up legacy single test directories if they exist
   const legacyDirs = ['.foundry-test', '.foundry-test-data'];
   for (const dir of legacyDirs) {
@@ -71,7 +73,7 @@ export default async function globalTeardown() {
       }
     }
   }
-  
+
   console.log('============================================================');
   console.log('[teardown] Cleanup complete');
   console.log('============================================================');

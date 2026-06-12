@@ -18,14 +18,14 @@
     "unused": "unimported",
     "test:repair": "node tests/utils/test-repair.mjs",
     "test:gemini": "node tests/integration/test-gemini-openai.js",
-    "test:e2e": "npx playwright test --config=tests/e2e/playwright.config.js",
-    "test:e2e:ui": "npx playwright test --config=tests/e2e/playwright.config.js --ui",
-    "test:e2e:headed": "npx playwright test --config=tests/e2e/playwright.config.js --headed",
-    "test:e2e:debug": "npx playwright test --config=tests/e2e/playwright.config.js --debug"
+    "test:e2e": "npx playwright test --config=tests/e2e/playwright.config.mjs",
+    "test:e2e:ui": "npx playwright test --config=tests/e2e/playwright.config.mjs --ui",
+    "test:e2e:headed": "npx playwright test --config=tests/e2e/playwright.config.mjs --headed",
+    "test:e2e:debug": "npx playwright test --config=tests/e2e/playwright.config.mjs --debug"
   },
   "devDependencies": {
     "@foundryvtt/foundryvtt-cli": "^3.0.2",
-    "@playwright/test": "^1.50.0",
+    "@playwright/test": "^1.60.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jest": "^29.12.1",
