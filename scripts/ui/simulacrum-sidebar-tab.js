@@ -10,7 +10,11 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SidebarEventHandlers } from './sidebar-event-handlers.js';
-import { syncMessagesFromCore, processMessageForDisplay } from './sidebar-state-syncer.js';
+import {
+  getDisplayUser,
+  syncMessagesFromCore,
+  processMessageForDisplay,
+} from './sidebar-state-syncer.js';
 import { modelService } from '../core/model-service.js';
 import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
 import { emitProcessCancelled, SimulacrumHooks } from '../core/hook-manager.js';
@@ -364,12 +368,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const context = await super._prepareContext(options);
 
     // SECURITY: Defensive check - GM-only access
+    const displayUser = getDisplayUser();
     if (!game.user?.isGM) {
-      return foundry.utils.mergeObject(context, {
+      return {
+        ...context,
         messages: [],
         welcomeMessage: null,
         isGM: false,
-        user: game.user,
+        user: displayUser,
         accessDenied: true,
         accessDeniedMessage:
           game.i18n?.localize('SIMULACRUM.AccessDenied') ??
@@ -378,7 +384,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         processActive: false,
         processLabel: null,
         disableInput: true,
-      });
+      };
     }
 
     // Sync messages if empty
@@ -398,10 +404,11 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       );
     }
 
-    return foundry.utils.mergeObject(context, {
+    return {
+      ...context,
       messages: this.messages,
       isGM: game.user.isGM,
-      user: game.user,
+      user: displayUser,
       isAtBottom: this.#isAtBottom,
       processActive,
       processLabel,
@@ -412,7 +419,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         !this._popoutClosing,
       currentModel: game.settings.get('simulacrum', 'model') || '',
       contextLimit: this._getFormattedContextLimit(game.settings.get('simulacrum', 'model')),
-    });
+    };
   }
 
   /**
@@ -576,6 +583,10 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   /** @inheritDoc */
   async _onActivate() {
     super._onActivate?.();
+    if (!this.rendered) {
+      await this.render({ force: true });
+    }
+
     // Only scroll if there's a pending scroll request (from messages added while inactive)
     if (this.#needsScroll) {
       // Yield to the browser to ensure layout update (display: none -> block) is processed
@@ -758,7 +769,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       content,
       display: `<div class="content-block text">${processedDisplay}</div>`,
       timestamp: new Date(),
-      user: role === 'user' ? game.user : undefined,
+      user: role === 'user' ? getDisplayUser() : undefined,
       id: foundry.utils.randomID(),
       pending: false,
     };

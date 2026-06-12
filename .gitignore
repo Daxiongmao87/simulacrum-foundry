@@ -6,6 +6,8 @@ CLAUDE.md
 
 # Specification documents (development-only)
 specs/
+!tests/e2e/specs/
+!tests/e2e/specs/**
 
 # Build outputs
 dist/
@@ -130,4 +132,3 @@ workspace/.foundry-test-data/
 # Foundry Pack LevelDB internals
 packs/**/LOG
 packs/**/LOCK
-

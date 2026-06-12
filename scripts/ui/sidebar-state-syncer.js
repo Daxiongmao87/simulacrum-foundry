@@ -15,6 +15,19 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('SidebarSync');
 
+export function getDisplayUser(user = game?.user) {
+  if (!user) return null;
+
+  return {
+    id: user.id ?? user._id,
+    _id: user.id ?? user._id,
+    name: user.name ?? '',
+    isGM: user.isGM === true,
+    active: user.active === true,
+    color: user.color ?? null,
+  };
+}
+
 /**
  * Process a message for display (markdown, think tags, enrichment)
  * @param {string} content - Raw message content
@@ -67,7 +80,7 @@ export async function createDisplayMessage(role, content, display = null) {
     content: String(content ?? ''),
     display: processedDisplay,
     timestamp: Date.now(),
-    user: role === 'user' ? game.user : null,
+    user: role === 'user' ? getDisplayUser() : null,
   };
 }
 

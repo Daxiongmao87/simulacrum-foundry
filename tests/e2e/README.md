@@ -9,12 +9,14 @@ This E2E test suite provides comprehensive testing of Simulacrum within an actua
 ### Test Lifecycle
 
 **Global Setup (runs once):**
+
 1. Validates Foundry zip exists in `vendor/foundry/`
 2. Validates license key in `.env.test`
 3. Packages the Simulacrum module
-4. Pre-caches game systems to `.foundry-system-cache/` (avoids re-downloading per test)
+4. Pre-caches game systems to `.foundry-system-cache/{foundryVersion}/` (avoids re-downloading per test)
 
 **Per-Test Setup (via fixtures):**
+
 1. Extracts fresh Foundry to `.foundry-test-{testId}/`
 2. Creates clean data directory `.foundry-data-{testId}/`
 3. Copies cached system and module files
@@ -24,14 +26,28 @@ This E2E test suite provides comprehensive testing of Simulacrum within an actua
 7. Verifies/enables Simulacrum module
 
 **Per-Test Teardown:**
+
 1. Kills server process
 2. Deletes `.foundry-test-{testId}/` and `.foundry-data-{testId}/`
 
 **Global Teardown:**
+
 1. Kills any orphaned processes on ports 30000-30010
 2. Cleans up any orphaned test directories
 
-## Multi-System Testing
+## Multi-Version and Multi-System Testing
+
+Tests can run against one Foundry version or a version matrix. Each configured Foundry version gets its own Playwright project and its own system cache.
+
+In `.env.test`:
+
+```bash
+# Single Foundry version
+TEST_FOUNDRY_VERSION=13.351
+
+# Regression matrix
+TEST_FOUNDRY_VERSIONS=13.351,14.364
+```
 
 Tests automatically run against each configured game system. This ensures Simulacrum works correctly across different RPG systems.
 
@@ -46,33 +62,32 @@ TEST_SYSTEM_IDS=dnd5e
 # Multiple systems - tests run against EACH
 TEST_SYSTEM_IDS=dnd5e,pf2e
 
-# Any system in Foundry's package browser works!
-TEST_SYSTEM_IDS=dnd5e,pf2e,swade,coc7,wfrp4e
+# Built-in manifest defaults exist for dnd5e and pf2e.
+TEST_SYSTEM_IDS=dnd5e,pf2e
 ```
 
-No manifest URLs needed - systems are installed via Foundry's UI using the system ID.
+For another system, provide a manifest URL with `TEST_SYSTEM_{ID}_MANIFEST_URL`, where `{ID}` is uppercase and non-alphanumeric characters are replaced with underscores.
 
 ### How It Works
 
 1. **Global Setup** pre-caches each system by:
-   - Starting a temporary Foundry server
-   - Using Playwright to install systems via Foundry's UI
-   - Copying installed systems to `.foundry-system-cache/`
-   - Killing the temporary server
+   - Fetching the configured Foundry package manifest
+   - Downloading and extracting the package into `.foundry-system-cache/{foundryVersion}/`
 2. **Per-Test Fixtures** copy from the cache (fast local copy vs slow download)
-3. **Playwright** generates a separate project for each system (e.g., `chromium-dnd5e`, `chromium-pf2e`)
+3. **Playwright** generates a separate project for each Foundry version and system (e.g., `chromium-foundry-14.364-dnd5e`, `chromium-foundry-13.351-dnd5e`)
 4. **Tests** run against each system independently with full isolation
 5. **Reports** show results per system
 
 ### Accessing System in Tests
 
 ```javascript
-import { test, expect } from '../fixtures/test-base.js';
+import { test, expect } from '../fixtures/test-base.mjs';
 
-test('system-specific test', async ({ gamePage, systemId, worldId }) => {
+test('system-specific test', async ({ gamePage, systemId, foundryVersion, worldId }) => {
   console.log(`Testing on: ${systemId}`); // e.g., "dnd5e" or "pf2e"
-  console.log(`World: ${worldId}`);       // e.g., "simulacrum-test-world-dnd5e"
-  
+  console.log(`Foundry: ${foundryVersion}`); // e.g., "13.351" or "14.364"
+  console.log(`World: ${worldId}`); // e.g., "simulacrum-test-world-dnd5e"
+
   // System-specific assertions
   if (systemId === 'pf2e') {
     // PF2e-specific test logic
@@ -134,6 +149,12 @@ mkdir -p vendor/foundry
 npm run test:e2e
 ```
 
+### Foundry 14 Sidebar Regression With Foundry 13 Control
+
+```bash
+TEST_FOUNDRY_VERSIONS=13.351,14.364 npm run test:e2e -- --grep "Simulacrum sidebar"
+```
+
 ### Specific Test File
 
 ```bash
@@ -162,19 +183,20 @@ npm run test:e2e:debug
 
 ```
 tests/e2e/
-├── playwright.config.js     # Playwright configuration
+├── playwright.config.mjs    # Playwright configuration
 ├── .env.test               # Test environment (gitignored)
 ├── .env.test.example       # Template for .env.test
 ├── README.md               # This file
 │
 ├── setup/
-│   ├── global-setup.js     # One-time: validate, package module, cache systems
-│   └── global-teardown.js  # Failsafe: kill orphaned processes, clean orphaned dirs
+│   ├── global-setup.mjs    # One-time: validate, package module, cache systems
+│   └── global-teardown.mjs # Failsafe: kill orphaned processes, clean orphaned dirs
 │
 ├── fixtures/
-│   ├── foundry-helpers.js  # Foundry interaction utilities
-│   ├── foundry-setup.js    # Per-test server lifecycle (extract, start, teardown)
-│   └── test-base.js        # Extended test fixtures
+│   ├── foundry-helpers.mjs # Foundry interaction utilities
+│   ├── foundry-setup.mjs   # Per-test server lifecycle (extract, start, teardown)
+│   ├── package-install.mjs # System package manifest download/extract helper
+│   └── test-base.mjs       # Extended test fixtures
 │
 ├── specs/
 │   ├── common/             # Tests that run for ALL systems
@@ -202,6 +224,7 @@ tests/e2e/
 - **`specs/systems/{systemId}/`**: Tests run ONLY for that specific system
 
 When you configure `TEST_SYSTEM_IDS=dnd5e,pf2e`:
+
 - Common tests run twice (once per system)
 - `specs/systems/dnd5e/` tests run only on dnd5e
 - `specs/systems/pf2e/` tests run only on pf2e
@@ -211,12 +234,12 @@ When you configure `TEST_SYSTEM_IDS=dnd5e,pf2e`:
 ### Using Fixtures
 
 ```javascript
-import { test, expect } from '../fixtures/test-base.js';
+import { test, expect } from '../fixtures/test-base.mjs';
 
 test('my test', async ({ simulacrumPage, foundry }) => {
   // simulacrumPage is authenticated with world loaded and module active
   // foundry provides helper functions
-  
+
   const panel = await foundry.openSimulacrumPanel(simulacrumPage);
   await expect(panel).toBeVisible();
 });
@@ -224,18 +247,18 @@ test('my test', async ({ simulacrumPage, foundry }) => {
 
 ### Available Fixtures
 
-| Fixture | Timeout | Description |
-|---------|---------|-------------|
-| `systemId` | — | Current system being tested (from project config) |
-| `testEnv` | — | Environment variables from `.env.test` |
-| `foundryServer` | 180s | **Core fixture**: Isolated Foundry server per test |
-| `worldId` | — | World ID from `foundryServer` |
-| `isolatedContext` | — | Fresh browser context with `baseURL` set |
-| `page` | — | Basic unauthenticated page |
-| `adminPage` | — | Authenticated page at `/setup` |
-| `gamePage` | 300s | Page inside the test world as Gamemaster |
-| `simulacrumPage` | 300s | `gamePage` with Simulacrum module verified active |
-| `foundry` | — | Helper functions from `foundry-helpers.js` |
+| Fixture           | Timeout | Description                                        |
+| ----------------- | ------- | -------------------------------------------------- |
+| `systemId`        | —       | Current system being tested (from project config)  |
+| `testEnv`         | —       | Environment variables from `.env.test`             |
+| `foundryServer`   | 180s    | **Core fixture**: Isolated Foundry server per test |
+| `worldId`         | —       | World ID from `foundryServer`                      |
+| `isolatedContext` | —       | Fresh browser context with `baseURL` set           |
+| `page`            | —       | Basic unauthenticated page                         |
+| `adminPage`       | —       | Authenticated page at `/setup`                     |
+| `gamePage`        | 300s    | Page inside the test world as Gamemaster           |
+| `simulacrumPage`  | 300s    | `gamePage` with Simulacrum module verified active  |
+| `foundry`         | —       | Helper functions from `foundry-helpers.mjs`        |
 
 ### Helper Functions
 
@@ -260,25 +283,26 @@ await foundry.waitForNotification(page, 'Success', 'info');
 For tests that are unique to a specific game system's UX or features:
 
 ```javascript
-// specs/systems/dnd5e/character-sheet.spec.js
-import { test, expect } from '../../fixtures/test-base.js';
+// specs/systems/dnd5e/character-sheet.spec.mjs
+import { test, expect } from '../../fixtures/test-base.mjs';
 
 test.describe('D&D 5e Character Sheet', () => {
   test('displays ability scores correctly', async ({ gamePage, systemId }) => {
     // Verify we're running on the expected system
     expect(systemId).toBe('dnd5e');
-    
+
     // D&D 5e-specific test logic
     const actorTypes = await gamePage.evaluate(() => {
       return Object.keys(game.system.documentTypes.Actor);
     });
-    
+
     expect(actorTypes).toContain('character');
   });
 });
 ```
 
 Key patterns:
+
 - Place system-specific tests in `specs/systems/{systemId}/`
 - Assert `systemId` at the start if the test only makes sense for one system
 - Use system-specific selectors and assertions
@@ -297,22 +321,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-        
+
       - name: Setup Foundry
         run: |
           mkdir -p vendor/foundry
           # Download or restore Foundry from secure storage
-          
+
       - name: Create test env
         run: |
           cat > tests/e2e/.env.test << EOF
@@ -320,10 +344,10 @@ jobs:
           FOUNDRY_ADMIN_KEY=ci-test-admin
           TEST_SYSTEM_IDS=dnd5e,pf2e
           EOF
-          
+
       - name: Run E2E tests
         run: npm run test:e2e
-        
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -341,7 +365,7 @@ jobs:
 
 ### Tests Timeout
 
-1. Increase timeouts in `playwright.config.js`
+1. Increase timeouts in `playwright.config.mjs`
 2. Check if Foundry is actually running: `curl http://localhost:30000`
 3. Enable debug output: `DEBUG_FOUNDRY=true npm run test:e2e`
 
@@ -366,19 +390,22 @@ fuser -k 30000-30010/tcp 2>/dev/null || true
 rm -rf .foundry-test-* .foundry-data-*
 
 # Run global teardown manually
-node -e "import('./tests/e2e/setup/global-teardown.js').then(m => m.default())"
+node -e "import('./tests/e2e/setup/global-teardown.mjs').then(m => m.default())"
 ```
 
 ## Environment Variables Reference
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `FOUNDRY_LICENSE_KEY` | Yes | — | Foundry license key (required) |
-| `FOUNDRY_ADMIN_KEY` | No | `test-admin-key` | Admin password |
-| `DEBUG_FOUNDRY` | No | `false` | Show Foundry server output |
-| `TEST_SYSTEM_IDS` | No | `dnd5e` | Comma-separated system IDs to test |
-| `TEST_WORLD_ID` | No | `simulacrum-test-world` | Base world ID (test ID appended per test) |
+| Variable                        | Required | Default                 | Description                                                              |
+| ------------------------------- | -------- | ----------------------- | ------------------------------------------------------------------------ |
+| `FOUNDRY_LICENSE_KEY`           | Yes      | —                       | Foundry license key (required)                                           |
+| `FOUNDRY_ADMIN_KEY`             | No       | `test-admin-key`        | Admin password                                                           |
+| `DEBUG_FOUNDRY`                 | No       | `false`                 | Show Foundry server output                                               |
+| `TEST_SYSTEM_IDS`               | No       | `dnd5e`                 | Comma-separated system IDs to test                                       |
+| `TEST_FOUNDRY_VERSION`          | No       | `13.351`                | Single Foundry version to test                                           |
+| `TEST_FOUNDRY_VERSIONS`         | No       | —                       | Comma-separated Foundry version matrix; overrides `TEST_FOUNDRY_VERSION` |
+| `TEST_SYSTEM_{ID}_MANIFEST_URL` | No       | —                       | Manifest URL for systems without a built-in default                      |
+| `TEST_WORLD_ID`                 | No       | `simulacrum-test-world` | Base world ID (test ID appended per test)                                |
 
 **Note:** `FOUNDRY_PORT` and `FOUNDRY_HOSTNAME` in `.env.test.example` are not used by the per-test isolation system. Each test automatically uses port `30000 + workerIndex` for parallel execution.
 
-Systems are installed via Foundry's UI - any system available in Foundry's package browser works.
+Systems are installed from Foundry package manifests into the same `Data/systems/{systemId}` layout that Foundry uses at runtime.

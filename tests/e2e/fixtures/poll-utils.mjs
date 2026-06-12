@@ -1,6 +1,6 @@
 /**
  * Polling Utilities
- * 
+ *
  * Replaces fixed waits with efficient polling that exits as soon as
  * conditions are met, with a master timeout as safety.
  */
@@ -16,11 +16,7 @@
  * @throws {Error} - If timeout expires before condition is met
  */
 export async function pollUntil(conditionFn, options = {}) {
-  const {
-    timeout = 30000,
-    interval = 100,
-    description = 'condition'
-  } = options;
+  const { timeout = 30000, interval = 100, description = 'condition' } = options;
 
   const startTime = Date.now();
   let lastError = null;
@@ -41,7 +37,7 @@ export async function pollUntil(conditionFn, options = {}) {
   const elapsed = Date.now() - startTime;
   throw new Error(
     `Timeout after ${elapsed}ms waiting for ${description}` +
-    (lastError ? `: ${lastError.message}` : '')
+      (lastError ? `: ${lastError.message}` : '')
   );
 }
 
@@ -54,7 +50,7 @@ export async function pollUntil(conditionFn, options = {}) {
  */
 export async function pollForElement(page, selector, options = {}) {
   const { timeout = 10000, interval = 100 } = options;
-  
+
   return pollUntil(
     async () => {
       const element = page.locator(selector).first();
@@ -76,10 +72,14 @@ export async function pollForElement(page, selector, options = {}) {
  */
 export async function pollUntilGone(page, selector, options = {}) {
   const { timeout = 10000, interval = 100 } = options;
-  
+
   return pollUntil(
     async () => {
-      const isVisible = await page.locator(selector).first().isVisible().catch(() => false);
+      const isVisible = await page
+        .locator(selector)
+        .first()
+        .isVisible()
+        .catch(() => false);
       return !isVisible;
     },
     { timeout, interval, description: `element "${selector}" to disappear` }
@@ -94,7 +94,7 @@ export async function pollUntilGone(page, selector, options = {}) {
  */
 export async function pollForNetworkIdle(page, options = {}) {
   const { timeout = 10000 } = options;
-  
+
   try {
     await page.waitForLoadState('networkidle', { timeout });
   } catch {
@@ -111,7 +111,7 @@ export async function pollForNetworkIdle(page, options = {}) {
  */
 export async function pollForUrl(page, pattern, options = {}) {
   const { timeout = 30000, interval = 100 } = options;
-  
+
   return pollUntil(
     async () => {
       const url = page.url();
@@ -132,13 +132,13 @@ export async function pollForUrl(page, pattern, options = {}) {
  */
 export async function pollForServer(url, options = {}) {
   const { timeout = 60000, interval = 500 } = options;
-  
+
   return pollUntil(
     async () => {
       try {
-        const response = await fetch(url, { 
+        const response = await fetch(url, {
           method: 'GET',
-          signal: AbortSignal.timeout(2000)
+          signal: AbortSignal.timeout(2000),
         });
         return response.ok || response.status === 403;
       } catch {
@@ -158,20 +158,22 @@ export async function pollForServer(url, options = {}) {
 export async function waitForUiSettle(page, maxWait = 500) {
   const startTime = Date.now();
   const checkInterval = 50;
-  
+
   // Wait for any animations to complete
   while (Date.now() - startTime < maxWait) {
     // Check if there are any ongoing animations
-    const hasAnimations = await page.evaluate(() => {
-      return document.getAnimations?.().some(a => a.playState === 'running') ?? false;
-    }).catch(() => false);
-    
+    const hasAnimations = await page
+      .evaluate(() => {
+        return document.getAnimations?.().some(a => a.playState === 'running') ?? false;
+      })
+      .catch(() => false);
+
     if (!hasAnimations) {
       // Small buffer for any micro-tasks
       await new Promise(r => setTimeout(r, 50));
       return;
     }
-    
+
     await new Promise(r => setTimeout(r, checkInterval));
   }
 }
@@ -185,7 +187,7 @@ export async function waitForUiSettle(page, maxWait = 500) {
  */
 export async function dismissBlockingDialog(page, options = {}) {
   const { timeout = 2000 } = options;
-  
+
   const dialogSelectors = [
     // Usage data dialog
     'dialog button[data-action="no"]',
@@ -198,7 +200,7 @@ export async function dismissBlockingDialog(page, options = {}) {
     '.tour-overlay .step-button:has-text("Skip")',
     '.tour-center-step button:has-text("Skip")',
   ];
-  
+
   for (const selector of dialogSelectors) {
     try {
       const btn = page.locator(selector).first();
@@ -211,6 +213,6 @@ export async function dismissBlockingDialog(page, options = {}) {
       // Continue to next selector
     }
   }
-  
+
   return false;
 }
