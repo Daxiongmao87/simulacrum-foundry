@@ -5,10 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-12
+
+### Changed
+
+- feat(compat): add Foundry v14 support by fixing sidebar rendering
+- fix(chat): fix message cancellation race-condition cascade
+- fix(ai): honor context limit in compaction to prevent overflow
+- fix(tools): ensure outgoing tool call arguments are valid JSON
 
 ## [1.0.9] - 2026-03-18
 
 ### Changed
+
 - refactor: remove maxResults caps and merge compendium management into document tools
 - feat: add document copy and move tools
 - feat: add compendium create action and rename pack_id to packId
@@ -22,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.8] - 2026-02-08
 
 ### Changed
+
 - refactor(benchmark): replace webhook with guided Discord sharing flow
 - chore(benchmark): switch webhook to public channel, drop review language
 - fix(benchmark): note that Discord submissions are reviewed
@@ -53,14 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.7] - 2026-02-06
 
 ### Changed
+
 - fix: Ollama integration - race conditions, non-blocking validation, token limit consolidation
 - fix(ci): Fix shell quoting in Discord announcement step
 
 ## [1.0.6] - 2026-02-05
 
 ### Changed
+
 - fix(ui): Restore status bar styling and task tracker regressions
-- fix(ui): Remove leftover _monitorStatus call causing crash
+- fix(ui): Remove leftover \_monitorStatus call causing crash
 - fix(ui): Restore status bar and indexing status logic
 - feat: Add context limit handling and sidebar UI refinements
 - fix: restore tool justification expand/collapse functionality
@@ -75,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.5] - 2026-02-03
 
 ### Changed
+
 - fix: preserve textarea content and status area on thinking state change
 - fix: extract proper content summary for direct display tools
 - fix: prevent raw JSON from rendering for direct display tools
@@ -91,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.4] - 2026-02-03
 
 ### Changed
+
 - fix: make disabled sidebar tab properly inert and V12 compatibility
 - style: refine Discord link appearance in settings
 - fix: add Discord link to Foundry settings config, remove dead code
@@ -103,11 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2026-01-31
 
 ### Changed
+
 - fix: restore system-agnostic CSS for Carolingian UX compatibility
 
 ## [1.0.2] - 2026-01-31
 
 ### Changed
+
 - ci: switch to manual workflow_dispatch for releases
 - docs: add CONTRIBUTING.md with commit conventions
 - fix: correct content/display pattern in list_documents tool
@@ -135,9 +151,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix: prevent context overflow from large tool outputs
 - fix: remove oneOf from execute_macro schema for Anthropic compatibility
 - feat: auto-update CHANGELOG.md on release
+
 ## [1.0.0] - 2026-01-12
 
 ### Added
+
 - Initial public release of Simulacrum: AI Campaign Copilot
 - Natural language document management (create, read, update, delete)
 - Multi-provider AI support (OpenAI, Google Gemini, Anthropic, and OpenAI-compatible APIs)
