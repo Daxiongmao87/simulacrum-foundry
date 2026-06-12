@@ -177,7 +177,7 @@ export default async function globalSetup() {
       console.log(
         `[setup] Pre-caching ${needsCaching.length} system(s) for Foundry ${foundryVersion}...`
       );
-      await preCacheSystems(needsCaching, foundryVersion);
+      await preCacheSystems(needsCaching, foundryVersion, env);
     }
   }
 
@@ -189,14 +189,14 @@ export default async function globalSetup() {
 /**
  * Pre-cache game systems in Foundry's expected Data/systems layout.
  */
-async function preCacheSystems(systemIds, foundryVersion) {
+async function preCacheSystems(systemIds, foundryVersion, env) {
   const versionCacheDir = getSystemCacheDir(foundryVersion);
 
   mkdirSync(versionCacheDir, { recursive: true });
 
   for (const systemId of systemIds) {
     console.log(`[cache] Installing system package ${systemId} for Foundry ${foundryVersion}...`);
-    const result = await installSystemPackage(systemId, versionCacheDir);
+    const result = await installSystemPackage(systemId, versionCacheDir, { env });
     console.log(
       `[cache] Cached ${systemId} ${result.version || 'unknown version'} for Foundry ${foundryVersion}`
     );

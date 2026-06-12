@@ -87,7 +87,10 @@ async function ensureSimulacrumSidebarRendered() {
   }
 
   const slot = document.querySelector('#sidebar-content #simulacrum');
-  if (!slot || !ui.simulacrum || ui.simulacrum.rendered) return;
+  if (!slot || !ui.simulacrum) return;
+
+  const hasRenderedContent = Boolean(slot.querySelector('.chat-scroll, .chat-form'));
+  if (ui.simulacrum.rendered && hasRenderedContent) return;
 
   try {
     await ui.simulacrum.render({ force: true });
@@ -305,7 +308,9 @@ Hooks.once('init', async () => {
 
   Hooks.on('renderSidebar', scheduleSimulacrumSidebarRender);
   Hooks.on('changeSidebarTab', app => {
-    if (app === ui.simulacrum || app?.tabName === 'simulacrum') scheduleSimulacrumSidebarRender();
+    if (app && (app === ui.simulacrum || app.tabName === 'simulacrum')) {
+      scheduleSimulacrumSidebarRender();
+    }
   });
 
   // Preload Handlebars templates and partials used by the sidebar

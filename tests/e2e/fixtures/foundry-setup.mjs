@@ -176,11 +176,20 @@ function getTestBasePath() {
  * @param {string} options.foundryVersion - Foundry version to test
  * @param {string} options.adminKey - Admin password
  * @param {string} options.licenseKey - Foundry license key
+ * @param {object} [options.env] - Loaded test environment
  * @param {number} options.port - Port to run on
  * @returns {Promise<Object>} Server info for test use
  */
 export async function setupIsolatedFoundry(options) {
-  const { testId, systemId, foundryVersion, adminKey, licenseKey, port } = options;
+  const {
+    testId,
+    systemId,
+    foundryVersion,
+    adminKey,
+    licenseKey,
+    port,
+    env = process.env,
+  } = options;
 
   // Get base path (tmpfs or project dir)
   const basePath = getTestBasePath();
@@ -371,7 +380,7 @@ export async function setupIsolatedFoundry(options) {
     if (!existsSync(join(systemsDir, systemId))) {
       console.log(`[setup:${testId}] Installing system: ${systemId}`);
       try {
-        await installSystemPackage(systemId, systemsDir);
+        await installSystemPackage(systemId, systemsDir, { env });
       } catch (installError) {
         console.error(
           `[setup:${testId}] Direct system package install failed: ${installError.message}`

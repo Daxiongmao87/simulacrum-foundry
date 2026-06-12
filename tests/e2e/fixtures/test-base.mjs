@@ -104,6 +104,7 @@ export const test = base.extend({
           foundryVersion,
           adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
           licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
+          env: testEnv,
           port: 30000 + (testInfo.parallelIndex || 0), // Unique port per worker
         });
 
