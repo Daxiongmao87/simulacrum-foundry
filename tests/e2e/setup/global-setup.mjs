@@ -14,7 +14,10 @@ import { execSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { installSystemPackage } from '../fixtures/package-install.mjs';
+import {
+  installSystemPackage,
+  validateInstalledSystemPackage,
+} from '../fixtures/package-install.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -166,7 +169,15 @@ export default async function globalSetup() {
     for (const systemId of systemIds) {
       const cachedSystem = join(versionCacheDir, systemId);
       if (existsSync(cachedSystem)) {
-        console.log(`[setup] System ${systemId} already cached for Foundry ${foundryVersion}`);
+        try {
+          validateInstalledSystemPackage(cachedSystem, systemId, foundryVersion);
+          console.log(`[setup] System ${systemId} already cached for Foundry ${foundryVersion}`);
+        } catch (error) {
+          needsCaching.push(systemId);
+          console.log(
+            `[setup] System ${systemId} cache is not usable for Foundry ${foundryVersion}: ${error.message}`
+          );
+        }
       } else {
         needsCaching.push(systemId);
         console.log(`[setup] System ${systemId} needs caching for Foundry ${foundryVersion}`);
@@ -196,7 +207,7 @@ async function preCacheSystems(systemIds, foundryVersion, env) {
 
   for (const systemId of systemIds) {
     console.log(`[cache] Installing system package ${systemId} for Foundry ${foundryVersion}...`);
-    const result = await installSystemPackage(systemId, versionCacheDir, { env });
+    const result = await installSystemPackage(systemId, versionCacheDir, { env, foundryVersion });
     console.log(
       `[cache] Cached ${systemId} ${result.version || 'unknown version'} for Foundry ${foundryVersion}`
     );

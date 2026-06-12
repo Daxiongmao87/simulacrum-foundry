@@ -17,7 +17,11 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, cpSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
-import { installSystemPackage } from './package-install.mjs';
+import {
+  installSystemPackage,
+  SystemManifestCompatibilityError,
+  validateInstalledSystemPackage,
+} from './package-install.mjs';
 import { completeUserManagementIfPresent } from './foundry-helpers.mjs';
 import {
   pollUntil,
@@ -250,8 +254,17 @@ export async function setupIsolatedFoundry(options) {
   const versionCacheDir = getSystemCacheDir(foundryVersion);
   const cachedSystem = join(versionCacheDir, systemId);
   if (existsSync(cachedSystem)) {
-    console.log(`[setup:${testId}] Using cached system: ${systemId} for Foundry ${foundryVersion}`);
-    cpSync(cachedSystem, join(systemsDir, systemId), { recursive: true });
+    try {
+      validateInstalledSystemPackage(cachedSystem, systemId, foundryVersion);
+      console.log(
+        `[setup:${testId}] Using cached system: ${systemId} for Foundry ${foundryVersion}`
+      );
+      cpSync(cachedSystem, join(systemsDir, systemId), { recursive: true });
+    } catch (error) {
+      console.log(
+        `[setup:${testId}] Skipping cached system ${systemId} for Foundry ${foundryVersion}: ${error.message}`
+      );
+    }
   }
 
   // 6. Configure Foundry
@@ -380,8 +393,12 @@ export async function setupIsolatedFoundry(options) {
     if (!existsSync(join(systemsDir, systemId))) {
       console.log(`[setup:${testId}] Installing system: ${systemId}`);
       try {
-        await installSystemPackage(systemId, systemsDir, { env });
+        await installSystemPackage(systemId, systemsDir, { env, foundryVersion });
       } catch (installError) {
+        if (installError instanceof SystemManifestCompatibilityError) {
+          throw installError;
+        }
+
         console.error(
           `[setup:${testId}] Direct system package install failed: ${installError.message}`
         );
@@ -392,8 +409,11 @@ export async function setupIsolatedFoundry(options) {
       // Cache the installed system for future tests
       const installedSystem = join(systemsDir, systemId);
       if (existsSync(installedSystem)) {
+        const cachedSystemTarget = join(versionCacheDir, systemId);
+
         mkdirSync(versionCacheDir, { recursive: true });
-        cpSync(installedSystem, join(versionCacheDir, systemId), { recursive: true });
+        rmSync(cachedSystemTarget, { recursive: true, force: true });
+        cpSync(installedSystem, cachedSystemTarget, { recursive: true });
         console.log(`[setup:${testId}] Cached system: ${systemId} for Foundry ${foundryVersion}`);
       }
     } else {
