@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: "!startsWith(github.event.head_commit.message, 'docs(release):')"
+    if: >-
+      !startsWith(github.event.head_commit.message, 'docs(release):')
+      && !contains(github.event.head_commit.message, '[skip ci]')
     steps:
       - name: Generate release bot token
         id: release-token
@@ -54,14 +56,14 @@ jobs:
             const fs = require("fs");
             const lastTag = process.env.LAST_TAG;
             const log = execSync(`git log --pretty=format:"%s" ${lastTag}..HEAD`, { encoding: "utf-8" });
-            const commits = log.split("\n").filter(l => l.length > 0 && !l.includes("docs(release):") && !l.includes("docs: update unreleased changelog"));
+            const commits = log.split("\n").filter(l => l.length > 0 && !l.includes("docs(release):") && !l.includes("[skip ci]"));
             if (commits.length === 0) {
               console.log("No relevant commits since last tag");
               process.exit(1);
             }
             const sections = {};
             const types = {
-              feat: "Features", fix: "Bug Fixes", refactor: "Refactoring",
+              feat: "Added", fix: "Fixed", refactor: "Refactoring",
               perf: "Performance", docs: "Documentation", ci: "CI/CD",
               build: "Build", chore: "Chores", test: "Testing", style: "Styles",
             };
@@ -100,23 +102,19 @@ jobs:
             console.log("Updated unreleased changelog:\n" + entry.trim());
           '
 
-      - name: Push changelog update via REST API
-     if: steps.generate.outcome == 'success' && github.event_name == 'push'
+      - name: Push changelog update via Contents API
+        if: steps.generate.outcome == 'success'
+        continue-on-error: true
         run: |
           if ! git diff --quiet CHANGELOG.md; then
             BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
             BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-            git config user.name "$BOT_NAME"
-            git config user.email "$BOT_EMAIL"
-            git add CHANGELOG.md
-            TREE_SHA=$(git write-tree)
-            PARENT_SHA=$(git rev-parse main)
-            gh api /repos/${{ github.repository }}/git/commits \
-              --method POST \
-              --field "sha=$PARENT_SHA" \
-              --field "tree=$TREE_SHA" \
-              --field 'message="docs: update unreleased changelog [skip ci]"' \
-              --jq .sha
+            CURRENT_SHA=$(gh api /repos/${{ github.repository }}/contents/CHANGELOG.md --jq .sha)
+            NEW_CONTENT=$(base64 -w 0 CHANGELOG.md)
+
+            printf '{"message":"docs: update unreleased changelog [skip ci]","content":"%s","sha":"%s","branch":"main","committer":{"name":"%s","email":"%s"},"author":{"name":"%s","email":"%s"}}' \
+              "$NEW_CONTENT" "$CURRENT_SHA" "$BOT_NAME" "$BOT_EMAIL" "$BOT_NAME" "$BOT_EMAIL" \
+              | gh api /repos/${{ github.repository }}/contents/CHANGELOG.md --method PUT --input -
           else
             echo "No changes to push"
           fi

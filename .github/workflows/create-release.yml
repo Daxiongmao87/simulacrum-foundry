@@ -105,9 +105,7 @@ jobs:
           cd dist
           zip -r ${{ env.MODULE_ID }}.zip ${{ env.MODULE_ID }}
           mv ${{ env.MODULE_ID }}.zip ../
-          cp ${{ env.MODULE_ID }}/module.json ../module.json.release
           cd ..
-          mv module.json.release module.json
 
       - name: Version changelog entry
         run: |
@@ -144,30 +142,35 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
-      - name: Commit release updates and create tag
+      - name: Commit release updates via Contents API
         run: |
           VERSION=${{ steps.version.outputs.version }}
           BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
           BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
 
-          git config user.name "$BOT_NAME"
-          git config user.email "$BOT_EMAIL"
+          # Update CHANGELOG.md via Contents API
+          CHANGELOG_SHA=$(gh api /repos/${{ github.repository }}/contents/CHANGELOG.md --jq .sha)
+          CHANGELOG_CONTENT=$(base64 -w 0 CHANGELOG.md)
+          printf '{"message":"docs(release): update changelog for ${VERSION} [skip ci]","content":"%s","sha":"%s","branch":"main","committer":{"name":"%s","email":"%s"},"author":{"name":"%s","email":"%s"}}' \
+            "$CHANGELOG_CONTENT" "$CHANGELOG_SHA" "$BOT_NAME" "$BOT_EMAIL" "$BOT_NAME" "$BOT_EMAIL" \
+            | gh api /repos/${{ github.repository }}/contents/CHANGELOG.md --method PUT --input - --jq .commit.sha
+          echo "CHANGELOG.md committed"
 
-          git add CHANGELOG.md module.json
-          if ! git diff --cached --quiet; then
-            TREE_SHA=$(git write-tree)
-            PARENT_SHA=$(git rev-parse main)
-            gh api /repos/${{ github.repository }}/git/commits \
-              --method POST \
-              --field "sha=$PARENT_SHA" \
-              --field "tree=$TREE_SHA" \
-              --field "message=docs(release): changelog and module.json for ${VERSION} [skip ci]" \
-              --jq .sha
-          else
-            echo "No changes to commit"
-          fi
+          # Update module.json via Contents API
+          MODULE_SHA=$(gh api /repos/${{ github.repository }}/contents/module.json --jq .sha)
+          MODULE_CONTENT=$(base64 -w 0 module.json)
+          printf '{"message":"docs(release): update module.json for ${VERSION} [skip ci]","content":"%s","sha":"%s","branch":"main","committer":{"name":"%s","email":"%s"},"author":{"name":"%s","email":"%s"}}' \
+            "$MODULE_CONTENT" "$MODULE_SHA" "$BOT_NAME" "$BOT_EMAIL" "$BOT_NAME" "$BOT_EMAIL" \
+            | gh api /repos/${{ github.repository }}/contents/module.json --method PUT --input - --jq .commit.sha
+          echo "module.json committed"
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
+      - name: Create tag and push
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          git fetch origin main
+          git tag -a "${VERSION}" -m "Release ${VERSION}" FETCH_HEAD
           git push origin "${VERSION}"
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
@@ -212,19 +215,16 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           REPO_URL="https://github.com/${{ github.repository }}"
           RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
-          # Discord field value limit is 1024 chars - truncate by lines until under limit
           SUFFIX=$'\n'"[See full release notes](${RELEASE_URL})"
           MAX_CHARS=$((1024 - ${#SUFFIX} - 10))
           CHANGELOG=$(cat changelog.txt)
           while [ ${#CHANGELOG} -gt $MAX_CHARS ]; do
-            # Drop the last line and append truncation notice
             CHANGELOG=$(echo "$CHANGELOG" | head -n -1)
           done
           if [ ${#CHANGELOG} -lt $(wc -c < changelog.txt) ]; then
             CHANGELOG="${CHANGELOG}${SUFFIX}"
           fi
 
-          # Build JSON payload with proper escaping using jq
           PAYLOAD=$(jq -n \
             --arg title "Simulacrum v${VERSION} Released!" \
             --arg url "$RELEASE_URL" \
