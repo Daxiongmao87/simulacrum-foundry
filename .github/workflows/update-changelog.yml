@@ -3,7 +3,7 @@
 
 name: Update Changelog
 
-'on':
+"on":
   push:
     branches:
       - main
@@ -41,8 +41,6 @@ jobs:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
       - name: Generate unreleased changelog
-        id: generate
-        continue-on-error: true
         run: |
           LAST_TAG=$(git tag --list --sort=-version:refname | grep -E '^[v]?[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
           if [ -z "$LAST_TAG" ]; then
@@ -58,10 +56,14 @@ jobs:
             const fs = require("fs");
             const lastRef = process.env.LAST_REF;
             const log = execSync(`git log --pretty=format:"%s" ${lastRef}..HEAD`, { encoding: "utf-8" });
-            const commits = log.split("\n").filter(l => l.length > 0 && !l.includes("docs(release):") && !l.includes("docs: update unreleased changelog"));
+            const commits = log
+              .split("\n")
+              .filter(l => l.length > 0)
+              .filter(l => !l.includes("docs(release):"))
+              .filter(l => !l.includes("docs: update unreleased changelog"));
             if (commits.length === 0) {
               console.log("No relevant commits since last tag");
-              process.exit(1);
+              process.exit(0);
             }
             const sections = {};
             const types = {
@@ -70,12 +72,12 @@ jobs:
               build: "Build", chore: "Chores", test: "Testing", style: "Styles",
             };
             for (const c of commits) {
-              const m = c.match(/^(feat|fix|refactor|perf|docs|ci|build|chore|test|style)(\(.*?\))?:\s*(.*)/);
+              const m = c.match(/^(feat|fix|refactor|perf|docs|ci|build|chore|test|style)(\((.*?)\))?:\s*(.*)/);
               const type = m ? m[1] : "other";
-              const scope = m ? (m[2] || "") : "";
-              const msg = m ? m[3] : c;
+              const scope = m && m[3] ? m[3] : "";
+              const msg = m ? m[4] : c;
               const section = sections[type] || [];
-              section.push(scope ? `${scope} ${msg}` : msg);
+              section.push(scope ? `${scope}: ${msg}` : msg);
               sections[type] = section;
             }
             const order = ["feat", "fix", "refactor", "perf", "docs", "ci", "build", "chore", "test", "style", "other"];
@@ -105,7 +107,6 @@ jobs:
           '
 
       - name: Push changelog update via Contents API
-        if: steps.generate.outcome == 'success' && github.event_name == 'push'
         run: |
           if ! git diff --quiet CHANGELOG.md; then
             BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
