@@ -101,7 +101,7 @@ jobs:
           '
 
       - name: Push changelog update via REST API
-     if: steps.generate.outcome == 'success' && github.event_name == 'push'
+        if: steps.generate.outcome == 'success' && github.event_name == 'push'
         run: |
           if ! git diff --quiet CHANGELOG.md; then
             BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
