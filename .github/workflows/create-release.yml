@@ -1,5 +1,5 @@
 # FoundryVTT Module Release Workflow
-# Manual trigger only - run with: gh workflow run release.yml -f version=1.0.2
+# Manual trigger only - run with: gh workflow run create-release.yml -f version=1.0.2
 
 name: Create Release
 
@@ -110,27 +110,35 @@ jobs:
           mv module.json.release module.json
 
       - name: Version changelog entry
+        env:
+          INPUT_RELEASE_TITLE: ${{ inputs.release_title }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
           if grep -q "^## \[Unreleased\]" CHANGELOG.md; then
-            sed -i "s/^## \[Unreleased\] - .*$/## [${VERSION}] - $(date -u +%Y-%m-%d)/" CHANGELOG.md
+            sed -i "s/^## \[Unreleased\].*$/## [${VERSION}] - $(date -u +%Y-%m-%d)/" CHANGELOG.md
             echo "Versioned [Unreleased] entry to [${VERSION}]"
           elif ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
             echo "::error::CHANGELOG.md is missing both [Unreleased] and [${VERSION}] entry"
             exit 1
           fi
-          TITLE="${{ inputs.release_title }}"
+          TITLE="$INPUT_RELEASE_TITLE"
           if [ -z "$TITLE" ]; then
-            TITLE="v${{ steps.version.outputs.version }}"
+            TITLE="v${VERSION}"
           fi
-          echo "RELEASE_TITLE=$TITLE" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$TITLE" >> "$GITHUB_ENV"
 
       - name: Prepare release body
+        env:
+          RELEASE_DESCRIPTION: ${{ inputs.release_description }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          awk "/^## \[${VERSION}\]/{found=1; next} /^## \[[0-9]/{exit} found{print}" CHANGELOG.md > changelog.txt
-          if [ -n "${{ inputs.release_description }}" ]; then
-            { printf '%s\n\n' "${{ inputs.release_description }}"; cat changelog.txt; } > release_body.md
+          awk -v version="$VERSION" '
+            $0 == "## [" version "]" || index($0, "## [" version "] - ") == 1 { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > changelog.txt
+          if [ -n "$RELEASE_DESCRIPTION" ]; then
+            { printf '%s\n\n' "$RELEASE_DESCRIPTION"; cat changelog.txt; } > release_body.md
           else
             cp changelog.txt release_body.md
           fi
@@ -149,26 +157,62 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
           BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          COMMIT_SHA=$(git rev-parse HEAD)
 
-          git config user.name "$BOT_NAME"
-          git config user.email "$BOT_EMAIL"
+          update_file() {
+            local path="$1"
+            local message="$2"
 
-          git add CHANGELOG.md module.json
-          if ! git diff --cached --quiet; then
-            TREE_SHA=$(git write-tree)
-            PARENT_SHA=$(git rev-parse main)
-            gh api /repos/${{ github.repository }}/git/commits \
-              --method POST \
-              --field "sha=$PARENT_SHA" \
-              --field "tree=$TREE_SHA" \
-              --field "message=docs(release): changelog and module.json for ${VERSION} [skip ci]" \
-              --jq .sha
+            FILE_SHA=$(gh api "/repos/${{ github.repository }}/contents/${path}" \
+              --field ref=main \
+              --jq .sha)
+
+            jq -n \
+              --arg message "$message" \
+              --arg content "$(base64 -w 0 "$path")" \
+              --arg sha "$FILE_SHA" \
+              --arg branch "main" \
+              --arg name "$BOT_NAME" \
+              --arg email "$BOT_EMAIL" \
+              '{
+                message: $message,
+                content: $content,
+                sha: $sha,
+                branch: $branch,
+                committer: {name: $name, email: $email},
+                author: {name: $name, email: $email}
+              }' > "/tmp/update-${path//\//-}.json"
+
+            COMMIT_SHA=$(gh api "/repos/${{ github.repository }}/contents/${path}" \
+              --method PUT \
+              --input "/tmp/update-${path//\//-}.json" \
+              --jq .commit.sha)
+          }
+
+          if ! git diff --quiet CHANGELOG.md; then
+            update_file "CHANGELOG.md" "docs(release): changelog for ${VERSION} [skip ci]"
           else
-            echo "No changes to commit"
+            echo "No CHANGELOG.md changes to commit"
           fi
 
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
-          git push origin "${VERSION}"
+          if ! git diff --quiet module.json; then
+            update_file "module.json" "docs(release): module.json for ${VERSION} [skip ci]"
+          else
+            echo "No module.json changes to commit"
+          fi
+
+          TAG_SHA=$(gh api /repos/${{ github.repository }}/git/tags \
+            --method POST \
+            --field "tag=${VERSION}" \
+            --field "message=Release ${VERSION}" \
+            --field "object=${COMMIT_SHA}" \
+            --field "type=commit" \
+            --jq .sha)
+
+          gh api /repos/${{ github.repository }}/git/refs \
+            --method POST \
+            --field "ref=refs/tags/${VERSION}" \
+            --field "sha=${TAG_SHA}"
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
