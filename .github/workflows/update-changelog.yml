@@ -106,17 +106,22 @@ jobs:
           if ! git diff --quiet CHANGELOG.md; then
             BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
             BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-            git config user.name "$BOT_NAME"
-            git config user.email "$BOT_EMAIL"
-            git add CHANGELOG.md
-            TREE_SHA=$(git write-tree)
-            PARENT_SHA=$(git rev-parse main)
-            gh api /repos/${{ github.repository }}/git/commits \
-              --method POST \
-              --field "sha=$PARENT_SHA" \
-              --field "tree=$TREE_SHA" \
-              --field 'message="docs: update unreleased changelog [skip ci]"' \
-              --jq .sha
+
+            # Get current SHA of CHANGELOG.md
+            CURRENT_SHA=$(gh api /repos/${{ github.repository }}/contents/CHANGELOG.md --jq .sha)
+
+            # Base64 encode the new content
+            NEW_CONTENT=$(base64 -w 0 CHANGELOG.md)
+
+            # Update the file via REST API
+            gh api /repos/${{ github.repository }}/contents/CHANGELOG.md \
+              --method PUT \
+              --field "message=docs: update unreleased changelog [skip ci]" \
+              --field "content=$NEW_CONTENT" \
+              --field "sha=$CURRENT_SHA" \
+              --field 'committer={"name":"'"$BOT_NAME"'","email":"'"$BOT_EMAIL"'"}' \
+              --field 'author={"name":"'"$BOT_NAME"'","email":"'"$BOT_EMAIL"'"}' \
+              --jq .commit.sha
           else
             echo "No changes to push"
           fi
