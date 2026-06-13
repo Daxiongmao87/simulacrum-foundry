@@ -3,7 +3,7 @@
 
 name: Create Release
 
-"on":
+'on':
   workflow_dispatch:
     inputs:
       version:
@@ -21,11 +21,21 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate release bot token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -91,45 +101,46 @@ jobs:
           cd ..
           mv module.json.release module.json
 
-      - name: Generate changelog
+      - name: Verify changelog entry exists
         id: changelog
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          TODAY=$(date +%Y-%m-%d)
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            echo "Generating changelog from $PREV_TAG to HEAD"
-            COMMITS=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD | grep -vE '^- (docs|ci|chore):')
-          else
-            echo "No previous tag found, including recent commits"
-            COMMITS=$(git log --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s" | grep -vE '^- (docs|ci|chore):')
+          if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md is missing entry for version ${VERSION}"
+            echo "Expected heading: ## [${VERSION}]"
+            exit 1
           fi
-          # Ensure we have at least something for the changelog
-          if [ -z "$COMMITS" ]; then
-            COMMITS="- Maintenance release"
-          fi
-          echo "$COMMITS" > changelog.txt
-          cat > new_entry.txt << 'ENTRY_EOF'
-          ## [$VERSION] - $TODAY
+          echo "Changelog entry for ${VERSION} found"
 
-          ### Changed
-          ENTRY_EOF
-          sed -i "s/\$VERSION/$VERSION/g; s/\$TODAY/$TODAY/g" new_entry.txt
-          echo "$COMMITS" >> new_entry.txt
-          head -n 7 CHANGELOG.md > CHANGELOG.tmp
-          echo "" >> CHANGELOG.tmp
-          cat new_entry.txt >> CHANGELOG.tmp
-          tail -n +8 CHANGELOG.md >> CHANGELOG.tmp
-          mv CHANGELOG.tmp CHANGELOG.md
-          rm new_entry.txt
+      - name: Extract changelog body for release
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Extract lines after the version heading until the next heading or end of file
+          awk "/^## \[${VERSION}\]/{found=1; next} /^## \[[0-9]/{exit} found{print}" CHANGELOG.md > changelog.txt
+          if [ ! -s changelog.txt ]; then
+            echo "::error::Changelog body for ${VERSION} is empty"
+            exit 1
+          fi
+          echo "Extracted changelog body:"
+          cat changelog.txt
+
+      - name: Get release bot user id
+        id: bot-user
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.release-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
       - name: Commit CHANGELOG.md and create tag
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git config user.name "${{ steps.release-token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
           git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for ${VERSION}" || echo "No changes to commit"
+          git commit -m "docs(release): update generated changelog for ${VERSION} [skip ci]" || echo "No changes to commit"
+
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin main
           git push origin "${VERSION}"
@@ -138,14 +149,14 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: "v${{ steps.version.outputs.version }}"
+          name: 'v${{ steps.version.outputs.version }}'
           body_path: changelog.txt
           files: |
             module.json
             ${{ env.MODULE_ID }}.zip
           fail_on_unmatched_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
 
       - name: Publish to Foundry VTT
         env:
