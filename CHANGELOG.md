@@ -8,12 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-06-13
 
-### Features
+### Added
 
 - compat: add Foundry v14 support by fixing sidebar rendering regression
 - ci: add Copilot code review workflow with PR gating and testing requirements
 
-### Bug Fixes
+### Fixed
 
 - ui: prevent race condition cascade on message cancellation
 - core: fix context compaction overflow and context limit honoring (Fixes #150)
