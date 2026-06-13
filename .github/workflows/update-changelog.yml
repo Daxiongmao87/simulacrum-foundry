@@ -1,0 +1,124 @@
+# Post-merge changelog auto-update
+# Generates/updates an [Unreleased] section after every merge to main
+
+name: Update Changelog
+
+'on':
+  push:
+    branches:
+      - main
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: "!startsWith(github.event.head_commit.message, 'docs(release):')"
+    steps:
+      - name: Generate release bot token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Get release bot user id
+        id: bot-user
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.release-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+
+      - name: Generate unreleased changelog
+        id: generate
+        continue-on-error: true
+        run: |
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1 | sed 's/^v//')
+          if [ -z "$LAST_TAG" ]; then
+            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          export LAST_TAG
+          echo "Collecting commits since $LAST_TAG"
+
+          node -e '
+            const { execSync } = require("child_process");
+            const fs = require("fs");
+            const lastTag = process.env.LAST_TAG;
+            const log = execSync(`git log --pretty=format:"%s" ${lastTag}..HEAD`, { encoding: "utf-8" });
+            const commits = log.split("\n").filter(l => l.length > 0 && !l.includes("docs(release):") && !l.includes("docs: update unreleased changelog"));
+            if (commits.length === 0) {
+              console.log("No relevant commits since last tag");
+              process.exit(1);
+            }
+            const sections = {};
+            const types = {
+              feat: "Features", fix: "Bug Fixes", refactor: "Refactoring",
+              perf: "Performance", docs: "Documentation", ci: "CI/CD",
+              build: "Build", chore: "Chores", test: "Testing", style: "Styles",
+            };
+            for (const c of commits) {
+              const m = c.match(/^(feat|fix|refactor|perf|docs|ci|build|chore|test|style)(\(.*?\))?:\s*(.*)/);
+              const type = m ? m[1] : "other";
+              const scope = m ? (m[2] || "") : "";
+              const msg = m ? m[3] : c;
+              const section = sections[type] || [];
+              section.push(scope ? `${scope} ${msg}` : msg);
+              sections[type] = section;
+            }
+            const order = ["feat", "fix", "refactor", "perf", "docs", "ci", "build", "chore", "test", "style", "other"];
+            const date = new Date().toISOString().slice(0, 10);
+            let entry = `## [Unreleased] - ${date}\n`;
+            for (const type of order) {
+              if (!sections[type]) continue;
+              entry += `\n### ${types[type] || "Other"}\n\n`;
+              for (const msg of sections[type]) entry += `- ${msg}\n`;
+            }
+            entry += "\n";
+            const ch = fs.readFileSync("CHANGELOG.md", "utf-8");
+            const unreleasedMarker = "## [Unreleased]";
+            const existing = ch.indexOf(unreleasedMarker);
+            if (existing > 0) {
+              const nextHeader = ch.indexOf("\n## [", existing);
+              const newContent = nextHeader > 0 ? ch.slice(0, existing) + entry + ch.slice(nextHeader) : ch.slice(0, existing) + entry;
+              fs.writeFileSync("CHANGELOG.md", newContent);
+            } else {
+              const firstVer = ch.indexOf("\n## [");
+              const insert = firstVer > 0 ? firstVer : ch.indexOf("## [");
+              const header = ch.slice(0, insert);
+              const rest = ch.slice(insert);
+              fs.writeFileSync("CHANGELOG.md", header + entry + rest);
+            }
+            console.log("Updated unreleased changelog:\n" + entry.trim());
+          '
+
+      - name: Push changelog update via REST API
+     if: steps.generate.outcome == 'success' && github.event_name == 'push'
+        run: |
+          if ! git diff --quiet CHANGELOG.md; then
+            BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
+            BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+            git config user.name "$BOT_NAME"
+            git config user.email "$BOT_EMAIL"
+            git add CHANGELOG.md
+            TREE_SHA=$(git write-tree)
+            PARENT_SHA=$(git rev-parse main)
+            gh api /repos/${{ github.repository }}/git/commits \
+              --method POST \
+              --field "sha=$PARENT_SHA" \
+              --field "tree=$TREE_SHA" \
+              --field 'message="docs: update unreleased changelog [skip ci]"' \
+              --jq .sha
+          else
+            echo "No changes to push"
+          fi
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
