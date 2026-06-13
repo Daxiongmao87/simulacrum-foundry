@@ -3,19 +3,19 @@
 
 name: Create Release
 
-'on':
+"on":
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.2)'
+        description: "Version to release (e.g., 1.0.2)"
         required: true
         type: string
       release_title:
-        description: 'Release title (default: v<version>)'
+        description: "Release title (default: v<version>)"
         required: false
         type: string
       release_description:
-        description: 'Release description/shoutbox (prepended to changelog)'
+        description: "Release description/shoutbox (prepended to changelog)"
         required: false
         type: string
 
@@ -48,8 +48,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -157,62 +157,60 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
           BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          COMMIT_SHA=$(git rev-parse HEAD)
 
-          update_file() {
-            local path="$1"
-            local message="$2"
-
-            FILE_SHA=$(gh api "/repos/${{ github.repository }}/contents/${path}" \
-              --field ref=main \
-              --jq .sha)
-
-            jq -n \
-              --arg message "$message" \
-              --arg content "$(base64 -w 0 "$path")" \
-              --arg sha "$FILE_SHA" \
-              --arg branch "main" \
+          if ! git diff --quiet CHANGELOG.md module.json; then
+            BASE_SHA=$(git rev-parse HEAD)
+            BASE_TREE_SHA=$(gh api "/repos/${{ github.repository }}/git/commits/${BASE_SHA}" --jq .tree.sha)
+            TREE_SHA=$(jq -n \
+              --arg base_tree "$BASE_TREE_SHA" \
+              --rawfile changelog CHANGELOG.md \
+              --rawfile module module.json \
+              '{
+                base_tree: $base_tree,
+                tree: [
+                  {path: "CHANGELOG.md", mode: "100644", type: "blob", content: $changelog},
+                  {path: "module.json", mode: "100644", type: "blob", content: $module}
+                ]
+              }' | gh api "/repos/${{ github.repository }}/git/trees" --method POST --input - --jq .sha)
+            COMMIT_SHA=$(jq -n \
+              --arg message "docs(release): changelog and module.json for ${VERSION} [skip ci]" \
+              --arg tree "$TREE_SHA" \
+              --arg parent "$BASE_SHA" \
               --arg name "$BOT_NAME" \
               --arg email "$BOT_EMAIL" \
               '{
                 message: $message,
-                content: $content,
-                sha: $sha,
-                branch: $branch,
-                committer: {name: $name, email: $email},
-                author: {name: $name, email: $email}
-              }' > "/tmp/update-${path//\//-}.json"
-
-            COMMIT_SHA=$(gh api "/repos/${{ github.repository }}/contents/${path}" \
-              --method PUT \
-              --input "/tmp/update-${path//\//-}.json" \
-              --jq .commit.sha)
-          }
-
-          if ! git diff --quiet CHANGELOG.md; then
-            update_file "CHANGELOG.md" "docs(release): changelog for ${VERSION} [skip ci]"
+                tree: $tree,
+                parents: [$parent],
+                author: {name: $name, email: $email},
+                committer: {name: $name, email: $email}
+              }' | gh api "/repos/${{ github.repository }}/git/commits" --method POST --input - --jq .sha)
+            gh api "/repos/${{ github.repository }}/git/refs/heads/main" \
+              --method PATCH \
+              --field "sha=$COMMIT_SHA" \
+              --field "force=false"
           else
-            echo "No CHANGELOG.md changes to commit"
+            echo "No changes to commit"
+            COMMIT_SHA=$(git rev-parse HEAD)
           fi
 
-          if ! git diff --quiet module.json; then
-            update_file "module.json" "docs(release): module.json for ${VERSION} [skip ci]"
-          else
-            echo "No module.json changes to commit"
-          fi
-
-          TAG_SHA=$(gh api /repos/${{ github.repository }}/git/tags \
-            --method POST \
-            --field "tag=${VERSION}" \
-            --field "message=Release ${VERSION}" \
-            --field "object=${COMMIT_SHA}" \
-            --field "type=commit" \
-            --jq .sha)
-
-          gh api /repos/${{ github.repository }}/git/refs \
+          TAG_SHA=$(jq -n \
+            --arg tag "$VERSION" \
+            --arg message "Release ${VERSION}" \
+            --arg object "$COMMIT_SHA" \
+            --arg name "$BOT_NAME" \
+            --arg email "$BOT_EMAIL" \
+            '{
+              tag: $tag,
+              message: $message,
+              object: $object,
+              type: "commit",
+              tagger: {name: $name, email: $email}
+            }' | gh api "/repos/${{ github.repository }}/git/tags" --method POST --input - --jq .sha)
+          gh api "/repos/${{ github.repository }}/git/refs" \
             --method POST \
             --field "ref=refs/tags/${VERSION}" \
-            --field "sha=${TAG_SHA}"
+            --field "sha=$TAG_SHA"
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
 
