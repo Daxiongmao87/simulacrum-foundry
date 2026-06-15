@@ -11,6 +11,7 @@
  */
 
 import { execFileSync, spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,6 +28,10 @@ if (!majorMatch) {
 const FOUNDRY_MAJOR = majorMatch[1];
 const IMAGE = process.env.E2E_IMAGE || `localhost/simulacrum-foundry-e2e:${FOUNDRY_MAJOR}`;
 
+// Read the installed @playwright/test version so the image tag stays in sync.
+const playwrightPkgPath = join(REPO_ROOT, 'node_modules/@playwright/test/package.json');
+const playwrightVersion = JSON.parse(readFileSync(playwrightPkgPath, 'utf8')).version;
+
 function detectEngine() {
   for (const engine of ['podman', 'docker', 'nerdctl', 'finch']) {
     try {
@@ -39,13 +44,15 @@ function detectEngine() {
 }
 
 const engine = detectEngine();
-console.log(`[build] Engine:  ${engine}`);
-console.log(`[build] Image:   ${IMAGE}`);
-console.log(`[build] Base:    felddy/foundryvtt:${FOUNDRY_MAJOR}`);
+console.log(`[build] Engine:     ${engine}`);
+console.log(`[build] Image:      ${IMAGE}`);
+console.log(`[build] Foundry:    felddy/foundryvtt:${FOUNDRY_MAJOR}`);
+console.log(`[build] Playwright: v${playwrightVersion}-jammy`);
 
 const result = spawnSync(engine, [
   'build',
   '--build-arg', `FOUNDRY_TAG=${FOUNDRY_MAJOR}`,
+  '--build-arg', `PLAYWRIGHT_VERSION=v${playwrightVersion}`,
   '--tag', IMAGE,
   '--file', DOCKERFILE,
   join(__dirname, '../docker'),

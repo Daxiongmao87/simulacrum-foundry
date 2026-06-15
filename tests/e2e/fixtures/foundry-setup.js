@@ -336,22 +336,24 @@ export async function setupIsolatedFoundry(options) {
     await page.goto(`${baseUrl}/setup`);
     await page.waitForLoadState('networkidle');
     
-    // Check for license page
+    // Check for license key input (no license.json at all → Foundry asks for the key first)
     const licenseInput = page.locator('input[name="licenseKey"]');
     if (await licenseInput.isVisible({ timeout: 2000 }).catch(() => false)) {
       console.log(`[setup:${testId}] Entering license key...`);
       await licenseInput.fill(licenseKey);
       await page.locator('button[type="submit"]').first().click();
       await page.waitForLoadState('networkidle');
-      
-      // Accept EULA if present
-      const eulaCheckbox = page.locator('input[name="agree"], input[name="eula"], #eula-agree');
-      if (await eulaCheckbox.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await eulaCheckbox.check();
-        // Click specifically the Agree button, not any submit button
-        await page.locator('button:has-text("Agree"), button[name="accept"], button[data-action="accept"]').first().click();
-        await page.waitForLoadState('networkidle');
-      }
+    }
+
+    // Accept EULA if shown — happens when no license key was entered (key was pre-placed via
+    // license.json) but the EULA was signed on different hardware (e.g. inside a container).
+    // Use role-based selectors so this works across Foundry v13/v14 markup variations.
+    const eulaCheckbox = page.getByRole('checkbox', { name: /I agree/i });
+    if (await eulaCheckbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log(`[setup:${testId}] Accepting EULA...`);
+      await eulaCheckbox.check();
+      await page.locator('button:has-text("Agree"):not(:has-text("Decline"))').first().click();
+      await page.waitForLoadState('networkidle');
     }
     
     // Dismiss "Allow Sharing Usage Data" dialog - appears after TOS on first /setup load
