@@ -1,19 +1,17 @@
 #!/bin/bash
-# Streamlined Foundry install entrypoint for the e2e test image.
-# Installs Foundry from a cached zip, applies the license, then hands off
-# to launcher.sh (which runs the test suite instead of the Foundry server).
 set -euo pipefail
 
-# Source FOUNDRY_* env vars baked in from the felddy stage at image build time
-# (e.g. FOUNDRY_VERSION=14.363). Docker does not carry ENV across base-image
-# switches, so we persist them to a file and source it here.
-if [ -f /home/node/.foundry_env ]; then
-  # shellcheck disable=SC1091
-  set -a; source /home/node/.foundry_env; set +a
-fi
-
-FOUNDRY_VERSION="${FOUNDRY_VERSION:-}"
 CONTAINER_CACHE="${CONTAINER_CACHE:-/foundry-cache}"
+
+# Derive version from the zip filename if not supplied explicitly.
+if [ -z "${FOUNDRY_VERSION:-}" ]; then
+  ZIP=$(ls "${CONTAINER_CACHE}"/foundryvtt-*.zip 2>/dev/null | head -1)
+  if [ -z "${ZIP:-}" ]; then
+    echo "[entrypoint] ERROR: No Foundry zip found in ${CONTAINER_CACHE} and FOUNDRY_VERSION is unset"
+    exit 1
+  fi
+  FOUNDRY_VERSION=$(basename "$ZIP" | grep -oP '\d+\.\d+')
+fi
 INSTALL_DIR="/home/node/resources/app"
 DATA_DIR="/data"
 CONFIG_DIR="${DATA_DIR}/Config"

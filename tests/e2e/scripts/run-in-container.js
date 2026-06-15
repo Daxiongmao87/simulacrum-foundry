@@ -145,6 +145,8 @@ const volumeArgs = [
   '--volume', `${VENDOR_DIR}:/foundry-cache`,
 ];
 
+const foundryVersion = foundryZip ? versionFromZip(foundryZip) : null;
+
 const envArgs = [
   '--env', 'CI=true',
   '--env', `FOUNDRY_INSTALL_PATH=/home/node/resources/app`,
@@ -152,6 +154,10 @@ const envArgs = [
   '--env', `FOUNDRY_ADMIN_KEY=${process.env.FOUNDRY_ADMIN_KEY || 'test-admin-key'}`,
   '--env', `TEST_SYSTEM_IDS=${process.env.TEST_SYSTEM_IDS || 'dnd5e'}`,
 ];
+
+if (foundryVersion) {
+  envArgs.push('--env', `FOUNDRY_VERSION=${foundryVersion}`);
+}
 
 const licenseB64 = process.env.FOUNDRY_LICENSE_JSON_B64 || resolveLicenseB64();
 if (licenseB64) {
