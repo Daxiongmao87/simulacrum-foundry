@@ -1,24 +1,23 @@
 #!/usr/bin/env node
 /**
- * Run the Simulacrum e2e test suite inside a felddy/foundryvtt-derived container.
+ * Run the Simulacrum e2e test suite inside the e2e container image.
  *
  * Usage:
  *   node tests/e2e/scripts/run-in-container.js [13|14]
  *   npm run test:e2e:container -- 14
  *
- * The felddy entrypoint downloads/installs Foundry from vendor/foundry/ (via
- * CONTAINER_CACHE), then hands off to our test-launcher.sh instead of starting
- * the Foundry server. Build the local image first:
- *   npm run test:e2e:container:build -- 14
- *
  * Optional env overrides:
  *   CONTAINER_ENGINE        — force a specific engine (podman, docker, nerdctl, finch…)
  *   E2E_IMAGE               — override the full image reference
+ *   E2E_DATA_IMAGE          — override the seed data image
+ *   E2E_MODULE_IMAGE        — override the module image
  *   FOUNDRY_ADMIN_KEY       — admin password passed to Foundry (default: test-admin-key)
  *   TEST_SYSTEM_IDS         — comma-separated system IDs (default: dnd5e)
  *
- * The script auto-detects the container engine, locates the Foundry zip in
- * vendor/foundry/, and reads the host license.json for FOUNDRY_LICENSE_JSON_B64.
+ * When simulacrum-foundry-e2e-data:<major> and simulacrum-foundry-e2e-module:<major>
+ * exist locally, they are mounted via --mount type=image so /data in the container
+ * is pre-seeded with immutable image content. Tests run in per-worker seeded mode.
+ * Build them with: npm run test:e2e:seed:build -- <major>
  */
 
 import { execFileSync, spawnSync } from 'child_process';
@@ -39,8 +38,10 @@ if (!majorMatch) {
   console.error('       Expected format: 14, 13');
   process.exit(1);
 }
-const FOUNDRY_MAJOR = majorMatch[1];
-const IMAGE = process.env.E2E_IMAGE || `localhost/simulacrum-foundry-e2e:${FOUNDRY_MAJOR}`;
+const FOUNDRY_MAJOR  = majorMatch[1];
+const IMAGE          = process.env.E2E_IMAGE          || `localhost/simulacrum-foundry-e2e:${FOUNDRY_MAJOR}`;
+const DATA_IMAGE     = process.env.E2E_DATA_IMAGE     || `localhost/simulacrum-foundry-e2e-data:${FOUNDRY_MAJOR}`;
+const MODULE_IMAGE   = process.env.E2E_MODULE_IMAGE   || `localhost/simulacrum-foundry-e2e-module:${FOUNDRY_MAJOR}`;
 
 // ---------------------------------------------------------------------------
 // Detect container engine
@@ -114,6 +115,17 @@ function resolveLicenseB64() {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function imageExists(engine, image) {
+  try {
+    execFileSync(engine, ['image', 'inspect', image, '--format', '{{.Id}}'], { stdio: 'pipe' });
+    return true;
+  } catch { return false; }
+}
+
+// ---------------------------------------------------------------------------
 // Build container run args
 // ---------------------------------------------------------------------------
 const engine = detectEngine();
@@ -123,11 +135,6 @@ console.log(`[container] Image:  ${IMAGE}`);
 // Ensure the cache dir exists — podman/docker won't mount a non-existent host path.
 mkdirSync(VENDOR_DIR, { recursive: true });
 
-// Mount vendor/foundry/ as a writable CONTAINER_CACHE so felddy can both read
-// an already-downloaded zip AND write the zip there on first download.
-// We never override FOUNDRY_VERSION — the image has the correct full version
-// (e.g. "14.363") baked in; overriding with just the major would break the
-// felddy download path.
 const foundryZip = findFoundryZip(FOUNDRY_MAJOR);
 if (foundryZip) {
   console.log(`[container] Foundry zip found: ${basename(foundryZip)}`);
@@ -139,9 +146,7 @@ if (foundryZip) {
 
 const volumeArgs = [
   '--volume', `${REPO_ROOT}:/workspace`,
-  // Anonymous volume so root-owned npm install files don't leak to the host
-  '--volume', '/workspace/node_modules',
-  // Writable cache dir — felddy reads existing zip or downloads+saves a new one
+  '--volume', '/workspace/node_modules',  // anonymous: keeps root-owned files off host
   '--volume', `${VENDOR_DIR}:/foundry-cache`,
 ];
 
@@ -172,6 +177,30 @@ if (licenseB64) {
 const envTestPath = join(REPO_ROOT, 'tests/e2e/.env.test');
 if (existsSync(envTestPath)) {
   envArgs.push('--env-file', envTestPath);
+}
+
+// ── Seed images ───────────────────────────────────────────────────────────────
+
+const dataImageAvailable   = imageExists(engine, DATA_IMAGE);
+const moduleImageAvailable = imageExists(engine, MODULE_IMAGE);
+const seeded = dataImageAvailable && moduleImageAvailable;
+
+if (seeded) {
+  console.log(`[container] Seed images found — mounting /data from ${DATA_IMAGE} + ${MODULE_IMAGE}`);
+  console.log(`[container] Workers will use pre-seeded data (per-worker Foundry instances)`);
+  // --mount type=image mounts the image filesystem directly (no volume seeding needed).
+  // data.Dockerfile and module.Dockerfile both use COPY . / so the image root maps
+  // to the destination path without an extra nesting level.
+  volumeArgs.push(
+    '--mount', `type=image,source=${DATA_IMAGE},dst=/data,rw=false`,
+    '--mount', `type=image,source=${MODULE_IMAGE},dst=/data/Data/modules/simulacrum,rw=false`,
+  );
+  envArgs.push('--env', 'SEEDED_DATA_DIR=/data');
+} else {
+  console.log(`[container] Seed images not found — per-test isolation mode`);
+  if (!dataImageAvailable)   console.log(`[container]   Missing: ${DATA_IMAGE}`);
+  if (!moduleImageAvailable) console.log(`[container]   Missing: ${MODULE_IMAGE}`);
+  console.log(`[container]   Run: npm run test:e2e:seed:build -- ${FOUNDRY_MAJOR}`);
 }
 
 const runArgs = [

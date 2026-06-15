@@ -410,6 +410,105 @@ export async function setupIsolatedFoundry(options) {
   };
 }
 
+// ── Per-worker seeded Foundry (used when SEEDED_DATA_DIR is set) ─────────────
+
+/**
+ * Start a Foundry instance per worker from pre-seeded /data.
+ * Copies the seed dir to /tmp/foundry-worker-N so each worker is isolated.
+ */
+export async function setupSeededFoundry({ workerIndex, foundryInstallPath, adminKey, port }) {
+  const seedDir = process.env.SEEDED_DATA_DIR || '/data';
+  const workerDataDir = `/tmp/foundry-worker-${workerIndex}`;
+
+  console.log(`[worker:${workerIndex}] Setting up seeded Foundry on port ${port} (seed: ${seedDir})`);
+
+  if (existsSync(workerDataDir)) rmSync(workerDataDir, { recursive: true, force: true });
+  cpSync(seedDir, workerDataDir, { recursive: true });
+
+  // Patch options.json with this worker's port + dataPath
+  const optionsPath = join(workerDataDir, 'Config', 'options.json');
+  const opts = existsSync(optionsPath) ? JSON.parse(readFileSync(optionsPath, 'utf-8')) : {};
+  opts.port = port;
+  opts.dataPath = workerDataDir;
+  opts.upnp = false;
+  if (adminKey) opts.adminKey = adminKey;
+  writeFileSync(optionsPath, JSON.stringify(opts, null, 2));
+
+  // Overwrite license.json from env (hardware fingerprint differs per container run)
+  const licenseB64 = process.env.FOUNDRY_LICENSE_JSON_B64;
+  if (licenseB64) {
+    writeFileSync(join(workerDataDir, 'Config', 'license.json'), Buffer.from(licenseB64, 'base64'));
+  }
+
+  // Start Foundry
+  const mainMjs = findFoundryEntryPoint(foundryInstallPath);
+  console.log(`[worker:${workerIndex}] Starting Foundry at ${mainMjs}`);
+  const serverProcess = spawn('node', [mainMjs, `--dataPath=${workerDataDir}`, `--port=${port}`], {
+    cwd: dirname(mainMjs),
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: false,
+  });
+  serverProcess.stdout.on('data', d => { const m = d.toString().trim(); if (m) console.log(`[foundry:w${workerIndex}] ${m}`); });
+  serverProcess.stderr.on('data', d => { const m = d.toString().trim(); if (m) console.error(`[foundry:w${workerIndex}] ${m}`); });
+
+  const baseUrl = `http://localhost:${port}`;
+  await pollForServer(baseUrl, { timeout: 60000 });
+  console.log(`[worker:${workerIndex}] Foundry ready at ${baseUrl}`);
+
+  // Accept EULA (hardware fingerprint changes per container run)
+  const browser = await chromium.launch({ headless: true });
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  try {
+    await page.goto(`${baseUrl}/setup`);
+    await page.waitForLoadState('networkidle');
+
+    const eulaCheckbox = page.getByRole('checkbox', { name: /I agree/i });
+    if (await eulaCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log(`[worker:${workerIndex}] Accepting EULA...`);
+      await eulaCheckbox.check();
+      await page.locator('button:has-text("Agree"):not(:has-text("Decline"))').first().click();
+      await page.waitForLoadState('networkidle');
+    }
+
+    await dismissUsageDataDialog(page, `w${workerIndex}`);
+    await page.keyboard.press('Escape');
+    await pollUntilGone(page, '.tour-overlay', { timeout: 2000 }).catch(() => {});
+  } finally {
+    await ctx.close();
+    await browser.close();
+  }
+
+  return {
+    workerIndex,
+    workerDataDir,
+    baseUrl,
+    port,
+    serverProcess,
+    serverPid: serverProcess.pid,
+    worldId: 'seed-world',
+    adminKey,
+    foundryVersion: process.env.FOUNDRY_VERSION || null,
+    foundryZip: null,
+    testDir: null,
+    dataDir: workerDataDir,
+    systemId: (process.env.TEST_SYSTEM_IDS || 'dnd5e').split(',')[0].trim(),
+  };
+}
+
+export async function teardownSeededFoundry(serverInfo) {
+  const { workerIndex, workerDataDir, port, serverProcess } = serverInfo;
+  console.log(`[teardown:w${workerIndex}] Stopping Foundry on port ${port}...`);
+  await killAndWait(serverProcess, { escalateAfterMs: 3000, timeoutMs: 10000 });
+  if (await waitForPortFree(port, { timeoutMs: 5000 })) {
+    console.log(`[teardown:w${workerIndex}] Port ${port} free`);
+  }
+  if (workerDataDir && existsSync(workerDataDir)) {
+    await rmDirWithRetry(workerDataDir, `w${workerIndex}`, 'workerDataDir');
+  }
+  console.log(`[teardown:w${workerIndex}] Done`);
+}
+
 export async function teardownIsolatedFoundry(serverInfo) {
   const { testId, testDir, dataDir, port, serverPid, serverProcess } = serverInfo;
 

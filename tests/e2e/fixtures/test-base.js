@@ -18,6 +18,8 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
+const SEEDED = Boolean(process.env.SEEDED_DATA_DIR);
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -26,30 +28,31 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 function loadEnv() {
   const envPath = join(__dirname, '../.env.test');
   if (!existsSync(envPath)) {
-    throw new Error('Missing tests/e2e/.env.test - copy from .env.test.example');
+    // In container/CI mode env vars are injected directly — .env.test file not required
+    return {};
   }
-  
+
   const content = readFileSync(envPath, 'utf-8');
   const env = {};
-  
+
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
-    
+
     const eqIndex = trimmed.indexOf('=');
     if (eqIndex === -1) continue;
-    
+
     const key = trimmed.slice(0, eqIndex).trim();
     let value = trimmed.slice(eqIndex + 1).trim();
-    
+
     if ((value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
-    
+
     env[key] = value;
   }
-  
+
   return env;
 }
 
@@ -57,6 +60,25 @@ function loadEnv() {
  * Extended test fixtures - each test is fully isolated
  */
 export const test = base.extend({
+
+  /**
+   * Worker-scoped seeded Foundry server — starts once per Playwright worker when
+   * SEEDED_DATA_DIR is set. Null when running in per-test isolation mode.
+   */
+  _seededFoundryServer: [async ({}, use, workerInfo) => {
+    if (!SEEDED) { await use(null); return; }
+
+    const port = await getFreePort();
+    const serverInfo = await foundrySetup.setupSeededFoundry({
+      workerIndex: workerInfo.parallelIndex,
+      foundryInstallPath: process.env.FOUNDRY_INSTALL_PATH || '/home/node/resources/app',
+      adminKey: process.env.FOUNDRY_ADMIN_KEY || 'test-admin-key',
+      port,
+    });
+    await use(serverInfo);
+    await foundrySetup.teardownSeededFoundry(serverInfo);
+  }, { scope: 'worker', timeout: 120000 }],
+
   /**
    * Current system ID being tested (from project config)
    */
@@ -111,14 +133,19 @@ export const test = base.extend({
    * 7. Yields server info to test
    * 8. On teardown: kills server, deletes all directories
    */
-  foundryServer: [async ({ systemId, foundryVersion, foundryZip, testEnv }, use, testInfo) => {
+  foundryServer: [async ({ systemId, foundryVersion, foundryZip, testEnv, _seededFoundryServer }, use, testInfo) => {
+    // Seeded mode: worker already started Foundry — just hand its info to the test
+    if (SEEDED) {
+      await use(_seededFoundryServer);
+      return;
+    }
+
     const testId = `test-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}`;
     console.log(`[fixture] Starting isolated Foundry v${foundryVersion} for: ${testId}`);
 
     let serverInfo = null;
 
     try {
-      // Setup isolated Foundry instance
       const foundryInstallPath = testInfo.project.use?.foundryInstallPath ?? null;
       const port = await getFreePort();
 
@@ -132,13 +159,11 @@ export const test = base.extend({
         licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
         port,
       });
-      
+
       console.log(`[fixture] Foundry ready at ${serverInfo.baseUrl}`);
-      
       await use(serverInfo);
-      
+
     } finally {
-      // ALWAYS clean up, even if test fails
       console.log(`[fixture] Tearing down isolated Foundry for: ${testId}`);
       if (serverInfo) {
         await foundrySetup.teardownIsolatedFoundry(serverInfo);

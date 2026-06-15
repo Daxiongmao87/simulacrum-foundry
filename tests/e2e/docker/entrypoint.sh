@@ -37,16 +37,22 @@ else
 fi
 
 # ── Apply license ─────────────────────────────────────────────────────────────
+# In seeded mode /data is a read-only image mount; workers copy /data to their
+# own tmp dir and accept the EULA themselves, so we skip the write here.
 
-mkdir -p "${CONFIG_DIR}"
-if [ -n "${FOUNDRY_LICENSE_JSON_B64:-}" ]; then
-  echo "${FOUNDRY_LICENSE_JSON_B64}" | base64 -d > "${CONFIG_DIR}/license.json"
-  echo "[entrypoint] License applied from FOUNDRY_LICENSE_JSON_B64."
-elif [ -n "${FOUNDRY_LICENSE_KEY:-}" ]; then
-  echo "{ \"license\": \"${FOUNDRY_LICENSE_KEY}\" }" | tr -d '-' > "${CONFIG_DIR}/license.json"
-  echo "[entrypoint] License applied from FOUNDRY_LICENSE_KEY."
+if [ -z "${SEEDED_DATA_DIR:-}" ]; then
+  mkdir -p "${CONFIG_DIR}"
+  if [ -n "${FOUNDRY_LICENSE_JSON_B64:-}" ]; then
+    echo "${FOUNDRY_LICENSE_JSON_B64}" | base64 -d > "${CONFIG_DIR}/license.json"
+    echo "[entrypoint] License applied from FOUNDRY_LICENSE_JSON_B64."
+  elif [ -n "${FOUNDRY_LICENSE_KEY:-}" ]; then
+    echo "{ \"license\": \"${FOUNDRY_LICENSE_KEY}\" }" | tr -d '-' > "${CONFIG_DIR}/license.json"
+    echo "[entrypoint] License applied from FOUNDRY_LICENSE_KEY."
+  else
+    echo "[entrypoint] WARNING: No license provided — Foundry will prompt on first run."
+  fi
 else
-  echo "[entrypoint] WARNING: No license provided — Foundry will prompt on first run."
+  echo "[entrypoint] Seeded mode — skipping license write (workers handle EULA per-instance)."
 fi
 
 # ── Run tests ─────────────────────────────────────────────────────────────────
