@@ -43,7 +43,7 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.dry_run && github.ref_name || 'main' }}
@@ -78,9 +78,9 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -315,7 +315,7 @@ jobs:
 
       - name: Create GitHub Release
         if: inputs.dry_run == false
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.version }}
           name: ${{ inputs.release_title }}
