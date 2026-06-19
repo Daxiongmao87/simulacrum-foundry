@@ -6,6 +6,7 @@ import fs from 'node:fs';
 const args = parseArgs(process.argv.slice(2));
 const optionAliases = {
   changelog: 'changelogPath',
+  summary: 'summaryPath',
 };
 
 const options = {
