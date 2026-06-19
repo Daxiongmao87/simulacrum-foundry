@@ -1,0 +1,162 @@
+# Post-merge changelog auto-update
+# Generates/updates an [Unreleased] section after every merge to main.
+
+name: Update Changelog
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan changes only (no remote mutation)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: >-
+      github.event_name != 'push' ||
+      (
+        !startsWith(github.event.head_commit.message, 'docs(release):') &&
+        !startsWith(github.event.head_commit.message, 'docs: update unreleased changelog') &&
+        !contains(github.event.head_commit.message, '[skip ci]')
+      )
+    steps:
+      - name: Generate release bot token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Resolve release bot identity
+        id: bot-user
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.release-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve runtime mode
+        id: runtime
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate unreleased changelog
+        id: changelog
+        run: |
+          if [ "${{ steps.runtime.outputs.dry_run }}" = "true" ]; then
+            MODE_ARGS="--dry-run"
+          else
+            MODE_ARGS="--write"
+          fi
+
+          node tools/release/generate-unreleased-changelog.mjs \
+            --changelog-path CHANGELOG.md \
+            $MODE_ARGS \
+            --summary /tmp/generate-changelog.json
+
+          HAS_UPDATES=$(jq -r .hasUpdates /tmp/generate-changelog.json)
+          echo "has_updates=$HAS_UPDATES" >> "$GITHUB_OUTPUT"
+
+      - name: Plan changelog commit payload
+        if: steps.changelog.outputs.has_updates == 'true'
+        run: |
+          node tools/release/plan-github-update.mjs \
+            --repo "${{ github.repository }}" \
+            --version "changelog-${{ github.sha }}" \
+            --commit-message "docs: update unreleased changelog [skip ci]" \
+            --actor-name "${{ steps.release-token.outputs.app-slug }}[bot]" \
+            --actor-email "${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com" \
+            --base-commit "$(git rev-parse HEAD)" \
+            --base-tree "$(git rev-parse HEAD^{tree})" \
+            --file CHANGELOG.md \
+            --output /tmp/changelog-github-plan.json
+
+      - name: Commit unreleased changelog via Git database API
+        if: steps.changelog.outputs.has_updates == 'true' && steps.runtime.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          COMMIT_MESSAGE="docs: update unreleased changelog [skip ci]"
+          BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
+          BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          if git diff --quiet CHANGELOG.md; then
+            echo "No changelog changes to commit"
+            exit 0
+          fi
+
+          BASE_COMMIT_SHA=$(git rev-parse HEAD)
+          BASE_TREE_SHA=$(git rev-parse "${BASE_COMMIT_SHA}^{tree}")
+
+          BLOB_BODY=$(mktemp)
+          jq -n \
+            --arg content "$(base64 -w 0 CHANGELOG.md)" \
+            '{content: $content, encoding: "base64"}' > "$BLOB_BODY"
+
+          BLOBSHA=$(gh api "/repos/${REPO}/git/blobs" \
+            --method POST \
+            --input "$BLOB_BODY" \
+            --jq .sha)
+
+          jq -n \
+            --arg base_tree "$BASE_TREE_SHA" \
+            --arg path "CHANGELOG.md" \
+            --arg sha "$BLOBSHA" \
+            '{base_tree: $base_tree, tree: [{path: $path, mode: "100644", type: "blob", sha: $sha}]}' \
+            > /tmp/changelog-tree.json
+
+          TREE_SHA=$(gh api "/repos/${REPO}/git/trees" \
+            --method POST \
+            --input /tmp/changelog-tree.json \
+            --jq .sha)
+
+          jq -n \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg tree "$TREE_SHA" \
+            --arg parent "$BASE_COMMIT_SHA" \
+            --arg name "$BOT_NAME" \
+            --arg email "$BOT_EMAIL" \
+            '{
+              message: $message,
+              tree: $tree,
+              parents: [$parent],
+              author: {name: $name, email: $email},
+              committer: {name: $name, email: $email}
+            }' > /tmp/changelog-commit.json
+
+          CHANGES_SHA=$(gh api "/repos/${REPO}/git/commits" \
+            --method POST \
+            --input /tmp/changelog-commit.json \
+            --jq .sha)
+
+          jq -n --arg sha "$CHANGES_SHA" '{sha: $sha, force: false}' > /tmp/changelog-ref.json
+          gh api "/repos/${REPO}/git/refs/heads/main" \
+            --method PATCH \
+            --input /tmp/changelog-ref.json \
+            --silent
+
+      - name: Show planned changelog payload (dry run)
+        if: steps.changelog.outputs.has_updates == 'true' && steps.runtime.outputs.dry_run == 'true'
+        run: cat /tmp/changelog-github-plan.json

@@ -1,15 +1,29 @@
 # FoundryVTT Module Release Workflow
-# Manual trigger only - run with: gh workflow run release.yml -f version=1.0.2
+# Manual trigger only - run with:
+# gh workflow run create-release.yml -f version=1.0.2 -f release_title="Simulacrum 1.0.2" -f release_description="..." -f dry_run=false
 
 name: Create Release
 
-"on":
+on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.2)'
+        description: 'SemVer to release (for example: 1.0.2)'
         required: true
         type: string
+      release_title:
+        description: 'Release title (required)'
+        required: true
+        type: string
+      release_description:
+        description: 'Release notes description to prepend (required)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Validate release metadata and payloads without mutating GitHub'
+        required: false
+        type: boolean
+        default: true
 
 env:
   MODULE_ID: simulacrum
@@ -19,13 +33,49 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
+      - name: Generate release bot token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ inputs.dry_run && github.ref_name || 'main' }}
+          token: ${{ steps.release-token.outputs.token }}
+
+      - name: Validate release inputs
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_TITLE: ${{ inputs.release_title }}
+          RELEASE_DESCRIPTION: ${{ inputs.release_description }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::version must be SemVer without a leading v"
+            exit 1
+          fi
+
+          if [ -z "${RELEASE_TITLE//[[:space:]]/}" ] || [ "$RELEASE_TITLE" = "$VERSION" ] || [ "$RELEASE_TITLE" = "v$VERSION" ]; then
+            echo "::error::release_title must be natural prose, not just the version"
+            exit 1
+          fi
+
+          if [ -z "${RELEASE_DESCRIPTION//[[:space:]]/}" ]; then
+            echo "::error::release_description is required"
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::tag refs/tags/${VERSION} already exists"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,38 +86,59 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set version
-        id: version
-        run: echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-
       - name: Convert README to HTML description
+        env:
+          REPO_RAW: https://raw.githubusercontent.com/${{ github.repository }}/main
         run: |
           npm install -g marked
-          REPO_RAW="https://raw.githubusercontent.com/${{ github.repository }}/main"
           cat README.md | \
             sed '/^\[!\[/d' | \
             sed "s|](docs/|](${REPO_RAW}/docs/|g" | \
             sed "s|src=\"docs/|src=\"${REPO_RAW}/docs/|g" \
             > readme_processed.md
           marked readme_processed.md > readme.html
-          sed -i '0,/<h1[^>]*>.*<\/h1>/s///' readme.html
+          sed -i '0,/^<h1[^>]*>.*<\/h1>$/d' readme.html
           cat readme.html | tr '\n' ' ' | sed 's/  */ /g' > readme_single.html
           rm -f readme_processed.md
 
-      - name: Update module.json version
+      - name: Prepare release metadata
+        id: prepare-release
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_TITLE: ${{ inputs.release_title }}
+          RELEASE_DESCRIPTION: ${{ inputs.release_description }}
+          MODULE_ID: ${{ env.MODULE_ID }}
+          REPO: ${{ github.repository }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          REPO_URL="https://github.com/${{ github.repository }}"
-          README_HTML=$(cat readme_single.html)
-          jq --arg ver "$VERSION" \
-             --arg manifest "${REPO_URL}/releases/download/${VERSION}/module.json" \
-             --arg download "${REPO_URL}/releases/download/${VERSION}/${MODULE_ID}.zip" \
-             --arg desc "$README_HTML" \
-             '.version = $ver | .manifest = $manifest | .download = $download | .description = $desc' \
-             module.json > module.json.tmp && mv module.json.tmp module.json
-          echo "Updated module.json:"
-          cat module.json | jq '.version, .manifest, .download'
-          rm -f readme.html readme_single.html
+          set -euo pipefail
+
+          node tools/release/prepare-release.mjs \
+            --version "${VERSION}" \
+            --release-title "${RELEASE_TITLE}" \
+            --release-description "${RELEASE_DESCRIPTION}" \
+            --module-id "${MODULE_ID}" \
+            --repo-url "https://github.com/${REPO}" \
+            --changelog-path CHANGELOG.md \
+            --module-json-path module.json \
+            --readme-html-path readme_single.html \
+            --release-body-path release_body.md \
+            --write \
+            --summary /tmp/prepare-release-plan.json
+
+          if [ ! -s release_body.md ]; then
+            echo "::error::Release body is empty after planning"
+            exit 1
+          fi
+
+          if ! grep -q "^## \\[${VERSION}\\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md was not versioned for ${VERSION}"
+            exit 1
+          fi
+
+          if [ "$(jq -r '.version' module.json)" != "${VERSION}" ]; then
+            echo "::error::module.json version was not updated to ${VERSION}"
+            exit 1
+          fi
 
       - name: Build compendium packs
         run: npm run build:packs
@@ -90,73 +161,182 @@ jobs:
           cp ${{ env.MODULE_ID }}/module.json ../module.json.release
           cd ..
           mv module.json.release module.json
+          rm -f readme_single.html readme.html
 
-      - name: Generate changelog
-        id: changelog
+      - name: Resolve release bot identity
+        id: bot-user
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          TODAY=$(date +%Y-%m-%d)
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            echo "Generating changelog from $PREV_TAG to HEAD"
-            COMMITS=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD | grep -vE '^- (docs|ci|chore):')
-          else
-            echo "No previous tag found, including recent commits"
-            COMMITS=$(git log --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null || git log --pretty=format:"- %s" | grep -vE '^- (docs|ci|chore):')
-          fi
-          # Ensure we have at least something for the changelog
-          if [ -z "$COMMITS" ]; then
-            COMMITS="- Maintenance release"
-          fi
-          echo "$COMMITS" > changelog.txt
-          cat > new_entry.txt << 'ENTRY_EOF'
-          ## [$VERSION] - $TODAY
+          echo "user-id=$(gh api "/users/${{ steps.release-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
 
-          ### Changed
-          ENTRY_EOF
-          sed -i "s/\$VERSION/$VERSION/g; s/\$TODAY/$TODAY/g" new_entry.txt
-          echo "$COMMITS" >> new_entry.txt
-          head -n 7 CHANGELOG.md > CHANGELOG.tmp
-          echo "" >> CHANGELOG.tmp
-          cat new_entry.txt >> CHANGELOG.tmp
-          tail -n +8 CHANGELOG.md >> CHANGELOG.tmp
-          mv CHANGELOG.tmp CHANGELOG.md
-          rm new_entry.txt
-
-      - name: Commit CHANGELOG.md and create tag
+      - name: Plan atomic commit and tag payloads
+        id: github-plan
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for ${VERSION}" || echo "No changes to commit"
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
-          git push origin main
-          git push origin "${VERSION}"
+          node tools/release/plan-github-update.mjs \
+            --repo "${{ github.repository }}" \
+            --version "${{ inputs.version }}" \
+            --commit-message "docs(release): release ${{ inputs.version }} [skip ci]" \
+            --actor-name "${{ steps.release-token.outputs.app-slug }}[bot]" \
+            --actor-email "${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com" \
+            --file module.json \
+            --file CHANGELOG.md \
+            --base-commit "$(git rev-parse HEAD)" \
+            --base-tree "$(git rev-parse HEAD^{tree})" \
+            --include-tag \
+            --output /tmp/github-plan.json
+
+      - name: Create release Git database commit and tag
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          REPO="${{ github.repository }}"
+          COMMIT_MESSAGE="docs(release): release ${VERSION} [skip ci]"
+          BOT_NAME="${{ steps.release-token.outputs.app-slug }}[bot]"
+          BOT_EMAIL="${{ steps.bot-user.outputs.user-id }}+${{ steps.release-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::tag refs/tags/${VERSION} already exists"
+            exit 1
+          fi
+
+          FILES_TO_COMMIT=()
+          if ! git diff --quiet -- CHANGELOG.md; then
+            FILES_TO_COMMIT+=("CHANGELOG.md")
+          fi
+          if ! git diff --quiet -- module.json; then
+            FILES_TO_COMMIT+=("module.json")
+          fi
+
+          if [ "${#FILES_TO_COMMIT[@]}" -eq 0 ]; then
+            echo "::error::No release file changes to commit"
+            exit 1
+          fi
+
+          BASE_COMMIT_SHA=$(git rev-parse HEAD)
+          BASE_TREE_SHA=$(git rev-parse "${BASE_COMMIT_SHA}^{tree}")
+          TREE_ENTRIES='[]'
+
+          for file in "${FILES_TO_COMMIT[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing expected file: $file"
+              exit 1
+            fi
+            BLOB_BODY=$(mktemp)
+            jq -n \
+              --arg content "$(base64 -w 0 "$file")" \
+              '{content: $content, encoding: "base64"}' > "$BLOB_BODY"
+            BLOBSHA=$(gh api "/repos/${REPO}/git/blobs" \
+              --method POST \
+              --input "$BLOB_BODY" \
+              --jq .sha)
+            ENTRY=$(jq -n \
+              --arg path "$file" \
+              --arg sha "$BLOBSHA" \
+              '{path: $path, mode: "100644", type: "blob", sha: $sha}')
+            TREE_ENTRIES=$(echo "$TREE_ENTRIES" | jq -c ". + [$ENTRY]")
+          done
+
+          jq -n \
+            --arg base_tree "$BASE_TREE_SHA" \
+            --argjson tree "$TREE_ENTRIES" \
+            '{base_tree: $base_tree, tree: $tree}' > /tmp/release-tree.json
+
+          TREE_SHA=$(gh api "/repos/${REPO}/git/trees" \
+            --method POST \
+            --input /tmp/release-tree.json \
+            --jq .sha)
+
+          jq -n \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg tree "$TREE_SHA" \
+            --arg parent "$BASE_COMMIT_SHA" \
+            --arg name "$BOT_NAME" \
+            --arg email "$BOT_EMAIL" \
+            '{
+              message: $message,
+              tree: $tree,
+              parents: [$parent],
+              author: {name: $name, email: $email},
+              committer: {name: $name, email: $email}
+            }' > /tmp/release-commit.json
+
+          RELEASE_COMMIT_SHA=$(gh api "/repos/${REPO}/git/commits" \
+            --method POST \
+            --input /tmp/release-commit.json \
+            --jq .sha)
+
+          jq -n --arg sha "$RELEASE_COMMIT_SHA" '{sha: $sha, force: false}' > /tmp/release-ref.json
+          gh api "/repos/${REPO}/git/refs/heads/main" \
+            --method PATCH \
+            --input /tmp/release-ref.json \
+            --silent
+
+          jq -n \
+            --arg tag "$VERSION" \
+            --arg message "Release ${VERSION}" \
+            --arg object "$RELEASE_COMMIT_SHA" \
+            --arg type "commit" \
+            --arg name "$BOT_NAME" \
+            --arg email "$BOT_EMAIL" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              tag: $tag,
+              message: $message,
+              object: $object,
+              type: $type,
+              tagger: {name: $name, email: $email, date: $date}
+            }' > /tmp/release-tag-object.json
+
+          TAG_SHA=$(gh api "/repos/${REPO}/git/tags" \
+            --method POST \
+            --input /tmp/release-tag-object.json \
+            --jq .sha)
+
+          jq -n \
+            --arg ref "refs/tags/${VERSION}" \
+            --arg sha "$TAG_SHA" \
+            '{ref: $ref, sha: $sha}' > /tmp/release-tag-ref.json
+          gh api "/repos/${REPO}/git/refs" \
+            --method POST \
+            --input /tmp/release-tag-ref.json \
+            --silent
+
+          echo "release_commit_sha=$RELEASE_COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Show planned API payloads (dry run)
+        if: inputs.dry_run == true
+        run: |
+          echo "Planned payload for module/release commit and tag:"
+          cat /tmp/github-plan.json
 
       - name: Create GitHub Release
+        if: inputs.dry_run == false
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: "v${{ steps.version.outputs.version }}"
-          body_path: changelog.txt
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.release_title }}
+          body_path: release_body.md
           files: |
             module.json
             ${{ env.MODULE_ID }}.zip
           fail_on_unmatched_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
 
       - name: Publish to Foundry VTT
+        if: inputs.dry_run == false
         env:
           FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
         run: |
           OUTPUT=$(npx @ghost-fvtt/foundry-publish \
             --manifestPath module.json \
-            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/module.json" 2>&1) || {
+            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/module.json" 2>&1) || {
             if echo "$OUTPUT" | grep -q "already exists"; then
               echo "Version already published to Foundry VTT, skipping"
-              exit 0
             else
               echo "$OUTPUT"
               exit 1
@@ -164,6 +344,7 @@ jobs:
           }
 
       - name: Announce on Discord
+        if: inputs.dry_run == false
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
@@ -171,24 +352,29 @@ jobs:
             echo "Discord webhook not configured, skipping announcement"
             exit 0
           fi
-          VERSION=${{ steps.version.outputs.version }}
+
+          VERSION="${{ inputs.version }}"
           REPO_URL="https://github.com/${{ github.repository }}"
           RELEASE_URL="${REPO_URL}/releases/tag/${VERSION}"
-          # Discord field value limit is 1024 chars - truncate by lines until under limit
           SUFFIX=$'\n'"[See full release notes](${RELEASE_URL})"
-          MAX_CHARS=$((1024 - ${#SUFFIX} - 10))
-          CHANGELOG=$(cat changelog.txt)
+          MAX_CHARS=$((1024 - ${#SUFFIX}))
+          CHANGELOG_FILE=changelog.txt
+          awk -v version="$VERSION" '
+            $0 == "## [" version "]" || index($0, "## [" version "] - ") == 1 { found=1; next }
+            found && /^## \\[/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$CHANGELOG_FILE"
+          CHANGELOG=$(cat "$CHANGELOG_FILE")
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="Release ${VERSION}"
+          fi
           while [ ${#CHANGELOG} -gt $MAX_CHARS ]; do
-            # Drop the last line and append truncation notice
             CHANGELOG=$(echo "$CHANGELOG" | head -n -1)
           done
-          if [ ${#CHANGELOG} -lt $(wc -c < changelog.txt) ]; then
-            CHANGELOG="${CHANGELOG}${SUFFIX}"
-          fi
+          CHANGELOG="${CHANGELOG}${SUFFIX}"
 
-          # Build JSON payload with proper escaping using jq
           PAYLOAD=$(jq -n \
-            --arg title "Simulacrum v${VERSION} Released!" \
+            --arg title "Simulacrum ${VERSION} Released!" \
             --arg url "$RELEASE_URL" \
             --arg desc "A new version of Simulacrum: AI Campaign Copilot is now available!" \
             --arg changes "$CHANGELOG" \
@@ -207,11 +393,14 @@ jobs:
               }]
             }')
 
-          echo "Payload: $PAYLOAD"
-          HTTP_CODE=$(curl -s -o /tmp/discord_response.txt -w "%{http_code}" -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL")
+          HTTP_CODE=$(curl -s -o /tmp/discord_response.txt -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL")
           BODY=$(cat /tmp/discord_response.txt)
-          echo "Response ($HTTP_CODE): $BODY"
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "::error::Discord announcement failed with HTTP $HTTP_CODE"
+            echo "Response: $BODY"
             exit 1
           fi

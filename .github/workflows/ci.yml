@@ -1,16 +1,8 @@
 # CI checks for pull requests
-# Lint and format run only against the changed files selected by this workflow's
-# pathspecs (scripts/**, tests/**, root *.json / *.md), so pre-existing debt in
-# untouched files does not block unrelated PRs. Dead-code (knip) is inherently a
-# whole-project analysis, so it runs across the repo on both HEAD and the PR
-# base and fails only on findings newly introduced by the PR (baseline-diff).
-# When a config file (.eslintrc.cjs / .prettierrc.json / knip.json) changes,
-# every check runs against the whole project instead, since a config change
-# can flip results anywhere.
 
 name: CI
 
-'on':
+on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -41,53 +33,50 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Check if lint/format config files changed (triggers full project checks).
-          # Include D so deletions of a config file also trigger a full run.
           CONFIG_CHANGED=$(git diff --name-only --diff-filter=ACMRD "$BASE_SHA" "$HEAD_SHA" -- '.eslintrc.cjs' '.prettierrc.json' 'knip.json' | tr '\n' ' ')
           if [ -n "$CONFIG_CHANGED" ]; then
-            echo "config_changed=true" >> $GITHUB_OUTPUT
-            echo "Config files changed: $CONFIG_CHANGED — will run full project checks"
+            echo "config_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Config files changed: $CONFIG_CHANGED — running full checks"
           else
-            echo "config_changed=false" >> $GITHUB_OUTPUT
+            echo "config_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # Extant changed JS files (for eslint/prettier, which can't lint a
-          # deleted path). ACMR excludes D because the file no longer exists.
-          CHANGED_JS=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' | tr '\n' ' ')
-          CHANGED_ALL=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' '*.json' '*.md' | tr '\n' ' ')
-
-          # Any JS touched (including deletions) — used only to decide whether
-          # the dead-code gate must run. Deleting a JS file can leave other
-          # files newly unreferenced, so D must trigger the gate too.
-          CHANGED_JS_ANY=$(git diff --name-only --diff-filter=ACMRD "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' | tr '\n' ' ')
-
-          echo "js_files=$CHANGED_JS" >> $GITHUB_OUTPUT
-          echo "all_files=$CHANGED_ALL" >> $GITHUB_OUTPUT
-
-          if [ -z "$CHANGED_JS" ]; then
-            echo "has_js=false" >> $GITHUB_OUTPUT
-            echo "No JS files changed"
+          WORKFLOW_CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- '.github/workflows/*.yml' '.github/workflows/*.yaml' | tr '\n' ' ')
+          if [ -n "$WORKFLOW_CHANGED_FILES" ]; then
+            echo "workflow_changed=true" >> "$GITHUB_OUTPUT"
+            echo "workflow_files=$WORKFLOW_CHANGED_FILES" >> "$GITHUB_OUTPUT"
           else
-            echo "has_js=true" >> $GITHUB_OUTPUT
-            echo "Changed JS files: $CHANGED_JS"
+            echo "workflow_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # Knip also reports unused/missing dependencies, so dep-manifest-only
-          # changes must still run the dead-code check. Include D so deletions of
-          # a manifest also trigger the gate.
+          CHANGED_JS=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' 'tools/**/*.js' 'tools/**/*.mjs' | tr '\n' ' ')
+          CHANGED_ALL=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' 'tools/**/*.js' 'tools/**/*.mjs' '*.json' '*.md' '.github/workflows/*.yml' '.github/workflows/*.yaml' | tr '\n' ' ')
+          CHANGED_JS_ANY=$(git diff --name-only --diff-filter=ACMRD "$BASE_SHA" "$HEAD_SHA" -- 'scripts/*.js' 'scripts/**/*.js' 'tests/**/*.js' 'tools/**/*.js' 'tools/**/*.mjs' | tr '\n' ' ')
           CHANGED_DEPS=$(git diff --name-only --diff-filter=ACMRD "$BASE_SHA" "$HEAD_SHA" -- 'package.json' 'package-lock.json' | tr '\n' ' ')
-          if [ -n "$CHANGED_JS_ANY" ] || [ -n "$CHANGED_DEPS" ]; then
-            echo "run_deadcode=true" >> $GITHUB_OUTPUT
+
+          echo "js_files=$CHANGED_JS" >> "$GITHUB_OUTPUT"
+          echo "all_files=$CHANGED_ALL" >> "$GITHUB_OUTPUT"
+          echo "workflow_files=$WORKFLOW_CHANGED_FILES" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$CHANGED_JS" ]; then
+            echo "has_js=true" >> "$GITHUB_OUTPUT"
+            echo "Changed JS files: $CHANGED_JS"
           else
-            echo "run_deadcode=false" >> $GITHUB_OUTPUT
+            echo "has_js=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ -z "$CHANGED_ALL" ]; then
-            echo "has_any=false" >> $GITHUB_OUTPUT
-            echo "No formattable files changed"
+          if [ -n "$CHANGED_JS_ANY" ] || [ -n "$CHANGED_DEPS" ]; then
+            echo "run_deadcode=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_any=true" >> $GITHUB_OUTPUT
+            echo "run_deadcode=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$CHANGED_ALL" ]; then
+            echo "has_any=true" >> "$GITHUB_OUTPUT"
             echo "Changed files for formatting: $CHANGED_ALL"
+          else
+            echo "has_any=false" >> "$GITHUB_OUTPUT"
+            echo "No files for formatting"
           fi
 
       - name: ESLint check (full — config changed)
@@ -102,6 +91,10 @@ jobs:
         if: steps.changed.outputs.config_changed == 'true'
         run: npm run format:check
 
+      - name: Workflow YAML parse check
+        if: steps.changed.outputs.workflow_changed == 'true'
+        run: npx prettier --check ${{ steps.changed.outputs.workflow_files }}
+
       - name: Prettier check (changed files only)
         if: steps.changed.outputs.config_changed == 'false' && steps.changed.outputs.has_any == 'true'
         run: npx prettier --check ${{ steps.changed.outputs.all_files }}
@@ -110,10 +103,6 @@ jobs:
         if: steps.changed.outputs.config_changed == 'true'
         run: npm run dead-code
 
-      # Baseline-diff: run knip on HEAD and on the PR base, fail only on findings
-      # newly introduced by this PR. Pre-existing dead code does not block; new
-      # dead code does — including the case where editing file A leaves file B
-      # newly unreferenced (knip reports B, the diff still catches it).
       - name: Dead code check (baseline diff)
         if: steps.changed.outputs.config_changed == 'false' && steps.changed.outputs.run_deadcode == 'true'
         run: .github/scripts/dead-code-diff.sh "${{ github.event.pull_request.base.sha }}"
