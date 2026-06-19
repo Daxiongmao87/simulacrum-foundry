@@ -50,7 +50,7 @@ const entries = options.files.map(filePath => {
   };
 });
 
-const normalizedRepo = options.repo.replace(/^github\.com\//, '');
+const normalizedRepo = options.repo.replace(/^(https?:\/\/)?(github\.com\/)?/, '');
 const treePayload = {
   base_tree: options.baseTree,
   tree: entries.map(entry => ({

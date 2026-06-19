@@ -224,7 +224,7 @@ function changedFilesForCommit(sha) {
   const parentCount = parentLine ? parentLine.split(/\s+/).length - 1 : 0;
   const command =
     parentCount > 1
-      ? `git diff --name-only ${sha}^1 ${sha}`
+      ? `git diff --name-only ${sha}~1 ${sha}`
       : `git show --name-only --pretty=format: --no-renames ${sha}`;
   return runGitLog(command, options.repoRoot)
     .split('\n')

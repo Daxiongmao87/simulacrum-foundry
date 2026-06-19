@@ -51,10 +51,10 @@ const moduleId = options.moduleId || 'simulacrum';
 if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(version)) {
   fail('version must be SemVer without a leading v');
 }
-if (releaseTitle === version || releaseTitle === `v${version}` || !/[A-Za-z]/.test(releaseTitle)) {
+if (releaseTitle === version || releaseTitle === `v${version}` || !/\p{L}/u.test(releaseTitle)) {
   fail('release_title must be natural prose, not just the version');
 }
-if (!/[A-Za-z]/.test(releaseDescription) || releaseDescription.split(/\s+/).length < 3) {
+if (!/\p{L}/u.test(releaseDescription) || releaseDescription.split(/\s+/).length < 3) {
   fail('release_description must be a natural-prose descriptor');
 }
 
@@ -100,8 +100,8 @@ if (options.writeFiles && !options.dryRun) {
   if (changedModuleJson) {
     fs.writeFileSync(options.moduleJsonPath, nextModuleJsonText);
   }
+  fs.writeFileSync(options.releaseBodyPath, `${releaseBody.trim()}\n`);
 }
-fs.writeFileSync(options.releaseBodyPath, `${releaseBody.trim()}\n`);
 
 const summary = {
   version,
@@ -146,7 +146,7 @@ function parseArgs(rawArgs) {
     values[key] = next;
     i += 1;
   }
-  if (!rawArgs.includes('--write')) {
+  if (values.writeFiles === undefined) {
     values.writeFiles = false;
   }
   return values;
