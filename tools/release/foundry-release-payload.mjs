@@ -43,60 +43,79 @@ if (process.argv[1] && process.argv[1].endsWith('foundry-release-payload.mjs')) 
 }
 
 function buildFoundryReleasePayload({ moduleJson, releaseVersion, repoUrl, dryRun = false }) {
-  const normalizedRepoUrl = normalizeRepoUrl(repoUrl);
-  const moduleId = moduleJson && moduleJson.id;
-  if (!moduleId || typeof moduleId !== 'string' || !moduleId.trim()) {
-    fail('module json is missing required id');
-  }
-
-  const manifestVersion = String(releaseVersion || '').trim();
-  if (!manifestVersion) {
-    fail('release version is required');
-  }
-  const moduleVersion = String(moduleJson.version || '').trim();
+  const moduleId = resolveModuleId(moduleJson);
+  const manifestVersion = resolveTrimmedValue(releaseVersion, 'release version is required');
+  const moduleVersion = String((moduleJson && moduleJson.version) ?? '').trim();
   if (moduleVersion !== manifestVersion) {
     fail(
       `module.json version (${moduleVersion}) does not match workflow version (${manifestVersion})`
     );
   }
 
-  const compatibility = moduleJson.compatibility || {};
-  const minimum = compatibility.minimum;
-  const verified = compatibility.verified;
-  if (minimum === undefined || minimum === null || String(minimum).trim() === '') {
-    fail('compatibility.minimum is required');
-  }
-  if (verified === undefined || verified === null || String(verified).trim() === '') {
-    fail('compatibility.verified is required');
-  }
-
-  const compatibilityPayload = {
-    minimum: String(minimum),
-    verified: String(verified),
-  };
-  const maximum = compatibility.maximum;
-  if (maximum !== undefined && maximum !== null && String(maximum).trim() !== '') {
-    compatibilityPayload.maximum = String(maximum);
-  }
-
+  const compatibility = buildCompatibilityPayload(moduleJson && moduleJson.compatibility);
+  const normalizedRepoUrl = normalizeRepoUrl(repoUrl);
   const payload = {
     id: moduleId,
     release: {
       version: manifestVersion,
       manifest: `${normalizedRepoUrl}/releases/download/${manifestVersion}/module.json`,
       notes: `${normalizedRepoUrl}/releases/tag/${manifestVersion}`,
-      compatibility: compatibilityPayload,
+      compatibility,
     },
+    ...(dryRun ? { 'dry-run': true } : {}),
   };
-
-  if (dryRun) {
-    payload['dry-run'] = true;
-  }
 
   return payload;
 }
 
 export { buildFoundryReleasePayload };
+
+function resolveModuleId(moduleJson) {
+  const moduleId = moduleJson && moduleJson.id;
+  if (typeof moduleId !== 'string' || !moduleId.trim()) {
+    fail('module json is missing required id');
+  }
+  return moduleId;
+}
+
+function resolveTrimmedValue(value, message) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    fail(message);
+  }
+  return trimmed;
+}
+
+function buildCompatibilityPayload(compatibility) {
+  const minimum = resolveTrimmedValue(
+    compatibility && compatibility.minimum,
+    'compatibility.minimum is required'
+  );
+  const verified = resolveTrimmedValue(
+    compatibility && compatibility.verified,
+    'compatibility.verified is required'
+  );
+
+  const compatibilityPayload = {
+    minimum,
+    verified,
+  };
+
+  const maximum = resolveOptionalTrimmedValue(compatibility && compatibility.maximum);
+  if (maximum !== null) {
+    compatibilityPayload.maximum = maximum;
+  }
+
+  return compatibilityPayload;
+}
+
+function resolveOptionalTrimmedValue(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const trimmed = String(value).trim();
+  return trimmed === '' ? null : trimmed;
+}
 
 function parseArgs(rawArgs) {
   const values = {};

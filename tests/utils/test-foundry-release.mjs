@@ -144,9 +144,9 @@ assert.equal(
   'Setup Node.js should run for all non-announce-only paths'
 );
 assert.equal(
-  /- name: Install dependencies\n\s+if: inputs\.announce_only == false && inputs\.foundry_only == false/.test(
-    workflow
-  ),
+  new RegExp(
+    '- name: Install dependencies\\n\\s+if: inputs\\.announce_only == false && inputs\\.foundry_only == false'
+  ).test(workflow),
   true,
   'npm ci should be skipped for foundry_only'
 );
