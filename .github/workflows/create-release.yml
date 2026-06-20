@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: false
+      foundry_only:
+        description: 'Publish an existing GitHub release to Foundry without mutating GitHub/tag/release assets'
+        required: false
+        type: boolean
+        default: false
       dry_run:
         description: 'Validate release metadata and payloads without mutating GitHub'
         required: false
@@ -51,7 +56,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ (inputs.dry_run || inputs.announce_only) && github.ref_name || 'main' }}
+          ref: ${{ (inputs.dry_run || inputs.announce_only || inputs.foundry_only) && github.ref_name || 'main' }}
           token: ${{ steps.release-token.outputs.token }}
 
       - name: Validate release inputs
@@ -88,7 +93,12 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ inputs.announce_only }}" != "true" ]; then
+          if [ "${{ inputs.announce_only }}" = "true" ] && [ "${{ inputs.foundry_only }}" = "true" ]; then
+            echo "::error::foundry_only and announce_only cannot both be true"
+            exit 1
+          fi
+
+          if [ "${{ inputs.announce_only }}" != "true" ] && [ "${{ inputs.foundry_only }}" != "true" ]; then
             if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
               echo "::error::tag refs/tags/${VERSION} already exists"
               exit 1
@@ -108,11 +118,11 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         run: npm ci
 
       - name: Convert README to HTML description
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         env:
           REPO_RAW: https://raw.githubusercontent.com/${{ github.repository }}/main
         run: |
@@ -129,7 +139,7 @@ jobs:
 
       - name: Prepare release metadata
         id: prepare-release
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         env:
           VERSION: ${{ inputs.version }}
           RELEASE_TITLE: ${{ inputs.release_title }}
@@ -168,11 +178,11 @@ jobs:
           fi
 
       - name: Build compendium packs
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         run: npm run build:packs
 
       - name: Create module zip
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         run: |
           mkdir -p dist/${{ env.MODULE_ID }}
           cp -r assets dist/${{ env.MODULE_ID }}/
@@ -193,7 +203,7 @@ jobs:
           rm -f readme_single.html readme.html
 
       - name: Resolve release bot identity
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         id: bot-user
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
@@ -201,7 +211,7 @@ jobs:
           echo "user-id=$(gh api "/users/${{ steps.release-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
 
       - name: Plan atomic commit and tag payloads
-        if: inputs.announce_only == false
+        if: inputs.announce_only == false && inputs.foundry_only == false
         id: github-plan
         run: |
           node tools/release/plan-github-update.mjs \
@@ -218,7 +228,7 @@ jobs:
             --output /tmp/github-plan.json
 
       - name: Create release Git database commit and tag
-        if: inputs.dry_run == false && inputs.announce_only == false
+        if: inputs.dry_run == false && inputs.announce_only == false && inputs.foundry_only == false
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
         run: |
@@ -339,13 +349,13 @@ jobs:
           echo "release_commit_sha=$RELEASE_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Show planned API payloads (dry run)
-        if: inputs.dry_run == true && inputs.announce_only == false
+        if: inputs.dry_run == true && inputs.announce_only == false && inputs.foundry_only == false
         run: |
           echo "Planned payload for module/release commit and tag:"
           cat /tmp/github-plan.json
 
       - name: Create GitHub Release
-        if: inputs.dry_run == false && inputs.announce_only == false
+        if: inputs.dry_run == false && inputs.announce_only == false && inputs.foundry_only == false
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.version }}
@@ -358,35 +368,148 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
 
-      - name: Publish to Foundry VTT
-        if: inputs.dry_run == false && inputs.announce_only == false
+      - name: Prepare release metadata for Foundry API
+        if: inputs.announce_only == false && (inputs.foundry_only == true || inputs.dry_run == false)
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ inputs.foundry_only }}" = "true" ]; then
+            curl -fsSL "https://github.com/${REPO}/releases/download/${VERSION}/module.json" -o /tmp/foundry-module.json
+          else
+            cp module.json /tmp/foundry-module.json
+          fi
+
+      - name: Build Foundry API payload
+        if: inputs.announce_only == false && (inputs.foundry_only == true || inputs.dry_run == false)
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          node tools/release/foundry-release-payload.mjs \
+            --module-json-path /tmp/foundry-module.json \
+            --version "${VERSION}" \
+            --repo-url "https://github.com/${REPO}" \
+            --output-path /tmp/foundry-payload.json
+
+          node tools/release/foundry-release-payload.mjs \
+            --module-json-path /tmp/foundry-module.json \
+            --version "${VERSION}" \
+            --repo-url "https://github.com/${REPO}" \
+            --dry-run \
+            --output-path /tmp/foundry-dry-run-payload.json
+
+      - name: Validate Foundry payload (dry run)
+        if: inputs.announce_only == false && (inputs.foundry_only == true || inputs.dry_run == false)
         env:
           FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+          FVTT_ENDPOINT: https://foundryvtt.com/_api/packages/release_version/
         run: |
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ inputs.version }}"
-          OUTPUT=$(npx @ghost-fvtt/foundry-publish \
-            --manifestPath module.json \
-            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/module.json" \
-            --changelogURL "${RELEASE_URL}" 2>&1) || EXIT_CODE=$?
-          EXIT_CODE=${EXIT_CODE:-0}
+          set -euo pipefail
+          RESPONSE_BODY=/tmp/foundry-dry-run-response.json
 
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            if echo "$OUTPUT" | grep -q "already exists"; then
-              echo "Version already published to Foundry VTT, skipping"
-            else
-              echo "$OUTPUT"
+          HTTP_CODE=$(curl -sS \
+            -o "$RESPONSE_BODY" \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: ${FVTT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/foundry-dry-run-payload.json \
+            "${FVTT_ENDPOINT}")
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Foundry API dry-run failed with HTTP $HTTP_CODE"
+            cat "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          STATUS=$(jq -r '.status // ""' "$RESPONSE_BODY")
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::Foundry API dry-run returned status ${STATUS:-<empty>}"
+            cat "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          echo "Foundry API dry-run returned success"
+
+      - name: Publish to Foundry VTT
+        if: inputs.announce_only == false && inputs.dry_run == false
+        env:
+          FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+          FVTT_ENDPOINT: https://foundryvtt.com/_api/packages/release_version/
+        run: |
+          set -euo pipefail
+          RESPONSE_BODY=/tmp/foundry_publish_response.json
+
+          HTTP_CODE=$(curl -sS \
+            -o "$RESPONSE_BODY" \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: ${FVTT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/foundry-payload.json \
+            "${FVTT_ENDPOINT}")
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Foundry API publish failed with HTTP $HTTP_CODE"
+            cat "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          STATUS=$(jq -r '.status // ""' "$RESPONSE_BODY")
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::Foundry API publish returned status ${STATUS:-<empty>}"
+            cat "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          echo "Foundry API publish returned success"
+
+      - name: Verify Foundry public package page
+        if: inputs.announce_only == false && inputs.dry_run == false
+        env:
+          VERSION: ${{ inputs.version }}
+          PACKAGE_URL: https://foundryvtt.com/packages/${{ env.MODULE_ID }}
+          POLL_INTERVAL_SECONDS: 30
+          MAX_ATTEMPTS: 20
+        run: |
+          set -euo pipefail
+
+          EXPECTED_VERSION="${VERSION}"
+          EXPECTED_VERIFIED=$(jq -r '.release.compatibility.verified' /tmp/foundry-payload.json)
+          ATTEMPT=1
+
+          while [ "$ATTEMPT" -le "${MAX_ATTEMPTS}" ]; do
+            PAGE_PATH="/tmp/foundry-package-page-${ATTEMPT}.html"
+            HTTP_CODE=$(curl -sS \
+              -o "$PAGE_PATH" \
+              -w "%{http_code}" \
+              "$PACKAGE_URL")
+
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              if grep -Fq "$EXPECTED_VERSION" "$PAGE_PATH" && grep -Fq "$EXPECTED_VERIFIED" "$PAGE_PATH"; then
+                echo "Foundry package page verification succeeded for version ${EXPECTED_VERSION}"
+                exit 0
+              fi
+            fi
+
+            if [ "$ATTEMPT" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "::error::Foundry package page did not include version ${EXPECTED_VERSION} and verified ${EXPECTED_VERIFIED}"
+              cat "$PAGE_PATH"
               exit 1
             fi
-          fi
 
-          if [ -n "$OUTPUT" ]; then
-            echo "$OUTPUT"
-          else
-            echo "Foundry publish succeeded"
-          fi
+            echo "Foundry package page not updated yet; retrying (attempt ${ATTEMPT}/${MAX_ATTEMPTS})"
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep "${POLL_INTERVAL_SECONDS}"
+          done
 
       - name: Announce on Discord
-        if: inputs.dry_run == false
+        if: inputs.dry_run == false && inputs.foundry_only == false
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           RELEASE_TITLE: ${{ inputs.release_title }}

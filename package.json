@@ -22,7 +22,8 @@
     "test:e2e:ui": "npx playwright test --config=tests/e2e/playwright.config.mjs --ui",
     "test:e2e:headed": "npx playwright test --config=tests/e2e/playwright.config.mjs --headed",
     "test:e2e:debug": "npx playwright test --config=tests/e2e/playwright.config.mjs --debug",
-    "test:changelog": "node tests/utils/test-generate-unreleased-changelog.mjs"
+    "test:changelog": "node tests/utils/test-generate-unreleased-changelog.mjs",
+    "test:foundry-release": "node tests/utils/test-foundry-release.mjs"
   },
   "devDependencies": {
     "@foundryvtt/foundryvtt-cli": "^3.0.2",
