@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - release: advertise Foundry VTT 14 compatibility (#168)
 
-
 ## [1.1.0] - 2026-06-20
 
 ### Fixed
@@ -34,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - style: format codebase with prettier
 - fix: sanitize innerHTML usage in sidebar tab (Fixes #112)
 - fix: resolve null derefs, dead code, API key leak, and game.packs guards
-- fix(ci): fix Discord announcement exceeding embed field char limit
 
 ## [1.0.8] - 2026-02-08
 
@@ -73,7 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - fix: Ollama integration - race conditions, non-blocking validation, token limit consolidation
-- fix(ci): Fix shell quoting in Discord announcement step
 
 ## [1.0.6] - 2026-02-05
 
@@ -132,16 +129,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- ci: switch to manual workflow_dispatch for releases
 - docs: add CONTRIBUTING.md with commit conventions
 - fix: correct content/display pattern in list_documents tool
 - feat: collapse tool justifications by default for completed tools (Ref #105)
 - fix: update read registry after successful document update
 - docs: suggest 200-line default chunk size for read_tool_output
 - docs: reorganize README badges with prominent Discord and FoundryVTT links
-- ci: add Discord announcement on release
 - chore: update build info
-- ci: auto-convert README to HTML for FoundryVTT package description
 - feat: show task name in task tracker header
 - feat: add step separators and skip justification for self-explanatory tools
 - docs: add badges to README
