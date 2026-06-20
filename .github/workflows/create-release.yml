@@ -73,8 +73,18 @@ jobs:
             exit 1
           fi
 
+          if [ "${#RELEASE_TITLE}" -gt 256 ]; then
+            echo "::error::release_title exceeds Discord embed limit (max 256 characters)"
+            exit 1
+          fi
+
           if [ -z "${RELEASE_DESCRIPTION//[[:space:]]/}" ]; then
             echo "::error::release_description is required"
+            exit 1
+          fi
+
+          if [ "${#RELEASE_DESCRIPTION}" -gt 4096 ]; then
+            echo "::error::release_description exceeds Discord embed limit (max 4096 characters)"
             exit 1
           fi
 
@@ -353,21 +363,34 @@ jobs:
         env:
           FVTT_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
         run: |
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ inputs.version }}"
           OUTPUT=$(npx @ghost-fvtt/foundry-publish \
             --manifestPath module.json \
-            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/module.json" 2>&1) || {
+            --manifestURL "https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/module.json" \
+            --changelogURL "${RELEASE_URL}" 2>&1) || EXIT_CODE=$?
+          EXIT_CODE=${EXIT_CODE:-0}
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
             if echo "$OUTPUT" | grep -q "already exists"; then
               echo "Version already published to Foundry VTT, skipping"
             else
               echo "$OUTPUT"
               exit 1
             fi
-          }
+          fi
+
+          if [ -n "$OUTPUT" ]; then
+            echo "$OUTPUT"
+          else
+            echo "Foundry publish succeeded"
+          fi
 
       - name: Announce on Discord
         if: inputs.dry_run == false
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RELEASE_TITLE: ${{ inputs.release_title }}
+          RELEASE_DESCRIPTION: ${{ inputs.release_description }}
         run: |
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
             echo "Discord webhook not configured, skipping announcement"
@@ -395,11 +418,12 @@ jobs:
           CHANGELOG="${CHANGELOG}${SUFFIX}"
 
           PAYLOAD=$(jq -n \
-            --arg title "Simulacrum ${VERSION} Released!" \
+            --arg title "$RELEASE_TITLE" \
             --arg url "$RELEASE_URL" \
-            --arg desc "A new version of Simulacrum: AI Campaign Copilot is now available!" \
+            --arg desc "$RELEASE_DESCRIPTION" \
             --arg changes "$CHANGELOG" \
             --arg install "Update from Foundry VTT or [GitHub](${RELEASE_URL})" \
+            --arg version "$VERSION" \
             '{
               embeds: [{
                 title: $title,
@@ -410,7 +434,7 @@ jobs:
                   {name: "Changes", value: $changes},
                   {name: "Install", value: $install}
                 ],
-                footer: {text: "Simulacrum: AI Campaign Copilot"}
+                footer: {text: ($version + " - Simulacrum: AI Campaign Copilot")}
               }]
             }')
 
