@@ -2,154 +2,180 @@
 /* eslint-disable no-console */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const args = parseArgs(process.argv.slice(2));
+const conventionalCommitRegex = /^([a-z]+)(\([^)]+\))?:\s*(.*)$/i;
+const SKIP_MESSAGE_PATTERNS = [
+  /^docs\(release\):/i,
+  /^docs:\s*update unreleased changelog/i,
+  /\[skip ci\]/i,
+];
+export const CHANGELOG_HEADINGS = [
+  'Added',
+  'Changed',
+  'Fixed',
+  'Deprecated',
+  'Removed',
+  'Security',
+  'Documentation',
+  'Testing',
+  'Build',
+  'Other',
+];
+export const DEFAULT_INCLUDE_PATHS = [
+  'scripts',
+  'styles',
+  'templates',
+  'lang',
+  'assets',
+  'packs',
+  'module.json',
+  'README.md',
+];
 const optionAliases = {
   changelog: 'changelogPath',
   summary: 'summaryPath',
 };
 
-const options = {
-  changelogPath: 'CHANGELOG.md',
-  repoRoot: process.cwd(),
-  dryRun: false,
-  writeFile: false,
-  includePaths: [
-    'scripts',
-    'styles',
-    'templates',
-    'lang',
-    'assets',
-    'packs',
-    'module.json',
-    'README.md',
-  ],
-  summaryPath: '',
-};
+function buildGeneratorOptions(rawArgs = {}) {
+  const options = {
+    changelogPath: 'CHANGELOG.md',
+    repoRoot: process.cwd(),
+    dryRun: false,
+    writeFile: false,
+    includePaths: DEFAULT_INCLUDE_PATHS,
+    summaryPath: '',
+  };
 
-for (const [key, value] of Object.entries(args)) {
-  const optionKey = optionAliases[key] || key;
-  if (Object.hasOwn(options, optionKey)) {
-    options[optionKey] = value;
+  for (const [key, value] of Object.entries(rawArgs)) {
+    const optionKey = optionAliases[key] || key;
+    if (Object.hasOwn(options, optionKey)) {
+      options[optionKey] = value;
+    }
+  }
+
+  return {
+    ...options,
+    includePaths: options.includePaths.map(entry => entry.replace(/\/+$/, '')),
+  };
+}
+
+function runGenerator() {
+  const options = buildGeneratorOptions(parseArgs(process.argv.slice(2)));
+  const changelog = readText(options.changelogPath);
+  const includePaths = options.includePaths;
+  const commits = collectReleaseCommits(options);
+  const grouped = buildSectionedEntries({ commits, includePaths, repoRoot: options.repoRoot });
+  const hasUpdates = hasAnyEntries(grouped);
+  const releaseDate = new Date().toISOString().slice(0, 10);
+  const headingOrder = [...CHANGELOG_HEADINGS];
+  const newSection = hasUpdates
+    ? generateSection(releaseDate, grouped, headingOrder)
+    : `## [Unreleased] - ${releaseDate}\n`;
+  const nextChangelog = hasUpdates ? replaceUnreleasedSection(changelog, newSection) : changelog;
+  const entryCount = Object.values(grouped).reduce((count, entries) => count + entries.length, 0);
+
+  if (options.writeFile && hasUpdates) {
+    fs.writeFileSync(options.changelogPath, nextChangelog);
+  }
+
+  const summary = {
+    changelogPath: options.changelogPath,
+    generatedAt: new Date().toISOString(),
+    latestReleaseTag: resolveLatestReleaseTag(options),
+    hasUpdates,
+    dryRun: options.dryRun || !options.writeFile,
+    writeFile: options.writeFile,
+    headingOrder,
+    entryCount,
+    sectionLines: newSection.trim(),
+  };
+
+  if (options.summaryPath) {
+    fs.writeFileSync(options.summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
+  }
+
+  console.log(JSON.stringify(summary, null, 2));
+
+  if (options.writeFile && !hasUpdates) {
+    console.log('{"hasUpdates": false, "message": "No product-facing commits found"}');
   }
 }
 
-const changelog = readText(options.changelogPath);
-const includePaths = options.includePaths.map(entry => entry.replace(/\/+$/, ''));
-const skipMessagePatterns = [
-  /^docs\(release\):/i,
-  /^docs:\s*update unreleased changelog/i,
-  /\[skip ci\]/i,
-];
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  runGenerator();
+}
 
-const latestTag = resolveLatestReleaseTag();
-const range = latestTag ? `${latestTag}..HEAD` : '';
-const commits = runGitLog(`git log --first-parent --pretty=format:%H ${range}`, options.repoRoot)
-  .split('\n')
-  .map(sha => sha.trim())
-  .filter(Boolean)
-  .map(sha => {
-    const subject = runGitLog(`git show -s --format=%s ${sha}`, options.repoRoot).trim();
-    const body = runGitLog(`git show -s --format=%b ${sha}`, options.repoRoot).trim();
-    return { sha, subject, body, releaseSubject: releaseSubjectForCommit(subject, body) };
-  })
-  .filter(entry => entry.sha && entry.releaseSubject);
+function collectReleaseCommits(options) {
+  const latestTag = resolveLatestReleaseTag(options);
+  const range = latestTag ? `${latestTag}..HEAD` : '';
+  return runGitLog(`git log --first-parent --pretty=format:%H ${range}`, options.repoRoot)
+    .split('\n')
+    .map(sha => sha.trim())
+    .filter(Boolean)
+    .map(sha => {
+      const subject = runGitLog(`git show -s --format=%s ${sha}`, options.repoRoot).trim();
+      const body = runGitLog(`git show -s --format=%b ${sha}`, options.repoRoot).trim();
+      return { sha, subject, body, releaseSubject: releaseSubjectForCommit(subject, body) };
+    })
+    .filter(entry => entry.sha && entry.releaseSubject);
+}
 
-const grouped = {
-  Added: [],
-  Changed: [],
-  Fixed: [],
-  Deprecated: [],
-  Removed: [],
-  Security: [],
-  Documentation: [],
-  Testing: [],
-  'CI/CD': [],
-  Build: [],
-  Other: [],
-};
-const headingOrder = Object.keys(grouped);
-
-for (const commit of commits) {
-  if (
-    skipMessagePatterns.some(
-      pattern => pattern.test(commit.subject) || pattern.test(commit.releaseSubject)
-    )
-  ) {
-    continue;
+function buildSectionedEntries({ commits, includePaths, repoRoot }) {
+  const grouped = createSectionedEntries();
+  for (const commit of commits) {
+    if (shouldSkipCommit(commit, SKIP_MESSAGE_PATTERNS)) {
+      continue;
+    }
+    const changedFiles = changedFilesForCommit(commit.sha, repoRoot);
+    const mapped = mapCommitToEntry({ commit, includePaths, changedFiles });
+    if (mapped) {
+      addEntry(grouped, mapped.section, mapped.entry);
+    }
   }
+  return grouped;
+}
 
-  const changedFiles = changedFilesForCommit(commit.sha);
-
-  const hasRelevantChange = changedFiles.some(filePath =>
-    isRelevantProductPath(filePath, includePaths)
+function shouldSkipCommit(commit, skipPatterns) {
+  return skipPatterns.some(
+    pattern => pattern.test(commit.subject) || pattern.test(commit.releaseSubject)
   );
-  if (!hasRelevantChange) {
-    continue;
-  }
+}
 
-  const parsed = /^([a-z]+)(\([^)]+\))?:\s*(.*)$/i.exec(commit.releaseSubject);
-  const rawType = parsed ? parsed[1].toLowerCase() : 'other';
-  const scope = parsed?.[2] ? `${parsed[2].slice(1, -1)}: ` : '';
-  const message = (parsed?.[3] || commit.releaseSubject).trim() || 'chore: change';
-  const section = parsed ? sectionForType(rawType) : sectionForFreeformSubject(message);
-  const entry = `${scope}${message}`;
+function createSectionedEntries() {
+  return Object.fromEntries(CHANGELOG_HEADINGS.map(heading => [heading, []]));
+}
+
+function addEntry(grouped, section, entry) {
   if (!grouped[section].includes(entry)) {
     grouped[section].push(entry);
   }
 }
 
-const hasUpdates = Object.values(grouped).some(entries => entries.length > 0);
-const releaseDate = new Date().toISOString().slice(0, 10);
-const newSection = hasUpdates
-  ? generateSection(releaseDate, grouped, headingOrder)
-  : `## [Unreleased] - ${releaseDate}\n`;
+function hasAnyEntries(grouped) {
+  return Object.values(grouped).some(entries => entries.length > 0);
+}
 
-let nextChangelog = changelog;
-
-if (hasUpdates) {
+function replaceUnreleasedSection(changelog, newSection) {
   const existingUnreleased = findUnreleasedSection(changelog);
-  if (existingUnreleased) {
-    nextChangelog = [
-      changelog.slice(0, existingUnreleased.start),
-      newSection.trimEnd(),
-      '\n\n',
-      changelog.slice(existingUnreleased.end).replace(/^\n+/, ''),
-    ].join('');
-  } else {
-    const insertionPoint = changelog.indexOf('\n## [');
-    if (insertionPoint === -1) {
-      nextChangelog = `${changelog.trimEnd()}\n\n${newSection}\n`;
-    } else {
-      nextChangelog = `${changelog.slice(0, insertionPoint + 1)}${newSection}\n${changelog.slice(insertionPoint + 1)}`;
-    }
+  if (!existingUnreleased) {
+    return insertNewUnreleasedSection(changelog, newSection);
   }
+  return [
+    changelog.slice(0, existingUnreleased.start),
+    newSection.trimEnd(),
+    '\n\n',
+    changelog.slice(existingUnreleased.end).replace(/^\n+/, ''),
+  ].join('');
 }
 
-if (options.writeFile && hasUpdates) {
-  fs.writeFileSync(options.changelogPath, nextChangelog);
-}
-
-const summary = {
-  changelogPath: options.changelogPath,
-  generatedAt: new Date().toISOString(),
-  latestReleaseTag: latestTag,
-  hasUpdates,
-  dryRun: options.dryRun || !options.writeFile,
-  writeFile: options.writeFile,
-  headingOrder,
-  entryCount: Object.values(grouped).reduce((count, entries) => count + entries.length, 0),
-  sectionLines: newSection.trim(),
-};
-
-if (options.summaryPath) {
-  fs.writeFileSync(options.summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
-}
-
-console.log(JSON.stringify(summary, null, 2));
-
-if (options.writeFile && !hasUpdates) {
-  console.log('{"hasUpdates": false, "message": "No product-facing commits found"}');
+function insertNewUnreleasedSection(changelog, newSection) {
+  const insertionPoint = changelog.indexOf('\n## [');
+  if (insertionPoint === -1) {
+    return `${changelog.trimEnd()}\n\n${newSection}\n`;
+  }
+  const insertionAnchor = insertionPoint + 1;
+  return `${changelog.slice(0, insertionAnchor)}${newSection}\n${changelog.slice(insertionAnchor)}`;
 }
 
 function runGitLog(command, cwd) {
@@ -179,7 +205,6 @@ function sectionForType(type) {
     refactor: 'Changed',
     perf: 'Changed',
     build: 'Build',
-    ci: 'CI/CD',
     test: 'Testing',
     tests: 'Testing',
     docs: 'Documentation',
@@ -189,6 +214,45 @@ function sectionForType(type) {
     security: 'Security',
   };
   return map[type] || 'Other';
+}
+
+export function parseConventionalCommit(subject) {
+  const parsed = conventionalCommitRegex.exec(subject || '');
+  if (!parsed) {
+    return null;
+  }
+  return {
+    type: parsed[1].toLowerCase(),
+    scope: parsed[2] ? parsed[2].slice(1, -1).trim() : '',
+    message: (parsed[3] || '').trim(),
+  };
+}
+
+export function isCiCommit(parsedCommit) {
+  if (!parsedCommit) {
+    return false;
+  }
+  return parsedCommit.type === 'ci' || parsedCommit.scope.toLowerCase() === 'ci';
+}
+
+export function mapCommitToEntry({ commit, includePaths, changedFiles }) {
+  const parsed = parseConventionalCommit(commit.releaseSubject);
+  if (isCiCommit(parsed)) {
+    return null;
+  }
+
+  const hasRelevantChange = changedFiles.some(filePath =>
+    isRelevantProductPath(filePath, includePaths)
+  );
+  if (!hasRelevantChange) {
+    return null;
+  }
+
+  const rawType = parsed ? parsed.type : 'other';
+  const scope = parsed?.scope ? `${parsed.scope}: ` : '';
+  const message = (parsed?.message || commit.releaseSubject).trim() || 'chore: change';
+  const section = parsed ? sectionForType(rawType) : sectionForFreeformSubject(message);
+  return { section, entry: `${scope}${message}` };
 }
 
 function sectionForFreeformSubject(subject) {
@@ -220,14 +284,14 @@ function releaseSubjectForCommit(subject, body) {
   return subject;
 }
 
-function changedFilesForCommit(sha) {
-  const parentLine = runGitLog(`git rev-list --parents -n 1 ${sha}`, options.repoRoot).trim();
+function changedFilesForCommit(sha, repoRoot = process.cwd()) {
+  const parentLine = runGitLog(`git rev-list --parents -n 1 ${sha}`, repoRoot).trim();
   const parentCount = parentLine ? parentLine.split(/\s+/).length - 1 : 0;
   const command =
     parentCount > 1
       ? `git diff --name-only ${sha}~1 ${sha}`
       : `git show --name-only --pretty=format: --no-renames ${sha}`;
-  return runGitLog(command, options.repoRoot)
+  return runGitLog(command, repoRoot)
     .split('\n')
     .map(filePath => filePath.trim())
     .filter(Boolean);
@@ -251,6 +315,22 @@ function isRelevantProductPath(filePath, includePaths) {
   });
 }
 
+export function generateSection(releaseDate, groupedEntries, headingOrder) {
+  const lines = [`## [Unreleased] - ${releaseDate}`, ''];
+  for (const heading of headingOrder) {
+    const entries = groupedEntries[heading];
+    if (!entries.length) {
+      continue;
+    }
+    lines.push(`### ${heading}`, '');
+    for (const entry of entries) {
+      lines.push(`- ${entry}`);
+    }
+    lines.push('');
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 function findUnreleasedSection(content) {
   const headingMatch = /^## \[Unreleased\][^\n]*$/m.exec(content);
   if (!headingMatch) {
@@ -267,23 +347,7 @@ function findUnreleasedSection(content) {
   };
 }
 
-function generateSection(releaseDate, grouped, headingOrder) {
-  const lines = [`## [Unreleased] - ${releaseDate}`, ''];
-  for (const heading of headingOrder) {
-    const entries = grouped[heading];
-    if (!entries.length) {
-      continue;
-    }
-    lines.push(`### ${heading}`, '');
-    for (const entry of entries) {
-      lines.push(`- ${entry}`);
-    }
-    lines.push('');
-  }
-  return `${lines.join('\n')}\n`;
-}
-
-function resolveLatestReleaseTag() {
+function resolveLatestReleaseTag(options = { repoRoot: process.cwd() }) {
   return (
     runGitLog('git tag --sort=-version:refname', options.repoRoot)
       .split('\n')
