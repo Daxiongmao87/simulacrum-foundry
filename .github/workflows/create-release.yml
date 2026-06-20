@@ -73,8 +73,18 @@ jobs:
             exit 1
           fi
 
+          if [ "${#RELEASE_TITLE}" -gt 256 ]; then
+            echo "::error::release_title exceeds Discord embed limit (max 256 characters)"
+            exit 1
+          fi
+
           if [ -z "${RELEASE_DESCRIPTION//[[:space:]]/}" ]; then
             echo "::error::release_description is required"
+            exit 1
+          fi
+
+          if [ "${#RELEASE_DESCRIPTION}" -gt 4096 ]; then
+            echo "::error::release_description exceeds Discord embed limit (max 4096 characters)"
             exit 1
           fi
 
