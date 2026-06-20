@@ -43,6 +43,10 @@ if (process.argv[1] && process.argv[1].endsWith('foundry-release-payload.mjs')) 
 }
 
 function buildFoundryReleasePayload({ moduleJson, releaseVersion, repoUrl, dryRun = false }) {
+  if (moduleJson === null || typeof moduleJson !== 'object' || Array.isArray(moduleJson)) {
+    fail('moduleJson must be a non-null object');
+  }
+
   const moduleId = resolveModuleId(moduleJson);
   const manifestVersion = resolveTrimmedValue(releaseVersion, 'release version is required');
   const moduleVersion = String((moduleJson && moduleJson.version) ?? '').trim();

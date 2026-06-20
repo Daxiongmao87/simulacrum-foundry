@@ -50,6 +50,42 @@ assert.equal(
   'dry-run should only be included when requested'
 );
 
+assert.throws(
+  () => {
+    buildFoundryReleasePayload({
+      moduleJson: null,
+      releaseVersion: '1.1.0',
+      repoUrl: 'https://github.com/Daxiongmao87/simulacrum-foundry',
+    });
+  },
+  /moduleJson must be a non-null object/,
+  'missing moduleJson should fail validation'
+);
+
+assert.throws(
+  () => {
+    buildFoundryReleasePayload({
+      moduleJson: '',
+      releaseVersion: '1.1.0',
+      repoUrl: 'https://github.com/Daxiongmao87/simulacrum-foundry',
+    });
+  },
+  /moduleJson must be a non-null object/,
+  'non-object moduleJson should fail validation'
+);
+
+assert.throws(
+  () => {
+    buildFoundryReleasePayload({
+      moduleJson: [],
+      releaseVersion: '1.1.0',
+      repoUrl: 'https://github.com/Daxiongmao87/simulacrum-foundry',
+    });
+  },
+  /moduleJson must be a non-null object/,
+  'array moduleJson should fail validation'
+);
+
 const sampleModuleWithMaximum = {
   id: 'simulacrum',
   version: '1.1.0',
@@ -101,6 +137,9 @@ function extractStepBlock(name, nextName) {
   assert.ok(start !== -1, `workflow step '${name}' should exist`);
 
   const end = nextMarker ? workflow.indexOf(nextMarker, start + startMarker.length) : -1;
+  if (nextName) {
+    assert.ok(end !== -1, `workflow step '${name}' should be followed by '${nextName}'`);
+  }
   return workflow.slice(start, end === -1 ? undefined : end);
 }
 
@@ -108,6 +147,7 @@ const buildFoundryPayloadBlock = extractStepBlock(
   'Build Foundry API payload',
   'Validate Foundry payload (dry run)'
 );
+const validateReleaseInputsBlock = extractStepBlock('Validate release inputs', 'Setup Node.js');
 const validateFoundryPayloadBlock = extractStepBlock(
   'Validate Foundry payload (dry run)',
   'Publish to Foundry VTT'
@@ -134,9 +174,18 @@ assert.equal(
 );
 assert.equal(/foundry_only/.test(workflow), true, 'foundry_only input/control should exist');
 assert.equal(
-  /foundry_only.*announce_only/.test(workflow) || /announce_only.*foundry_only/.test(workflow),
+  validateReleaseInputsBlock.includes(
+    'if [ "${{ inputs.announce_only }}" = "true" ] && [ "${{ inputs.foundry_only }}" = "true" ]; then'
+  ),
   true,
-  'workflow should reject announce_only + foundry_only together'
+  'validate release inputs should reject announce_only + foundry_only together'
+);
+assert.equal(
+  validateReleaseInputsBlock.includes(
+    'echo "::error::foundry_only and announce_only cannot both be true"'
+  ),
+  true,
+  'validation should emit announce_only/ foundry_only conflict error'
 );
 assert.equal(
   /- name: Setup Node\.js\n\s+if: inputs\.announce_only == false/.test(workflow),
