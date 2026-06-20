@@ -51,14 +51,14 @@ if (releaseCommit) {
   grouped[releaseCommit.section].push(releaseCommit.entry);
 }
 
-const generatedSection = generateSection('2026-06-20', grouped, CHANGELOG_HEADINGS);
+const resultSection = generateSection('2026-06-20', grouped, CHANGELOG_HEADINGS);
 assert.equal(
-  generatedSection.includes('### CI/CD'),
+  resultSection.includes('### CI/CD'),
   false,
   'generated section must omit CI/CD heading'
 );
 assert.equal(
-  generatedSection.includes('- release: advertise Foundry VTT 14 compatibility (#168)'),
+  resultSection.includes('- release: advertise Foundry VTT 14 compatibility (#168)'),
   true,
   'generated section must include non-CI release commit'
 );

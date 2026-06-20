@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const conventionalCommitRegex = /^([a-z]+)(\([^)]+\))?:\s*(.*)$/i;
+const CONVENTIONAL_COMMIT_REGEX = /^([a-z]+)(\([^)]+\))?:\s*(.*)$/i;
 const SKIP_MESSAGE_PATTERNS = [
   /^docs\(release\):/i,
   /^docs:\s*update unreleased changelog/i,
@@ -32,7 +32,7 @@ export const DEFAULT_INCLUDE_PATHS = [
   'module.json',
   'README.md',
 ];
-const optionAliases = {
+const OPTION_ALIASES = {
   changelog: 'changelogPath',
   summary: 'summaryPath',
 };
@@ -48,15 +48,20 @@ function buildGeneratorOptions(rawArgs = {}) {
   };
 
   for (const [key, value] of Object.entries(rawArgs)) {
-    const optionKey = optionAliases[key] || key;
+    const optionKey = OPTION_ALIASES[key] || key;
     if (Object.hasOwn(options, optionKey)) {
       options[optionKey] = value;
     }
   }
 
+  const includePaths =
+    typeof options.includePaths === 'string'
+      ? options.includePaths.split(',').map(path => path.trim())
+      : options.includePaths;
+
   return {
     ...options,
-    includePaths: options.includePaths.map(entry => entry.replace(/\/+$/, '')),
+    includePaths: includePaths.map(entry => entry.replace(/\/+$/, '')),
   };
 }
 
@@ -217,7 +222,7 @@ function sectionForType(type) {
 }
 
 export function parseConventionalCommit(subject) {
-  const parsed = conventionalCommitRegex.exec(subject || '');
+  const parsed = CONVENTIONAL_COMMIT_REGEX.exec(subject || '');
   if (!parsed) {
     return null;
   }
@@ -232,7 +237,7 @@ export function isCiCommit(parsedCommit) {
   if (!parsedCommit) {
     return false;
   }
-  return parsedCommit.type === 'ci' || parsedCommit.scope.toLowerCase() === 'ci';
+  return parsedCommit.type === 'ci' || parsedCommit.scope?.toLowerCase() === 'ci';
 }
 
 export function mapCommitToEntry({ commit, includePaths, changedFiles }) {
