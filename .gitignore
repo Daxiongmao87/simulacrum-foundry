@@ -56,6 +56,8 @@ tests/e2e/reports/
 tests/e2e/screenshots/
 tests/e2e/test-results/
 tests/e2e/setup/.test-state.json
+tests/e2e/reports/
+artifacts/test-results/
 
 # Additional test-related directories and files
 .foundry-system-cache/

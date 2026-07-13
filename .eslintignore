@@ -2,6 +2,9 @@ node_modules/
 vendor/
 dist/
 coverage/
+artifacts/
+tests/e2e/reports/
+tests/e2e/test-results/
 .foundry-cache/
 .foundry-data/
 reference/

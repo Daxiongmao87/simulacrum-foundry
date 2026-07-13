@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +58,7 @@ function parseSystemIds(env) {
  * Parse comma-separated Foundry versions.
  */
 function parseFoundryVersions(env) {
-  const versionsRaw = env.TEST_FOUNDRY_VERSIONS || env.TEST_FOUNDRY_VERSION || '13.351';
+  const versionsRaw = env.TEST_FOUNDRY_VERSIONS || env.TEST_FOUNDRY_VERSION || '13.351,14.364';
   return versionsRaw
     .split(',')
     .map(v => v.trim())
@@ -90,8 +90,8 @@ function buildProjects(systemIds, foundryVersions) {
           `systems/${systemId}/**/*.spec.js`,
           `systems/${systemId}/**/*.spec.mjs`,
         ],
-        // Per-test setup can take a while (extracting, starting server, installing system)
-        timeout: 180000, // 3 minutes per test
+        // A cold dnd5e migration plus module activation can exceed three minutes.
+        timeout: 300000, // 5 minutes per real Foundry test, with no retries
         use: {
           ...devices['Desktop Chrome'],
           // Foundry requires minimum 1366x768 resolution
@@ -129,6 +129,12 @@ const env = loadEnv();
 const systemIds = parseSystemIds(env);
 const foundryVersions = parseFoundryVersions(env);
 const projects = buildProjects(systemIds, foundryVersions);
+const artifactRoot = env.ADP_ARTIFACT_DIR ? resolve(env.ADP_ARTIFACT_DIR) : null;
+const reportRoot = artifactRoot || join(ROOT, 'tests/e2e/reports');
+const outputRoot = artifactRoot ? join(artifactRoot, 'raw') : join(ROOT, 'tests/e2e/test-results');
+const jsonReportPath = artifactRoot
+  ? join(artifactRoot, 'reports', 'results.json')
+  : join(reportRoot, 'results.json');
 
 console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
 console.log(`[config] Testing with Foundry versions: ${foundryVersions.join(', ')}`);
@@ -157,20 +163,23 @@ console.log(`[config] Testing with Foundry versions: ${foundryVersions.join(', '
 export default defineConfig({
   testDir: './specs',
 
-  /* Run tests in parallel - each test gets isolated Foundry instance */
-  fullyParallel: true,
+  /* Foundry licensing and port ownership are serialized; each test is still isolated. */
+  fullyParallel: false,
 
   /* Fail the build on CI if you accidentally left test.only in the source code */
-  forbidOnly: !!process.env.CI,
+  forbidOnly: true,
 
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  /* A required failure stays a failure; retries are diagnostic-only outside this command. */
+  retries: 0,
 
-  /* Multiple workers OK - each test gets own Foundry on unique port */
-  workers: process.env.CI ? 2 : 4,
+  workers: 1,
 
-  /* Reporter to use - line for minimal output */
-  reporter: 'line',
+  reporter: [
+    ['line'],
+    ['json', { outputFile: jsonReportPath }],
+    ['html', { outputFolder: join(reportRoot, 'html'), open: 'never' }],
+    ['./reporters/agentic-artifact-reporter.mjs'],
+  ],
 
   /* Shared settings for all the projects below */
   use: {
@@ -180,14 +189,12 @@ export default defineConfig({
     /* Clear storage state for reproducibility - no cached cookies/localStorage */
     storageState: undefined,
 
-    /* Collect trace when retrying the failed test */
-    trace: 'on-first-retry',
+    /* Retain complete evidence for successful and failed required runs. */
+    trace: 'on',
 
-    /* Screenshot on failure */
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
 
-    /* Video on failure */
-    video: 'on-first-retry',
+    video: 'on',
 
     /* Timeout for actions */
     actionTimeout: 30000,
@@ -214,5 +221,5 @@ export default defineConfig({
   projects,
 
   /* Output directory for test artifacts */
-  outputDir: join(ROOT, 'tests/e2e/test-results'),
+  outputDir: outputRoot,
 });

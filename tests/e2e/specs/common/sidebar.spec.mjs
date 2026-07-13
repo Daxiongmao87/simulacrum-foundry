@@ -1,6 +1,21 @@
 import { test, expect } from '../../fixtures/test-base.mjs';
 
-const IGNORED_CONSOLE_ERRORS = [/localhost:11434/i, /net::ERR_CONNECTION_REFUSED/i, /\/models\b/i];
+const OPTIONAL_MODEL_ENDPOINT_FAILURES = [
+  {
+    url: 'https://openrouter.ai/api/v1/models',
+    error: /net::ERR_NAME_NOT_RESOLVED/iu,
+  },
+  {
+    url: 'http://localhost:11434/v1/models',
+    error: /net::ERR_CONNECTION_REFUSED/iu,
+  },
+];
+
+function isExpectedOptionalModelFailure(text, location) {
+  return OPTIONAL_MODEL_ENDPOINT_FAILURES.some(
+    expectation => location.url === expectation.url && expectation.error.test(text)
+  );
+}
 
 function collectBrowserErrors(page) {
   const errors = [];
@@ -13,15 +28,17 @@ function collectBrowserErrors(page) {
     if (message.type() !== 'error') return;
 
     const text = message.text();
-    if (IGNORED_CONSOLE_ERRORS.some(pattern => pattern.test(text))) return;
+    const location = message.location();
+    if (isExpectedOptionalModelFailure(text, location)) return;
 
-    errors.push(`console.error: ${text}`);
+    const source = location.url ? ` source=${location.url}:${location.lineNumber}` : '';
+    errors.push(`console.error: ${text}${source}`);
   });
 
   return errors;
 }
 
-test('Simulacrum sidebar tab renders non-blank for a GM', async ({
+test('@smoke @ui Simulacrum sidebar tab renders non-blank for a GM', async ({
   gamePage,
   foundry,
   foundryVersion,
