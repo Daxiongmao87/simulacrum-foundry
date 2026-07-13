@@ -1,6 +1,8 @@
 import { execFileSync } from 'child_process';
 import {
   existsSync,
+  lstatSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -9,6 +11,8 @@ import {
   writeFileSync,
 } from 'fs';
 import { join } from 'path';
+
+const PACKAGE_OPERATION_MARKER = '.simulacrum-package-operation.json';
 
 const SYSTEM_MANIFEST_URLS = {
   dnd5e: 'https://github.com/foundryvtt/dnd5e/releases/latest/download/system.json',
@@ -91,6 +95,10 @@ export async function installSystemPackage(systemId, systemsDir, options = {}) {
   }
 
   mkdirSync(systemsDir, { recursive: true });
+  const targetDir = join(systemsDir, systemId);
+  if (existsSync(targetDir)) {
+    throw new Error(`Refusing to replace pre-existing system package directory ${targetDir}`);
+  }
 
   const manifest = await fetchJson(manifestUrl);
   if (manifest.id !== systemId) {
@@ -120,36 +128,140 @@ export async function installSystemPackage(systemId, systemsDir, options = {}) {
 
 async function downloadAndExtractSystemPackage(manifest, systemId, systemsDir) {
   const targetDir = join(systemsDir, systemId);
-  const zipPath = join(systemsDir, `.${systemId}-${Date.now()}.zip`);
-  const extractDir = join(systemsDir, `.${systemId}-extract-${Date.now()}`);
-
   if (existsSync(targetDir)) {
-    rmSync(targetDir, { recursive: true, force: true });
+    throw new Error(`Refusing to replace pre-existing system package directory ${targetDir}`);
   }
 
+  const operationRoot = mkdtempSync(join(systemsDir, `.simulacrum-package-${safePart(systemId)}-`));
+  const operationMarker = join(operationRoot, PACKAGE_OPERATION_MARKER);
+  const operation = {
+    schema_version: 1,
+    owner: 'simulacrum-system-package-install',
+    operation_root: operationRoot,
+  };
+  writeFileSync(operationMarker, `${JSON.stringify(operation)}\n`, { flag: 'wx', mode: 0o600 });
+  const zipPath = join(operationRoot, 'package.zip');
+  const extractDir = join(operationRoot, 'extract');
+  let targetCreated = false;
+
   try {
-    mkdirSync(extractDir, { recursive: true });
+    mkdirSync(extractDir);
     await downloadFile(manifest.download, zipPath);
     execFileSync('unzip', ['-q', zipPath, '-d', extractDir], { stdio: 'pipe' });
 
     const extractedSystemDir = findExtractedSystemDir(extractDir, systemId);
+    if (existsSync(targetDir)) {
+      throw new Error(`Refusing to replace concurrently-created system package ${targetDir}`);
+    }
     renameSync(extractedSystemDir, targetDir);
+    targetCreated = true;
+    if (!existsSync(join(targetDir, 'system.json'))) {
+      throw new Error(`System package ${systemId} did not extract to ${targetDir}`);
+    }
+  } catch (error) {
+    if (targetCreated && existsSync(targetDir)) {
+      rmSync(targetDir, { recursive: true, force: true });
+    }
+    throw error;
   } finally {
-    cleanPackageDownload(zipPath, extractDir);
-  }
-
-  if (!existsSync(join(targetDir, 'system.json'))) {
-    throw new Error(`System package ${systemId} did not extract to ${targetDir}`);
+    cleanPackageOperation(operationRoot, operation);
   }
 }
 
-function cleanPackageDownload(zipPath, extractDir) {
-  if (existsSync(zipPath)) {
-    rmSync(zipPath, { force: true });
+function cleanPackageOperation(operationRoot, expected) {
+  if (!existsSync(operationRoot)) return;
+  const markerPath = join(operationRoot, PACKAGE_OPERATION_MARKER);
+  try {
+    const stat = lstatSync(operationRoot);
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8'));
+    if (
+      !stat.isDirectory() ||
+      stat.isSymbolicLink() ||
+      marker.schema_version !== expected.schema_version ||
+      marker.owner !== expected.owner ||
+      marker.operation_root !== operationRoot
+    ) {
+      throw new Error('operation ownership marker differs');
+    }
+  } catch (error) {
+    throw new Error(`Refusing cleanup of unverified package operation ${operationRoot}: ${error.message}`);
   }
-  if (existsSync(extractDir)) {
-    rmSync(extractDir, { recursive: true, force: true });
+  rmSync(operationRoot, { recursive: true, force: true });
+}
+
+export function cacheInstalledSystemPackage(
+  installedSystem,
+  versionCacheDir,
+  systemId,
+  foundryVersion
+) {
+  validateInstalledSystemPackage(installedSystem, systemId, foundryVersion);
+  mkdirSync(versionCacheDir, { recursive: true });
+  const target = join(versionCacheDir, systemId);
+
+  if (existsSync(target)) {
+    try {
+      const existing = validateInstalledSystemPackage(target, systemId, foundryVersion);
+      return { status: 'reused', target, version: existing.version };
+    } catch (error) {
+      return { status: 'preserved-invalid', target, error: error.message };
+    }
   }
+
+  let targetCreated = false;
+  try {
+    mkdirSync(target);
+    targetCreated = true;
+    writeFileSync(
+      join(target, '.simulacrum-cache-owned.json'),
+      `${JSON.stringify({
+        schema_version: 1,
+        owner: 'simulacrum-system-cache',
+        system_id: systemId,
+        foundry_version: foundryVersion,
+        cache_dir: target,
+      })}\n`,
+      { flag: 'wx', mode: 0o600 }
+    );
+    for (const entry of readdirSync(installedSystem)) {
+      const source = join(installedSystem, entry);
+      const destination = join(target, entry);
+      if (existsSync(destination)) {
+        throw new Error(`Refusing cache copy collision at ${destination}`);
+      }
+      cpEntry(source, destination);
+    }
+    const cached = validateInstalledSystemPackage(target, systemId, foundryVersion);
+    return { status: 'created', target, version: cached.version };
+  } catch (error) {
+    if (targetCreated && existsSync(target)) {
+      rmSync(target, { recursive: true, force: true });
+    }
+    throw error;
+  }
+}
+
+function cpEntry(source, destination) {
+  const stat = lstatSync(source);
+  if (stat.isSymbolicLink()) {
+    throw new Error(`Refusing symbolic link in installed system package: ${source}`);
+  }
+  if (stat.isDirectory()) {
+    mkdirSync(destination);
+    for (const entry of readdirSync(source)) {
+      cpEntry(join(source, entry), join(destination, entry));
+    }
+    return;
+  }
+  if (!stat.isFile()) {
+    throw new Error(`Refusing non-file system package entry: ${source}`);
+  }
+  const contents = readFileSync(source);
+  writeFileSync(destination, contents, { flag: 'wx', mode: stat.mode & 0o777 });
+}
+
+function safePart(value) {
+  return String(value).replace(/[^A-Za-z0-9._-]+/gu, '-').slice(0, 64) || 'system';
 }
 
 function getFoundryCompatibility(manifest) {
@@ -259,5 +371,5 @@ async function downloadFile(url, path) {
   }
 
   const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(path, buffer);
+  writeFileSync(path, buffer, { flag: 'wx', mode: 0o600 });
 }

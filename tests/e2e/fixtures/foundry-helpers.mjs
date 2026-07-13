@@ -521,8 +521,10 @@ export async function launchWorld(page, worldId, baseUrl = '') {
     }).catch(() => {});
   }
 
-  // Take a debug screenshot before looking for launch button
-  await page.screenshot({ path: `/tmp/foundry-before-launch-${worldId}.png`, fullPage: true });
+  if (worldLaunchTriggered) {
+    await waitForWorldJoin(page, worldId);
+    return;
+  }
 
   // Dismiss tour overlay one more time before clicking launch
   await dismissTourOverlay(page);
@@ -575,6 +577,10 @@ export async function launchWorld(page, worldId, baseUrl = '') {
   // Wait for redirect to join page (not /game - that happens after joining)
   // World loading can take 3-4 minutes for database connections, especially with dnd5e
   // loading 22 compendium databases + world data + package migrations
+  await waitForWorldJoin(page, worldId);
+}
+
+async function waitForWorldJoin(page, worldId) {
   await page.waitForURL(/join/, { timeout: 240000 });
   await page.waitForLoadState('networkidle');
   console.log(`[helper] World ${worldId} launched, now on join page`);
@@ -595,9 +601,21 @@ export async function joinAsUser(page, userName, password = '') {
   await page.waitForLoadState('networkidle');
 
   // Look for user selection
-  const userSelect = page.locator('select[name="userid"], #join-user');
-  if (await userSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await userSelect.selectOption({ label: userName });
+  const userSelect = page.locator('select[name="userid"], #join-user').first();
+  await userSelect.waitFor({ state: 'visible', timeout: 10000 });
+
+  let selectedValues = await userSelect.selectOption({ label: userName });
+  if (selectedValues.length === 0 || !selectedValues[0]) {
+    const userId = await userSelect.locator('option').evaluateAll((options, expectedName) => {
+      return options.find(option => option.textContent?.trim() === expectedName)?.value || '';
+    }, userName);
+    if (!userId) throw new Error(`Join page does not offer the expected user "${userName}"`);
+    selectedValues = await userSelect.selectOption(userId);
+  }
+
+  const selectedUserId = await userSelect.inputValue();
+  if (!selectedUserId || selectedValues.length === 0) {
+    throw new Error(`Failed to select user "${userName}" on the Foundry join page`);
   }
 
   // Fill password if needed

@@ -11,8 +11,10 @@
  */
 
 import { test as base, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import * as helpers from './foundry-helpers.mjs';
 import * as foundrySetup from './foundry-setup.mjs';
+import { scanAccessibility } from './accessibility.mjs';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,6 +27,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 function loadEnv() {
   const envPath = join(__dirname, '../.env.test');
   if (!existsSync(envPath)) {
+    if (process.env.ADP_FOUNDRY_ENDPOINT) return { ...process.env };
     throw new Error('Missing tests/e2e/.env.test - copy from .env.test.example');
   }
 
@@ -58,6 +61,77 @@ function loadEnv() {
  * Extended test fixtures - each test is fully isolated
  */
 export const test = base.extend({
+  evidence: [
+    async ({ isolatedContext, foundryServer }, use, testInfo) => {
+      const browserConsole = [];
+      const pageErrors = [];
+      const failedRequests = [];
+      const boundPages = new WeakSet();
+      const bindPage = page => {
+        if (boundPages.has(page)) return;
+        boundPages.add(page);
+        page.on('console', message => {
+          browserConsole.push({
+            type: message.type(),
+            text: message.text(),
+            location: message.location(),
+          });
+        });
+        page.on('pageerror', error =>
+          pageErrors.push({ name: error.name, message: error.message })
+        );
+        page.on('requestfailed', request => {
+          failedRequests.push({
+            url: request.url(),
+            method: request.method(),
+            resourceType: request.resourceType(),
+            errorText: request.failure()?.errorText ?? 'unknown',
+          });
+        });
+      };
+
+      isolatedContext.pages().forEach(bindPage);
+      isolatedContext.on('page', bindPage);
+      await use();
+
+      const pages = isolatedContext.pages();
+      for (const [index, page] of pages.entries()) {
+        if (page.isClosed()) continue;
+        await testInfo.attach(`dom-${index}.html`, {
+          body: Buffer.from(await page.content()),
+          contentType: 'text/html',
+        });
+        await testInfo.attach(`accessibility-${index}.json`, {
+          body: Buffer.from(JSON.stringify(await scanAccessibility(page), null, 2)),
+          contentType: 'application/json',
+        });
+      }
+
+      await testInfo.attach('browser-console.json', {
+        body: Buffer.from(JSON.stringify(browserConsole, null, 2)),
+        contentType: 'application/json',
+      });
+      await testInfo.attach('browser-page-errors.json', {
+        body: Buffer.from(JSON.stringify(pageErrors, null, 2)),
+        contentType: 'application/json',
+      });
+      await testInfo.attach('browser-failed-requests.json', {
+        body: Buffer.from(JSON.stringify(failedRequests, null, 2)),
+        contentType: 'application/json',
+      });
+      const foundryLogs = await foundrySetup.collectFoundryLogs(foundryServer);
+      await testInfo.attach('foundry-stdout.log', {
+        body: Buffer.from(`${foundryLogs.stdout.join('\n')}\n`),
+        contentType: 'text/plain',
+      });
+      await testInfo.attach('foundry-stderr.log', {
+        body: Buffer.from(`${foundryLogs.stderr.join('\n')}\n`),
+        contentType: 'text/plain',
+      });
+    },
+    { auto: true },
+  ],
+
   /**
    * Current system ID being tested (from project config)
    */
@@ -71,6 +145,8 @@ export const test = base.extend({
   /**
    * Environment configuration
    */
+  // Playwright requires an object-destructuring fixture parameter.
+  // eslint-disable-next-line no-empty-pattern
   testEnv: async ({}, use) => {
     const env = loadEnv();
     await use(env);
@@ -91,22 +167,23 @@ export const test = base.extend({
    */
   foundryServer: [
     async ({ systemId, foundryVersion, testEnv }, use, testInfo) => {
-      const testId = `test-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      const testId = `test-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}-${randomUUID()}`;
       console.log(`[fixture] Starting isolated Foundry for: ${testId}`);
 
       let serverInfo = null;
 
       try {
-        // Setup isolated Foundry instance
-        serverInfo = await foundrySetup.setupIsolatedFoundry({
-          testId,
-          systemId,
-          foundryVersion,
-          adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
-          licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
-          env: testEnv,
-          port: 30000 + (testInfo.parallelIndex || 0), // Unique port per worker
-        });
+        serverInfo = process.env.ADP_FOUNDRY_ENDPOINT
+          ? await foundrySetup.setupBrokerFoundry({ testId, systemId, foundryVersion })
+          : await foundrySetup.setupIsolatedFoundry({
+              testId,
+              systemId,
+              foundryVersion,
+              adminKey: testEnv.FOUNDRY_ADMIN_KEY || 'test-admin-key',
+              licenseKey: testEnv.FOUNDRY_LICENSE_KEY,
+              env: testEnv,
+              port: 30000 + (testInfo.parallelIndex || 0),
+            });
 
         console.log(`[fixture] Foundry ready at ${serverInfo.baseUrl}`);
 
@@ -114,7 +191,7 @@ export const test = base.extend({
       } finally {
         // ALWAYS clean up, even if test fails
         console.log(`[fixture] Tearing down isolated Foundry for: ${testId}`);
-        if (serverInfo) {
+        if (serverInfo && !serverInfo.externalBroker) {
           await foundrySetup.teardownIsolatedFoundry(serverInfo);
         }
       }
@@ -132,7 +209,7 @@ export const test = base.extend({
   /**
    * Fresh browser context with baseURL set from foundryServer
    */
-  isolatedContext: async ({ browser, foundryServer }, use) => {
+  isolatedContext: async ({ browser, foundryServer }, use, testInfo) => {
     // Create brand new context - no cookies, no storage from other tests
     // Set baseURL so relative navigation works (e.g., page.goto('/'))
     // IMPORTANT: Must set viewport explicitly - Foundry requires 1366x768 minimum
@@ -140,12 +217,24 @@ export const test = base.extend({
       storageState: undefined, // Explicitly no stored state
       baseURL: foundryServer.baseUrl,
       viewport: { width: 1920, height: 1080 },
+      recordVideo: {
+        dir: testInfo.outputPath('video'),
+        size: { width: 1280, height: 720 },
+      },
     });
 
     await use(context);
 
-    // Clean up context
+    const recordedPages = context.pages();
     await context.close();
+    for (const [index, recordedPage] of recordedPages.entries()) {
+      const video = recordedPage.video();
+      if (!video) throw new Error(`Playwright omitted video for page ${index}`);
+      await testInfo.attach(`video-${index}`, {
+        path: await video.path(),
+        contentType: 'video/webm',
+      });
+    }
   },
 
   /**
@@ -261,6 +350,8 @@ export const test = base.extend({
   /**
    * Helper functions available in tests
    */
+  // Playwright requires an object-destructuring fixture parameter.
+  // eslint-disable-next-line no-empty-pattern
   foundry: async ({}, use) => {
     await use(helpers);
   },

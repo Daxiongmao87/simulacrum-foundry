@@ -13,11 +13,21 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync, cpSync } from 'fs';
-import { dirname, join } from 'path';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  cpSync,
+} from 'fs';
+import { dirname, isAbsolute, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
 import {
+  cacheInstalledSystemPackage,
   installSystemPackage,
   SystemManifestCompatibilityError,
   validateInstalledSystemPackage,
@@ -35,6 +45,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
 const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
+const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
 
 /**
  * Dismiss the "Allow Sharing Usage Data" dialog that appears after TOS acceptance.
@@ -50,6 +61,7 @@ const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
  * @param {string} [logPrefix='setup'] - Prefix for log messages
  */
 async function dismissUsageDataDialog(page, logPrefix = 'setup') {
+  const dialogSelector = 'dialog:has-text("Allow Sharing Usage Data")';
   // Primary selector: exact match for the decline button
   const declineBtn = page.locator('button[data-action="no"]:has-text("Decline Sharing")');
 
@@ -64,10 +76,7 @@ async function dismissUsageDataDialog(page, logPrefix = 'setup') {
   if (await declineBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     console.log(`[${logPrefix}] Dismissing "Allow Sharing Usage Data" dialog`);
     await declineBtn.click();
-    // Wait for dialog to disappear using polling
-    await pollUntilGone(page, 'button[data-action="no"]:has-text("Decline Sharing")', {
-      timeout: 3000,
-    }).catch(() => {});
+    await ensureUsageDialogGone(page, dialogSelector);
     return true;
   }
 
@@ -77,13 +86,19 @@ async function dismissUsageDataDialog(page, logPrefix = 'setup') {
     if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
       console.log(`[${logPrefix}] Dismissing usage dialog via fallback: ${selector}`);
       await btn.click();
-      // Wait for dialog to disappear using polling
-      await pollUntilGone(page, selector, { timeout: 2000 }).catch(() => {});
+      await ensureUsageDialogGone(page, dialogSelector);
       return true;
     }
   }
 
   return false; // No dialog found
+}
+
+async function ensureUsageDialogGone(page, dialogSelector) {
+  await pollUntilGone(page, dialogSelector, { timeout: 5000 }).catch(async () => {
+    await page.locator(dialogSelector).evaluateAll(dialogs => dialogs.forEach(dialog => dialog.remove()));
+  });
+  await pollUntilGone(page, dialogSelector, { timeout: 2000 });
 }
 
 /**
@@ -157,14 +172,19 @@ function getSystemCacheDir(foundryVersion) {
 function getTestBasePath() {
   const tmpfsPath = process.env.TEST_TMPFS_PATH;
   if (tmpfsPath && existsSync(tmpfsPath)) {
-    // Verify it's writable
+    // mkdtemp creates an exact current-invocation path and fails on collision.
+    let probeDirectory = null;
     try {
-      const testFile = join(tmpfsPath, `.foundry-test-write-check-${Date.now()}`);
-      writeFileSync(testFile, 'test');
-      rmSync(testFile);
+      probeDirectory = mkdtempSync(join(tmpfsPath, '.simulacrum-write-check-'));
+      rmSync(probeDirectory, { recursive: true });
+      probeDirectory = null;
       console.log(`[setup] Using tmpfs path: ${tmpfsPath}`);
       return tmpfsPath;
     } catch (e) {
+      if (probeDirectory && existsSync(probeDirectory)) {
+        // This exact path was returned by the current mkdtempSync invocation.
+        rmSync(probeDirectory, { recursive: true });
+      }
       console.warn(`[setup] tmpfs path ${tmpfsPath} not writable, falling back to project dir`);
     }
   }
@@ -212,12 +232,9 @@ export async function setupIsolatedFoundry(options) {
     console.log(`[setup:${testId}] Using tmpfs: ${basePath}`);
   }
 
-  // 1. Clean any existing directories
-  if (existsSync(testDir)) {
-    rmSync(testDir, { recursive: true, force: true });
-  }
-  if (existsSync(dataDir)) {
-    rmSync(dataDir, { recursive: true, force: true });
+  // 1. A nonce-based operation identity must never collide with pre-existing state.
+  if (existsSync(testDir) || existsSync(dataDir)) {
+    throw new Error(`Refusing colliding Foundry operation directories for ${testId}`);
   }
 
   // 2. Create directory structure
@@ -226,6 +243,15 @@ export async function setupIsolatedFoundry(options) {
   mkdirSync(worldsDir, { recursive: true });
   mkdirSync(systemsDir, { recursive: true });
   mkdirSync(configDir, { recursive: true });
+  const ownership = {
+    schema_version: 1,
+    owner: 'simulacrum-e2e',
+    test_id: testId,
+    test_dir: testDir,
+    data_dir: dataDir,
+  };
+  writeOwnershipMarker(testDir, ownership);
+  writeOwnershipMarker(dataDir, ownership);
 
   // 3. Extract Foundry
   const foundryZip = findFoundryZip(foundryVersion);
@@ -276,38 +302,7 @@ export async function setupIsolatedFoundry(options) {
   };
   writeFileSync(join(configDir, 'options.json'), JSON.stringify(optionsJson, null, 2));
 
-  // 7. FORCE KILL any process already using this port (cleanup from failed previous runs)
-  console.log(`[setup:${testId}] Pre-cleanup: ensuring port ${port} is free...`);
-  try {
-    execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
-    // Poll until port is free rather than fixed wait
-    await pollUntil(
-      async () => {
-        try {
-          const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-          return !result.trim(); // Return true when port is free (no output)
-        } catch (e) {
-          return true; // If ss fails, assume port is free
-        }
-      },
-      { timeout: 5000, pollInterval: 100 }
-    ).catch(() => {}); // Ignore timeout - we'll check again below
-  } catch (e) {
-    // Ignore errors - port may already be free
-  }
-
-  // Verify port is free before starting
-  try {
-    const portCheck = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-    if (portCheck.trim()) {
-      throw new Error(`Port ${port} is still in use after cleanup attempt: ${portCheck}`);
-    }
-  } catch (e) {
-    if (e.message && e.message.includes('still in use')) {
-      throw e;
-    }
-    // If ss fails, assume port is free
-  }
+  // 7. Never kill an unowned listener. Starting Foundry will fail closed if the port is busy.
 
   // 8. Start Foundry server
   console.log(`[setup:${testId}] Starting Foundry on port ${port}...`);
@@ -320,16 +315,28 @@ export async function setupIsolatedFoundry(options) {
   });
 
   const serverPid = serverProcess.pid;
+  ownership.foundry_pid = serverPid;
+  ownership.port = port;
+  ownership.main_mjs = mainMjs;
+  writeOwnershipMarker(testDir, ownership);
+  writeOwnershipMarker(dataDir, ownership);
+  const foundryStdout = [];
+  const foundryStderr = [];
   console.log(`[setup:${testId}] Server PID: ${serverPid}`);
 
   // Forward server output
   serverProcess.stdout.on('data', data => {
     const msg = data.toString().trim();
-    if (msg) console.log(`[foundry:${testId}] ${msg}`);
+    if (msg) {
+      foundryStdout.push(msg);
+    }
   });
   serverProcess.stderr.on('data', data => {
     const msg = data.toString().trim();
-    if (msg) console.error(`[foundry:${testId}] ${msg}`);
+    if (msg) {
+      foundryStderr.push(msg);
+      console.error(`[foundry:${testId}] ${msg}`);
+    }
   });
 
   // 8. Wait for server to be ready
@@ -409,12 +416,21 @@ export async function setupIsolatedFoundry(options) {
       // Cache the installed system for future tests
       const installedSystem = join(systemsDir, systemId);
       if (existsSync(installedSystem)) {
-        const cachedSystemTarget = join(versionCacheDir, systemId);
-
-        mkdirSync(versionCacheDir, { recursive: true });
-        rmSync(cachedSystemTarget, { recursive: true, force: true });
-        cpSync(installedSystem, cachedSystemTarget, { recursive: true });
-        console.log(`[setup:${testId}] Cached system: ${systemId} for Foundry ${foundryVersion}`);
+        const cacheResult = cacheInstalledSystemPackage(
+          installedSystem,
+          versionCacheDir,
+          systemId,
+          foundryVersion
+        );
+        if (cacheResult.status === 'preserved-invalid') {
+          console.warn(
+            `[setup:${testId}] Preserving pre-existing unusable cache ${cacheResult.target}: ${cacheResult.error}`
+          );
+        } else {
+          console.log(
+            `[setup:${testId}] System cache ${cacheResult.status}: ${systemId} for Foundry ${foundryVersion}`
+          );
+        }
       }
     } else {
       console.log(`[setup:${testId}] Using cached system: ${systemId}`);
@@ -441,7 +457,102 @@ export async function setupIsolatedFoundry(options) {
     worldId,
     systemId,
     foundryVersion,
+    foundryLogs: {
+      stdout: foundryStdout,
+      stderr: foundryStderr,
+    },
   };
+}
+
+export async function setupBrokerFoundry({ testId, systemId, foundryVersion }) {
+  const baseUrl = process.env.ADP_FOUNDRY_ENDPOINT;
+  const sessionPath = process.env.ADP_FOUNDRY_SESSION_FILE;
+  const session = loadBrokerSession({ baseUrl, sessionPath, systemId, foundryVersion });
+
+  const worldId = `world-${testId}`;
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await createWorldViaUI(page, baseUrl, worldId, systemId, session.admin_password);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+
+  return {
+    testId,
+    baseUrl,
+    adminKey: session.admin_password,
+    accessToken: session.access_token,
+    logsUrl: session.logs_url,
+    worldId,
+    systemId,
+    foundryVersion,
+    externalBroker: true,
+    foundryLogs: { stdout: [], stderr: [] },
+  };
+}
+
+export function loadBrokerSession({
+  baseUrl,
+  sessionPath,
+  systemId,
+  foundryVersion,
+  brokerSystemId = process.env.ADP_GAME_SYSTEM,
+  brokerFoundryVersion = process.env.ADP_FOUNDRY_VERSION,
+}) {
+  if (!baseUrl || !/^http:\/\/foundry-[0-9a-f-]{36}:30000$/u.test(baseUrl)) {
+    throw new Error('External Foundry endpoint is missing or outside the broker identity contract');
+  }
+  if (brokerFoundryVersion !== foundryVersion) {
+    throw new Error('External Foundry version differs from the Playwright project matrix');
+  }
+  if (brokerSystemId !== systemId) {
+    throw new Error('External game system differs from the Playwright project matrix');
+  }
+  if (!sessionPath || !isAbsolute(sessionPath) || !existsSync(sessionPath)) {
+    throw new Error('External Foundry session file is unavailable');
+  }
+  const sessionStat = statSync(sessionPath);
+  if (!sessionStat.isFile() || (sessionStat.mode & 0o077) !== 0) {
+    throw new Error('External Foundry session file must be a mode-0600 regular file');
+  }
+  const session = JSON.parse(readFileSync(sessionPath, 'utf8'));
+  const runId = baseUrl.match(/^http:\/\/foundry-([0-9a-f-]{36}):30000$/u)?.[1];
+  if (
+    session.session_id !== `session-${runId}` ||
+    typeof session.admin_password !== 'string' ||
+    session.admin_password.length < 32 ||
+    typeof session.access_token !== 'string' ||
+    session.access_token.length < 32 ||
+    session.logs_url !== `${baseUrl}/__agentic/logs`
+  ) {
+    throw new Error('External Foundry session scope is invalid');
+  }
+  return session;
+}
+
+export async function collectFoundryLogs(serverInfo) {
+  if (!serverInfo.externalBroker) return serverInfo.foundryLogs;
+  const response = await fetch(serverInfo.logsUrl, {
+    headers: { Authorization: `Bearer ${serverInfo.accessToken}` },
+  });
+  if (!response.ok) throw new Error(`External Foundry logs failed with HTTP ${response.status}`);
+  const value = await response.json();
+  for (const name of ['stdout', 'stderr']) {
+    if (!Array.isArray(value[name]) || !value[name].every(item => typeof item === 'string')) {
+      throw new Error(`External Foundry ${name} log evidence is invalid`);
+    }
+    if (value[name].some(item => item.includes(serverInfo.accessToken))) {
+      throw new Error(`External Foundry ${name} leaked the scoped session token`);
+    }
+  }
+  return value;
+}
+
+function writeOwnershipMarker(directory, ownership) {
+  writeFileSync(join(directory, OWNERSHIP_MARKER), JSON.stringify(ownership));
 }
 
 /**
@@ -452,36 +563,21 @@ export async function teardownIsolatedFoundry(serverInfo) {
 
   console.log(`[teardown:${testId}] Stopping server on port ${port}...`);
 
-  // Kill server process
+  const operationOwned = ownsOperation(serverInfo);
+
+  // Kill only the exact child process recorded by this operation's ownership marker.
   try {
-    if (serverProcess && !serverProcess.killed) {
+    if (operationOwned && serverProcess?.pid === serverPid && serverProcess.exitCode === null) {
       serverProcess.kill('SIGTERM');
-      // Poll until process is killed rather than fixed wait
-      await pollUntil(async () => serverProcess.killed, { timeout: 3000, pollInterval: 100 }).catch(
-        () => {
-          // Process didn't terminate gracefully, force kill
-          if (!serverProcess.killed) {
-            serverProcess.kill('SIGKILL');
-          }
-        }
-      );
+      await pollUntil(
+        async () => serverProcess.exitCode !== null || serverProcess.signalCode !== null,
+        { timeout: 3000, pollInterval: 100 }
+      ).catch(() => {
+        if (serverProcess.exitCode === null) serverProcess.kill('SIGKILL');
+      });
     }
   } catch (e) {
     console.log(`[teardown:${testId}] Error stopping server: ${e.message}`);
-  }
-
-  // Also try killing by PID in case process object doesn't work
-  try {
-    process.kill(serverPid, 'SIGKILL');
-  } catch (e) {
-    // Process may already be dead
-  }
-
-  // Force kill any process using this port
-  try {
-    execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: 'pipe' });
-  } catch (e) {
-    // Port may already be free
   }
 
   // Wait for port to be free using polling
@@ -506,22 +602,47 @@ export async function teardownIsolatedFoundry(serverInfo) {
   // Delete directories
   console.log(`[teardown:${testId}] Cleaning up directories...`);
   try {
-    if (existsSync(testDir)) {
+    if (operationOwned && existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
+    } else if (existsSync(testDir)) {
+      console.log(`[teardown:${testId}] Preserving unowned testDir: ${testDir}`);
     }
   } catch (e) {
     console.log(`[teardown:${testId}] Error removing testDir: ${e.message}`);
   }
 
   try {
-    if (existsSync(dataDir)) {
+    if (operationOwned && existsSync(dataDir)) {
       rmSync(dataDir, { recursive: true, force: true });
+    } else if (existsSync(dataDir)) {
+      console.log(`[teardown:${testId}] Preserving unowned dataDir: ${dataDir}`);
     }
   } catch (e) {
     console.log(`[teardown:${testId}] Error removing dataDir: ${e.message}`);
   }
 
   console.log(`[teardown:${testId}] Cleanup complete`);
+}
+
+function ownsOperation(serverInfo) {
+  const expected = {
+    schema_version: 1,
+    owner: 'simulacrum-e2e',
+    test_id: serverInfo.testId,
+    test_dir: serverInfo.testDir,
+    data_dir: serverInfo.dataDir,
+    foundry_pid: serverInfo.serverPid,
+    port: serverInfo.port,
+  };
+
+  return [serverInfo.testDir, serverInfo.dataDir].every(directory => {
+    try {
+      const marker = JSON.parse(readFileSync(join(directory, OWNERSHIP_MARKER), 'utf8'));
+      return Object.entries(expected).every(([key, value]) => marker[key] === value);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -713,7 +834,7 @@ async function installSystemViaUI(page, baseUrl, systemId, adminKey) {
 /**
  * Create a world via Foundry UI
  */
-async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
+export async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
   await page.goto(`${baseUrl}/setup`);
   await page.waitForLoadState('networkidle');
 
@@ -743,13 +864,14 @@ async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKey) {
     .first();
   await worldsTab.click({ force: true });
   await page.waitForLoadState('networkidle');
+  await waitForUiSettle(page, 300);
 
   // Dismiss tour overlay before clicking Create World (tour blocks button clicks)
   await dismissTourOverlay(page);
 
   // Click Create World button
   const createBtn = page.locator('button[data-action="worldCreate"]');
-  await createBtn.click();
+  await createBtn.click({ force: true });
   // Wait for create world dialog to appear
   await pollForElement(page, 'input[name="title"]', { timeout: 5000 });
 

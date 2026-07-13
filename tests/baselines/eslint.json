@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "path": "scripts/core/asset-index-service.js",
+      "rule_id": "complexity",
+      "message": "Arrow function has a complexity of 11. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/asset-index-service.js",
+      "rule_id": "complexity",
+      "message": "Async method 'rebuildIndex' has a complexity of 12. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/asset-index-service.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'rebuildIndex' has too many lines (70). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/asset-index-service.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'search' has too many lines (56). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/asset-index-service.js",
+      "rule_id": "no-undef",
+      "message": "'FilePicker' is not defined.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "complexity",
+      "message": "Async method 'handleToolResult' has a complexity of 26. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "complexity",
+      "message": "Async method 'processUserMessage' has a complexity of 11. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'handleToolResult' has too many lines (100). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'processUserMessage' has too many lines (69). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "max-params",
+      "message": "Method 'addMessageToConversation' has too many parameters (5). Maximum allowed is 4.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/chat-handler.js",
+      "rule_id": "no-empty",
+      "message": "Empty block statement.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/document-api.js",
+      "rule_id": "no-empty",
+      "message": "Empty block statement.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/interaction-logger.js",
+      "rule_id": "complexity",
+      "message": "Method 'buildReadableLog' has a complexity of 17. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/interaction-logger.js",
+      "rule_id": "no-unused-vars",
+      "message": "'force' is defined but never used. Allowed unused args must match /^_|^unused/u.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/interaction-logger.js",
+      "rule_id": "no-unused-vars",
+      "message": "'options' is defined but never used. Allowed unused args must match /^_|^unused/u.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/macro-tool-manager.js",
+      "rule_id": "complexity",
+      "message": "Async method 'refreshTools' has a complexity of 14. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/macro-tool-manager.js",
+      "rule_id": "complexity",
+      "message": "Method '_parseToolConfig' has a complexity of 12. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/macro-tool-manager.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Method '_registerTool' has too many lines (53). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/core/tool-permission-manager.js",
+      "rule_id": "complexity",
+      "message": "Method 'getAllDestructiveTools' has a complexity of 14. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/base-tool.js",
+      "rule_id": "max-params",
+      "message": "Constructor has too many parameters (5). Maximum allowed is 4.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/base-tool.js",
+      "rule_id": "max-params",
+      "message": "Private method #tryCorrectUuid has too many parameters (7). Maximum allowed is 4.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/base-tool.js",
+      "rule_id": "max-params",
+      "message": "Private method #validateSchemaUuids has too many parameters (5). Maximum allowed is 4.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "complexity",
+      "message": "Async method 'execute' has a complexity of 25. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "complexity",
+      "message": "Private async method #buildSchemaResponse has a complexity of 17. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "complexity",
+      "message": "Private async method #retryWithCorrectedIds has a complexity of 17. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "complexity",
+      "message": "Private method #formatSchemaForError has a complexity of 16. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-depth",
+      "message": "Blocks are nested too deeply (5). Maximum allowed is 4.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-depth",
+      "message": "Blocks are nested too deeply (6). Maximum allowed is 4.",
+      "count": 3
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'execute' has too many lines (135). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Private async method #buildSchemaResponse has too many lines (61). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Private async method #retryWithCorrectedIds has too many lines (55). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "max-lines",
+      "message": "File has too many lines (546). Maximum allowed is 500.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "no-unused-vars",
+      "message": "'embeddedInfo' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-create.js",
+      "rule_id": "no-useless-catch",
+      "message": "Unnecessary try/catch wrapper.",
+      "count": 2
+    },
+    {
+      "path": "scripts/tools/document-ownership.js",
+      "rule_id": "camelcase",
+      "message": "Identifier 'document_id' is not in camel case.",
+      "count": 3
+    },
+    {
+      "path": "scripts/tools/document-ownership.js",
+      "rule_id": "camelcase",
+      "message": "Identifier 'document_type' is not in camel case.",
+      "count": 6
+    },
+    {
+      "path": "scripts/tools/document-search.js",
+      "rule_id": "complexity",
+      "message": "Arrow function has a complexity of 13. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-update.js",
+      "rule_id": "complexity",
+      "message": "Async method '_configureCompendium' has a complexity of 12. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-update.js",
+      "rule_id": "complexity",
+      "message": "Async method 'execute' has a complexity of 15. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-update.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method '_configureCompendium' has too many lines (65). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-update.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method 'execute' has too many lines (56). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/document-update.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Constructor has too many lines (72). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/manage-task.js",
+      "rule_id": "complexity",
+      "message": "Method '_startTask' has a complexity of 11. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/manage-task.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Constructor has too many lines (63). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/manage-task.js",
+      "rule_id": "no-unused-vars",
+      "message": "'status' is defined but never used. Allowed unused args must match /^_|^unused/u.",
+      "count": 1
+    },
+    {
+      "path": "scripts/tools/read-tool-output.js",
+      "rule_id": "complexity",
+      "message": "Async method 'execute' has a complexity of 12. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/ui/tool-permissions-config.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async method '_prepareContext' has too many lines (51). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "scripts/ui/tool-permissions-config.js",
+      "rule_id": "no-unused-vars",
+      "message": "'event' is defined but never used. Allowed unused args must match /^_|^unused/u.",
+      "count": 1
+    },
+    {
+      "path": "scripts/ui/tool-permissions-config.js",
+      "rule_id": "no-unused-vars",
+      "message": "'target' is defined but never used. Allowed unused args must match /^_|^unused/u.",
+      "count": 1
+    },
+    {
+      "path": "scripts/utils/message-utils.js",
+      "rule_id": "complexity",
+      "message": "Function 'extractToolDisplay' has a complexity of 17. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/utils/message-utils.js",
+      "rule_id": "complexity",
+      "message": "Function 'formatToolCallDisplay' has a complexity of 22. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/utils/message-utils.js",
+      "rule_id": "complexity",
+      "message": "Function 'smartSliceMessages' has a complexity of 16. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "scripts/utils/message-utils.js",
+      "rule_id": "max-depth",
+      "message": "Blocks are nested too deeply (5). Maximum allowed is 4.",
+      "count": 2
+    },
+    {
+      "path": "scripts/utils/message-utils.js",
+      "rule_id": "no-empty",
+      "message": "Empty block statement.",
+      "count": 1
+    },
+    {
+      "path": "scripts/utils/validation-errors.js",
+      "rule_id": "complexity",
+      "message": "Static method 'parseFoundryValidationError' has a complexity of 11. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "tests/integration/test-gemini-openai.js",
+      "rule_id": "max-lines-per-function",
+      "message": "Async function 'testToolCalling' has too many lines (53). Maximum allowed is 50.",
+      "count": 1
+    },
+    {
+      "path": "tools/build-packs.js",
+      "rule_id": "no-unused-vars",
+      "message": "'cpSync' is defined but never used.",
+      "count": 1
+    },
+    {
+      "path": "tools/generate-mermaid.js",
+      "rule_id": "complexity",
+      "message": "Function 'parseFile' has a complexity of 12. Maximum allowed is 10.",
+      "count": 1
+    },
+    {
+      "path": "tools/generate-mermaid.js",
+      "rule_id": "max-len",
+      "message": "This line has a length of 106. Maximum allowed is 100.",
+      "count": 1
+    },
+    {
+      "path": "tools/generate-mermaid.js",
+      "rule_id": "no-unused-vars",
+      "message": "'__dirname' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "path": "tools/generate-mermaid.js",
+      "rule_id": "no-unused-vars",
+      "message": "'METHOD_PATTERN' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "path": "tools/generate-mermaid.js",
+      "rule_id": "no-unused-vars",
+      "message": "'PROPERTY_PATTERN' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "path": "tools/package-module.js",
+      "rule_id": "no-empty",
+      "message": "Empty block statement.",
+      "count": 2
+    }
+  ]
+}
