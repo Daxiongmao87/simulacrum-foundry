@@ -321,7 +321,7 @@
     {
       "id": "npm_dependencies",
       "owner": "repository",
-      "description": "Installs root npm dependencies into an Agentic Delivery-owned cache and links them into the mounted workspace so repository npm commands can run after the worker mount hides image-layer node_modules.",
+      "description": "Restores root npm dependencies from an Agentic Delivery image cache into the mounted workspace, falling back to npm ci only when the cache is unavailable, so repository npm commands remain reproducible after the worker mount hides image-layer node_modules.",
       "probe_command": "probe_npm_dependencies",
       "prepare_command": "prepare_npm_dependencies",
       "verify_command": "verify_npm_dependencies",

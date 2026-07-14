@@ -2,14 +2,17 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const LOCKFILE = join(ROOT, 'package-lock.json');
+const NODE_MODULES_PATH = join(ROOT, 'node_modules');
 const MARKER_PATH = join(ROOT, 'node_modules', '.agentic-delivery-owner.json');
+const OWNER = 'simulacrum-agentic-delivery-npm';
+const IMAGE_CACHE = process.env.AGENTIC_DELIVERY_NODE_MODULES_CACHE;
 const action = process.argv[2];
 
 if (!['probe', 'prepare', 'verify'].includes(action)) {
@@ -37,10 +40,18 @@ async function prepare() {
     return;
   }
 
-  if (!(await dependenciesInstalled())) {
+  await ensureOwnedTarget();
+
+  if (await dependenciesInstalledAt(NODE_MODULES_PATH)) {
+    await writeMarker();
+  } else if (await dependenciesInstalledAt(IMAGE_CACHE)) {
+    await restoreImageCache();
+    await writeMarker();
+  } else {
     await run('npm', ['ci', '--no-audit', '--no-fund']);
+    await writeMarker();
   }
-  await writeMarker();
+
   await assertPrepared();
   console.log('Prepared Node dependencies.');
 }
@@ -57,19 +68,24 @@ async function assertPrepared() {
 }
 
 async function isPrepared() {
-  if (!(await dependenciesInstalled()) || !existsSync(MARKER_PATH)) return false;
+  if (!(await dependenciesInstalledAt(NODE_MODULES_PATH)) || !existsSync(MARKER_PATH)) return false;
 
   const [pkg, marker] = await Promise.all([readJson(packageJsonPath()), readJson(MARKER_PATH)]);
   return (
     pkg.version === '3.0.2' &&
-    marker.owner === 'simulacrum-agentic-delivery-npm' &&
+    marker.owner === OWNER &&
     marker.lock_sha256 === (await lockfileHash())
   );
 }
 
-async function dependenciesInstalled() {
-  if (!existsSync(packageJsonPath()) || !existsSync(eslintBinPath())) return false;
-  const pkg = await readJson(packageJsonPath());
+async function dependenciesInstalledAt(nodeModulesPath) {
+  if (!nodeModulesPath) return false;
+
+  const pkgPath = packageJsonPath(nodeModulesPath);
+  const eslintPath = eslintBinPath(nodeModulesPath);
+  if (!existsSync(pkgPath) || !existsSync(eslintPath)) return false;
+
+  const pkg = await readJson(pkgPath);
   return pkg.version === '3.0.2';
 }
 
@@ -78,13 +94,13 @@ async function readJson(path) {
 }
 
 async function writeMarker() {
-  await mkdir(join(ROOT, 'node_modules'), { recursive: true });
+  await mkdir(NODE_MODULES_PATH, { recursive: true });
   await writeFile(
     MARKER_PATH,
     `${JSON.stringify(
       {
         schema_version: 1,
-        owner: 'simulacrum-agentic-delivery-npm',
+        owner: OWNER,
         lock_sha256: await lockfileHash(),
       },
       null,
@@ -94,12 +110,49 @@ async function writeMarker() {
   );
 }
 
-function packageJsonPath() {
-  return join(ROOT, 'node_modules', '@foundryvtt', 'foundryvtt-cli', 'package.json');
+async function restoreImageCache() {
+  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true });
 }
 
-function eslintBinPath() {
-  return join(ROOT, 'node_modules', '.bin', 'eslint');
+async function ensureOwnedTarget() {
+  if (!existsSync(NODE_MODULES_PATH)) return;
+
+  const stat = await lstat(NODE_MODULES_PATH);
+  if (!stat.isDirectory()) {
+    throw new Error('Refusing to replace pre-existing non-directory node_modules path');
+  }
+
+  if (await isOwnedPreparedTree()) {
+    await rm(NODE_MODULES_PATH, { recursive: true, force: true });
+    return;
+  }
+
+  const entries = await readdir(NODE_MODULES_PATH);
+  if (entries.length === 0) {
+    await rm(NODE_MODULES_PATH, { recursive: true, force: true });
+    return;
+  }
+
+  throw new Error('Refusing to replace pre-existing unowned node_modules directory');
+}
+
+async function isOwnedPreparedTree() {
+  if (!existsSync(MARKER_PATH)) return false;
+
+  try {
+    const marker = await readJson(MARKER_PATH);
+    return marker.owner === OWNER;
+  } catch {
+    return false;
+  }
+}
+
+function packageJsonPath(nodeModulesPath = NODE_MODULES_PATH) {
+  return join(nodeModulesPath, '@foundryvtt', 'foundryvtt-cli', 'package.json');
+}
+
+function eslintBinPath(nodeModulesPath = NODE_MODULES_PATH) {
+  return join(nodeModulesPath, '.bin', 'eslint');
 }
 
 async function lockfileHash() {
