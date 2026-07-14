@@ -125,18 +125,6 @@
       "resource_inputs": []
     },
     {
-      "id": "lint_check",
-      "argv": [
-        "npm",
-        "run",
-        "lint:check"
-      ],
-      "working_directory": ".",
-      "timeout": "PT5M",
-      "secret_inputs": [],
-      "resource_inputs": []
-    },
-    {
       "id": "format_check",
       "argv": [
         "npm",
@@ -368,9 +356,9 @@
       "id": "lint_validation",
       "category": "lint",
       "applicable": true,
-      "rationale": "CI runs ESLint, and the repository exposes npm run lint:check as the authoritative lint command.",
+      "rationale": "The repository checks in tests/baselines/eslint.json and exposes npm run test:static as the reproducible ESLint clean gate; CI only promotes ordinary pull requests to a full npm run lint:check when lint configuration changes.",
       "command_ids": [
-        "lint_check"
+        "static_baseline"
       ],
       "prerequisite_ids": [
         "npm_dependencies"
@@ -410,10 +398,9 @@
       "id": "static_analysis_validation",
       "category": "static_analysis",
       "applicable": true,
-      "rationale": "The repository maintains a required test policy check, an ESLint baseline gate, and a dead-code analysis command that CI executes for pull requests.",
+      "rationale": "The repository maintains a required test policy check and dead-code analysis command for static repository governance beyond the ESLint baseline clean gate tracked under lint validation.",
       "command_ids": [
         "policy_check",
-        "static_baseline",
         "dead_code_check"
       ],
       "prerequisite_ids": [
