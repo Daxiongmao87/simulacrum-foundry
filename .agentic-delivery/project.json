@@ -31,6 +31,42 @@
   },
   "commands": [
     {
+      "id": "probe_npm_dependencies",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/npm-prereq.mjs",
+        "probe"
+      ],
+      "working_directory": ".",
+      "timeout": "PT30S",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "prepare_npm_dependencies",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/npm-prereq.mjs",
+        "prepare"
+      ],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "verify_npm_dependencies",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/npm-prereq.mjs",
+        "verify"
+      ],
+      "working_directory": ".",
+      "timeout": "PT30S",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
       "id": "probe_foundry_e2e",
       "argv": [
         "node",
@@ -283,6 +319,16 @@
   ],
   "prerequisites": [
     {
+      "id": "npm_dependencies",
+      "owner": "repository",
+      "description": "Installs root npm dependencies into an Agentic Delivery-owned cache and links them into the mounted workspace so repository npm commands can run after the worker mount hides image-layer node_modules.",
+      "probe_command": "probe_npm_dependencies",
+      "prepare_command": "prepare_npm_dependencies",
+      "verify_command": "verify_npm_dependencies",
+      "cleanup_command": null,
+      "external_input": null
+    },
+    {
       "id": "foundry_e2e_inputs",
       "owner": "repository",
       "description": "Maps Agentic Delivery Foundry license and per-version zip resources into the repository paths expected by the Playwright Foundry harness.",
@@ -304,7 +350,9 @@
         "package_module",
         "package_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [
         "dist_zip"
       ],
@@ -325,7 +373,9 @@
       "command_ids": [
         "lint_check"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -344,7 +394,9 @@
       "command_ids": [
         "format_check"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -365,7 +417,9 @@
         "static_baseline",
         "dead_code_check"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -384,7 +438,9 @@
       "command_ids": [
         "unit_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -403,7 +459,9 @@
       "command_ids": [
         "regression_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -422,7 +480,9 @@
       "command_ids": [
         "integration_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -441,7 +501,9 @@
       "command_ids": [
         "security_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -461,6 +523,7 @@
         "accessibility_tests"
       ],
       "prerequisite_ids": [
+        "npm_dependencies",
         "foundry_e2e_inputs"
       ],
       "artifact_ids": [],
@@ -501,7 +564,9 @@
       "command_ids": [
         "component_tests"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
@@ -521,6 +586,7 @@
         "ui_tests"
       ],
       "prerequisite_ids": [
+        "npm_dependencies",
         "foundry_e2e_inputs"
       ],
       "artifact_ids": [],
@@ -562,6 +628,7 @@
         "e2e_tests"
       ],
       "prerequisite_ids": [
+        "npm_dependencies",
         "foundry_e2e_inputs"
       ],
       "artifact_ids": [],

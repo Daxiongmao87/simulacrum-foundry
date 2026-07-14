@@ -7,13 +7,16 @@
  * the .js content is injected into the JSON's `command` field at build time.
  * This keeps macro scripts maintainable as standalone JS files.
  */
-import { execSync } from 'child_process';
-import { existsSync, rmSync, readdirSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'fs';
-import { join, dirname, basename, extname } from 'path';
+import { execFileSync } from 'child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { basename, dirname, extname, join } from 'path';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
+const require = createRequire(import.meta.url);
+const FVTT_BIN = resolveFoundryCli();
 
 // Pack definitions: [sourceName, outputName]
 const PACKS = [
@@ -70,19 +73,29 @@ async function build() {
         // Prepare staging with injected scripts
         const stagingDir = prepareStaging(sourceDir);
 
-        // Use official Foundry CLI
-        const cmd = `npx fvtt package pack --type Module --id simulacrum -n ${outputName} --in "${stagingDir}" --out "${join(ROOT, 'packs')}" -v`;
-
         try {
-            const result = execSync(cmd, {
+            const args = [
+                FVTT_BIN,
+                'package',
+                'pack',
+                '--type',
+                'Module',
+                '--id',
+                'simulacrum',
+                '-n',
+                outputName,
+                '--in',
+                stagingDir,
+                '--out',
+                join(ROOT, 'packs'),
+                '-v',
+            ];
+            execFileSync(process.execPath, args, {
                 cwd: ROOT,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe']
+                stdio: 'inherit',
             });
-            console.log(result);
         } catch (err) {
             console.error(`Failed to build ${sourceName}:`, err.message);
-            if (err.stderr) console.error(err.stderr);
             process.exit(1);
         } finally {
             // Clean up staging
@@ -97,3 +110,15 @@ build().catch(err => {
     console.error(err);
     process.exit(1);
 });
+
+function resolveFoundryCli() {
+    try {
+        const packageJson = require.resolve('@foundryvtt/foundryvtt-cli/package.json');
+        return join(dirname(packageJson), 'fvtt.mjs');
+    } catch {
+        console.error(
+            'Missing @foundryvtt/foundryvtt-cli. Run npm ci before building packs.'
+        );
+        process.exit(1);
+    }
+}
