@@ -344,9 +344,8 @@
       "id": "build_validation",
       "category": "build",
       "applicable": true,
-      "rationale": "The repository defines packaging commands for compendium packs and the release zip, and it includes a package smoke test that inspects the built archive contents.",
+      "rationale": "The repository checks in the built compendium LevelDB output under packs/ and validates the distributable artifact by packaging the module zip plus running the package smoke test that inspects the built archive contents.",
       "command_ids": [
-        "build_packs",
         "package_module",
         "package_tests"
       ],
