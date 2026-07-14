@@ -1,0 +1,622 @@
+{
+  "schema_version": "v1",
+  "project": {
+    "key": "simulacrum",
+    "display_name": "Simulacrum: AI Campaign Copilot",
+    "base_branch": "main"
+  },
+  "pipeline": {
+    "trigger_labels": [
+      "agentic-delivery"
+    ],
+    "human_authority": "Daxiongmao87",
+    "models": {
+      "default": "gpt-5.4",
+      "roles": []
+    },
+    "protected_paths": [
+      ".github/workflows",
+      "CHANGELOG.md",
+      "module.json",
+      ".agentic-delivery/project.json"
+    ]
+  },
+  "environment": {
+    "context": ".",
+    "dockerfile": ".agentic-delivery/Dockerfile",
+    "network": "egress",
+    "pids_limit": 512,
+    "memory": "4G",
+    "cpus": "2"
+  },
+  "commands": [
+    {
+      "id": "probe_foundry_e2e",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/foundry-prereq.mjs",
+        "probe"
+      ],
+      "working_directory": ".",
+      "timeout": "PT30S",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "prepare_foundry_e2e",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/foundry-prereq.mjs",
+        "prepare"
+      ],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [
+        "foundry_license_key"
+      ],
+      "resource_inputs": [
+        "foundry_v13_351_zip",
+        "foundry_v14_364_zip"
+      ]
+    },
+    {
+      "id": "verify_foundry_e2e",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/foundry-prereq.mjs",
+        "verify"
+      ],
+      "working_directory": ".",
+      "timeout": "PT30S",
+      "secret_inputs": [
+        "foundry_license_key"
+      ],
+      "resource_inputs": [
+        "foundry_v13_351_zip",
+        "foundry_v14_364_zip"
+      ]
+    },
+    {
+      "id": "cleanup_foundry_e2e",
+      "argv": [
+        "node",
+        "tools/agentic-delivery/foundry-prereq.mjs",
+        "cleanup"
+      ],
+      "working_directory": ".",
+      "timeout": "PT30S",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "lint_check",
+      "argv": [
+        "npm",
+        "run",
+        "lint:check"
+      ],
+      "working_directory": ".",
+      "timeout": "PT5M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "format_check",
+      "argv": [
+        "npm",
+        "run",
+        "format:check"
+      ],
+      "working_directory": ".",
+      "timeout": "PT5M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "static_baseline",
+      "argv": [
+        "npm",
+        "run",
+        "test:static"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "policy_check",
+      "argv": [
+        "npm",
+        "run",
+        "test:policy"
+      ],
+      "working_directory": ".",
+      "timeout": "PT5M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "dead_code_check",
+      "argv": [
+        "npm",
+        "run",
+        "dead-code"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "build_packs",
+      "argv": [
+        "npm",
+        "run",
+        "build:packs"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "package_module",
+      "argv": [
+        "npm",
+        "run",
+        "package:module"
+      ],
+      "working_directory": ".",
+      "timeout": "PT5M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "package_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:package"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "unit_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:unit"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "regression_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:regression"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "integration_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:integration"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "security_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:security"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "component_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:component"
+      ],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "ui_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:ui"
+      ],
+      "working_directory": ".",
+      "timeout": "PT1H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "accessibility_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:accessibility"
+      ],
+      "working_directory": ".",
+      "timeout": "PT1H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "e2e_tests",
+      "argv": [
+        "npm",
+        "run",
+        "test:foundry"
+      ],
+      "working_directory": ".",
+      "timeout": "PT1H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "foundry_e2e_inputs",
+      "owner": "repository",
+      "description": "Maps Agentic Delivery Foundry license and per-version zip resources into the repository paths expected by the Playwright Foundry harness.",
+      "probe_command": "probe_foundry_e2e",
+      "prepare_command": "prepare_foundry_e2e",
+      "verify_command": "verify_foundry_e2e",
+      "cleanup_command": "cleanup_foundry_e2e",
+      "external_input": "foundry_license_key"
+    }
+  ],
+  "validations": [
+    {
+      "id": "build_validation",
+      "category": "build",
+      "applicable": true,
+      "rationale": "The repository defines packaging commands for compendium packs and the release zip, and it includes a package smoke test that inspects the built archive contents.",
+      "command_ids": [
+        "build_packs",
+        "package_module",
+        "package_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [
+        "dist_zip"
+      ],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lint_validation",
+      "category": "lint",
+      "applicable": true,
+      "rationale": "CI runs ESLint, and the repository exposes npm run lint:check as the authoritative lint command.",
+      "command_ids": [
+        "lint_check"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "format_validation",
+      "category": "format",
+      "applicable": true,
+      "rationale": "CI runs Prettier checks and package.json defines npm run format:check for repository formatting validation.",
+      "command_ids": [
+        "format_check"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "static_analysis_validation",
+      "category": "static_analysis",
+      "applicable": true,
+      "rationale": "The repository maintains a required test policy check, an ESLint baseline gate, and a dead-code analysis command that CI executes for pull requests.",
+      "command_ids": [
+        "policy_check",
+        "static_baseline",
+        "dead_code_check"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unit_validation",
+      "category": "unit",
+      "applicable": true,
+      "rationale": "tests/unit contains node:test suites and package.json exposes npm run test:unit through the shared tier runner.",
+      "command_ids": [
+        "unit_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regression_validation",
+      "category": "regression",
+      "applicable": true,
+      "rationale": "tests/regression and the compaction budget script are wired to npm run test:regression in the repository tier runner.",
+      "command_ids": [
+        "regression_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "integration_validation",
+      "category": "integration",
+      "applicable": true,
+      "rationale": "tests/integration/local contains repository-owned integration checks and npm run test:integration targets that local suite without requiring external provider credentials.",
+      "command_ids": [
+        "integration_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security_validation",
+      "category": "security",
+      "applicable": true,
+      "rationale": "tests/security contains sanitizer and secret-scanning assertions, and package.json exposes npm run test:security for that suite.",
+      "command_ids": [
+        "security_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "accessibility_validation",
+      "category": "accessibility",
+      "applicable": true,
+      "rationale": "tests/e2e/specs/common/accessibility.spec.mjs is tagged @accessibility and the repository defines npm run test:accessibility to execute it through Playwright and the Foundry harness.",
+      "command_ids": [
+        "accessibility_tests"
+      ],
+      "prerequisite_ids": [
+        "foundry_e2e_inputs"
+      ],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        },
+        {
+          "name": "browser",
+          "values": [
+            "chromium"
+          ]
+        },
+        {
+          "name": "foundry_version",
+          "values": [
+            "13.351",
+            "14.364"
+          ]
+        },
+        {
+          "name": "game_system",
+          "values": [
+            "dnd5e",
+            "pf2e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "component_validation",
+      "category": "component",
+      "applicable": true,
+      "rationale": "tests/component contains focused node:test coverage for the sidebar template and package.json exposes npm run test:component for that tier.",
+      "command_ids": [
+        "component_tests"
+      ],
+      "prerequisite_ids": [],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui_validation",
+      "category": "ui",
+      "applicable": true,
+      "rationale": "tests/e2e/specs/common/sidebar.spec.mjs is tagged @ui and the repository defines npm run test:ui to execute the UI-focused Playwright slice against Foundry.",
+      "command_ids": [
+        "ui_tests"
+      ],
+      "prerequisite_ids": [
+        "foundry_e2e_inputs"
+      ],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        },
+        {
+          "name": "browser",
+          "values": [
+            "chromium"
+          ]
+        },
+        {
+          "name": "foundry_version",
+          "values": [
+            "13.351",
+            "14.364"
+          ]
+        },
+        {
+          "name": "game_system",
+          "values": [
+            "dnd5e",
+            "pf2e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e2e_validation",
+      "category": "e2e",
+      "applicable": true,
+      "rationale": "npm run test:foundry executes the complete Playwright Foundry suite, which currently covers the common UI and accessibility scenarios across the documented default Foundry version matrix.",
+      "command_ids": [
+        "e2e_tests"
+      ],
+      "prerequisite_ids": [
+        "foundry_e2e_inputs"
+      ],
+      "artifact_ids": [],
+      "matrix": [
+        {
+          "name": "node_version",
+          "values": [
+            "24"
+          ]
+        },
+        {
+          "name": "browser",
+          "values": [
+            "chromium"
+          ]
+        },
+        {
+          "name": "foundry_version",
+          "values": [
+            "13.351",
+            "14.364"
+          ]
+        },
+        {
+          "name": "game_system",
+          "values": [
+            "dnd5e",
+            "pf2e"
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "dist_zip",
+      "path_pattern": "dist/*.zip",
+      "required": true
+    }
+  ],
+  "external_inputs": [
+    {
+      "id": "foundry_license_key",
+      "kind": "license",
+      "purpose": "Single-line licensed Foundry VTT key used to sign the local test instance during Playwright Foundry validation."
+    },
+    {
+      "id": "foundry_v13_351_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT Node distribution zip for version 13.351, mounted so the repository harness can materialize the v13 Playwright test instance."
+    },
+    {
+      "id": "foundry_v14_364_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT Node distribution zip for version 14.364, mounted so the repository harness can materialize the v14 Playwright test instance."
+    }
+  ]
+}
