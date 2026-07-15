@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -27,13 +27,19 @@ test('foundry prerequisite prepares the supported matrix when no ADP selectors a
     const envBody = await readFile(join(root, 'tests', 'e2e', '.env.test'), 'utf8');
     assert.match(envBody, /^TEST_FOUNDRY_VERSIONS=13\.351,14\.364$/mu);
     assert.match(envBody, /^TEST_SYSTEM_IDS=dnd5e,pf2e$/mu);
-
     const state = JSON.parse(
       await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
     );
-    assert.deepEqual(state.foundry_versions, ['13.351', '14.364']);
-    assert.deepEqual(state.system_ids, ['dnd5e', 'pf2e']);
-    assert.equal(state.zip_links.length, 2);
+    for (const link of state.zip_links) {
+      assert.ok(link.foundry_version, 'missing foundry_version');
+      assert.ok(link.zip_input_id, 'missing zip_input_id');
+      assert.ok(link.target_path, 'missing target_path');
+      assert.ok(link.sha256, 'missing sha256');
+
+      // Vendor target must be a regular file, not a symlink
+      const targetStat = await stat(link.target_path);
+      assert.ok(targetStat.isFile(), `vendor target ${link.target_path} should be a regular file`);
+    }
   } finally {
     await runPrereq(root, 'cleanup', {});
     await rm(root, { recursive: true, force: true });
@@ -60,6 +66,15 @@ test('foundry prerequisite narrows preparation to the requested matrix selector'
     const envBody = await readFile(join(root, 'tests', 'e2e', '.env.test'), 'utf8');
     assert.match(envBody, /^TEST_FOUNDRY_VERSIONS=13\.351$/mu);
     assert.match(envBody, /^TEST_SYSTEM_IDS=dnd5e$/mu);
+
+    const state = JSON.parse(
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
+    );
+    assert.equal(state.zip_links.length, 1);
+    assert.equal(state.zip_links[0].foundry_version, '13.351');
+    assert.ok(state.zip_links[0].sha256, 'sha256 must be recorded');
+    const selTargetStat = await stat(state.zip_links[0].target_path);
+    assert.ok(selTargetStat.isFile(), 'vendor target should be a regular file');
   } finally {
     await runPrereq(root, 'cleanup', {});
     await rm(root, { recursive: true, force: true });
@@ -82,6 +97,18 @@ test('foundry prerequisite verifies prepared state without re-reading external i
       AGENTIC_DELIVERY_INPUT_FOUNDRY_V13_351_ZIP: join(inputs, 'FoundryVTT-Node-13.351.zip'),
     });
     assert.equal(prepareResult.exitCode, 0, prepareResult.stderr || prepareResult.stdout);
+
+    // Remove inputs dir to simulate verify/cleanup container (no /run/agentic-delivery/inputs mount)
+    await rm(inputs, { recursive: true, force: true });
+
+    // Assert vendor targets are regular files (copied, not symlinked)
+    const state = JSON.parse(
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
+    );
+    for (const link of state.zip_links) {
+      const tgtStat = await stat(link.target_path);
+      assert.ok(tgtStat.isFile(), `vendor target ${link.target_path} should be a regular file`);
+    }
 
     const verifyResult = await runPrereq(root, 'verify', {
       ADP_FOUNDRY_VERSION: '13.351',

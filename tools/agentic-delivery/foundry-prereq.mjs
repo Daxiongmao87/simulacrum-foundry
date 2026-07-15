@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import {
+  copyFile,
   lstat,
   mkdir,
   readFile,
-  readlink,
   rm,
   rmdir,
-  symlink,
-  unlink,
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -85,8 +83,15 @@ async function prepare() {
     }
   }
 
+  const copiedZips = [];
   for (const zipLink of context.zip_links) {
-    await symlink(zipLink.input_path, zipLink.target_path);
+    const hash = await copyAndHash(zipLink.input_path, zipLink.target_path);
+    copiedZips.push({
+      foundry_version: zipLink.foundry_version,
+      zip_input_id: zipLink.zip_input_id,
+      target_path: zipLink.target_path,
+      sha256: hash,
+    });
   }
 
   const adminKey = `agentic-${randomUUID()}${randomUUID().replaceAll('-', '')}`;
@@ -108,7 +113,7 @@ async function prepare() {
     owner: OWNER,
     foundry_versions: context.foundry_versions,
     system_ids: context.system_ids,
-    zip_links: context.zip_links,
+    zip_links: copiedZips,
     env_path: ENV_PATH,
     env_sha256: sha256(envBody),
   };
@@ -138,7 +143,7 @@ async function cleanup() {
 
   for (const zipLink of state.zip_links || []) {
     if (await ownsPreparedZip(zipLink)) {
-      await unlink(zipLink.target_path);
+      await rm(zipLink.target_path, { force: true });
     }
   }
   if (await ownsPreparedEnv(state)) {
@@ -260,8 +265,10 @@ async function assertPrepared(state, context = null) {
 async function ownsPreparedZip(zipLink) {
   try {
     const targetStat = await lstat(zipLink.target_path);
-    if (!targetStat.isSymbolicLink()) return false;
-    return (await readlink(zipLink.target_path)) === zipLink.input_path;
+    if (!targetStat.isFile()) return false;
+    if (!zipLink.sha256) return false;
+    const actual = await hashFile(zipLink.target_path);
+    return actual === zipLink.sha256;
   } catch {
     return false;
   }
@@ -344,6 +351,29 @@ function parseRequestedValues(value, defaults) {
   }
   return [...new Set(requested)];
 }
+async function copyAndHash(source, target) {
+  const hash = createHash('sha256');
+  const stream = createReadStream(source);
+  stream.pipe(hash, { end: false });
+  await copyFile(source, target);
+  await new Promise((resolve, reject) => {
+    stream.on('error', reject);
+    stream.on('end', resolve);
+  });
+  return hash.digest('hex');
+}
+
+async function hashFile(path) {
+  const hash = createHash('sha256');
+  const stream = createReadStream(path);
+  stream.pipe(hash, { end: false });
+  await new Promise((resolve, reject) => {
+    stream.on('error', reject);
+    stream.on('end', resolve);
+  });
+  return hash.digest('hex');
+}
+
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
