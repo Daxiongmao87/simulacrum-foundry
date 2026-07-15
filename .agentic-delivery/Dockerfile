@@ -18,9 +18,8 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 
 RUN npm ci \
+  && ./node_modules/.bin/playwright install --with-deps chromium \
   && mkdir -p /opt/agentic-delivery/simulacrum-node_modules \
   && cp -a node_modules/. /opt/agentic-delivery/simulacrum-node_modules/ \
   && rm -rf node_modules \
-  && npx playwright install --with-deps chromium \
   && npm cache clean --force
-
