@@ -66,6 +66,34 @@ test('foundry prerequisite narrows preparation to the requested matrix selector'
   }
 });
 
+test('foundry prerequisite verifies prepared state without re-reading external inputs', async () => {
+  const root = await createTempRepo();
+  const inputs = join(root, '.inputs');
+
+  try {
+    await mkdir(inputs, { recursive: true });
+    await writeFile(join(inputs, 'foundry-license-key'), 'licensed-key\n');
+    await writeFile(join(inputs, 'FoundryVTT-Node-13.351.zip'), 'zip-13');
+
+    const prepareResult = await runPrereq(root, 'prepare', {
+      ADP_FOUNDRY_VERSION: '13.351',
+      ADP_GAME_SYSTEM: 'dnd5e',
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY: join(inputs, 'foundry-license-key'),
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_V13_351_ZIP: join(inputs, 'FoundryVTT-Node-13.351.zip'),
+    });
+    assert.equal(prepareResult.exitCode, 0, prepareResult.stderr || prepareResult.stdout);
+
+    const verifyResult = await runPrereq(root, 'verify', {
+      ADP_FOUNDRY_VERSION: '13.351',
+      ADP_GAME_SYSTEM: 'dnd5e',
+    });
+    assert.equal(verifyResult.exitCode, 0, verifyResult.stderr || verifyResult.stdout);
+  } finally {
+    await runPrereq(root, 'cleanup', {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function createTempRepo() {
   const root = await mkdtemp(join(tmpdir(), 'simulacrum-foundry-prereq-'));
   const scriptTarget = join(root, 'tools', 'agentic-delivery');

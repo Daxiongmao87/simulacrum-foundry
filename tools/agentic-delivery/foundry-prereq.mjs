@@ -6,7 +6,7 @@ import {
   lstat,
   mkdir,
   readFile,
-  realpath,
+  readlink,
   rm,
   rmdir,
   symlink,
@@ -120,7 +120,7 @@ async function prepare() {
 }
 
 async function verify() {
-  const context = await resolveContext();
+  const context = resolveVerificationContext();
   const state = await readState();
   await assertPrepared(state, context);
   console.log(
@@ -155,22 +155,7 @@ async function cleanup() {
 }
 
 async function resolveContext() {
-  const matrix = matrixSelectors();
-  const foundryVersions = parseRequestedValues(
-    process.env.ADP_FOUNDRY_VERSION || matrix.foundry_version,
-    Object.keys(ZIP_INPUT_IDS)
-  );
-  if (foundryVersions.length === 0) {
-    throw new Error('Foundry E2E setup requires at least one supported Foundry version');
-  }
-
-  const systemIds = parseRequestedValues(
-    process.env.ADP_GAME_SYSTEM || matrix.game_system,
-    DEFAULT_SYSTEM_IDS
-  );
-  if (systemIds.length === 0) {
-    throw new Error('Foundry E2E setup requires at least one supported game system');
-  }
+  const { foundry_versions: foundryVersions, system_ids: systemIds } = resolveRequestedMatrix();
   const licensePath = process.env.AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY;
   if (!licensePath) {
     throw new Error('AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY is required');
@@ -200,6 +185,18 @@ async function resolveContext() {
     system_ids: systemIds,
     license_key,
     zip_links,
+  };
+}
+
+function resolveVerificationContext() {
+  const { foundry_versions, system_ids } = resolveRequestedMatrix();
+  return {
+    foundry_versions,
+    system_ids,
+    zip_links: foundry_versions.map(foundryVersion => ({
+      foundry_version: foundryVersion,
+      target_path: join(VENDOR_DIR, `FoundryVTT-Node-${foundryVersion}.zip`),
+    })),
   };
 }
 
@@ -263,9 +260,7 @@ async function ownsPreparedZip(zipLink) {
   try {
     const targetStat = await lstat(zipLink.target_path);
     if (!targetStat.isSymbolicLink()) return false;
-    const targetRealPath = await realpath(zipLink.target_path);
-    const inputRealPath = await realpath(zipLink.input_path);
-    return targetRealPath === inputRealPath;
+    return (await readlink(zipLink.target_path)) === zipLink.input_path;
   } catch {
     return false;
   }
@@ -310,6 +305,27 @@ function matrixSelectors() {
     }
   }
   return matrix;
+}
+
+function resolveRequestedMatrix() {
+  const matrix = matrixSelectors();
+  const foundry_versions = parseRequestedValues(
+    process.env.ADP_FOUNDRY_VERSION || matrix.foundry_version,
+    Object.keys(ZIP_INPUT_IDS)
+  );
+  if (foundry_versions.length === 0) {
+    throw new Error('Foundry E2E setup requires at least one supported Foundry version');
+  }
+
+  const system_ids = parseRequestedValues(
+    process.env.ADP_GAME_SYSTEM || matrix.game_system,
+    DEFAULT_SYSTEM_IDS
+  );
+  if (system_ids.length === 0) {
+    throw new Error('Foundry E2E setup requires at least one supported game system');
+  }
+
+  return { foundry_versions, system_ids };
 }
 
 function parseRequestedValues(value, defaults) {

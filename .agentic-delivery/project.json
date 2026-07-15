@@ -104,13 +104,8 @@
       ],
       "working_directory": ".",
       "timeout": "PT30S",
-      "secret_inputs": [
-        "foundry_license_key"
-      ],
-      "resource_inputs": [
-        "foundry_v13_351_zip",
-        "foundry_v14_364_zip"
-      ]
+      "secret_inputs": [],
+      "resource_inputs": []
     },
     {
       "id": "cleanup_foundry_e2e",
