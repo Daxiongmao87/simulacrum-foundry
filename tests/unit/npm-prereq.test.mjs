@@ -107,7 +107,9 @@ test('npm prerequisite preserves a pre-existing unowned node_modules directory w
     await mkdir(join(root, 'node_modules'), { recursive: true });
     await writeFile(join(root, 'node_modules', 'sentinel.txt'), 'user-owned');
 
-    const result = await runPrereq(root, 'prepare', {});
+    const result = await runPrereq(root, 'prepare', {
+      AGENTIC_DELIVERY_NODE_MODULES_CACHE: '',
+    });
 
     assert.notEqual(result.exitCode, 0);
     assert.equal(await readFile(join(root, 'node_modules', 'sentinel.txt'), 'utf8'), 'user-owned');
