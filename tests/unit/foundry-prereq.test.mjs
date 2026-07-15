@@ -29,7 +29,7 @@ test('foundry prerequisite prepares the supported matrix when no ADP selectors a
     assert.match(envBody, /^TEST_SYSTEM_IDS=dnd5e,pf2e$/mu);
 
     const state = JSON.parse(
-      await readFile('/tmp/simulacrum-agentic-delivery-foundry-state.json', 'utf8')
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
     );
     assert.deepEqual(state.foundry_versions, ['13.351', '14.364']);
     assert.deepEqual(state.system_ids, ['dnd5e', 'pf2e']);
@@ -104,7 +104,7 @@ async function createTempRepo() {
 }
 
 function runPrereq(root, action, extraEnv) {
-  const statePath = '/tmp/simulacrum-agentic-delivery-foundry-state.json';
+  const statePath = join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json');
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,

@@ -17,7 +17,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const STATE_PATH = '/tmp/simulacrum-agentic-delivery-foundry-state.json';
+const STATE_PATH = join(ROOT, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json');
 const OWNER = 'simulacrum-agentic-delivery-foundry';
 const ENV_PATH = join(ROOT, 'tests', 'e2e', '.env.test');
 const VENDOR_DIR = join(ROOT, 'vendor', 'foundry');
@@ -112,6 +112,7 @@ async function prepare() {
     env_path: ENV_PATH,
     env_sha256: sha256(envBody),
   };
+  await mkdir(dirname(STATE_PATH), { recursive: true });
   await writeFile(STATE_PATH, `${JSON.stringify(nextState, null, 2)}\n`, { mode: 0o600 });
   await assertPrepared(nextState, context);
   console.log(
