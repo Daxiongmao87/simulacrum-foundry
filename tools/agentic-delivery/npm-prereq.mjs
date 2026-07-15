@@ -40,20 +40,35 @@ async function prepare() {
     return;
   }
 
-  await ensureOwnedTarget();
-
-  if (await dependenciesInstalledAt(NODE_MODULES_PATH)) {
+  if (await canAdoptPreexistingTree()) {
+    await writeMarker();
+  } else if (await canOverlayImageCache()) {
+    await overlayImageCache();
     await writeMarker();
   } else if (await dependenciesInstalledAt(IMAGE_CACHE)) {
+    await ensureOwnedTarget();
     await restoreImageCache();
     await writeMarker();
   } else {
+    await ensureOwnedTarget();
     await run('npm', ['ci', '--no-audit', '--no-fund']);
     await writeMarker();
   }
 
   await assertPrepared();
   console.log('Prepared Node dependencies.');
+}
+
+async function canAdoptPreexistingTree() {
+  if (!existsSync(NODE_MODULES_PATH)) return false;
+  if (await isOwnedPreparedTree()) return false;
+  return dependenciesInstalledAt(NODE_MODULES_PATH);
+}
+
+async function canOverlayImageCache() {
+  if (!existsSync(NODE_MODULES_PATH)) return false;
+  if (await isOwnedPreparedTree()) return false;
+  return dependenciesInstalledAt(IMAGE_CACHE);
 }
 
 async function verify() {
@@ -111,6 +126,10 @@ async function writeMarker() {
 }
 
 async function restoreImageCache() {
+  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true });
+}
+
+async function overlayImageCache() {
   await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true });
 }
 

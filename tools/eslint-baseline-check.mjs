@@ -20,6 +20,11 @@ try {
   }));
 } catch (error) {
   if (typeof error.stdout !== 'string') throw error;
+  if (!error.stdout.trim()) {
+    const reason =
+      typeof error.stderr === 'string' && error.stderr.trim() ? error.stderr.trim() : error.message;
+    throw new Error(`ESLint baseline execution did not return JSON output: ${reason}`);
+  }
   stdout = error.stdout;
 }
 
