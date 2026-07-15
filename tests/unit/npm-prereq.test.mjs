@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -32,6 +32,7 @@ test('npm prerequisite restores node_modules from the image cache without npm in
       ).version,
       '3.0.2'
     );
+    assert.equal(await readlink(join(root, 'node_modules', '.bin', 'eslint')), '../eslint/bin/eslint.js');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -89,12 +90,16 @@ async function createTempRepo() {
 
 async function seedCache(cache) {
   await mkdir(join(cache, '@foundryvtt', 'foundryvtt-cli'), { recursive: true });
+  await mkdir(join(cache, '@eslint', 'eslintrc'), { recursive: true });
+  await mkdir(join(cache, 'eslint', 'bin'), { recursive: true });
   await mkdir(join(cache, '.bin'), { recursive: true });
   await writeFile(
     join(cache, '@foundryvtt', 'foundryvtt-cli', 'package.json'),
     JSON.stringify({ version: '3.0.2' })
   );
-  await writeFile(join(cache, '.bin', 'eslint'), '#!/bin/sh\nexit 0\n');
+  await writeFile(join(cache, '@eslint', 'eslintrc', 'package.json'), '{"name":"@eslint/eslintrc"}\n');
+  await writeFile(join(cache, 'eslint', 'bin', 'eslint.js'), '#!/usr/bin/env node\n');
+  await symlink('../eslint/bin/eslint.js', join(cache, '.bin', 'eslint'));
 }
 
 function runPrereq(root, action, extraEnv) {

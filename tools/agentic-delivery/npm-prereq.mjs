@@ -126,11 +126,11 @@ async function writeMarker() {
 }
 
 async function restoreImageCache() {
-  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true });
+  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true, verbatimSymlinks: true });
 }
 
 async function overlayImageCache() {
-  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true });
+  await cp(IMAGE_CACHE, NODE_MODULES_PATH, { recursive: true, verbatimSymlinks: true });
 }
 
 async function ensureOwnedTarget() {
