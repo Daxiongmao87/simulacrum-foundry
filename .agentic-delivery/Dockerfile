@@ -24,4 +24,3 @@ RUN npm ci \
   && npx playwright install --with-deps chromium \
   && npm cache clean --force
 
-COPY . .
