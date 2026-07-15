@@ -139,8 +139,6 @@
     {
       "id": "static_baseline",
       "argv": [
-        "node",
-        "tools/agentic-delivery/run-with-npm-prereq.mjs",
         "npm",
         "run",
         "test:static"
@@ -362,7 +360,9 @@
       "command_ids": [
         "static_baseline"
       ],
-      "prerequisite_ids": [],
+      "prerequisite_ids": [
+        "npm_dependencies"
+      ],
       "artifact_ids": [],
       "matrix": [
         {
