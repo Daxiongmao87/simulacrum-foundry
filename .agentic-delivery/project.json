@@ -127,9 +127,8 @@
     {
       "id": "format_check",
       "argv": [
-        "npm",
-        "run",
-        "format:check"
+        "node",
+        "tools/agentic-delivery/format-check.mjs"
       ],
       "working_directory": ".",
       "timeout": "PT5M",
@@ -377,7 +376,7 @@
       "id": "format_validation",
       "category": "format",
       "applicable": true,
-      "rationale": "CI runs Prettier checks and package.json defines npm run format:check for repository formatting validation.",
+      "rationale": "CI only promotes formatter changes to a full npm run format:check when Prettier-related config changes; otherwise it runs Prettier on the changed files, so the repository-owned format gate mirrors that changed-file policy.",
       "command_ids": [
         "format_check"
       ],
