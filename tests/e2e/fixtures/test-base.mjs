@@ -54,7 +54,7 @@ function loadEnv() {
     env[key] = value;
   }
 
-  return env;
+  return { ...env, ...process.env };
 }
 
 /**
@@ -173,8 +173,16 @@ export const test = base.extend({
       let serverInfo = null;
 
       try {
-        serverInfo = process.env.ADP_FOUNDRY_ENDPOINT
-          ? await foundrySetup.setupBrokerFoundry({ testId, systemId, foundryVersion })
+        serverInfo = testEnv.ADP_FOUNDRY_ENDPOINT
+          ? await foundrySetup.setupBrokerFoundry({
+              testId,
+              systemId,
+              foundryVersion,
+              baseUrl: testEnv.ADP_FOUNDRY_ENDPOINT,
+              sessionPath: testEnv.ADP_FOUNDRY_SESSION_FILE,
+              brokerSystemId: testEnv.ADP_GAME_SYSTEM || systemId,
+              brokerFoundryVersion: testEnv.ADP_FOUNDRY_VERSION || foundryVersion,
+            })
           : await foundrySetup.setupIsolatedFoundry({
               testId,
               systemId,

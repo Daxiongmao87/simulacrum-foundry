@@ -20,6 +20,7 @@ const OWNER = 'simulacrum-agentic-delivery-foundry';
 const ENV_PATH = join(ROOT, 'tests', 'e2e', '.env.test');
 const VENDOR_DIR = join(ROOT, 'vendor', 'foundry');
 const DEFAULT_SYSTEM_IDS = ['dnd5e', 'pf2e'];
+const BROKER_SESSION_INPUT_ID = 'FOUNDRY_BROKER_SESSION';
 
 const ZIP_INPUT_IDS = {
   '13.351': 'FOUNDRY_V13_351_ZIP',
@@ -66,57 +67,12 @@ async function prepare() {
     }
   }
 
-  await mkdir(VENDOR_DIR, { recursive: true });
   if (existsSync(ENV_PATH)) {
     throw new Error(`Refusing to overwrite pre-existing ${relativeRoot(ENV_PATH)}`);
   }
 
-  for (const zipLink of context.zip_links) {
-    const zipStat = await lstat(zipLink.input_path);
-    if (!zipStat.isFile()) {
-      throw new Error(`Foundry zip input is not a regular file: ${zipLink.input_path}`);
-    }
-    if (existsSync(zipLink.target_path)) {
-      throw new Error(
-        `Refusing to overwrite pre-existing Foundry zip target ${relativeRoot(zipLink.target_path)}`
-      );
-    }
-  }
-
-  const copiedZips = [];
-  for (const zipLink of context.zip_links) {
-    const hash = await copyAndHash(zipLink.input_path, zipLink.target_path);
-    copiedZips.push({
-      foundry_version: zipLink.foundry_version,
-      zip_input_id: zipLink.zip_input_id,
-      target_path: zipLink.target_path,
-      sha256: hash,
-    });
-  }
-
-  const adminKey = `agentic-${randomUUID()}${randomUUID().replaceAll('-', '')}`;
-  const envBody = [
-    `# owner=${OWNER}`,
-    `# foundry_versions=${context.foundry_versions.join(',')}`,
-    `# system_ids=${context.system_ids.join(',')}`,
-    `FOUNDRY_LICENSE_KEY=${context.license_key}`,
-    `FOUNDRY_ADMIN_KEY=${adminKey}`,
-    `TEST_FOUNDRY_VERSIONS=${context.foundry_versions.join(',')}`,
-    `TEST_SYSTEM_IDS=${context.system_ids.join(',')}`,
-    'TEST_TMPFS_PATH=/tmp',
-    '',
-  ].join('\n');
+  const { envBody, nextState } = await prepareContext(context);
   await writeFile(ENV_PATH, envBody, { mode: 0o600 });
-
-  const nextState = {
-    schema_version: 1,
-    owner: OWNER,
-    foundry_versions: context.foundry_versions,
-    system_ids: context.system_ids,
-    zip_links: copiedZips,
-    env_path: ENV_PATH,
-    env_sha256: sha256(envBody),
-  };
   await mkdir(dirname(STATE_PATH), { recursive: true });
   await writeFile(STATE_PATH, `${JSON.stringify(nextState, null, 2)}\n`, { mode: 0o600 });
   await assertPrepared(nextState, context);
@@ -126,8 +82,8 @@ async function prepare() {
 }
 
 async function verify() {
-  const context = resolveVerificationContext();
   const state = await readState();
+  const context = resolveVerificationContext(state.mode || 'local');
   await assertPrepared(state, context);
   console.log(
     `Verified Foundry E2E inputs for versions ${state.foundry_versions.join(', ')} and systems ${state.system_ids.join(', ')}.`
@@ -162,9 +118,24 @@ async function cleanup() {
 
 async function resolveContext() {
   const { foundry_versions: foundryVersions, system_ids: systemIds } = resolveRequestedMatrix();
+  const brokerSessionPath = process.env[`AGENTIC_DELIVERY_INPUT_${BROKER_SESSION_INPUT_ID}`];
+  if (brokerSessionPath) {
+    const session = await readBrokerSession(brokerSessionPath);
+    return {
+      mode: 'broker',
+      foundry_versions: foundryVersions,
+      system_ids: systemIds,
+      broker_endpoint: deriveBrokerEndpoint(session),
+      broker_session_path: brokerSessionPath,
+      broker_session_sha256: sha256(JSON.stringify(session)),
+    };
+  }
+
   const licensePath = process.env.AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY;
   if (!licensePath) {
-    throw new Error('AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY is required');
+    throw new Error(
+      `Either AGENTIC_DELIVERY_INPUT_${BROKER_SESSION_INPUT_ID} or AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY is required`
+    );
   }
   const license_key = (await readFile(licensePath, 'utf8')).trim();
   if (!license_key || /\r|\n/u.test(license_key)) {
@@ -187,6 +158,7 @@ async function resolveContext() {
   });
 
   return {
+    mode: 'local',
     foundry_versions: foundryVersions,
     system_ids: systemIds,
     license_key,
@@ -194,15 +166,19 @@ async function resolveContext() {
   };
 }
 
-function resolveVerificationContext() {
+function resolveVerificationContext(mode = 'local') {
   const { foundry_versions, system_ids } = resolveRequestedMatrix();
   return {
+    mode,
     foundry_versions,
     system_ids,
-    zip_links: foundry_versions.map(foundryVersion => ({
-      foundry_version: foundryVersion,
-      target_path: join(VENDOR_DIR, `FoundryVTT-Node-${foundryVersion}.zip`),
-    })),
+    zip_links:
+      mode === 'local'
+        ? foundry_versions.map(foundryVersion => ({
+            foundry_version: foundryVersion,
+            target_path: join(VENDOR_DIR, `FoundryVTT-Node-${foundryVersion}.zip`),
+          }))
+        : [],
   };
 }
 
@@ -218,16 +194,37 @@ async function assertPrepared(state, context = null) {
   if (!state || state.owner !== OWNER) {
     throw new Error('Foundry E2E inputs are not prepared');
   }
+  const mode = state.mode || 'local';
+  if (!['local', 'broker'].includes(mode)) {
+    throw new Error('Prepared Foundry mode is invalid');
+  }
   if (!Array.isArray(state.foundry_versions) || state.foundry_versions.length === 0) {
     throw new Error('Prepared Foundry versions are missing from state');
   }
   if (!Array.isArray(state.system_ids) || state.system_ids.length === 0) {
     throw new Error('Prepared game systems are missing from state');
   }
-  if (!Array.isArray(state.zip_links) || state.zip_links.length === 0) {
+  if (mode === 'local' && (!Array.isArray(state.zip_links) || state.zip_links.length === 0)) {
     throw new Error('Prepared Foundry zip links are missing from state');
   }
+  if (mode === 'broker') {
+    if (
+      typeof state.broker_endpoint !== 'string' ||
+      !/^http:\/\/foundry-[0-9a-f-]{36}:30000$/u.test(state.broker_endpoint)
+    ) {
+      throw new Error('Prepared external Foundry endpoint is invalid');
+    }
+    if (
+      typeof state.broker_session_path !== 'string' ||
+      !state.broker_session_path.startsWith('/')
+    ) {
+      throw new Error('Prepared external Foundry session path is invalid');
+    }
+  }
   if (context) {
+    if (context.mode && context.mode !== mode) {
+      throw new Error(`Prepared Foundry mode does not match requested ${context.mode}`);
+    }
     for (const foundryVersion of context.foundry_versions) {
       if (!state.foundry_versions.includes(foundryVersion)) {
         throw new Error(`Prepared Foundry versions do not include requested ${foundryVersion}`);
@@ -238,8 +235,8 @@ async function assertPrepared(state, context = null) {
         throw new Error(`Prepared game systems do not include requested ${systemId}`);
       }
     }
-    for (const zipLink of context.zip_links) {
-      const preparedZip = state.zip_links.find(
+    for (const zipLink of context.zip_links || []) {
+      const preparedZip = (state.zip_links || []).find(
         candidate => candidate.foundry_version === zipLink.foundry_version
       );
       if (!preparedZip || preparedZip.target_path !== zipLink.target_path) {
@@ -248,9 +245,17 @@ async function assertPrepared(state, context = null) {
         );
       }
     }
+    if (mode === 'broker') {
+      if (context.broker_endpoint && state.broker_endpoint !== context.broker_endpoint) {
+        throw new Error('Prepared external Foundry endpoint does not match requested session');
+      }
+      if (context.broker_session_path && state.broker_session_path !== context.broker_session_path) {
+        throw new Error('Prepared external Foundry session path does not match mounted input');
+      }
+    }
   }
 
-  for (const zipLink of state.zip_links) {
+  for (const zipLink of state.zip_links || []) {
     if (!(await ownsPreparedZip(zipLink))) {
       throw new Error(
         `Prepared Foundry zip ownership check failed for ${relativeRoot(zipLink.target_path)}`
@@ -334,6 +339,120 @@ function resolveRequestedMatrix() {
   }
 
   return { foundry_versions, system_ids };
+}
+
+async function prepareContext(context) {
+  if (context.mode === 'broker') {
+    const envBody = [
+      `# owner=${OWNER}`,
+      '# mode=broker',
+      `# foundry_versions=${context.foundry_versions.join(',')}`,
+      `# system_ids=${context.system_ids.join(',')}`,
+      `ADP_FOUNDRY_ENDPOINT=${context.broker_endpoint}`,
+      `ADP_FOUNDRY_SESSION_FILE=${context.broker_session_path}`,
+      `TEST_FOUNDRY_VERSIONS=${context.foundry_versions.join(',')}`,
+      `TEST_SYSTEM_IDS=${context.system_ids.join(',')}`,
+      'TEST_TMPFS_PATH=/tmp',
+      '',
+    ].join('\n');
+    return {
+      envBody,
+      nextState: {
+        schema_version: 1,
+        owner: OWNER,
+        mode: 'broker',
+        foundry_versions: context.foundry_versions,
+        system_ids: context.system_ids,
+        env_path: ENV_PATH,
+        env_sha256: sha256(envBody),
+        broker_endpoint: context.broker_endpoint,
+        broker_session_path: context.broker_session_path,
+        broker_session_sha256: context.broker_session_sha256,
+      },
+    };
+  }
+
+  await mkdir(VENDOR_DIR, { recursive: true });
+  for (const zipLink of context.zip_links) {
+    const zipStat = await lstat(zipLink.input_path);
+    if (!zipStat.isFile()) {
+      throw new Error(`Foundry zip input is not a regular file: ${zipLink.input_path}`);
+    }
+    if (existsSync(zipLink.target_path)) {
+      throw new Error(
+        `Refusing to overwrite pre-existing Foundry zip target ${relativeRoot(zipLink.target_path)}`
+      );
+    }
+  }
+
+  const copiedZips = [];
+  for (const zipLink of context.zip_links) {
+    const hash = await copyAndHash(zipLink.input_path, zipLink.target_path);
+    copiedZips.push({
+      foundry_version: zipLink.foundry_version,
+      zip_input_id: zipLink.zip_input_id,
+      target_path: zipLink.target_path,
+      sha256: hash,
+    });
+  }
+
+  const adminKey = `agentic-${randomUUID()}${randomUUID().replaceAll('-', '')}`;
+  const envBody = [
+    `# owner=${OWNER}`,
+    '# mode=local',
+    `# foundry_versions=${context.foundry_versions.join(',')}`,
+    `# system_ids=${context.system_ids.join(',')}`,
+    `FOUNDRY_LICENSE_KEY=${context.license_key}`,
+    `FOUNDRY_ADMIN_KEY=${adminKey}`,
+    `TEST_FOUNDRY_VERSIONS=${context.foundry_versions.join(',')}`,
+    `TEST_SYSTEM_IDS=${context.system_ids.join(',')}`,
+    'TEST_TMPFS_PATH=/tmp',
+    '',
+  ].join('\n');
+  return {
+    envBody,
+    nextState: {
+      schema_version: 1,
+      owner: OWNER,
+      mode: 'local',
+      foundry_versions: context.foundry_versions,
+      system_ids: context.system_ids,
+      zip_links: copiedZips,
+      env_path: ENV_PATH,
+      env_sha256: sha256(envBody),
+    },
+  };
+}
+
+async function readBrokerSession(sessionPath) {
+  const stat = await lstat(sessionPath);
+  if (!stat.isFile()) {
+    throw new Error(`External Foundry session input is not a regular file: ${sessionPath}`);
+  }
+  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  if (
+    typeof session.session_id !== 'string' ||
+    typeof session.admin_password !== 'string' ||
+    session.admin_password.length < 32 ||
+    typeof session.access_token !== 'string' ||
+    session.access_token.length < 32 ||
+    typeof session.logs_url !== 'string'
+  ) {
+    throw new Error('External Foundry session input is invalid');
+  }
+  return session;
+}
+
+function deriveBrokerEndpoint(session) {
+  const match = session.logs_url.match(/^(http:\/\/foundry-[0-9a-f-]{36}:30000)\/__agentic\/logs$/u);
+  if (!match) {
+    throw new Error('External Foundry session logs_url is outside the broker identity contract');
+  }
+  const runId = match[1].match(/^http:\/\/foundry-([0-9a-f-]{36}):30000$/u)?.[1];
+  if (session.session_id !== `session-${runId}`) {
+    throw new Error('External Foundry session is not scoped to its broker endpoint');
+  }
+  return match[1];
 }
 
 function parseRequestedValues(value, defaults) {

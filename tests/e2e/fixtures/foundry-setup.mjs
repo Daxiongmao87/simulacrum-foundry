@@ -464,10 +464,23 @@ export async function setupIsolatedFoundry(options) {
   };
 }
 
-export async function setupBrokerFoundry({ testId, systemId, foundryVersion }) {
-  const baseUrl = process.env.ADP_FOUNDRY_ENDPOINT;
-  const sessionPath = process.env.ADP_FOUNDRY_SESSION_FILE;
-  const session = loadBrokerSession({ baseUrl, sessionPath, systemId, foundryVersion });
+export async function setupBrokerFoundry({
+  testId,
+  systemId,
+  foundryVersion,
+  baseUrl,
+  sessionPath,
+  brokerSystemId = systemId,
+  brokerFoundryVersion = foundryVersion,
+}) {
+  const session = loadBrokerSession({
+    baseUrl,
+    sessionPath,
+    systemId,
+    foundryVersion,
+    brokerSystemId,
+    brokerFoundryVersion,
+  });
 
   const worldId = `world-${testId}`;
   const browser = await chromium.launch({ headless: true });

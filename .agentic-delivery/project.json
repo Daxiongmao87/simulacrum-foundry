@@ -88,12 +88,9 @@
       "working_directory": ".",
       "timeout": "PT2M",
       "secret_inputs": [
-        "foundry_license_key"
+        "foundry_broker_session"
       ],
-      "resource_inputs": [
-        "foundry_v13_351_zip",
-        "foundry_v14_364_zip"
-      ]
+      "resource_inputs": []
     },
     {
       "id": "verify_foundry_e2e",
@@ -312,12 +309,12 @@
     {
       "id": "foundry_e2e_inputs",
       "owner": "repository",
-      "description": "Maps Agentic Delivery Foundry license and per-version zip resources into the repository paths expected by the Playwright Foundry harness.",
+      "description": "Maps a deployment-scoped Foundry broker session into the repository env file consumed by the Playwright harness, while preserving the repository-owned local zip fallback for manual runs.",
       "probe_command": "probe_foundry_e2e",
       "prepare_command": "prepare_foundry_e2e",
       "verify_command": "verify_foundry_e2e",
       "cleanup_command": "cleanup_foundry_e2e",
-      "external_input": "foundry_license_key"
+      "external_input": "foundry_broker_session"
     }
   ],
   "validations": [
@@ -650,19 +647,9 @@
   ],
   "external_inputs": [
     {
-      "id": "foundry_license_key",
-      "kind": "license",
-      "purpose": "Single-line licensed Foundry VTT key used to sign the local test instance during Playwright Foundry validation."
-    },
-    {
-      "id": "foundry_v13_351_zip",
-      "kind": "resource",
-      "purpose": "Licensed Foundry VTT Node distribution zip for version 13.351, mounted so the repository harness can materialize the v13 Playwright test instance."
-    },
-    {
-      "id": "foundry_v14_364_zip",
-      "kind": "resource",
-      "purpose": "Licensed Foundry VTT Node distribution zip for version 14.364, mounted so the repository harness can materialize the v14 Playwright test instance."
+      "id": "foundry_broker_session",
+      "kind": "secret",
+      "purpose": "Scoped Foundry broker session JSON whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
     }
   ]
 }

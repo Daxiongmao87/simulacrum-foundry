@@ -125,21 +125,16 @@ export default async function globalSetup() {
   console.log('[setup] Simulacrum E2E Test Setup (Validation Only)');
   console.log('============================================================');
 
-  if (process.env.ADP_FOUNDRY_ENDPOINT) {
-    for (const name of [
-      'ADP_FOUNDRY_ENDPOINT',
-      'ADP_FOUNDRY_SESSION_FILE',
-      'ADP_FOUNDRY_VERSION',
-      'ADP_GAME_SYSTEM',
-    ]) {
-      if (!process.env[name]) throw new Error(`External Foundry provider requires ${name}`);
+  const env = loadEnv();
+  if (env.ADP_FOUNDRY_ENDPOINT) {
+    for (const name of ['ADP_FOUNDRY_ENDPOINT', 'ADP_FOUNDRY_SESSION_FILE']) {
+      if (!env[name]) throw new Error(`External Foundry provider requires ${name}`);
     }
     console.log('[setup] External broker mode: licensed stores and lifecycle are provider-owned.');
     return;
   }
 
   // 1. Load and validate environment
-  const env = loadEnv();
   const systemIds = parseSystemIds(env);
   const foundryVersions = parseFoundryVersions(env);
 

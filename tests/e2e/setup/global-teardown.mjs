@@ -12,6 +12,21 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
+const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
+
+function loadEnv() {
+  if (!existsSync(TEST_ENV_PATH)) return { ...process.env };
+
+  const env = {};
+  for (const line of readFileSync(TEST_ENV_PATH, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+    env[trimmed.slice(0, eqIndex).trim()] = trimmed.slice(eqIndex + 1).trim();
+  }
+  return { ...env, ...process.env };
+}
 
 /**
  * Global Teardown - Clean up orphaned test directories
@@ -19,7 +34,8 @@ const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
 export default async function globalTeardown() {
   console.log('============================================================');
 
-  if (process.env.ADP_FOUNDRY_ENDPOINT) {
+  const env = loadEnv();
+  if (env.ADP_FOUNDRY_ENDPOINT) {
     console.log('[teardown] External broker mode: lifecycle cleanup remains broker-owned.');
     return;
   }

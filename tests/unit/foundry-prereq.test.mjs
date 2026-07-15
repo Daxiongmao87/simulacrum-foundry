@@ -121,6 +121,70 @@ test('foundry prerequisite verifies prepared state without re-reading external i
   }
 });
 
+test('foundry prerequisite prepares broker-backed E2E inputs from a scoped session file', async () => {
+  const root = await createTempRepo();
+  const inputs = join(root, '.inputs');
+
+  try {
+    await mkdir(inputs, { recursive: true });
+    await writeFile(
+      join(inputs, 'foundry-broker-session.json'),
+      JSON.stringify({
+        schema_version: 1,
+        session_id: 'session-12345678-1234-4123-8123-123456789abc',
+        admin_password: 'a'.repeat(32),
+        access_token: 't'.repeat(48),
+        logs_url: 'http://foundry-12345678-1234-4123-8123-123456789abc:30000/__agentic/logs',
+      }),
+      { mode: 0o600 }
+    );
+
+    const result = await runPrereq(root, 'prepare', {
+      ADP_FOUNDRY_VERSION: '14.364',
+      ADP_GAME_SYSTEM: 'pf2e',
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_BROKER_SESSION: join(
+        inputs,
+        'foundry-broker-session.json'
+      ),
+    });
+
+    assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+    const envBody = await readFile(join(root, 'tests', 'e2e', '.env.test'), 'utf8');
+    assert.match(
+      envBody,
+      /^ADP_FOUNDRY_ENDPOINT=http:\/\/foundry-12345678-1234-4123-8123-123456789abc:30000$/mu
+    );
+    assert.match(
+      envBody,
+      /^ADP_FOUNDRY_SESSION_FILE=.*foundry-broker-session\.json$/mu
+    );
+    assert.match(envBody, /^TEST_FOUNDRY_VERSIONS=14\.364$/mu);
+    assert.match(envBody, /^TEST_SYSTEM_IDS=pf2e$/mu);
+
+    const state = JSON.parse(
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
+    );
+    assert.equal(state.mode, 'broker');
+    assert.equal(
+      state.broker_endpoint,
+      'http://foundry-12345678-1234-4123-8123-123456789abc:30000'
+    );
+    assert.equal(
+      state.broker_session_path,
+      join(inputs, 'foundry-broker-session.json')
+    );
+
+    const verifyResult = await runPrereq(root, 'verify', {
+      ADP_FOUNDRY_VERSION: '14.364',
+      ADP_GAME_SYSTEM: 'pf2e',
+    });
+    assert.equal(verifyResult.exitCode, 0, verifyResult.stderr || verifyResult.stdout);
+  } finally {
+    await runPrereq(root, 'cleanup', {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function createTempRepo() {
   const root = await mkdtemp(join(tmpdir(), 'simulacrum-foundry-prereq-'));
   const scriptTarget = join(root, 'tools', 'agentic-delivery');
