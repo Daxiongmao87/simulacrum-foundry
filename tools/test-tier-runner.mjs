@@ -14,6 +14,23 @@ const PLAYWRIGHT_RESULTS = process.env.ADP_ARTIFACT_DIR
   ? join(resolve(process.env.ADP_ARTIFACT_DIR), 'reports', 'results.json')
   : join(ROOT, 'tests/e2e/reports/results.json');
 
+const matrix = matrixSelectors();
+
+function matrixSelectors() {
+  const raw = process.env.AGENTIC_DELIVERY_MATRIX_JSON;
+  if (!raw) return {};
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error('AGENTIC_DELIVERY_MATRIX_JSON must be valid JSON');
+  }
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error('AGENTIC_DELIVERY_MATRIX_JSON must be a JSON object');
+  }
+  return value;
+}
+
 const tier = process.argv[2];
 const definitions = {
   policy: [{ command: process.execPath, args: ['tools/test-policy-check.mjs'] }],
@@ -88,11 +105,13 @@ function playwrightStep(grep) {
     env: {
       TEST_FOUNDRY_VERSIONS:
         process.env.ADP_FOUNDRY_VERSION ||
+        matrix.foundry_version ||
         process.env.TEST_FOUNDRY_VERSIONS ||
         process.env.TEST_FOUNDRY_VERSION ||
         '13.351,14.364',
       TEST_SYSTEM_IDS:
         process.env.ADP_GAME_SYSTEM ||
+        matrix.game_system ||
         process.env.TEST_SYSTEM_IDS ||
         process.env.TEST_SYSTEM_ID ||
         'dnd5e',
