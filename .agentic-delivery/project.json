@@ -88,9 +88,13 @@
       "working_directory": ".",
       "timeout": "PT2M",
       "secret_inputs": [
-        "foundry_broker_session"
+        "foundry_broker_session",
+        "foundry_license_key"
       ],
-      "resource_inputs": []
+      "resource_inputs": [
+        "foundry_v13_351_zip",
+        "foundry_v14_364_zip"
+      ]
     },
     {
       "id": "verify_foundry_e2e",
@@ -267,9 +271,7 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [
-        "foundry_broker_session"
-      ],
+      "secret_inputs": [],
       "resource_inputs": []
     },
     {
@@ -281,9 +283,7 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [
-        "foundry_broker_session"
-      ],
+      "secret_inputs": [],
       "resource_inputs": []
     },
     {
@@ -295,9 +295,7 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [
-        "foundry_broker_session"
-      ],
+      "secret_inputs": [],
       "resource_inputs": []
     }
   ],
@@ -315,12 +313,12 @@
     {
       "id": "foundry_e2e_inputs",
       "owner": "repository",
-      "description": "Maps a deployment-scoped Foundry broker session into the repository env file consumed by the Playwright harness, while preserving the repository-owned local zip fallback for manual runs.",
+      "description": "Prepares the Playwright Foundry harness from either a scoped broker session or repository-owned licensed local inputs consisting of a Foundry license key plus the supported versioned Foundry zip resources.",
       "probe_command": "probe_foundry_e2e",
       "prepare_command": "prepare_foundry_e2e",
       "verify_command": "verify_foundry_e2e",
       "cleanup_command": "cleanup_foundry_e2e",
-      "external_input": "foundry_broker_session"
+      "external_input": null
     }
   ],
   "validations": [
@@ -500,7 +498,7 @@
       "id": "accessibility_validation",
       "category": "accessibility",
       "applicable": true,
-      "rationale": "tests/e2e/specs/common/accessibility.spec.mjs is tagged @accessibility and the repository defines npm run test:accessibility to execute it through Playwright and the Foundry harness.",
+      "rationale": "tests/e2e/specs/common/accessibility.spec.mjs is tagged @accessibility, package.json defines npm run test:accessibility through the shared tier runner, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
       "command_ids": [
         "accessibility_tests"
       ],
@@ -508,7 +506,14 @@
         "npm_dependencies",
         "foundry_e2e_inputs"
       ],
-      "artifact_ids": [],
+      "artifact_ids": [
+        "browser_screenshots",
+        "browser_video",
+        "browser_trace",
+        "browser_console",
+        "browser_dom",
+        "browser_accessibility"
+      ],
       "matrix": [
         {
           "name": "node_version",
@@ -563,7 +568,7 @@
       "id": "ui_validation",
       "category": "ui",
       "applicable": true,
-      "rationale": "tests/e2e/specs/common/sidebar.spec.mjs is tagged @ui and the repository defines npm run test:ui to execute the UI-focused Playwright slice against Foundry.",
+      "rationale": "tests/e2e/specs/common/sidebar.spec.mjs is tagged @ui, package.json defines npm run test:ui through the shared tier runner, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
       "command_ids": [
         "ui_tests"
       ],
@@ -571,7 +576,14 @@
         "npm_dependencies",
         "foundry_e2e_inputs"
       ],
-      "artifact_ids": [],
+      "artifact_ids": [
+        "browser_screenshots",
+        "browser_video",
+        "browser_trace",
+        "browser_console",
+        "browser_dom",
+        "browser_accessibility"
+      ],
       "matrix": [
         {
           "name": "node_version",
@@ -605,7 +617,7 @@
       "id": "e2e_validation",
       "category": "e2e",
       "applicable": true,
-      "rationale": "npm run test:foundry executes the complete Playwright Foundry suite, which currently covers the common UI and accessibility scenarios across the documented default Foundry version matrix.",
+      "rationale": "npm run test:foundry executes the complete Playwright Foundry suite across the documented default Foundry version and game-system matrix, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
       "command_ids": [
         "e2e_tests"
       ],
@@ -613,7 +625,14 @@
         "npm_dependencies",
         "foundry_e2e_inputs"
       ],
-      "artifact_ids": [],
+      "artifact_ids": [
+        "browser_screenshots",
+        "browser_video",
+        "browser_trace",
+        "browser_console",
+        "browser_dom",
+        "browser_accessibility"
+      ],
       "matrix": [
         {
           "name": "node_version",
@@ -649,6 +668,36 @@
       "id": "dist_zip",
       "path_pattern": "dist/*.zip",
       "required": true
+    },
+    {
+      "id": "browser_screenshots",
+      "path_pattern": "screenshots/*",
+      "required": true
+    },
+    {
+      "id": "browser_video",
+      "path_pattern": "video/*",
+      "required": true
+    },
+    {
+      "id": "browser_trace",
+      "path_pattern": "trace/*",
+      "required": true
+    },
+    {
+      "id": "browser_console",
+      "path_pattern": "console/*",
+      "required": true
+    },
+    {
+      "id": "browser_dom",
+      "path_pattern": "dom/*",
+      "required": true
+    },
+    {
+      "id": "browser_accessibility",
+      "path_pattern": "accessibility/*",
+      "required": true
     }
   ],
   "external_inputs": [
@@ -656,6 +705,21 @@
       "id": "foundry_broker_session",
       "kind": "secret",
       "purpose": "Scoped Foundry broker session JSON whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+    },
+    {
+      "id": "foundry_license_key",
+      "kind": "secret",
+      "purpose": "Licensed Foundry VTT key used by the repository-owned local harness when a broker session is not supplied."
+    },
+    {
+      "id": "foundry_v13_351_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT 13.351 Node distribution zip consumed by the repository-owned local harness for the supported Foundry 13 matrix member."
+    },
+    {
+      "id": "foundry_v14_364_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT 14.364 Node distribution zip consumed by the repository-owned local harness for the supported Foundry 14 matrix member."
     }
   ]
 }
