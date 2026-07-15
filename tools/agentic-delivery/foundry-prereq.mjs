@@ -155,12 +155,19 @@ async function cleanup() {
 }
 
 async function resolveContext() {
-  const foundryVersions = parseRequestedValues(process.env.ADP_FOUNDRY_VERSION, Object.keys(ZIP_INPUT_IDS));
+  const matrix = matrixSelectors();
+  const foundryVersions = parseRequestedValues(
+    process.env.ADP_FOUNDRY_VERSION || matrix.foundry_version,
+    Object.keys(ZIP_INPUT_IDS)
+  );
   if (foundryVersions.length === 0) {
     throw new Error('Foundry E2E setup requires at least one supported Foundry version');
   }
 
-  const systemIds = parseRequestedValues(process.env.ADP_GAME_SYSTEM, DEFAULT_SYSTEM_IDS);
+  const systemIds = parseRequestedValues(
+    process.env.ADP_GAME_SYSTEM || matrix.game_system,
+    DEFAULT_SYSTEM_IDS
+  );
   if (systemIds.length === 0) {
     throw new Error('Foundry E2E setup requires at least one supported game system');
   }
@@ -279,6 +286,30 @@ async function removeIfEmpty(path) {
   } catch {
     // Preserve directories with unrelated contents.
   }
+}
+
+function matrixSelectors() {
+  const raw = process.env.AGENTIC_DELIVERY_MATRIX_JSON;
+  if (!raw) return {};
+
+  let matrix;
+  try {
+    matrix = JSON.parse(raw);
+  } catch {
+    throw new Error('AGENTIC_DELIVERY_MATRIX_JSON must be valid JSON');
+  }
+  if (!matrix || Array.isArray(matrix) || typeof matrix !== 'object') {
+    throw new Error('AGENTIC_DELIVERY_MATRIX_JSON must be a JSON object');
+  }
+  for (const name of ['foundry_version', 'game_system']) {
+    if (
+      Object.prototype.hasOwnProperty.call(matrix, name) &&
+      (typeof matrix[name] !== 'string' || !matrix[name].trim())
+    ) {
+      throw new Error(`AGENTIC_DELIVERY_MATRIX_JSON.${name} must be a non-empty string`);
+    }
+  }
+  return matrix;
 }
 
 function parseRequestedValues(value, defaults) {
