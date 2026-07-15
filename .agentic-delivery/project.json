@@ -267,7 +267,9 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session"
+      ],
       "resource_inputs": []
     },
     {
@@ -279,7 +281,9 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session"
+      ],
       "resource_inputs": []
     },
     {
@@ -291,7 +295,9 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session"
+      ],
       "resource_inputs": []
     }
   ],
