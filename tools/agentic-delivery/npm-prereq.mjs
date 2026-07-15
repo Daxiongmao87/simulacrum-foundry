@@ -101,7 +101,10 @@ async function dependenciesInstalledAt(nodeModulesPath) {
   if (!existsSync(pkgPath) || !existsSync(eslintPath)) return false;
 
   const pkg = await readJson(pkgPath);
-  return pkg.version === '3.0.2';
+  if (pkg.version !== '3.0.2') return false;
+
+  const lock = await readJson(LOCKFILE);
+  return directDependenciesInstalledAt(nodeModulesPath, lock);
 }
 
 async function readJson(path) {
@@ -172,6 +175,33 @@ function packageJsonPath(nodeModulesPath = NODE_MODULES_PATH) {
 
 function eslintBinPath(nodeModulesPath = NODE_MODULES_PATH) {
   return join(nodeModulesPath, '.bin', 'eslint');
+}
+
+async function directDependenciesInstalledAt(nodeModulesPath, lock) {
+  const rootPackage = lock?.packages?.[''];
+  if (!rootPackage) return false;
+
+  const dependencyNames = [
+    ...Object.keys(rootPackage.dependencies ?? {}),
+    ...Object.keys(rootPackage.devDependencies ?? {}),
+  ].sort();
+
+  for (const dependencyName of dependencyNames) {
+    const lockedPackage = lock.packages[`node_modules/${dependencyName}`];
+    if (!lockedPackage?.version) return false;
+
+    const installedPackagePath = join(
+      nodeModulesPath,
+      ...dependencyName.split('/'),
+      'package.json'
+    );
+    if (!existsSync(installedPackagePath)) return false;
+
+    const installedPackage = await readJson(installedPackagePath);
+    if (installedPackage.version !== lockedPackage.version) return false;
+  }
+
+  return true;
 }
 
 async function lockfileHash() {
