@@ -121,6 +121,58 @@ test('foundry prerequisite verifies prepared state without re-reading external i
   }
 });
 
+test('foundry prerequisite recovers from owned partial local prepare state', async () => {
+  const root = await createTempRepo();
+  const inputs = join(root, '.inputs');
+  const vendorDir = join(root, 'vendor', 'foundry');
+
+  try {
+    await mkdir(inputs, { recursive: true });
+    await mkdir(vendorDir, { recursive: true });
+    await writeFile(join(inputs, 'foundry-license-key'), 'licensed-key\n');
+    await writeFile(join(inputs, 'FoundryVTT-Node-13.351.zip'), 'zip-13');
+    await writeFile(join(inputs, 'FoundryVTT-Node-14.364.zip'), 'zip-14');
+    await writeFile(join(vendorDir, 'FoundryVTT-Node-13.351.zip'), 'zip-13');
+    await writeFile(join(vendorDir, 'FoundryVTT-Node-14.364.zip'), 'zip-14');
+    await writeFile(
+      join(root, 'tests', 'e2e', '.env.test'),
+      [
+        '# owner=simulacrum-agentic-delivery-foundry',
+        '# mode=local',
+        '# foundry_versions=13.351,14.364',
+        '# system_ids=dnd5e,pf2e',
+        'FOUNDRY_LICENSE_KEY=licensed-key',
+        'FOUNDRY_ADMIN_KEY=stale-admin-key',
+        'TEST_FOUNDRY_VERSIONS=13.351,14.364',
+        'TEST_SYSTEM_IDS=dnd5e,pf2e',
+        'TEST_TMPFS_PATH=/tmp',
+        '',
+      ].join('\n')
+    );
+
+    const result = await runPrereq(root, 'prepare', {
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY: join(inputs, 'foundry-license-key'),
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_V13_351_ZIP: join(inputs, 'FoundryVTT-Node-13.351.zip'),
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_V14_364_ZIP: join(inputs, 'FoundryVTT-Node-14.364.zip'),
+    });
+
+    assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+    const state = JSON.parse(
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
+    );
+    assert.equal(state.mode, 'local');
+    assert.equal(state.zip_links.length, 2);
+
+    const envBody = await readFile(join(root, 'tests', 'e2e', '.env.test'), 'utf8');
+    assert.match(envBody, /^# owner=simulacrum-agentic-delivery-foundry$/mu);
+    assert.match(envBody, /^FOUNDRY_LICENSE_KEY=licensed-key$/mu);
+    assert.match(envBody, /^TEST_FOUNDRY_VERSIONS=13\.351,14\.364$/mu);
+  } finally {
+    await runPrereq(root, 'cleanup', {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('foundry prerequisite prepares broker-backed E2E inputs from a scoped session file', async () => {
   const root = await createTempRepo();
   const inputs = join(root, '.inputs');

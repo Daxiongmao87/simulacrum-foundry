@@ -68,7 +68,11 @@ async function prepare() {
   }
 
   if (existsSync(ENV_PATH)) {
-    throw new Error(`Refusing to overwrite pre-existing ${relativeRoot(ENV_PATH)}`);
+    if (await isOwnedEnvPath(ENV_PATH)) {
+      await rm(ENV_PATH, { force: true });
+    } else {
+      throw new Error(`Refusing to overwrite pre-existing ${relativeRoot(ENV_PATH)}`);
+    }
   }
 
   const { envBody, nextState } = await prepareContext(context);
@@ -288,6 +292,15 @@ async function ownsPreparedEnv(state) {
   }
 }
 
+async function isOwnedEnvPath(path) {
+  try {
+    const content = await readFile(path, 'utf8');
+    return content.startsWith(`# owner=${OWNER}\n`);
+  } catch {
+    return false;
+  }
+}
+
 async function removeIfEmpty(path) {
   try {
     await rmdir(path);
@@ -378,7 +391,7 @@ async function prepareContext(context) {
     if (!zipStat.isFile()) {
       throw new Error(`Foundry zip input is not a regular file: ${zipLink.input_path}`);
     }
-    if (existsSync(zipLink.target_path)) {
+    if (existsSync(zipLink.target_path) && !(await canReusePreparedZip(zipLink))) {
       throw new Error(
         `Refusing to overwrite pre-existing Foundry zip target ${relativeRoot(zipLink.target_path)}`
       );
@@ -387,7 +400,9 @@ async function prepareContext(context) {
 
   const copiedZips = [];
   for (const zipLink of context.zip_links) {
-    const hash = await copyAndHash(zipLink.input_path, zipLink.target_path);
+    const hash = existsSync(zipLink.target_path)
+      ? await hashFile(zipLink.target_path)
+      : await copyAndHash(zipLink.input_path, zipLink.target_path);
     copiedZips.push({
       foundry_version: zipLink.foundry_version,
       zip_input_id: zipLink.zip_input_id,
@@ -491,6 +506,20 @@ async function hashFile(path) {
     stream.on('end', resolve);
   });
   return hash.digest('hex');
+}
+
+async function canReusePreparedZip(zipLink) {
+  try {
+    const targetStat = await lstat(zipLink.target_path);
+    if (!targetStat.isFile()) return false;
+    const [inputHash, targetHash] = await Promise.all([
+      hashFile(zipLink.input_path),
+      hashFile(zipLink.target_path),
+    ]);
+    return inputHash === targetHash;
+  } catch {
+    return false;
+  }
 }
 
 
