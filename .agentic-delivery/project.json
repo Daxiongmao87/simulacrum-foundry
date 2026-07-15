@@ -162,9 +162,8 @@
     {
       "id": "dead_code_check",
       "argv": [
-        "npm",
-        "run",
-        "dead-code"
+        "node",
+        "tools/agentic-delivery/dead-code-check.mjs"
       ],
       "working_directory": ".",
       "timeout": "PT10M",
@@ -397,7 +396,7 @@
       "id": "static_analysis_validation",
       "category": "static_analysis",
       "applicable": true,
-      "rationale": "The repository maintains a required test policy check and dead-code analysis command for static repository governance beyond the ESLint baseline clean gate tracked under lint validation.",
+      "rationale": "The repository maintains a required test policy check and a dead-code gate, but CI only promotes dead-code analysis to a full raw knip run when lint or knip configuration changes; otherwise it diffs knip findings against the base revision so pre-existing baseline findings do not fail clean repository validation.",
       "command_ids": [
         "policy_check",
         "dead_code_check"
