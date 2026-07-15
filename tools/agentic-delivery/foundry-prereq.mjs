@@ -21,6 +21,7 @@ const STATE_PATH = '/tmp/simulacrum-agentic-delivery-foundry-state.json';
 const OWNER = 'simulacrum-agentic-delivery-foundry';
 const ENV_PATH = join(ROOT, 'tests', 'e2e', '.env.test');
 const VENDOR_DIR = join(ROOT, 'vendor', 'foundry');
+const DEFAULT_SYSTEM_IDS = ['dnd5e', 'pf2e'];
 
 const ZIP_INPUT_IDS = {
   '13.351': 'FOUNDRY_V13_351_ZIP',
@@ -47,7 +48,9 @@ try {
 async function probe() {
   const state = await readState();
   await assertPrepared(state);
-  console.log(`Foundry E2E inputs are prepared for ${state.foundry_version}/${state.system_id}.`);
+  console.log(
+    `Foundry E2E inputs are prepared for versions ${state.foundry_versions.join(', ')} and systems ${state.system_ids.join(', ')}.`
+  );
 }
 
 async function prepare() {
@@ -56,7 +59,9 @@ async function prepare() {
   if (state) {
     try {
       await assertPrepared(state, context);
-      console.log(`Foundry E2E inputs already prepared for ${state.foundry_version}/${state.system_id}.`);
+      console.log(
+        `Foundry E2E inputs already prepared for versions ${state.foundry_versions.join(', ')} and systems ${state.system_ids.join(', ')}.`
+      );
       return;
     } catch {
       await cleanup();
@@ -64,31 +69,35 @@ async function prepare() {
   }
 
   await mkdir(VENDOR_DIR, { recursive: true });
-  const zipStat = await lstat(context.zip_input_path);
-  if (!zipStat.isFile()) {
-    throw new Error(`Foundry zip input is not a regular file: ${context.zip_input_path}`);
-  }
-
-  if (existsSync(context.target_zip_path)) {
-    throw new Error(
-      `Refusing to overwrite pre-existing Foundry zip target ${relativeRoot(context.target_zip_path)}`
-    );
-  }
   if (existsSync(ENV_PATH)) {
     throw new Error(`Refusing to overwrite pre-existing ${relativeRoot(ENV_PATH)}`);
   }
 
-  await symlink(context.zip_input_path, context.target_zip_path);
+  for (const zipLink of context.zip_links) {
+    const zipStat = await lstat(zipLink.input_path);
+    if (!zipStat.isFile()) {
+      throw new Error(`Foundry zip input is not a regular file: ${zipLink.input_path}`);
+    }
+    if (existsSync(zipLink.target_path)) {
+      throw new Error(
+        `Refusing to overwrite pre-existing Foundry zip target ${relativeRoot(zipLink.target_path)}`
+      );
+    }
+  }
+
+  for (const zipLink of context.zip_links) {
+    await symlink(zipLink.input_path, zipLink.target_path);
+  }
 
   const adminKey = `agentic-${randomUUID()}${randomUUID().replaceAll('-', '')}`;
   const envBody = [
     `# owner=${OWNER}`,
-    `# foundry_version=${context.foundry_version}`,
-    `# system_id=${context.system_id}`,
+    `# foundry_versions=${context.foundry_versions.join(',')}`,
+    `# system_ids=${context.system_ids.join(',')}`,
     `FOUNDRY_LICENSE_KEY=${context.license_key}`,
     `FOUNDRY_ADMIN_KEY=${adminKey}`,
-    `TEST_FOUNDRY_VERSIONS=${context.foundry_version}`,
-    `TEST_SYSTEM_IDS=${context.system_id}`,
+    `TEST_FOUNDRY_VERSIONS=${context.foundry_versions.join(',')}`,
+    `TEST_SYSTEM_IDS=${context.system_ids.join(',')}`,
     'TEST_TMPFS_PATH=/tmp',
     '',
   ].join('\n');
@@ -97,24 +106,26 @@ async function prepare() {
   const nextState = {
     schema_version: 1,
     owner: OWNER,
-    foundry_version: context.foundry_version,
-    system_id: context.system_id,
-    zip_input_id: context.zip_input_id,
-    zip_input_path: context.zip_input_path,
-    target_zip_path: context.target_zip_path,
+    foundry_versions: context.foundry_versions,
+    system_ids: context.system_ids,
+    zip_links: context.zip_links,
     env_path: ENV_PATH,
     env_sha256: sha256(envBody),
   };
   await writeFile(STATE_PATH, `${JSON.stringify(nextState, null, 2)}\n`, { mode: 0o600 });
   await assertPrepared(nextState, context);
-  console.log(`Prepared Foundry E2E inputs for ${context.foundry_version}/${context.system_id}.`);
+  console.log(
+    `Prepared Foundry E2E inputs for versions ${context.foundry_versions.join(', ')} and systems ${context.system_ids.join(', ')}.`
+  );
 }
 
 async function verify() {
   const context = await resolveContext();
   const state = await readState();
   await assertPrepared(state, context);
-  console.log(`Verified Foundry E2E inputs for ${state.foundry_version}/${state.system_id}.`);
+  console.log(
+    `Verified Foundry E2E inputs for versions ${state.foundry_versions.join(', ')} and systems ${state.system_ids.join(', ')}.`
+  );
 }
 
 async function cleanup() {
@@ -124,8 +135,10 @@ async function cleanup() {
     return;
   }
 
-  if (await ownsPreparedZip(state)) {
-    await unlink(state.target_zip_path);
+  for (const zipLink of state.zip_links || []) {
+    if (await ownsPreparedZip(zipLink)) {
+      await unlink(zipLink.target_path);
+    }
   }
   if (await ownsPreparedEnv(state)) {
     await rm(state.env_path, { force: true });
@@ -136,18 +149,21 @@ async function cleanup() {
   await removeIfEmpty(join(ROOT, 'vendor', 'foundry'));
   await removeIfEmpty(join(ROOT, 'vendor'));
 
-  console.log(`Cleaned Foundry E2E inputs for ${state.foundry_version}/${state.system_id}.`);
+  console.log(
+    `Cleaned Foundry E2E inputs for versions ${(state.foundry_versions || []).join(', ')} and systems ${(state.system_ids || []).join(', ')}.`
+  );
 }
 
 async function resolveContext() {
-  const foundry_version = process.env.ADP_FOUNDRY_VERSION;
-  if (!foundry_version || !Object.hasOwn(ZIP_INPUT_IDS, foundry_version)) {
-    throw new Error(
-      `ADP_FOUNDRY_VERSION must be one of ${Object.keys(ZIP_INPUT_IDS).join(', ')} for Foundry E2E setup`
-    );
+  const foundryVersions = parseRequestedValues(process.env.ADP_FOUNDRY_VERSION, Object.keys(ZIP_INPUT_IDS));
+  if (foundryVersions.length === 0) {
+    throw new Error('Foundry E2E setup requires at least one supported Foundry version');
   }
 
-  const system_id = process.env.ADP_GAME_SYSTEM || 'dnd5e';
+  const systemIds = parseRequestedValues(process.env.ADP_GAME_SYSTEM, DEFAULT_SYSTEM_IDS);
+  if (systemIds.length === 0) {
+    throw new Error('Foundry E2E setup requires at least one supported game system');
+  }
   const licensePath = process.env.AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY;
   if (!licensePath) {
     throw new Error('AGENTIC_DELIVERY_INPUT_FOUNDRY_LICENSE_KEY is required');
@@ -157,19 +173,26 @@ async function resolveContext() {
     throw new Error('Foundry license input must be a single non-empty line');
   }
 
-  const zip_input_id = ZIP_INPUT_IDS[foundry_version];
-  const zip_input_path = process.env[`AGENTIC_DELIVERY_INPUT_${zip_input_id}`];
-  if (!zip_input_path) {
-    throw new Error(`AGENTIC_DELIVERY_INPUT_${zip_input_id} is required`);
-  }
+  const zip_links = foundryVersions.map(foundryVersion => {
+    const zip_input_id = ZIP_INPUT_IDS[foundryVersion];
+    const input_path = process.env[`AGENTIC_DELIVERY_INPUT_${zip_input_id}`];
+    if (!input_path) {
+      throw new Error(`AGENTIC_DELIVERY_INPUT_${zip_input_id} is required`);
+    }
+
+    return {
+      foundry_version: foundryVersion,
+      zip_input_id: zip_input_id.toLowerCase(),
+      input_path,
+      target_path: join(VENDOR_DIR, `FoundryVTT-Node-${foundryVersion}.zip`),
+    };
+  });
 
   return {
-    foundry_version,
-    system_id,
+    foundry_versions: foundryVersions,
+    system_ids: systemIds,
     license_key,
-    zip_input_id: zip_input_id.toLowerCase(),
-    zip_input_path,
-    target_zip_path: join(VENDOR_DIR, `FoundryVTT-Node-${foundry_version}.zip`),
+    zip_links,
   };
 }
 
@@ -185,36 +208,56 @@ async function assertPrepared(state, context = null) {
   if (!state || state.owner !== OWNER) {
     throw new Error('Foundry E2E inputs are not prepared');
   }
+  if (!Array.isArray(state.foundry_versions) || state.foundry_versions.length === 0) {
+    throw new Error('Prepared Foundry versions are missing from state');
+  }
+  if (!Array.isArray(state.system_ids) || state.system_ids.length === 0) {
+    throw new Error('Prepared game systems are missing from state');
+  }
+  if (!Array.isArray(state.zip_links) || state.zip_links.length === 0) {
+    throw new Error('Prepared Foundry zip links are missing from state');
+  }
   if (context) {
-    if (state.foundry_version !== context.foundry_version) {
-      throw new Error(
-        `Prepared Foundry version ${state.foundry_version} does not match requested ${context.foundry_version}`
-      );
+    for (const foundryVersion of context.foundry_versions) {
+      if (!state.foundry_versions.includes(foundryVersion)) {
+        throw new Error(`Prepared Foundry versions do not include requested ${foundryVersion}`);
+      }
     }
-    if (state.system_id !== context.system_id) {
-      throw new Error(
-        `Prepared game system ${state.system_id} does not match requested ${context.system_id}`
-      );
+    for (const systemId of context.system_ids) {
+      if (!state.system_ids.includes(systemId)) {
+        throw new Error(`Prepared game systems do not include requested ${systemId}`);
+      }
     }
-    if (state.target_zip_path !== context.target_zip_path) {
-      throw new Error('Prepared Foundry zip target does not match requested version');
+    for (const zipLink of context.zip_links) {
+      const preparedZip = state.zip_links.find(
+        candidate => candidate.foundry_version === zipLink.foundry_version
+      );
+      if (!preparedZip || preparedZip.target_path !== zipLink.target_path) {
+        throw new Error(
+          `Prepared Foundry zip target does not match requested version ${zipLink.foundry_version}`
+        );
+      }
     }
   }
 
-  if (!(await ownsPreparedZip(state))) {
-    throw new Error(`Prepared Foundry zip ownership check failed for ${relativeRoot(state.target_zip_path)}`);
+  for (const zipLink of state.zip_links) {
+    if (!(await ownsPreparedZip(zipLink))) {
+      throw new Error(
+        `Prepared Foundry zip ownership check failed for ${relativeRoot(zipLink.target_path)}`
+      );
+    }
   }
   if (!(await ownsPreparedEnv(state))) {
     throw new Error(`Prepared E2E env ownership check failed for ${relativeRoot(state.env_path)}`);
   }
 }
 
-async function ownsPreparedZip(state) {
+async function ownsPreparedZip(zipLink) {
   try {
-    const targetStat = await lstat(state.target_zip_path);
+    const targetStat = await lstat(zipLink.target_path);
     if (!targetStat.isSymbolicLink()) return false;
-    const targetRealPath = await realpath(state.target_zip_path);
-    const inputRealPath = await realpath(state.zip_input_path);
+    const targetRealPath = await realpath(zipLink.target_path);
+    const inputRealPath = await realpath(zipLink.input_path);
     return targetRealPath === inputRealPath;
   } catch {
     return false;
@@ -236,6 +279,22 @@ async function removeIfEmpty(path) {
   } catch {
     // Preserve directories with unrelated contents.
   }
+}
+
+function parseRequestedValues(value, defaults) {
+  if (!value) return [...defaults];
+  const requested = value
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+  const supported = new Set(defaults);
+  const unsupported = requested.filter(entry => !supported.has(entry));
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported value(s): ${unsupported.join(', ')}. Expected subset of ${defaults.join(', ')}`
+    );
+  }
+  return [...new Set(requested)];
 }
 
 function sha256(value) {
