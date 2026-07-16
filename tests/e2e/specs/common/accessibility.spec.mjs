@@ -1,12 +1,14 @@
 import { test, expect } from '../../fixtures/test-base.mjs';
 import { scanAccessibility } from '../../fixtures/accessibility.mjs';
 
+// This check includes full world startup, module activation, an in-page scan,
+// and retained teardown evidence, which exceeds the shared 5-minute default.
+test.setTimeout(420000);
+
 test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid controls', async ({
   gamePage,
   foundry,
 }) => {
-  test.setTimeout(420000);
-
   let active = await foundry.isSimulacrumActive(gamePage);
   if (!active) active = await foundry.enableModuleViaUI(gamePage, 'simulacrum');
   expect(active).toBe(true);
