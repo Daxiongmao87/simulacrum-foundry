@@ -304,8 +304,8 @@ export const test = base.extend({
 
       // Page cleanup handled by isolatedContext teardown
     },
-    { timeout: 300000 },
-  ], // 5 minutes for world launch and join (world loading can take 3-4 min with dnd5e)
+    { timeout: 420000 },
+  ], // 7 minutes so world launch plus retained accessibility evidence matches the documented Foundry window
 
   /**
    * Page with Simulacrum module confirmed active
