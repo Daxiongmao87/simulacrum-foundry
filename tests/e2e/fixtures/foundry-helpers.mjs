@@ -61,10 +61,10 @@ async function dismissTourOverlay(page) {
  */
 export async function loginAsAdmin(page, adminKey, baseUrl = '') {
   const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
-  await page.goto(setupUrl);
+  await page.goto(setupUrl, { waitUntil: 'domcontentloaded' });
 
   // Wait for the page to load
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   // Check current URL - Foundry might redirect to /join if a world is active
   let currentUrl = page.url();
