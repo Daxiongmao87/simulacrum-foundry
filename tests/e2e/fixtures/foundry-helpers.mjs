@@ -1001,7 +1001,7 @@ export async function openSimulacrumSidebar(page) {
     .first();
 
   await expect(tabButton).toBeVisible({ timeout: 30000 });
-  await tabButton.click({ force: true });
+  await tabButton.evaluate(button => button.click());
 
   await page.waitForFunction(
     () => {
