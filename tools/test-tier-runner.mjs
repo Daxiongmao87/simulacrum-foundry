@@ -10,9 +10,10 @@ const PLAYWRIGHT = join(ROOT, 'node_modules', '.bin', 'playwright');
 const RESULTS_DIR = process.env.ADP_TEST_OUTCOME_FILE
   ? join(dirname(dirname(process.env.ADP_TEST_OUTCOME_FILE)), 'tier-results')
   : join(ROOT, 'artifacts', 'test-results');
-const PLAYWRIGHT_RESULTS = process.env.ADP_ARTIFACT_DIR
-  ? join(resolve(process.env.ADP_ARTIFACT_DIR), 'reports', 'results.json')
-  : join(ROOT, 'tests/e2e/reports/results.json');
+const ARTIFACT_DIR = process.env.ADP_ARTIFACT_DIR
+  ? resolve(process.env.ADP_ARTIFACT_DIR)
+  : join(ROOT, 'tests/e2e/test-results');
+const PLAYWRIGHT_RESULTS = join(ARTIFACT_DIR, 'reports', 'results.json');
 
 const matrix = matrixSelectors();
 
@@ -103,7 +104,7 @@ function playwrightStep(grep) {
     command: PLAYWRIGHT,
     args,
     env: {
-      ADP_ARTIFACT_DIR: process.env.ADP_ARTIFACT_DIR || ROOT,
+      ADP_ARTIFACT_DIR: ARTIFACT_DIR,
       TEST_FOUNDRY_VERSIONS:
         process.env.ADP_FOUNDRY_VERSION ||
         matrix.foundry_version ||

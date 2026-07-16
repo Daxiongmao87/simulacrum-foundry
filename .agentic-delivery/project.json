@@ -693,32 +693,32 @@
     },
     {
       "id": "browser_screenshots",
-      "path_pattern": "screenshots/*",
+      "path_pattern": "tests/e2e/test-results/screenshots/*",
       "required": true
     },
     {
       "id": "browser_video",
-      "path_pattern": "video/*",
+      "path_pattern": "tests/e2e/test-results/video/*",
       "required": true
     },
     {
       "id": "browser_trace",
-      "path_pattern": "trace/*",
+      "path_pattern": "tests/e2e/test-results/trace/*",
       "required": true
     },
     {
       "id": "browser_console",
-      "path_pattern": "console/*",
+      "path_pattern": "tests/e2e/test-results/console/*",
       "required": true
     },
     {
       "id": "browser_dom",
-      "path_pattern": "dom/*",
+      "path_pattern": "tests/e2e/test-results/dom/*",
       "required": true
     },
     {
       "id": "browser_accessibility",
-      "path_pattern": "accessibility/*",
+      "path_pattern": "tests/e2e/test-results/accessibility/*",
       "required": true
     }
   ],
