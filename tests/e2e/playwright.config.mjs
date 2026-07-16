@@ -90,9 +90,9 @@ function buildProjects(systemIds, foundryVersions) {
           `systems/${systemId}/**/*.spec.js`,
           `systems/${systemId}/**/*.spec.mjs`,
         ],
-        // A cold dnd5e migration, module activation, and retained evidence can exceed
-        // seven minutes on the supported worker.
-        timeout: 600000, // 10 minutes per real Foundry test, with no retries
+        // A cold dnd5e migration plus module activation can exceed the shared
+        // five-minute window.
+        timeout: 420000, // 7 minutes per real Foundry test, with no retries
         use: {
           ...devices['Desktop Chrome'],
           // Foundry requires minimum 1366x768 resolution

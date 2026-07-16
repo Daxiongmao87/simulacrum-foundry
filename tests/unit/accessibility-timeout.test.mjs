@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 
-test('playwright project timeout covers the documented accessibility startup window', async () => {
+test('playwright project preserves the shared seven-minute Foundry window', async () => {
   const config = await readFile(join(process.cwd(), 'tests', 'e2e', 'playwright.config.mjs'), 'utf8');
-  assert.match(config, /timeout:\s*600000,\s*\/\/ 10 minutes per real Foundry test/u);
+  assert.match(config, /timeout:\s*420000,\s*\/\/ 7 minutes per real Foundry test/u);
 });
 
 test('accessibility spec pins the long timeout needed by the Foundry startup path', async () => {
