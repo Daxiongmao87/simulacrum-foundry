@@ -5,5 +5,5 @@ import test from 'node:test';
 
 test('playwright project timeout covers the documented accessibility startup window', async () => {
   const config = await readFile(join(process.cwd(), 'tests', 'e2e', 'playwright.config.mjs'), 'utf8');
-  assert.match(config, /timeout:\s*420000,\s*\/\/ 7 minutes per real Foundry test/u);
+  assert.match(config, /timeout:\s*600000,\s*\/\/ 10 minutes per real Foundry test/u);
 });
