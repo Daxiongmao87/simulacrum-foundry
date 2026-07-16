@@ -693,7 +693,7 @@
     },
     {
       "id": "browser_screenshots",
-      "path_pattern": "screenshots/*",
+      "path_pattern": "raw/**/*.png",
       "required": true
     },
     {
