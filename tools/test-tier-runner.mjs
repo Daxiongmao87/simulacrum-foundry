@@ -103,6 +103,7 @@ function playwrightStep(grep) {
     command: PLAYWRIGHT,
     args,
     env: {
+      ADP_ARTIFACT_DIR: process.env.ADP_ARTIFACT_DIR || ROOT,
       TEST_FOUNDRY_VERSIONS:
         process.env.ADP_FOUNDRY_VERSION ||
         matrix.foundry_version ||
