@@ -15,3 +15,8 @@ test('accessibility spec pins the long timeout needed by the Foundry startup pat
   );
   assert.match(spec, /test\.describe\.configure\(\{\s*timeout:\s*600000\s*\}\);/u);
 });
+
+test('gamePage fixture preserves the long startup budget used by accessibility runs', async () => {
+  const fixture = await readFile(join(process.cwd(), 'tests', 'e2e', 'fixtures', 'test-base.mjs'), 'utf8');
+  assert.match(fixture, /gamePage:\s*\[[\s\S]*\{\s*timeout:\s*600000\s*\},/u);
+});
