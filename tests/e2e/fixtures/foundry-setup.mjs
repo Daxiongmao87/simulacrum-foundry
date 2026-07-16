@@ -73,7 +73,10 @@ async function dismissUsageDataDialog(page, logPrefix = 'setup') {
   ];
 
   // Try primary selector first
-  if (await declineBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+  const dialogAppeared = await declineBtn
+    .waitFor({ state: 'visible', timeout: 3000 })
+    .then(() => true, () => false);
+  if (dialogAppeared) {
     console.log(`[${logPrefix}] Dismissing "Allow Sharing Usage Data" dialog`);
     await declineBtn.click();
     await ensureUsageDialogGone(page, dialogSelector);
