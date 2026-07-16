@@ -304,8 +304,8 @@ export const test = base.extend({
 
       // Page cleanup handled by isolatedContext teardown
     },
-    { timeout: 420000 },
-  ], // 7 minutes for world launch and join during cold dnd5e accessibility startup
+    { timeout: 300000 },
+  ], // 5 minutes for world launch and join (world loading can take 3-4 min with dnd5e)
 
   /**
    * Page with Simulacrum module confirmed active
@@ -352,8 +352,8 @@ export const test = base.extend({
 
       await use(gamePage);
     },
-    { timeout: 420000 },
-  ], // 7 minutes for module enable via UI during retained accessibility evidence runs
+    { timeout: 300000 },
+  ], // 5 minutes for module enable via UI (reload + verification)
 
   /**
    * Helper functions available in tests
