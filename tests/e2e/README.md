@@ -256,8 +256,8 @@ test('my test', async ({ simulacrumPage, foundry }) => {
 | `isolatedContext` | —       | Fresh browser context with `baseURL` set           |
 | `page`            | —       | Basic unauthenticated page                         |
 | `adminPage`       | —       | Authenticated page at `/setup`                     |
-| `gamePage`        | 300s    | Page inside the test world as Gamemaster           |
-| `simulacrumPage`  | 300s    | `gamePage` with Simulacrum module verified active  |
+| `gamePage`        | 420s    | Page inside the test world as Gamemaster           |
+| `simulacrumPage`  | 420s    | `gamePage` with Simulacrum module verified active  |
 | `foundry`         | —       | Helper functions from `foundry-helpers.mjs`        |
 
 ### Helper Functions
