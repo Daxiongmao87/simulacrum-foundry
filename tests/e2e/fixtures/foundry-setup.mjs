@@ -863,6 +863,8 @@ export async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKe
     await adminKeyInput.fill(adminKey);
     await page.getByRole('button', { name: /Return to Setup/i }).click();
     await page.waitForLoadState('networkidle');
+    await page.goto(`${baseUrl}/setup`);
+    await page.waitForLoadState('networkidle');
   }
 
   // Dismiss usage data dialog again (can appear after auth)
