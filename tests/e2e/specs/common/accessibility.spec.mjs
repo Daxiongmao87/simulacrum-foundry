@@ -31,6 +31,16 @@ test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid co
 
   const tab = await foundry.openSimulacrumSidebar(gamePage);
   await expect(tab).toBeVisible();
+  await expect(gamePage.locator('#sidebar-content.active-simulacrum')).toBeVisible();
+  await expect(tab.locator('.chat-scroll')).toBeVisible();
+  await expect(tab.locator('.chat-form')).toBeVisible();
+  await expect(tab.locator('textarea[name="message"]')).toBeVisible();
+  await expect
+    .poll(async () => tab.locator('.chat-log .chat-message').count(), {
+      message: 'Simulacrum sidebar should render at least one chat message before scanning',
+      timeout: 30000,
+    })
+    .toBeGreaterThan(0);
 
   const report = await scanAccessibility(gamePage, '#simulacrum');
   await test.info().attach('simulacrum-accessibility.json', {
