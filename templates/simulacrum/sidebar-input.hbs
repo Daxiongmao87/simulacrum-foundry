@@ -18,13 +18,15 @@
             {{/if}}
             <div class="model-selector-wrapper">
                 <input type="text" class="model-selector-input" name="model" value="{{currentModel}}" autocomplete="off"
-                    placeholder="{{localize 'SIMULACRUM.ModelSelector.Placeholder'}}">
+                    placeholder="{{localize 'SIMULACRUM.ModelSelector.Placeholder'}}"
+                    aria-label="{{localize 'SIMULACRUM.ModelSelector.Placeholder'}}">
 
                 <i class="model-selector-icon fa-solid fa-caret-down"></i>
                 <ul class="model-dropdown hidden"></ul>
             </div>
             <input type="text" class="context-limit-input" name="contextLimit" value="{{contextLimit}}"
-                autocomplete="off" placeholder="32k" title="Context limit (e.g. 128k, 1M)">
+                autocomplete="off" placeholder="32k" title="Context limit (e.g. 128k, 1M)"
+                aria-label="Context limit">
         </div>
     </div>
 
