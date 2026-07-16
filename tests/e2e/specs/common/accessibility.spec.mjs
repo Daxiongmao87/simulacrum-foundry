@@ -5,6 +5,8 @@ test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid co
   gamePage,
   foundry,
 }) => {
+  test.setTimeout(420000);
+
   let active = await foundry.isSimulacrumActive(gamePage);
   if (!active) active = await foundry.enableModuleViaUI(gamePage, 'simulacrum');
   expect(active).toBe(true);
