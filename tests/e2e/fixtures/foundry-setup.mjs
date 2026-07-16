@@ -875,7 +875,7 @@ export async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKe
 
   // Click Worlds tab
   const worldsTab = page
-    .locator('[data-action="tab"][data-tab="worlds"], [data-tab="worlds"]')
+    .locator('h2[data-tab="worlds"]')
     .first();
   await worldsTab.click({ force: true });
   await page.waitForLoadState('networkidle');
