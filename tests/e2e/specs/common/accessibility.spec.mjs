@@ -2,8 +2,9 @@ import { test, expect } from '../../fixtures/test-base.mjs';
 import { scanAccessibility } from '../../fixtures/accessibility.mjs';
 
 // This check includes full world startup, module activation, an in-page scan,
-// and retained teardown evidence, which exceeds the shared 5-minute default.
-test.setTimeout(420000);
+// and retained teardown evidence, so it must inherit the long Foundry project
+// timeout instead of Playwright's shared five-minute default.
+test.describe.configure({ timeout: 600000 });
 
 test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid controls', async ({
   gamePage,
