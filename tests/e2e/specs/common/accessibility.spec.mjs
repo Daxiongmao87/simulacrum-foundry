@@ -9,6 +9,24 @@ test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid co
   if (!active) active = await foundry.enableModuleViaUI(gamePage, 'simulacrum');
   expect(active).toBe(true);
 
+  await gamePage.waitForFunction(
+    () => {
+      // @ts-ignore - Foundry globals
+      return game?.modules?.get('simulacrum')?.active === true;
+    },
+    null,
+    { timeout: 30000 }
+  );
+
+  await gamePage.waitForFunction(
+    () => {
+      // @ts-ignore - Foundry globals
+      return Boolean(ui?.sidebar && ui?.simulacrum && CONFIG?.ui?.simulacrum);
+    },
+    null,
+    { timeout: 30000 }
+  );
+
   const tab = await foundry.openSimulacrumSidebar(gamePage);
   await expect(tab).toBeVisible();
 
