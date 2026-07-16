@@ -861,10 +861,7 @@ export async function createWorldViaUI(page, baseUrl, worldId, systemId, adminKe
   const adminKeyInput = page.locator('input[name="adminKey"], input[name="adminPassword"]');
   if (await adminKeyInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await adminKeyInput.fill(adminKey);
-    await adminKeyInput
-      .locator('xpath=ancestor::form[1]')
-      .locator('button[type="submit"]')
-      .click();
+    await page.getByRole('button', { name: /Return to Setup/i }).click();
     await page.waitForLoadState('networkidle');
   }
 
