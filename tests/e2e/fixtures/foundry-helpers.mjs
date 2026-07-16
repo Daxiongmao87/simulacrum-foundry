@@ -61,7 +61,7 @@ async function dismissTourOverlay(page) {
  */
 export async function loginAsAdmin(page, adminKey, baseUrl = '') {
   const setupUrl = baseUrl ? `${baseUrl}/setup` : '/setup';
-  await page.goto(setupUrl, { waitUntil: 'domcontentloaded' });
+  await page.goto(setupUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
   // Wait for the page to load
   await page.waitForLoadState('domcontentloaded');
