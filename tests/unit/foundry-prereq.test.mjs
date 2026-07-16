@@ -237,6 +237,54 @@ test('foundry prerequisite prepares broker-backed E2E inputs from a scoped sessi
   }
 });
 
+test('foundry prerequisite selects the matrix-scoped broker session input for the requested member', async () => {
+  const root = await createTempRepo();
+  const inputs = join(root, '.inputs');
+
+  try {
+    await mkdir(inputs, { recursive: true });
+    await writeFile(
+      join(inputs, 'foundry-broker-session-pf2e.json'),
+      JSON.stringify({
+        schema_version: 1,
+        session_id: 'session-12345678-1234-4123-8123-123456789abc',
+        admin_password: 'a'.repeat(32),
+        access_token: 't'.repeat(48),
+        logs_url: 'http://foundry-12345678-1234-4123-8123-123456789abc:30000/__agentic/logs',
+      }),
+      { mode: 0o600 }
+    );
+
+    const result = await runPrereq(root, 'prepare', {
+      AGENTIC_DELIVERY_MATRIX_JSON: JSON.stringify({
+        foundry_version: '14.364',
+        game_system: 'pf2e',
+      }),
+      AGENTIC_DELIVERY_INPUT_FOUNDRY_BROKER_SESSION_V14_364_PF2E: join(
+        inputs,
+        'foundry-broker-session-pf2e.json'
+      ),
+    });
+
+    assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+    const envBody = await readFile(join(root, 'tests', 'e2e', '.env.test'), 'utf8');
+    assert.match(envBody, /^TEST_FOUNDRY_VERSIONS=14\.364$/mu);
+    assert.match(envBody, /^TEST_SYSTEM_IDS=pf2e$/mu);
+
+    const state = JSON.parse(
+      await readFile(join(root, 'tests', 'e2e', 'setup', '.agentic-delivery-foundry-state.json'), 'utf8')
+    );
+    assert.equal(state.mode, 'broker');
+    assert.equal(
+      state.broker_session_path,
+      join(inputs, 'foundry-broker-session-pf2e.json')
+    );
+  } finally {
+    await runPrereq(root, 'cleanup', {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function createTempRepo() {
   const root = await mkdtemp(join(tmpdir(), 'simulacrum-foundry-prereq-'));
   const scriptTarget = join(root, 'tools', 'agentic-delivery');

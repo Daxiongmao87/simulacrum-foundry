@@ -122,7 +122,7 @@ async function cleanup() {
 
 async function resolveContext() {
   const { foundry_versions: foundryVersions, system_ids: systemIds } = resolveRequestedMatrix();
-  const brokerSessionPath = process.env[`AGENTIC_DELIVERY_INPUT_${BROKER_SESSION_INPUT_ID}`];
+  const brokerSessionPath = resolveBrokerSessionPath(foundryVersions, systemIds);
   if (brokerSessionPath) {
     const session = await readBrokerSession(brokerSessionPath);
     return {
@@ -168,6 +168,37 @@ async function resolveContext() {
     license_key,
     zip_links,
   };
+}
+
+function resolveBrokerSessionPath(foundryVersions, systemIds) {
+  const genericPath = process.env[`AGENTIC_DELIVERY_INPUT_${BROKER_SESSION_INPUT_ID}`];
+  const exactPath =
+    foundryVersions.length === 1 && systemIds.length === 1
+      ? process.env[`AGENTIC_DELIVERY_INPUT_${brokerSessionInputId(foundryVersions[0], systemIds[0])}`]
+      : null;
+
+  if (exactPath) return exactPath;
+  if (genericPath) {
+    if (foundryVersions.length !== 1 || systemIds.length !== 1) {
+      throw new Error('A broker-backed Foundry session requires a single matrix-selected version and game system');
+    }
+    return genericPath;
+  }
+
+  const hasScopedBrokerInput = Object.keys(process.env).some(name => {
+    return /^AGENTIC_DELIVERY_INPUT_FOUNDRY_BROKER_SESSION_V\d+_\d+_[A-Z0-9_]+$/u.test(name);
+  });
+  if (hasScopedBrokerInput && (foundryVersions.length !== 1 || systemIds.length !== 1)) {
+    throw new Error('Scoped broker-backed Foundry sessions require a single matrix-selected version and game system');
+  }
+
+  return null;
+}
+
+function brokerSessionInputId(foundryVersion, systemId) {
+  return `FOUNDRY_BROKER_SESSION_V${foundryVersion.replaceAll('.', '_')}_${systemId
+    .replace(/[^A-Za-z0-9]+/gu, '_')
+    .toUpperCase()}`;
 }
 
 function resolveVerificationContext(mode = 'local') {

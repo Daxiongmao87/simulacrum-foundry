@@ -89,6 +89,10 @@
       "timeout": "PT2M",
       "secret_inputs": [
         "foundry_broker_session",
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e",
         "foundry_license_key"
       ],
       "resource_inputs": [
@@ -271,7 +275,13 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session",
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     },
     {
@@ -283,7 +293,13 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session",
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     },
     {
@@ -295,7 +311,13 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session",
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     }
   ],
@@ -313,7 +335,7 @@
     {
       "id": "foundry_e2e_inputs",
       "owner": "repository",
-      "description": "Prepares the Playwright Foundry harness from either a scoped broker session or repository-owned licensed local inputs consisting of a Foundry license key plus the supported versioned Foundry zip resources.",
+      "description": "Prepares the Playwright Foundry harness from matrix-scoped broker sessions that match each selected Foundry version and game system, while retaining the repository-owned licensed local setup inputs.",
       "probe_command": "probe_foundry_e2e",
       "prepare_command": "prepare_foundry_e2e",
       "verify_command": "verify_foundry_e2e",
@@ -704,12 +726,32 @@
     {
       "id": "foundry_broker_session",
       "kind": "secret",
-      "purpose": "Scoped Foundry broker session JSON whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+      "purpose": "Fallback scoped Foundry broker session JSON whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+    },
+    {
+      "id": "foundry_broker_session_v13_351_dnd5e",
+      "kind": "secret",
+      "purpose": "Scoped Foundry broker session JSON for the chromium / Foundry 13.351 / dnd5e matrix member, whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+    },
+    {
+      "id": "foundry_broker_session_v13_351_pf2e",
+      "kind": "secret",
+      "purpose": "Scoped Foundry broker session JSON for the chromium / Foundry 13.351 / pf2e matrix member, whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+    },
+    {
+      "id": "foundry_broker_session_v14_364_dnd5e",
+      "kind": "secret",
+      "purpose": "Scoped Foundry broker session JSON for the chromium / Foundry 14.364 / dnd5e matrix member, whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
+    },
+    {
+      "id": "foundry_broker_session_v14_364_pf2e",
+      "kind": "secret",
+      "purpose": "Scoped Foundry broker session JSON for the chromium / Foundry 14.364 / pf2e matrix member, whose logs_url anchors the provider endpoint and whose credentials authorize repository-owned Playwright evidence collection."
     },
     {
       "id": "foundry_license_key",
-      "kind": "secret",
-      "purpose": "Licensed Foundry VTT key used by the repository-owned local harness when a broker session is not supplied."
+      "kind": "license",
+      "purpose": "Licensed Foundry VTT key used by the repository-owned local harness when broker sessions are not supplied."
     },
     {
       "id": "foundry_v13_351_zip",
