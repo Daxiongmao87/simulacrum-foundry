@@ -275,7 +275,12 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     },
     {
@@ -287,7 +292,12 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     },
     {
@@ -299,7 +309,12 @@
       ],
       "working_directory": ".",
       "timeout": "PT1H",
-      "secret_inputs": [],
+      "secret_inputs": [
+        "foundry_broker_session_v13_351_dnd5e",
+        "foundry_broker_session_v13_351_pf2e",
+        "foundry_broker_session_v14_364_dnd5e",
+        "foundry_broker_session_v14_364_pf2e"
+      ],
       "resource_inputs": []
     }
   ],
