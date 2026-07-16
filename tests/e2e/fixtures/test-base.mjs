@@ -101,8 +101,20 @@ export const test = base.extend({
           body: Buffer.from(await page.content()),
           contentType: 'text/html',
         });
+        // Bound full-page evidence scans so teardown cannot exceed the Foundry
+        // test budget when sidebar pages have thousands of rendered controls.
         await testInfo.attach(`accessibility-${index}.json`, {
-          body: Buffer.from(JSON.stringify(await scanAccessibility(page), null, 2)),
+          body: Buffer.from(
+            JSON.stringify(
+              await scanAccessibility(page, 'body', {
+                maxControls: 600,
+                maxImages: 200,
+                maxIds: 1500,
+              }),
+              null,
+              2
+            )
+          ),
           contentType: 'application/json',
         });
       }
