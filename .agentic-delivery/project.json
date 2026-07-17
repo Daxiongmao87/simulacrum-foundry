@@ -6,9 +6,7 @@
     "base_branch": "main"
   },
   "pipeline": {
-    "trigger_labels": [
-      "agent"
-    ],
+    "trigger_labels": ["agent"],
     "human_authority": "Daxiongmao87",
     "models": {
       "default": "gpt-5.4",
@@ -18,7 +16,9 @@
       ".github/workflows",
       "CHANGELOG.md",
       "module.json",
-      ".agentic-delivery/project.json"
+      ".agentic-delivery/project.json",
+      "tests/unit/ui-tier-tagging.test.mjs",
+      "tools/test-tier-runner.mjs"
     ]
   },
   "environment": {
@@ -32,11 +32,7 @@
   "commands": [
     {
       "id": "probe_npm_dependencies",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/npm-prereq.mjs",
-        "probe"
-      ],
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "probe"],
       "working_directory": ".",
       "timeout": "PT30S",
       "secret_inputs": [],
@@ -44,11 +40,7 @@
     },
     {
       "id": "prepare_npm_dependencies",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/npm-prereq.mjs",
-        "prepare"
-      ],
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "prepare"],
       "working_directory": ".",
       "timeout": "PT15M",
       "secret_inputs": [],
@@ -56,11 +48,7 @@
     },
     {
       "id": "verify_npm_dependencies",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/npm-prereq.mjs",
-        "verify"
-      ],
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "verify"],
       "working_directory": ".",
       "timeout": "PT30S",
       "secret_inputs": [],
@@ -68,11 +56,7 @@
     },
     {
       "id": "probe_foundry_e2e",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/foundry-prereq.mjs",
-        "probe"
-      ],
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "probe"],
       "working_directory": ".",
       "timeout": "PT30S",
       "secret_inputs": [],
@@ -80,11 +64,7 @@
     },
     {
       "id": "prepare_foundry_e2e",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/foundry-prereq.mjs",
-        "prepare"
-      ],
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "prepare"],
       "working_directory": ".",
       "timeout": "PT2M",
       "secret_inputs": [
@@ -95,18 +75,11 @@
         "foundry_broker_session_v14_364_pf2e",
         "foundry_license_key"
       ],
-      "resource_inputs": [
-        "foundry_v13_351_zip",
-        "foundry_v14_364_zip"
-      ]
+      "resource_inputs": ["foundry_v13_351_zip", "foundry_v14_364_zip"]
     },
     {
       "id": "verify_foundry_e2e",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/foundry-prereq.mjs",
-        "verify"
-      ],
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "verify"],
       "working_directory": ".",
       "timeout": "PT30S",
       "secret_inputs": [],
@@ -114,11 +87,7 @@
     },
     {
       "id": "cleanup_foundry_e2e",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/foundry-prereq.mjs",
-        "cleanup"
-      ],
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "cleanup"],
       "working_directory": ".",
       "timeout": "PT30S",
       "secret_inputs": [],
@@ -126,10 +95,7 @@
     },
     {
       "id": "format_check",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/format-check.mjs"
-      ],
+      "argv": ["node", "tools/agentic-delivery/format-check.mjs"],
       "working_directory": ".",
       "timeout": "PT5M",
       "secret_inputs": [],
@@ -137,11 +103,7 @@
     },
     {
       "id": "static_baseline",
-      "argv": [
-        "npm",
-        "run",
-        "test:static"
-      ],
+      "argv": ["npm", "run", "test:static"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -149,11 +111,7 @@
     },
     {
       "id": "policy_check",
-      "argv": [
-        "npm",
-        "run",
-        "test:policy"
-      ],
+      "argv": ["npm", "run", "test:policy"],
       "working_directory": ".",
       "timeout": "PT5M",
       "secret_inputs": [],
@@ -161,10 +119,7 @@
     },
     {
       "id": "dead_code_check",
-      "argv": [
-        "node",
-        "tools/agentic-delivery/dead-code-check.mjs"
-      ],
+      "argv": ["node", "tools/agentic-delivery/dead-code-check.mjs"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -172,11 +127,7 @@
     },
     {
       "id": "build_packs",
-      "argv": [
-        "npm",
-        "run",
-        "build:packs"
-      ],
+      "argv": ["npm", "run", "build:packs"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -184,11 +135,7 @@
     },
     {
       "id": "package_module",
-      "argv": [
-        "npm",
-        "run",
-        "package:module"
-      ],
+      "argv": ["npm", "run", "package:module"],
       "working_directory": ".",
       "timeout": "PT5M",
       "secret_inputs": [],
@@ -196,11 +143,7 @@
     },
     {
       "id": "package_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:package"
-      ],
+      "argv": ["npm", "run", "test:package"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -208,11 +151,7 @@
     },
     {
       "id": "unit_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:unit"
-      ],
+      "argv": ["npm", "run", "test:unit"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -220,11 +159,7 @@
     },
     {
       "id": "regression_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:regression"
-      ],
+      "argv": ["npm", "run", "test:regression"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -232,11 +167,7 @@
     },
     {
       "id": "integration_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:integration"
-      ],
+      "argv": ["npm", "run", "test:integration"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -244,11 +175,7 @@
     },
     {
       "id": "security_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:security"
-      ],
+      "argv": ["npm", "run", "test:security"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -256,11 +183,7 @@
     },
     {
       "id": "component_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:component"
-      ],
+      "argv": ["npm", "run", "test:component"],
       "working_directory": ".",
       "timeout": "PT10M",
       "secret_inputs": [],
@@ -268,11 +191,7 @@
     },
     {
       "id": "ui_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:ui"
-      ],
+      "argv": ["npm", "run", "test:ui"],
       "working_directory": ".",
       "timeout": "PT1H",
       "secret_inputs": [
@@ -286,11 +205,7 @@
     },
     {
       "id": "accessibility_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:accessibility"
-      ],
+      "argv": ["npm", "run", "test:accessibility"],
       "working_directory": ".",
       "timeout": "PT1H",
       "secret_inputs": [
@@ -304,11 +219,7 @@
     },
     {
       "id": "e2e_tests",
-      "argv": [
-        "npm",
-        "run",
-        "test:foundry"
-      ],
+      "argv": ["npm", "run", "test:foundry"],
       "working_directory": ".",
       "timeout": "PT1H",
       "secret_inputs": [
@@ -349,22 +260,13 @@
       "category": "build",
       "applicable": true,
       "rationale": "The repository checks in the built compendium LevelDB output under packs/ and validates the distributable artifact by packaging the module zip plus running the package smoke test that inspects the built archive contents.",
-      "command_ids": [
-        "package_module",
-        "package_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
-      "artifact_ids": [
-        "dist_zip"
-      ],
+      "command_ids": ["package_module", "package_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["dist_zip"],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -373,19 +275,13 @@
       "category": "lint",
       "applicable": true,
       "rationale": "The repository checks in tests/baselines/eslint.json and exposes npm run test:static as the reproducible ESLint clean gate; CI only promotes ordinary pull requests to a full npm run lint:check when lint configuration changes.",
-      "command_ids": [
-        "static_baseline"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["static_baseline"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -394,19 +290,13 @@
       "category": "format",
       "applicable": true,
       "rationale": "CI only promotes formatter changes to a full npm run format:check when Prettier-related config changes; otherwise it runs Prettier on the changed files, so the repository-owned format gate mirrors that changed-file policy.",
-      "command_ids": [
-        "format_check"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["format_check"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -415,20 +305,13 @@
       "category": "static_analysis",
       "applicable": true,
       "rationale": "The repository maintains a required test policy check and a dead-code gate, but CI only promotes dead-code analysis to a full raw knip run when lint or knip configuration changes; otherwise it diffs knip findings against the base revision so pre-existing baseline findings do not fail clean repository validation.",
-      "command_ids": [
-        "policy_check",
-        "dead_code_check"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["policy_check", "dead_code_check"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -437,19 +320,13 @@
       "category": "unit",
       "applicable": true,
       "rationale": "tests/unit contains node:test suites and package.json exposes npm run test:unit through the shared tier runner.",
-      "command_ids": [
-        "unit_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["unit_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -458,19 +335,13 @@
       "category": "regression",
       "applicable": true,
       "rationale": "tests/regression and the compaction budget script are wired to npm run test:regression in the repository tier runner.",
-      "command_ids": [
-        "regression_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["regression_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -479,19 +350,13 @@
       "category": "integration",
       "applicable": true,
       "rationale": "tests/integration/local contains repository-owned integration checks and npm run test:integration targets that local suite without requiring external provider credentials.",
-      "command_ids": [
-        "integration_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["integration_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -500,19 +365,13 @@
       "category": "security",
       "applicable": true,
       "rationale": "tests/security contains sanitizer and secret-scanning assertions, and package.json exposes npm run test:security for that suite.",
-      "command_ids": [
-        "security_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["security_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -521,13 +380,8 @@
       "category": "accessibility",
       "applicable": true,
       "rationale": "tests/e2e/specs/common/accessibility.spec.mjs is tagged @accessibility, package.json defines npm run test:accessibility through the shared tier runner, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
-      "command_ids": [
-        "accessibility_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies",
-        "foundry_e2e_inputs"
-      ],
+      "command_ids": ["accessibility_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_e2e_inputs"],
       "artifact_ids": [
         "browser_screenshots",
         "browser_video",
@@ -539,29 +393,19 @@
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         },
         {
           "name": "browser",
-          "values": [
-            "chromium"
-          ]
+          "values": ["chromium"]
         },
         {
           "name": "foundry_version",
-          "values": [
-            "13.351",
-            "14.364"
-          ]
+          "values": ["13.351", "14.364"]
         },
         {
           "name": "game_system",
-          "values": [
-            "dnd5e",
-            "pf2e"
-          ]
+          "values": ["dnd5e", "pf2e"]
         }
       ]
     },
@@ -570,19 +414,13 @@
       "category": "component",
       "applicable": true,
       "rationale": "tests/component contains focused node:test coverage for the sidebar template and package.json exposes npm run test:component for that tier.",
-      "command_ids": [
-        "component_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies"
-      ],
+      "command_ids": ["component_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
       "artifact_ids": [],
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         }
       ]
     },
@@ -591,13 +429,8 @@
       "category": "ui",
       "applicable": true,
       "rationale": "tests/e2e/specs/common/sidebar.spec.mjs is tagged @ui, package.json defines npm run test:ui through the shared tier runner, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
-      "command_ids": [
-        "ui_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies",
-        "foundry_e2e_inputs"
-      ],
+      "command_ids": ["ui_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_e2e_inputs"],
       "artifact_ids": [
         "browser_screenshots",
         "browser_video",
@@ -609,29 +442,19 @@
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         },
         {
           "name": "browser",
-          "values": [
-            "chromium"
-          ]
+          "values": ["chromium"]
         },
         {
           "name": "foundry_version",
-          "values": [
-            "13.351",
-            "14.364"
-          ]
+          "values": ["13.351", "14.364"]
         },
         {
           "name": "game_system",
-          "values": [
-            "dnd5e",
-            "pf2e"
-          ]
+          "values": ["dnd5e", "pf2e"]
         }
       ]
     },
@@ -640,13 +463,8 @@
       "category": "e2e",
       "applicable": true,
       "rationale": "npm run test:foundry executes the complete Playwright Foundry suite across the documented default Foundry version and game-system matrix, and the Playwright harness retains screenshot, video, trace, console, DOM, and accessibility evidence for each browser validation.",
-      "command_ids": [
-        "e2e_tests"
-      ],
-      "prerequisite_ids": [
-        "npm_dependencies",
-        "foundry_e2e_inputs"
-      ],
+      "command_ids": ["e2e_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_e2e_inputs"],
       "artifact_ids": [
         "browser_screenshots",
         "browser_video",
@@ -658,29 +476,19 @@
       "matrix": [
         {
           "name": "node_version",
-          "values": [
-            "24"
-          ]
+          "values": ["24"]
         },
         {
           "name": "browser",
-          "values": [
-            "chromium"
-          ]
+          "values": ["chromium"]
         },
         {
           "name": "foundry_version",
-          "values": [
-            "13.351",
-            "14.364"
-          ]
+          "values": ["13.351", "14.364"]
         },
         {
           "name": "game_system",
-          "values": [
-            "dnd5e",
-            "pf2e"
-          ]
+          "values": ["dnd5e", "pf2e"]
         }
       ]
     }

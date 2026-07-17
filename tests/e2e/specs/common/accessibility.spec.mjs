@@ -5,7 +5,7 @@ import { scanAccessibility } from '../../fixtures/accessibility.mjs';
 // and retained teardown evidence, which requires a ten-minute budget.
 test.describe.configure({ timeout: 600000 });
 
-test('@accessibility Simulacrum sidebar exposes named, structurally valid controls', async ({
+test('@accessibility @ui Simulacrum sidebar exposes named, structurally valid controls', async ({
   gamePage,
   foundry,
 }) => {
@@ -15,8 +15,7 @@ test('@accessibility Simulacrum sidebar exposes named, structurally valid contro
 
   await gamePage.waitForFunction(
     () => {
-      // @ts-ignore - Foundry globals
-      return game?.modules?.get('simulacrum')?.active === true;
+      return globalThis.game?.modules?.get('simulacrum')?.active === true;
     },
     null,
     { timeout: 30000 }
@@ -24,8 +23,9 @@ test('@accessibility Simulacrum sidebar exposes named, structurally valid contro
 
   await gamePage.waitForFunction(
     () => {
-      // @ts-ignore - Foundry globals
-      return Boolean(ui?.sidebar && ui?.simulacrum && CONFIG?.ui?.simulacrum);
+      return Boolean(
+        globalThis.ui?.sidebar && globalThis.ui?.simulacrum && globalThis.CONFIG?.ui?.simulacrum
+      );
     },
     null,
     { timeout: 30000 }
