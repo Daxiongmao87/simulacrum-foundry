@@ -1,0 +1,490 @@
+{
+  "schema_version": "v1",
+  "project": {
+    "key": "simulacrum",
+    "display_name": "Simulacrum: AI Campaign Copilot",
+    "base_branch": "main"
+  },
+  "pipeline": {
+    "trigger_labels": ["agent"],
+    "human_authority": "Daxiongmao87",
+    "models": {
+      "default": "gpt-5.4",
+      "roles": []
+    },
+    "protected_paths": [
+      ".agentic-delivery/project.json",
+      "tests/e2e/specs/common/accessibility.spec.mjs",
+      "tests/unit/agentic-tier-policy.test.mjs",
+      "tools/test-tier-runner.mjs"
+    ]
+  },
+  "environment": {
+    "context": ".",
+    "dockerfile": "Dockerfile.agentic-delivery",
+    "network": "egress",
+    "pids_limit": 512,
+    "memory": "8G",
+    "cpus": "4"
+  },
+  "commands": [
+    {
+      "id": "npm_prereq_probe",
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "probe"],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "npm_prereq_prepare",
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "prepare"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "npm_prereq_verify",
+      "argv": ["node", "tools/agentic-delivery/npm-prereq.mjs", "verify"],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "foundry_prereq_probe",
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "probe"],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "foundry_prereq_prepare",
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "prepare"],
+      "working_directory": ".",
+      "timeout": "PT5M",
+      "secret_inputs": ["foundry_license_key"],
+      "resource_inputs": ["foundry_v13_zip", "foundry_v14_zip"]
+    },
+    {
+      "id": "foundry_prereq_verify",
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "verify"],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "foundry_prereq_cleanup",
+      "argv": ["node", "tools/agentic-delivery/foundry-prereq.mjs", "cleanup"],
+      "working_directory": ".",
+      "timeout": "PT2M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "package_module",
+      "argv": ["npm", "run", "package:module"],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "format_check",
+      "argv": ["node", "tools/agentic-delivery/format-check.mjs"],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "static_tests",
+      "argv": ["npm", "run", "test:static"],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "dead_code_check",
+      "argv": ["node", "tools/agentic-delivery/dead-code-check.mjs"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "policy_tests",
+      "argv": ["npm", "run", "test:policy"],
+      "working_directory": ".",
+      "timeout": "PT10M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "unit_tests",
+      "argv": ["npm", "run", "test:unit"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "regression_tests",
+      "argv": ["npm", "run", "test:regression"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "integration_tests",
+      "argv": ["npm", "run", "test:integration"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "component_tests",
+      "argv": ["npm", "run", "test:component"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "security_tests",
+      "argv": ["npm", "run", "test:security"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "package_tests",
+      "argv": ["npm", "run", "test:package"],
+      "working_directory": ".",
+      "timeout": "PT15M",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "ui_tests",
+      "argv": ["npm", "run", "test:ui"],
+      "working_directory": ".",
+      "timeout": "PT2H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "accessibility_tests",
+      "argv": ["npm", "run", "test:accessibility"],
+      "working_directory": ".",
+      "timeout": "PT2H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    },
+    {
+      "id": "e2e_tests",
+      "argv": ["npm", "run", "test:foundry"],
+      "working_directory": ".",
+      "timeout": "PT3H",
+      "secret_inputs": [],
+      "resource_inputs": []
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "npm_dependencies",
+      "owner": "repository",
+      "description": "Install Node.js dependencies with npm ci from the committed package-lock.json.",
+      "probe_command": "npm_prereq_probe",
+      "prepare_command": "npm_prereq_prepare",
+      "verify_command": "npm_prereq_verify",
+      "cleanup_command": null,
+      "external_input": null
+    },
+    {
+      "id": "foundry_test_assets",
+      "owner": "repository",
+      "description": "Materialize the licensed Foundry test zips and a generated tests/e2e/.env.test file for the documented Foundry and system matrix.",
+      "probe_command": "foundry_prereq_probe",
+      "prepare_command": "foundry_prereq_prepare",
+      "verify_command": "foundry_prereq_verify",
+      "cleanup_command": "foundry_prereq_cleanup",
+      "external_input": null
+    }
+  ],
+  "validations": [
+    {
+      "id": "build",
+      "category": "build",
+      "applicable": true,
+      "rationale": "The repository ships a packaged Foundry module zip via tools/package-module.js and validates that archive with tests/package/package-smoke.test.mjs.",
+      "command_ids": ["package_module", "package_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["release_zip", "tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "lint",
+      "category": "lint",
+      "applicable": true,
+      "rationale": "Repository CI uses the committed ESLint baseline gate exposed through npm run test:static rather than an unbounded raw eslint invocation.",
+      "command_ids": ["static_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "format",
+      "category": "format",
+      "applicable": true,
+      "rationale": "The wrapper reproduces the required CI changed-file Prettier gate and escalates to the repository's full format check when formatting policy changes.",
+      "command_ids": ["format_check"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": [],
+      "matrix": []
+    },
+    {
+      "id": "static_analysis",
+      "category": "static_analysis",
+      "applicable": true,
+      "rationale": "Static analysis reproduces CI's full-or-baseline knip gate and runs the required-test policy gate for skip, focus, quarantine, and retry-to-pass markers.",
+      "command_ids": ["dead_code_check", "policy_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": [],
+      "matrix": []
+    },
+    {
+      "id": "unit",
+      "category": "unit",
+      "applicable": true,
+      "rationale": "tests/unit contains Node test invariants for validation utilities, broker/session handling, teardown ownership, artifact retention, and tier-policy protection.",
+      "command_ids": ["unit_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "regression",
+      "category": "regression",
+      "applicable": true,
+      "rationale": "The regression tier combines explicit regression scripts with tests/regression under npm run test:regression.",
+      "command_ids": ["regression_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "integration",
+      "category": "integration",
+      "applicable": true,
+      "rationale": "Local integration tests live in tests/integration/local and are exercised by npm run test:integration.",
+      "command_ids": ["integration_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "security",
+      "category": "security",
+      "applicable": true,
+      "rationale": "tests/security enforces sanitizer behavior and tracked-source secret scanning through npm run test:security.",
+      "command_ids": ["security_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "accessibility",
+      "category": "accessibility",
+      "applicable": true,
+      "rationale": "Playwright runs the tagged accessibility scenario across the documented Foundry 13.351 and 14.364 matrix with built-in dnd5e and pf2e support.",
+      "command_ids": ["accessibility_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_test_assets"],
+      "artifact_ids": [
+        "tier_results",
+        "playwright_json_report",
+        "playwright_html_report",
+        "playwright_screenshots",
+        "playwright_video",
+        "playwright_trace",
+        "playwright_console",
+        "playwright_service_logs",
+        "playwright_dom",
+        "playwright_accessibility"
+      ],
+      "matrix": [
+        {
+          "name": "browser",
+          "values": ["chromium"]
+        },
+        {
+          "name": "foundry_version",
+          "values": ["13.351", "14.364"]
+        },
+        {
+          "name": "game_system",
+          "values": ["dnd5e", "pf2e"]
+        }
+      ]
+    },
+    {
+      "id": "component",
+      "category": "component",
+      "applicable": true,
+      "rationale": "Template-level component assertions are implemented in tests/component and run through npm run test:component.",
+      "command_ids": ["component_tests"],
+      "prerequisite_ids": ["npm_dependencies"],
+      "artifact_ids": ["tier_results"],
+      "matrix": []
+    },
+    {
+      "id": "ui",
+      "category": "ui",
+      "applicable": true,
+      "rationale": "Playwright exposes a dedicated @ui subset for browser-side UI coverage over the supported Foundry and system matrix.",
+      "command_ids": ["ui_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_test_assets"],
+      "artifact_ids": [
+        "tier_results",
+        "playwright_json_report",
+        "playwright_html_report",
+        "playwright_screenshots",
+        "playwright_video",
+        "playwright_trace",
+        "playwright_console",
+        "playwright_service_logs",
+        "playwright_dom",
+        "playwright_accessibility"
+      ],
+      "matrix": [
+        {
+          "name": "browser",
+          "values": ["chromium"]
+        },
+        {
+          "name": "foundry_version",
+          "values": ["13.351", "14.364"]
+        },
+        {
+          "name": "game_system",
+          "values": ["dnd5e", "pf2e"]
+        }
+      ]
+    },
+    {
+      "id": "e2e",
+      "category": "e2e",
+      "applicable": true,
+      "rationale": "npm run test:foundry executes the full Playwright suite over the repository’s supported Foundry/browser/system matrix.",
+      "command_ids": ["e2e_tests"],
+      "prerequisite_ids": ["npm_dependencies", "foundry_test_assets"],
+      "artifact_ids": [
+        "tier_results",
+        "playwright_json_report",
+        "playwright_html_report",
+        "playwright_screenshots",
+        "playwright_video",
+        "playwright_trace",
+        "playwright_console",
+        "playwright_service_logs",
+        "playwright_dom",
+        "playwright_accessibility"
+      ],
+      "matrix": [
+        {
+          "name": "browser",
+          "values": ["chromium"]
+        },
+        {
+          "name": "foundry_version",
+          "values": ["13.351", "14.364"]
+        },
+        {
+          "name": "game_system",
+          "values": ["dnd5e", "pf2e"]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "release_zip",
+      "path_pattern": "dist/*.zip",
+      "required": true
+    },
+    {
+      "id": "tier_results",
+      "path_pattern": "artifacts/test-results/*.json",
+      "required": false
+    },
+    {
+      "id": "playwright_json_report",
+      "path_pattern": "tests/e2e/reports/results.json",
+      "required": true
+    },
+    {
+      "id": "playwright_html_report",
+      "path_pattern": "tests/e2e/reports/html/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_screenshots",
+      "path_pattern": "tests/e2e/reports/agentic/screenshots/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_video",
+      "path_pattern": "tests/e2e/reports/agentic/video/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_trace",
+      "path_pattern": "tests/e2e/reports/agentic/trace/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_console",
+      "path_pattern": "tests/e2e/reports/agentic/console/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_service_logs",
+      "path_pattern": "tests/e2e/reports/agentic/service-logs/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_dom",
+      "path_pattern": "tests/e2e/reports/agentic/dom/**/*",
+      "required": false
+    },
+    {
+      "id": "playwright_accessibility",
+      "path_pattern": "tests/e2e/reports/agentic/accessibility/**/*",
+      "required": false
+    }
+  ],
+  "external_inputs": [
+    {
+      "id": "foundry_license_key",
+      "kind": "license",
+      "purpose": "Foundry VTT license key used to sign isolated Playwright test servers."
+    },
+    {
+      "id": "foundry_v13_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT 13.351 server zip mounted for the Foundry 13 browser matrix."
+    },
+    {
+      "id": "foundry_v14_zip",
+      "kind": "resource",
+      "purpose": "Licensed Foundry VTT 14.364 server zip mounted for the Foundry 14 browser matrix."
+    }
+  ]
+}

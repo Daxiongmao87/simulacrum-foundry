@@ -1,11 +1,15 @@
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
-import { basename, extname, join, resolve } from 'node:path';
+import { dirname, basename, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const CATEGORY_BY_NAME = [
   [/screenshot/iu, 'screenshots'],
   [/video/iu, 'video'],
   [/trace/iu, 'trace'],
-  [/console|page-errors|foundry-(?:stdout|stderr)/iu, 'console'],
+  [/foundry-(?:stdout|stderr)/iu, 'service-logs'],
+  [/console|page-errors|failed-requests/iu, 'console'],
   [/^dom-/iu, 'dom'],
   [/accessibility/iu, 'accessibility'],
 ];
@@ -14,12 +18,10 @@ export default class AgenticArtifactReporter {
   constructor() {
     this.root = process.env.ADP_ARTIFACT_DIR
       ? resolve(process.env.ADP_ARTIFACT_DIR)
-      : null;
+      : join(ROOT, 'tests/e2e/reports/agentic');
   }
 
   async onTestEnd(test, result) {
-    if (!this.root) return;
-
     const identity = safePart(`${test.parent.project()?.name || 'project'}-${test.id}`);
     for (const [index, attachment] of result.attachments.entries()) {
       const category = categoryFor(attachment.name);

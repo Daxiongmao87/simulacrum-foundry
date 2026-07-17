@@ -113,6 +113,7 @@ deploy_module.sh
 deploy_package.sh
 # Agent working notes
 .agent/
+/.agentic-delivery/state/
 
 # AI Tool Working Directories
 .gemini/
