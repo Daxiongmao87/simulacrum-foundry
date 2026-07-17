@@ -7,7 +7,7 @@
   },
   "pipeline": {
     "trigger_labels": [
-      "agentic-delivery"
+      "agent"
     ],
     "human_authority": "Daxiongmao87",
     "models": {
