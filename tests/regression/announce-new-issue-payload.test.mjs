@@ -60,7 +60,8 @@ function assertBalancedCodeDelimiters(description) {
   assert.equal(fences.length % 2, 0, 'code fences must be balanced');
 
   const withoutFencedBlocks = description.replace(/```[\s\S]*?```/gu, '');
-  const inlineTicks = withoutFencedBlocks.match(/`/gu) ?? [];
+  const withoutEscapedTicks = withoutFencedBlocks.replace(/\\`/gu, '');
+  const inlineTicks = withoutEscapedTicks.match(/`/gu) ?? [];
   assert.equal(inlineTicks.length % 2, 0, 'inline-code backticks must be balanced');
 }
 
@@ -203,4 +204,73 @@ test('truncation preserves authored bold-only paragraphs', () => {
   const convertedBody = ['Intro.', '', '## Details', '', 'x'.repeat(900)].join('\n');
   const convertedDescription = descriptionOf(buildPayload({ body: convertedBody }));
   assert.equal(convertedDescription, 'Intro...');
+});
+
+test('normalization preserves Markdown-sensitive indentation', () => {
+  const body = [
+    '## Layout',
+    '',
+    '- parent   item',
+    '  - child   item',
+    '',
+    '```python',
+    'if ready:',
+    '    run_task()',
+    '```',
+    '',
+    '    indented   code',
+  ].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(
+    description,
+    [
+      '**Layout**',
+      '',
+      '- parent item',
+      '  - child item',
+      '',
+      '```python',
+      'if ready:',
+      '    run_task()',
+      '```',
+      '',
+      '    indented   code',
+    ].join('\n')
+  );
+});
+
+test('inline-code balancing ignores escaped literal backticks', () => {
+  const body = ['Intro with escaped \\` tick and important tail.', '', 'x'.repeat(900)].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, 'Intro with escaped \\` tick and important tail...');
+  assertBalancedCodeDelimiters(description);
+});
+
+test('word fallback keeps non-code Markdown delimiters balanced', () => {
+  const boldDescription = descriptionOf(
+    buildPayload({ body: `**${'word '.repeat(200).trim()}**` })
+  );
+  assert.equal((boldDescription.match(/\*\*/gu) ?? []).length % 2, 0);
+
+  const linkBody = `${'prefix '.repeat(94)}[important link label](https://example.com) trailing`;
+  const linkDescription = descriptionOf(buildPayload({ body: linkBody }));
+  assert.equal((linkDescription.match(/\[/gu) ?? []).length, 0);
+  assert.equal((linkDescription.match(/\]/gu) ?? []).length, 0);
+
+  const autolinkBody = `<https://example.com/${'x'.repeat(800)}>`;
+  const autolinkDescription = descriptionOf(buildPayload({ body: autolinkBody }));
+  assert.equal(
+    (autolinkDescription.match(/</gu) ?? []).length,
+    (autolinkDescription.match(/>/gu) ?? []).length
+  );
+});
+
+test('truncation places the ellipsis after a closing fence', () => {
+  const body = ['Intro.', '', '```js', 'code', '```', '', 'x'.repeat(900)].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, 'Intro.\n\n```js\ncode\n```\n...');
+  assertBalancedCodeDelimiters(description);
 });

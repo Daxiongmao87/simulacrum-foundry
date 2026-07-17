@@ -23,40 +23,64 @@ jobs:
             def heading_marker: "\u001e";
             def fence_line: test("^[ \t]*```");
             def normalized_line($convert_heading):
-              gsub("[ \t]+"; " ")
-              | sub("^ +"; "")
-              | sub(" +$"; "")
-              | if $convert_heading and test("^#{1,6}( |$)") then
-                  sub("^#{1,6} *"; "")
-                  | sub(" +#+$"; "")
-                  | if length == 0 then
-                      ""
-                    else
-                      heading_marker + "**" + . + "**"
-                    end
-                else
-                  .
-                end;
+              if test("^[ \t]*$") then
+                ""
+              elif test("^(    |\t)") then
+                .
+              else
+                capture("^(?<indent>[ \t]*)(?<content>.*)$") as $line
+                | (
+                    $line.content
+                    | gsub("[ \t]+"; " ")
+                    | sub(" +$"; "")
+                  ) as $content
+                | if $convert_heading and ($content | test("^#{1,6}( |$)")) then
+                    (
+                      $content
+                      | sub("^#{1,6} *"; "")
+                      | sub(" +#+$"; "")
+                    ) as $heading
+                    | if ($heading | length) == 0 then
+                        ""
+                      else
+                        heading_marker + "**" + $heading + "**"
+                      end
+                  else
+                    $line.indent + $content
+                  end
+              end;
             def normalized:
               gsub("\r\n"; "\n")
               | gsub("\r"; "\n")
               | split("\n")
               | reduce .[] as $line (
-                  {lines: [], in_fence: false};
+                  {lines: [], in_fence: false, blank_count: 0};
                   ($line | fence_line) as $is_fence
                   | if .in_fence then
-                      .lines += [($line | normalized_line(false))]
+                      .lines += [$line]
+                      | .blank_count = 0
                       | if $is_fence then .in_fence = false else . end
                     elif $is_fence then
-                      .lines += [($line | normalized_line(false))]
+                      .lines += [$line]
                       | .in_fence = true
+                      | .blank_count = 0
                     else
-                      .lines += [($line | normalized_line(true))]
+                      ($line | normalized_line(true)) as $normalized
+                      | if $normalized == "" then
+                          if .blank_count == 0 then
+                            .lines += [""]
+                            | .blank_count = 1
+                          else
+                            .
+                          end
+                        else
+                          .lines += [$normalized]
+                          | .blank_count = 0
+                        end
                     end
                 )
               | .lines
               | join("\n")
-              | gsub("\n{3,}"; "\n\n")
               | sub("^\n+"; "")
               | sub("\n+$"; "");
             def complete_paragraphs($limit):
@@ -107,6 +131,28 @@ jobs:
                 else
                   .
                 end;
+            def mask_escaped_ticks:
+              explode
+              | reduce .[] as $char (
+                  {chars: [], backslashes: 0};
+                  if $char == 96 then
+                    if (.backslashes % 2) == 1 then
+                      .chars += [32]
+                    else
+                      .chars += [$char]
+                    end
+                    | .backslashes = 0
+                  else
+                    .chars += [$char]
+                    | if $char == 92 then
+                        .backslashes += 1
+                      else
+                        .backslashes = 0
+                      end
+                  end
+                )
+              | .chars
+              | implode;
             def mask_fenced_ticks:
               split("\n")
               | reduce .[] as $line (
@@ -119,7 +165,7 @@ jobs:
                       .lines += [($line | gsub("`"; " "))]
                       | .in_fence = true
                     else
-                      .lines += [$line]
+                      .lines += [($line | mask_escaped_ticks)]
                     end
                 )
               | .lines
@@ -134,6 +180,54 @@ jobs:
                 else
                   $content
                 end;
+            def remove_at($index; $size):
+              .[0:$index] + .[($index + $size):];
+            def without_unclosed_marker($marker):
+              ((split($marker) | length) - 1) as $count
+              | if ($count % 2) == 1 then
+                  (rindex($marker) // length) as $index
+                  | remove_at($index; ($marker | length))
+                else
+                  .
+                end;
+            def without_unclosed_link:
+              . as $content
+              | (($content | rindex("[")) // -1) as $label_open
+              | (($content | rindex("]")) // -1) as $label_close
+              | if $label_open > $label_close then
+                  $content[0:$label_open]
+                else
+                  (($content | rindex("](")) // -1) as $destination_open
+                  | (($content | rindex(")")) // -1) as $destination_close
+                  | if $destination_open > $destination_close then
+                      (
+                        ($content[0:$destination_open] | rindex("["))
+                        // $destination_open
+                      ) as $link_open
+                      | $content[0:$link_open]
+                    else
+                      $content
+                    end
+                end;
+            def without_unclosed_autolink:
+              . as $content
+              | (($content | rindex("<")) // -1) as $open
+              | (($content | rindex(">")) // -1) as $close
+              | if $open > $close then $content[0:$open] else $content end;
+            def non_code_safe:
+              without_unclosed_link
+              | without_unclosed_autolink
+              | without_unclosed_marker("**")
+              | without_unclosed_marker("__")
+              | without_unclosed_marker("~~")
+              | without_unclosed_marker("*")
+              | sub("[ \n]+$"; "");
+            def with_ellipsis:
+              if test("(^|\n)[ \t]*`{3,}[ \t]*$") then
+                . + "\n..."
+              else
+                (sub("\\.+$"; "")) + "..."
+              end;
             def markdown_safe:
               without_unclosed_fence
               | without_unclosed_inline_code
@@ -148,17 +242,17 @@ jobs:
               | if ($paragraphs | length) > 0 then
                   $paragraphs
                 else
-                  $body | word_prefix($limit) | markdown_safe
+                  $body | word_prefix($limit) | markdown_safe | non_code_safe
                 end;
             def bounded($limit):
               . as $body
               | if ($body | length) <= $limit then
                   $body
                 else
-                  ($limit - 3) as $content_limit
+                  ($limit - 4) as $content_limit
                   | word_or_paragraph_prefix($body; $content_limit) as $prefix
                   | if ($prefix | length) > 0 then
-                      ($prefix | sub("\\.+$"; "")) + "..."
+                      $prefix | with_ellipsis
                     else
                       "..."
                     end
