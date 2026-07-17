@@ -6,6 +6,7 @@ CLAUDE.md
 
 # Specification documents (development-only)
 specs/
+spec/
 !tests/e2e/specs/
 !tests/e2e/specs/**
 

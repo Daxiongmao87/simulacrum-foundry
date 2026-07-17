@@ -20,18 +20,111 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           jq --arg repository "$REPOSITORY" '
+            def normalized_line:
+              gsub("[ \t]+"; " ")
+              | sub("^ +"; "")
+              | sub(" +$"; "")
+              | if test("^#{1,6}( |$)") then
+                  sub("^#{1,6} *"; "")
+                  | sub(" +#+$"; "")
+                  | if length == 0 then "" else "**" + . + "**" end
+                else
+                  .
+                end;
             def normalized:
-              gsub("[[:space:]]+"; " ")
-              | sub("^ "; "")
-              | sub(" $"; "");
+              gsub("\r\n"; "\n")
+              | gsub("\r"; "\n")
+              | split("\n")
+              | map(normalized_line)
+              | join("\n")
+              | gsub("\n{3,}"; "\n\n")
+              | sub("^\n+"; "")
+              | sub("\n+$"; "");
+            def complete_paragraphs($limit):
+              split("\n\n")
+              | reduce .[] as $paragraph (
+                  {text: "", accepting: true};
+                  if (.accepting | not) then
+                    .
+                  else
+                    (
+                      if .text == "" then
+                        $paragraph
+                      else
+                        .text + "\n\n" + $paragraph
+                      end
+                    ) as $candidate
+                    | if ($candidate | length) <= $limit then
+                        .text = $candidate
+                      else
+                        .accepting = false
+                      end
+                  end
+                )
+              | .text;
+            def without_trailing_heading:
+              if test("(^|\n\n)\\*\\*[^\n]+\\*\\*$") then
+                sub("(^|\n\n)\\*\\*[^\n]+\\*\\*$"; "")
+              else
+                .
+              end;
+            def word_prefix($limit):
+              .[0:$limit] as $slice
+              | (($slice | rindex(" ")) // -1) as $space
+              | (($slice | rindex("\n")) // -1) as $newline
+              | ([$space, $newline] | max) as $cut
+              | if $cut > 0 then $slice[0:$cut] else $slice end;
+            def without_unclosed_fence:
+              ([scan("```")] | length) as $fences
+              | if ($fences % 2) == 1 then
+                  (rindex("```") // length) as $cut
+                  | .[0:$cut]
+                else
+                  .
+                end;
+            def without_unclosed_inline_code:
+              ([scan("`")] | length) as $ticks
+              | if ($ticks % 2) == 1 then
+                  (rindex("`") // length) as $cut
+                  | .[0:$cut]
+                else
+                  .
+                end;
+            def markdown_safe:
+              without_unclosed_fence
+              | without_unclosed_inline_code
+              | sub("[ \n]+$"; "");
+            def word_or_paragraph_prefix($body; $limit):
+              (
+                $body
+                | complete_paragraphs($limit)
+                | without_trailing_heading
+                | markdown_safe
+              ) as $paragraphs
+              | if ($paragraphs | length) > 0 then
+                  $paragraphs
+                else
+                  $body | word_prefix($limit) | markdown_safe
+                end;
+            def bounded($limit):
+              . as $body
+              | if ($body | length) <= $limit then
+                  $body
+                else
+                  ($limit - 3) as $content_limit
+                  | word_or_paragraph_prefix($body; $content_limit) as $prefix
+                  | if ($prefix | length) > 0 then
+                      ($prefix | sub("\\.+$"; "")) + "..."
+                    else
+                      "..."
+                    end
+                end;
             def summary:
               (. // "" | normalized) as $body
               | if ($body | length) == 0 then
                   "_No description provided._"
-                elif ($body | length) > 700 then
-                  $body[0:697] + "..."
                 else
-                  $body
+                  $body | bounded(700)
                 end;
             {
               username: "GitHub Issues",
