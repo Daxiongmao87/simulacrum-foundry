@@ -61,8 +61,16 @@ function assertBalancedCodeDelimiters(description) {
 
   const withoutFencedBlocks = description.replace(/```[\s\S]*?```/gu, '');
   const withoutEscapedTicks = withoutFencedBlocks.replace(/\\`/gu, '');
-  const inlineTicks = withoutEscapedTicks.match(/`/gu) ?? [];
-  assert.equal(inlineTicks.length % 2, 0, 'inline-code backticks must be balanced');
+  const inlineRuns = [...withoutEscapedTicks.matchAll(/`+/gu)].map(match => match[0].length);
+  let openRun = null;
+  for (const runLength of inlineRuns) {
+    if (openRun === null) {
+      openRun = runLength;
+    } else if (runLength === openRun) {
+      openRun = null;
+    }
+  }
+  assert.equal(openRun, null, 'inline-code backtick runs must be balanced');
 }
 
 test('issue 181 Markdown keeps readable sections within the Discord limit', () => {
@@ -273,4 +281,50 @@ test('truncation places the ellipsis after a closing fence', () => {
 
   assert.equal(description, 'Intro.\n\n```js\ncode\n```\n...');
   assertBalancedCodeDelimiters(description);
+});
+
+test('backticks with a text suffix do not close fenced code', () => {
+  const body = ['```text', '```not-a-close', '# value', '```'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, '```text\n```not-a-close\n# value\n```');
+});
+
+test('non-code repair ignores emphasis inside completed inline code', () => {
+  const body = `Inline \`a*b\` important value. ${'word '.repeat(180)}`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /Inline `a\*b` important value\./u);
+  assertBalancedCodeDelimiters(description);
+});
+
+test('inline-code balancing pairs delimiter runs by length', () => {
+  const body = `Prefix \`\` \` \`\` important tail. ${'word '.repeat(180)}`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /Prefix `` ` `` important tail\./u);
+  assertBalancedCodeDelimiters(description);
+});
+
+test('autolink cleanup preserves literal less-than comparisons', () => {
+  const body = `Keep values where count < limit and preserve this explanation. ${'word '.repeat(180)}`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /count < limit and preserve this explanation\./u);
+});
+
+test('heading markers do not consume the visible length budget', () => {
+  const body = ['# H', '', 'a'.repeat(591), '', 'b'.repeat(100)].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description.length, SUMMARY_LIMIT);
+  assert.equal(description, `**H**\n\n${'a'.repeat(591)}\n\n${'b'.repeat(100)}`);
+});
+
+test('word fallback excludes heading markers from its slice budget', () => {
+  const headings = Array.from({ length: 10 }, () => '# H');
+  const body = [...headings, 'x '.repeat(1000)].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description.length, 698);
 });
