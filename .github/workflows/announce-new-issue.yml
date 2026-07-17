@@ -20,14 +20,20 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           jq --arg repository "$REPOSITORY" '
-            def normalized_line:
+            def heading_marker: "\u001e";
+            def fence_line: test("^[ \t]*```");
+            def normalized_line($convert_heading):
               gsub("[ \t]+"; " ")
               | sub("^ +"; "")
               | sub(" +$"; "")
-              | if test("^#{1,6}( |$)") then
+              | if $convert_heading and test("^#{1,6}( |$)") then
                   sub("^#{1,6} *"; "")
                   | sub(" +#+$"; "")
-                  | if length == 0 then "" else "**" + . + "**" end
+                  | if length == 0 then
+                      ""
+                    else
+                      heading_marker + "**" + . + "**"
+                    end
                 else
                   .
                 end;
@@ -35,7 +41,20 @@ jobs:
               gsub("\r\n"; "\n")
               | gsub("\r"; "\n")
               | split("\n")
-              | map(normalized_line)
+              | reduce .[] as $line (
+                  {lines: [], in_fence: false};
+                  ($line | fence_line) as $is_fence
+                  | if .in_fence then
+                      .lines += [($line | normalized_line(false))]
+                      | if $is_fence then .in_fence = false else . end
+                    elif $is_fence then
+                      .lines += [($line | normalized_line(false))]
+                      | .in_fence = true
+                    else
+                      .lines += [($line | normalized_line(true))]
+                    end
+                )
+              | .lines
               | join("\n")
               | gsub("\n{3,}"; "\n\n")
               | sub("^\n+"; "")
@@ -63,11 +82,17 @@ jobs:
                 )
               | .text;
             def without_trailing_heading:
-              if test("(^|\n\n)\\*\\*[^\n]+\\*\\*$") then
-                sub("(^|\n\n)\\*\\*[^\n]+\\*\\*$"; "")
-              else
-                .
-              end;
+              split("\n\n") as $paragraphs
+              | if ($paragraphs | length) == 0 then
+                  .
+                elif (
+                  ($paragraphs[-1] | startswith(heading_marker)) and
+                  ($paragraphs[-1] | contains("\n") | not)
+                ) then
+                  $paragraphs[0:-1] | join("\n\n")
+                else
+                  .
+                end;
             def word_prefix($limit):
               .[0:$limit] as $slice
               | (($slice | rindex(" ")) // -1) as $space
@@ -82,13 +107,32 @@ jobs:
                 else
                   .
                 end;
+            def mask_fenced_ticks:
+              split("\n")
+              | reduce .[] as $line (
+                  {lines: [], in_fence: false};
+                  ($line | fence_line) as $is_fence
+                  | if .in_fence then
+                      .lines += [($line | gsub("`"; " "))]
+                      | if $is_fence then .in_fence = false else . end
+                    elif $is_fence then
+                      .lines += [($line | gsub("`"; " "))]
+                      | .in_fence = true
+                    else
+                      .lines += [$line]
+                    end
+                )
+              | .lines
+              | join("\n");
             def without_unclosed_inline_code:
-              ([scan("`")] | length) as $ticks
+              . as $content
+              | ($content | mask_fenced_ticks) as $inline_content
+              | ($inline_content | [scan("`")] | length) as $ticks
               | if ($ticks % 2) == 1 then
-                  (rindex("`") // length) as $cut
-                  | .[0:$cut]
+                  (($inline_content | rindex("`")) // ($content | length)) as $cut
+                  | $content[0:$cut]
                 else
-                  .
+                  $content
                 end;
             def markdown_safe:
               without_unclosed_fence
@@ -124,7 +168,7 @@ jobs:
               | if ($body | length) == 0 then
                   "_No description provided._"
                 else
-                  $body | bounded(700)
+                  $body | bounded(700) | gsub(heading_marker; "")
                 end;
             {
               username: "GitHub Issues",

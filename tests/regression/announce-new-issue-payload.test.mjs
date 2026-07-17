@@ -167,3 +167,40 @@ test('truncation removes incomplete inline code and fenced blocks', () => {
   assertBalancedCodeDelimiters(fencedDescription);
   assert.ok(fencedDescription.length <= SUMMARY_LIMIT);
 });
+
+test('ATX-like lines inside fenced code remain unchanged', () => {
+  const body = ['## Example', '', '```sh', '# not a heading', 'echo done', '```'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, '**Example**\n\n```sh\n# not a heading\necho done\n```');
+});
+
+test('inline-code balancing ignores literal backticks inside fenced code', () => {
+  const body = [
+    'Intro.',
+    '',
+    '```js',
+    'const marker = "`";',
+    '```',
+    '',
+    'Kept after fence.',
+    '',
+    'x'.repeat(900),
+  ].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /```js\nconst marker = "`";\n```/u);
+  assert.match(description, /Kept after fence\.\.\.$/u);
+  assertBalancedCodeDelimiters(description);
+});
+
+test('truncation preserves authored bold-only paragraphs', () => {
+  const body = ['Intro.', '', '**Do not share this log**', '', 'x'.repeat(900)].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, 'Intro.\n\n**Do not share this log**...');
+
+  const convertedBody = ['Intro.', '', '## Details', '', 'x'.repeat(900)].join('\n');
+  const convertedDescription = descriptionOf(buildPayload({ body: convertedBody }));
+  assert.equal(convertedDescription, 'Intro...');
+});
