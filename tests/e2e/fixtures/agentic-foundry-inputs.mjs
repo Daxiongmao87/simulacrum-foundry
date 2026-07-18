@@ -79,6 +79,12 @@ export function findFoundryDistribution(
 ) {
   const definition = DISTRIBUTIONS[version];
   if (!definition) {
+    if (/^[0-9]+\.[0-9]+$/u.test(version) && vendorDirectory) {
+      const localPath = join(vendorDirectory, `FoundryVTT-Node-${version}.zip`);
+      if (existsSync(localPath)) {
+        return requireAbsoluteRegularFile(localPath, `Foundry ${version} distribution input`);
+      }
+    }
     throw new Error(`unsupported Foundry version: ${version}`);
   }
 

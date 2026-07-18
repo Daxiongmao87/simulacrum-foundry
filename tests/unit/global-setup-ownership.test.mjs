@@ -97,3 +97,39 @@ test('global teardown preserves an unowned runtime child', async t => {
   assert.equal(existsSync(unownedChild), true);
   assert.equal(existsSync(runtimeRoot), true);
 });
+
+test('global teardown honors a file-sourced governed artifact root', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'simulacrum-file-global-teardown-'));
+  const artifactRoot = join(root, 'artifacts');
+  const environmentFile = join(root, 'foundry-test-env');
+  const ownerId = 'file-global-teardown-test';
+  const previousEnvironment = new Map(ENVIRONMENT_KEYS.map(key => [key, process.env[key]]));
+
+  t.after(async () => {
+    for (const [key, value] of previousEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await mkdir(artifactRoot);
+  await writeFile(
+    environmentFile,
+    `ADP_ARTIFACT_DIR=${artifactRoot}\nAGENTIC_DELIVERY_RUN_ID=${ownerId}\n`
+  );
+  const runtimeRoot = selectFoundryRuntimeRoot({
+    artifactRoot,
+    requestedPath: null,
+    fallbackRoot: root,
+    executableProbe: () => true,
+    ownerId,
+  });
+  for (const key of ENVIRONMENT_KEYS) delete process.env[key];
+  process.env.AGENTIC_DELIVERY_INPUT_FOUNDRY_TEST_ENV = environmentFile;
+
+  await globalTeardown();
+
+  assert.equal(existsSync(runtimeRoot), false);
+  assert.equal(existsSync(artifactRoot), true);
+});

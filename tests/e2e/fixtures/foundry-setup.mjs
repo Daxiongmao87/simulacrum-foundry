@@ -137,9 +137,9 @@ function findFoundryZip(foundryVersion, environment) {
   });
 }
 
-function getSystemCacheDir(foundryVersion) {
-  const cacheRoot = process.env.ADP_ARTIFACT_DIR
-    ? join(getTestBasePath(), 'system-cache')
+function getSystemCacheDir(foundryVersion, environment = process.env) {
+  const cacheRoot = environment.ADP_ARTIFACT_DIR
+    ? join(getTestBasePath(environment), 'system-cache')
     : LOCAL_SYSTEM_CACHE_DIR;
   return join(cacheRoot, foundryVersion);
 }
@@ -149,11 +149,12 @@ function getSystemCacheDir(foundryVersion) {
  * Governed runs use an operation-owned directory outside the Git worktree.
  * @returns {string} Base path for test directories
  */
-function getTestBasePath() {
+export function getTestBasePath(environment = process.env) {
   return selectFoundryRuntimeRoot({
-    artifactRoot: process.env.ADP_ARTIFACT_DIR || null,
-    requestedPath: process.env.TEST_TMPFS_PATH || null,
+    artifactRoot: environment.ADP_ARTIFACT_DIR || null,
+    requestedPath: environment.TEST_TMPFS_PATH || null,
     fallbackRoot: ROOT,
+    ownerId: environment.AGENTIC_DELIVERY_RUN_ID,
   });
 }
 
@@ -182,7 +183,7 @@ export async function setupIsolatedFoundry(options) {
   } = options;
 
   // Get base path (tmpfs or project dir)
-  const basePath = getTestBasePath();
+  const basePath = getTestBasePath(env);
 
   // Unique directories for this test
   const testDir = join(basePath, `.foundry-test-${testId}`);
@@ -243,7 +244,7 @@ export async function setupIsolatedFoundry(options) {
   }
 
   // 5. Copy cached system if available
-  const versionCacheDir = getSystemCacheDir(foundryVersion);
+  const versionCacheDir = getSystemCacheDir(foundryVersion, env);
   const cachedSystem = join(versionCacheDir, systemId);
   if (existsSync(cachedSystem)) {
     try {

@@ -45,6 +45,25 @@ test('governed Foundry inputs are read directly from external regular files', as
   }
 });
 
+test('local Foundry versions resolve their explicitly requested licensed archive', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'simulacrum-local-foundry-version-'));
+  const localArchive = join(root, 'FoundryVTT-Node-13.350.zip');
+
+  try {
+    await writeFile(localArchive, 'licensed-local-archive');
+
+    assert.equal(
+      findFoundryDistribution('13.350', {
+        environment: {},
+        vendorDirectory: root,
+      }),
+      localArchive
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('governed Foundry inputs reject symbolic links and unsupported versions', async () => {
   const root = await mkdtemp(join(tmpdir(), 'simulacrum-unsafe-inputs-'));
   const externalEnv = join(root, 'foundry-test-env');

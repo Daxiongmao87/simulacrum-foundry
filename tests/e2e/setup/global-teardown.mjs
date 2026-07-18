@@ -8,27 +8,38 @@
 import { existsSync, readFileSync, rmSync, readdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { removeGovernedRuntimeRoot } from '../fixtures/agentic-foundry-inputs.mjs';
+import {
+  loadFoundryEnvironment,
+  removeGovernedRuntimeRoot,
+} from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
 const RUNTIME_OWNER_MARKER = '.simulacrum-runtime-owner.json';
+const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
 
 /**
  * Global Teardown - Clean up orphaned test directories
  */
 export default async function globalTeardown() {
   console.log('============================================================');
+  const env = {
+    ...loadFoundryEnvironment({
+      environment: process.env,
+      localPath: TEST_ENV_PATH,
+    }),
+    ...process.env,
+  };
 
-  if (process.env.ADP_FOUNDRY_ENDPOINT) {
+  if (env.ADP_FOUNDRY_ENDPOINT) {
     console.log('[teardown] External broker mode: lifecycle cleanup remains broker-owned.');
     return;
   }
   console.log('[teardown] Simulacrum E2E Test Teardown');
   console.log('============================================================');
 
-  const artifactRoot = process.env.ADP_ARTIFACT_DIR ? resolve(process.env.ADP_ARTIFACT_DIR) : null;
+  const artifactRoot = env.ADP_ARTIFACT_DIR ? resolve(env.ADP_ARTIFACT_DIR) : null;
   const cleanupRoot = artifactRoot ? join(artifactRoot, '.foundry-runtime') : ROOT;
   const legacyDirs = ['.foundry-test', '.foundry-test-data'];
   let cleanupSafe = true;
@@ -99,7 +110,7 @@ export default async function globalTeardown() {
 
   if (artifactRoot) {
     if (cleanupSafe) {
-      removeGovernedRuntimeRoot(cleanupRoot, artifactRoot);
+      removeGovernedRuntimeRoot(cleanupRoot, artifactRoot, env.AGENTIC_DELIVERY_RUN_ID);
     } else {
       console.log('[teardown] Preserving governed runtime root with unowned content.');
     }
