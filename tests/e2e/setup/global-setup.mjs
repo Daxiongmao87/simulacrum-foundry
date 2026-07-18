@@ -10,85 +10,33 @@
  * This ensures each test is completely isolated.
  */
 
-import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { execFileSync } from 'child_process';
+import { existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
   installSystemPackage,
   validateInstalledSystemPackage,
 } from '../fixtures/package-install.mjs';
+import {
+  externalBrokerConfiguration,
+  findFoundryDistribution,
+  removeGovernedRuntimeRoot,
+  resolveFoundryEnvironment,
+  selectFoundryRuntimeRoot,
+} from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
 const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
-const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
+let systemCacheRoot = join(ROOT, '.foundry-system-cache');
 
-/**
- * Load environment variables from .env.test
- */
 function loadEnv() {
-  const fileEnv = {};
-
-  if (!existsSync(TEST_ENV_PATH)) {
-    console.error(`[setup] ERROR: Missing ${TEST_ENV_PATH}`);
-    console.error('[setup] Copy .env.test.example to .env.test and configure it.');
-    process.exit(1);
-  }
-
-  const envContent = readFileSync(TEST_ENV_PATH, 'utf-8');
-
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    fileEnv[key] = value;
-  }
-
-  return { ...fileEnv, ...process.env };
-}
-
-/**
- * Find the Foundry zip file in vendor/foundry/
- */
-function findFoundryZip(foundryVersion) {
-  if (!existsSync(FOUNDRY_VENDOR_DIR)) {
-    console.error(`[setup] ERROR: Missing ${FOUNDRY_VENDOR_DIR}`);
-    console.error('[setup] Create vendor/foundry/ and place your FoundryVTT zip file there.');
-    process.exit(1);
-  }
-
-  const files = execSync(`ls -1 "${FOUNDRY_VENDOR_DIR}"`, { encoding: 'utf-8' })
-    .split('\n')
-    .filter(f => f.toLowerCase().endsWith('.zip'));
-
-  const expectedZip = `FoundryVTT-Node-${foundryVersion}.zip`;
-  const matchingZip = files.find(f => f === expectedZip);
-  if (matchingZip) return join(FOUNDRY_VENDOR_DIR, matchingZip);
-
-  if (files.length === 0) {
-    console.error(`[setup] ERROR: No .zip file found in ${FOUNDRY_VENDOR_DIR}`);
-    console.error('[setup] Download FoundryVTT and place the zip file in vendor/foundry/');
-    process.exit(1);
-  }
-
-  console.error(`[setup] ERROR: Missing ${expectedZip} in ${FOUNDRY_VENDOR_DIR}`);
-  console.error(`[setup] Available zips: ${files.join(', ')}`);
-  process.exit(1);
+  return resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: TEST_ENV_PATH,
+  });
 }
 
 /**
@@ -114,7 +62,7 @@ function parseFoundryVersions(env) {
 }
 
 function getSystemCacheDir(foundryVersion) {
-  return join(SYSTEM_CACHE_DIR, foundryVersion);
+  return join(systemCacheRoot, foundryVersion);
 }
 
 /**
@@ -125,21 +73,37 @@ export default async function globalSetup() {
   console.log('[setup] Simulacrum E2E Test Setup (Validation Only)');
   console.log('============================================================');
 
-  if (process.env.ADP_FOUNDRY_ENDPOINT) {
-    for (const name of [
-      'ADP_FOUNDRY_ENDPOINT',
-      'ADP_FOUNDRY_SESSION_FILE',
-      'ADP_FOUNDRY_VERSION',
-      'ADP_GAME_SYSTEM',
-    ]) {
-      if (!process.env[name]) throw new Error(`External Foundry provider requires ${name}`);
-    }
+  // 1. Load and validate environment
+  const env = loadEnv();
+  if (externalBrokerConfiguration(env)) {
     console.log('[setup] External broker mode: licensed stores and lifecycle are provider-owned.');
     return;
   }
+  let governedRuntimeRoot = null;
+  try {
+    if (env.ADP_ARTIFACT_DIR) {
+      governedRuntimeRoot = selectFoundryRuntimeRoot({
+        artifactRoot: env.ADP_ARTIFACT_DIR,
+        requestedPath: env.TEST_TMPFS_PATH,
+        fallbackRoot: ROOT,
+        ownerId: env.AGENTIC_DELIVERY_RUN_ID,
+      });
+      systemCacheRoot = join(governedRuntimeRoot, 'system-cache');
+    }
+    await completeGlobalSetup(env);
+  } catch (error) {
+    if (governedRuntimeRoot) {
+      removeGovernedRuntimeRoot(
+        governedRuntimeRoot,
+        env.ADP_ARTIFACT_DIR,
+        env.AGENTIC_DELIVERY_RUN_ID
+      );
+    }
+    throw error;
+  }
+}
 
-  // 1. Load and validate environment
-  const env = loadEnv();
+async function completeGlobalSetup(env) {
   const systemIds = parseSystemIds(env);
   const foundryVersions = parseFoundryVersions(env);
 
@@ -148,30 +112,31 @@ export default async function globalSetup() {
 
   // 2. Validate Foundry zips exist
   const foundryZips = foundryVersions.map(foundryVersion => {
-    const foundryZip = findFoundryZip(foundryVersion);
-    console.log(`[setup] Foundry ${foundryVersion} zip: ${foundryZip}`);
-    return { foundryVersion, foundryZip };
+    findFoundryDistribution(foundryVersion, {
+      environment: env,
+      vendorDirectory: FOUNDRY_VENDOR_DIR,
+    });
+    console.log(`[setup] Foundry ${foundryVersion} distribution: configured`);
+    return { foundryVersion };
   });
 
   // 3. Validate license key exists
   if (!env.FOUNDRY_LICENSE_KEY) {
-    console.error('[setup] ERROR: FOUNDRY_LICENSE_KEY not set in .env.test');
-    process.exit(1);
+    throw new Error('FOUNDRY_LICENSE_KEY is not configured');
   }
   console.log('[setup] License key: configured');
 
   // 4. Package the module once (this is safe to share between tests)
   console.log('[setup] Packaging Simulacrum module...');
   try {
-    execSync('node tools/package-module.js', {
+    execFileSync('node', ['tools/package-module.js'], {
       cwd: ROOT,
       stdio: 'pipe',
       encoding: 'utf-8',
     });
     console.log('[setup] Module packaged successfully');
-  } catch (e) {
-    console.error('[setup] ERROR packaging module:', e.message);
-    process.exit(1);
+  } catch (error) {
+    throw new Error(`module packaging failed: ${error.message}`, { cause: error });
   }
 
   // 5. Pre-cache systems per Foundry version (speeds up per-test setup significantly)

@@ -2,52 +2,27 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import {
+  playwrightResultsPath,
+  resolveFoundryEnvironment,
+} from './fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
 const TEST_ENV_PATH = join(__dirname, '.env.test');
 
-/**
- * Load environment variables from .env.test
- */
 function loadEnv() {
-  const fileEnv = {};
-
-  if (!existsSync(TEST_ENV_PATH)) {
-    return { ...process.env };
-  }
-
-  const envContent = readFileSync(TEST_ENV_PATH, 'utf-8');
-
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    fileEnv[key] = value;
-  }
-
-  return { ...fileEnv, ...process.env };
+  return resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: TEST_ENV_PATH,
+  });
 }
 
 /**
  * Parse comma-separated system IDs
  */
 function parseSystemIds(env) {
-  const systemIdsRaw = env.TEST_SYSTEM_IDS || env.TEST_SYSTEM_ID || 'dnd5e';
+  const systemIdsRaw = env.ADP_GAME_SYSTEM || env.TEST_SYSTEM_IDS || env.TEST_SYSTEM_ID || 'dnd5e';
   return systemIdsRaw
     .split(',')
     .map(s => s.trim())
@@ -58,7 +33,11 @@ function parseSystemIds(env) {
  * Parse comma-separated Foundry versions.
  */
 function parseFoundryVersions(env) {
-  const versionsRaw = env.TEST_FOUNDRY_VERSIONS || env.TEST_FOUNDRY_VERSION || '13.351,14.364';
+  const versionsRaw =
+    env.ADP_FOUNDRY_VERSION ||
+    env.TEST_FOUNDRY_VERSIONS ||
+    env.TEST_FOUNDRY_VERSION ||
+    '13.351,14.364';
   return versionsRaw
     .split(',')
     .map(v => v.trim())
@@ -132,9 +111,7 @@ const projects = buildProjects(systemIds, foundryVersions);
 const artifactRoot = env.ADP_ARTIFACT_DIR ? resolve(env.ADP_ARTIFACT_DIR) : null;
 const reportRoot = artifactRoot || join(ROOT, 'tests/e2e/reports');
 const outputRoot = artifactRoot ? join(artifactRoot, 'raw') : join(ROOT, 'tests/e2e/test-results');
-const jsonReportPath = artifactRoot
-  ? join(artifactRoot, 'reports', 'results.json')
-  : join(reportRoot, 'results.json');
+const jsonReportPath = playwrightResultsPath(env, ROOT);
 
 console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
 console.log(`[config] Testing with Foundry versions: ${foundryVersions.join(', ')}`);
