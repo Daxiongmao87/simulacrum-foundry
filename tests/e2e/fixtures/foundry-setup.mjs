@@ -14,6 +14,7 @@
 
 import { execFileSync, spawn } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, cpSync } from 'fs';
+import { connect } from 'node:net';
 import { dirname, isAbsolute, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
@@ -520,6 +521,28 @@ function writeOwnershipMarker(directory, ownership) {
   writeFileSync(join(directory, OWNERSHIP_MARKER), JSON.stringify(ownership));
 }
 
+export async function isFoundryPortFree(port) {
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
+    throw new Error('Foundry port is invalid');
+  }
+
+  return new Promise(resolve => {
+    const socket = connect({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = available => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(available);
+    };
+
+    socket.setTimeout(500);
+    socket.once('connect', () => finish(false));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', error => finish(error.code === 'ECONNREFUSED'));
+  });
+}
+
 /**
  * Teardown an isolated Foundry instance
  */
@@ -545,18 +568,11 @@ export async function teardownIsolatedFoundry(serverInfo) {
     console.log(`[teardown:${testId}] Error stopping server: ${e.message}`);
   }
 
-  // Wait for port to be free using polling
-  await pollUntil(
-    async () => {
-      try {
-        const result = execSync(`ss -tlnp | grep :${port} || true`, { encoding: 'utf-8' });
-        return !result.trim(); // Return true when port is free
-      } catch (e) {
-        return true; // If ss fails, assume port is free
-      }
-    },
-    { timeout: 5000, pollInterval: 200 }
-  )
+  // Wait until a direct connection probe proves the port is free.
+  await pollUntil(() => isFoundryPortFree(port), {
+    timeout: 5000,
+    pollInterval: 200,
+  })
     .then(() => {
       console.log(`[teardown:${testId}] Port ${port} is now free`);
     })

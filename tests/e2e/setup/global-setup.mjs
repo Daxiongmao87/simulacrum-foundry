@@ -22,6 +22,7 @@ import {
   findFoundryDistribution,
   loadFoundryEnvironment,
   selectFoundryRuntimeRoot,
+  removeGovernedRuntimeRoot,
 } from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -89,16 +90,26 @@ export default async function globalSetup() {
 
   // 1. Load and validate environment
   const env = loadEnv();
-  if (env.ADP_ARTIFACT_DIR) {
-    systemCacheRoot = join(
-      selectFoundryRuntimeRoot({
+  let governedRuntimeRoot = null;
+  try {
+    if (env.ADP_ARTIFACT_DIR) {
+      governedRuntimeRoot = selectFoundryRuntimeRoot({
         artifactRoot: env.ADP_ARTIFACT_DIR,
         requestedPath: env.TEST_TMPFS_PATH,
         fallbackRoot: ROOT,
-      }),
-      'system-cache'
-    );
+      });
+      systemCacheRoot = join(governedRuntimeRoot, 'system-cache');
+    }
+    await completeGlobalSetup(env);
+  } catch (error) {
+    if (governedRuntimeRoot) {
+      removeGovernedRuntimeRoot(governedRuntimeRoot, env.ADP_ARTIFACT_DIR);
+    }
+    throw error;
   }
+}
+
+async function completeGlobalSetup(env) {
   const systemIds = parseSystemIds(env);
   const foundryVersions = parseFoundryVersions(env);
 
@@ -107,18 +118,17 @@ export default async function globalSetup() {
 
   // 2. Validate Foundry zips exist
   const foundryZips = foundryVersions.map(foundryVersion => {
-    const foundryZip = findFoundryDistribution(foundryVersion, {
+    findFoundryDistribution(foundryVersion, {
       environment: env,
       vendorDirectory: FOUNDRY_VENDOR_DIR,
     });
-    console.log(`[setup] Foundry ${foundryVersion} zip: ${foundryZip}`);
-    return { foundryVersion, foundryZip };
+    console.log(`[setup] Foundry ${foundryVersion} distribution: configured`);
+    return { foundryVersion };
   });
 
   // 3. Validate license key exists
   if (!env.FOUNDRY_LICENSE_KEY) {
-    console.error('[setup] ERROR: FOUNDRY_LICENSE_KEY is not configured');
-    process.exit(1);
+    throw new Error('FOUNDRY_LICENSE_KEY is not configured');
   }
   console.log('[setup] License key: configured');
 
@@ -131,9 +141,8 @@ export default async function globalSetup() {
       encoding: 'utf-8',
     });
     console.log('[setup] Module packaged successfully');
-  } catch (e) {
-    console.error('[setup] ERROR packaging module:', e.message);
-    process.exit(1);
+  } catch (error) {
+    throw new Error(`module packaging failed: ${error.message}`, { cause: error });
   }
 
   // 5. Pre-cache systems per Foundry version (speeds up per-test setup significantly)

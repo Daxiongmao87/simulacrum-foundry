@@ -140,6 +140,7 @@ export function selectFoundryRuntimeRoot({
       create: true,
     });
     if (!executableProbe(governedRoot)) {
+      removeGovernedRuntimeRoot(governedRoot, artifactRoot);
       throw new Error('governed Foundry runtime root is not executable');
     }
     return governedRoot;

@@ -96,6 +96,7 @@ test('governed runtime storage fails closed when the artifact mount is not execu
         }),
       /governed Foundry runtime root is not executable/u
     );
+    assert.equal(existsSync(join(artifactRoot, '.foundry-runtime')), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
