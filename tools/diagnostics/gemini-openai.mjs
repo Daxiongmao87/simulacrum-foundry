@@ -198,8 +198,6 @@ async function testToolCalling() {
   } else {
     throw new Error('Unexpected response format');
   }
-
-  return data;
 }
 
 async function main() {

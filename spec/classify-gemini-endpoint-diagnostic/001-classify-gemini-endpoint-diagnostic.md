@@ -13,4 +13,5 @@
 - [x] Run the renamed diagnostic without a credential and confirm it reaches its precise missing-key failure rather than an unknown command or a pass.
 - [x] Run the complete repository-owned offline validation gate.
 - [x] Read package, CI, and contribution surfaces back and prove only the opt-in diagnostic names the credentialed endpoint probe.
+- [x] Run the exact changed-file ESLint check and confirm the moved diagnostic introduces no finding.
 - [ ] Re-run zero-touch repository analysis and confirm the derived authoritative contract requires no Gemini diagnostic credential.
