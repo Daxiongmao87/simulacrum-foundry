@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  externalBrokerConfiguration,
   findFoundryDistribution,
   loadFoundryEnvironment,
+  playwrightResultsPath,
+  resolveFoundryEnvironment,
   removeGovernedRuntimeRoot,
   selectFoundryRuntimeRoot,
 } from '../e2e/fixtures/agentic-foundry-inputs.mjs';
@@ -40,6 +43,53 @@ test('governed Foundry inputs are read directly from external regular files', as
     assert.equal(environment.FOUNDRY_LICENSE_KEY, 'licensed-value');
     assert.equal(environment.FOUNDRY_ADMIN_KEY, 'admin-value');
     assert.equal(distribution, externalZip);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('file-sourced lifecycle configuration resolves one broker and result contract', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'simulacrum-resolved-environment-'));
+  const artifactRoot = join(root, 'artifacts');
+  const externalEnv = join(root, 'foundry-test-env');
+  const endpoint = 'http://foundry-12345678-1234-4123-8123-123456789abc:30000';
+
+  try {
+    await mkdir(artifactRoot);
+    await writeFile(
+      externalEnv,
+      [
+        `ADP_ARTIFACT_DIR=${artifactRoot}`,
+        'AGENTIC_DELIVERY_RUN_ID=file-environment-test',
+        `ADP_FOUNDRY_ENDPOINT=${endpoint}`,
+        'ADP_FOUNDRY_SESSION_FILE=/run/agentic-delivery/inputs/foundry_session',
+        'ADP_FOUNDRY_VERSION=13.351',
+        'ADP_GAME_SYSTEM=dnd5e',
+      ].join('\n')
+    );
+
+    const environment = resolveFoundryEnvironment({
+      environment: {
+        AGENTIC_DELIVERY_INPUT_FOUNDRY_TEST_ENV: externalEnv,
+      },
+    });
+
+    assert.equal(environment.ADP_ARTIFACT_DIR, artifactRoot);
+    assert.equal(environment.AGENTIC_DELIVERY_RUN_ID, 'file-environment-test');
+    assert.deepEqual(externalBrokerConfiguration(environment), {
+      baseUrl: endpoint,
+      sessionPath: '/run/agentic-delivery/inputs/foundry_session',
+      foundryVersion: '13.351',
+      systemId: 'dnd5e',
+    });
+    assert.equal(
+      playwrightResultsPath(environment, root),
+      join(artifactRoot, 'reports', 'results.json')
+    );
+    assert.throws(
+      () => externalBrokerConfiguration({ ADP_FOUNDRY_ENDPOINT: endpoint }),
+      /requires ADP_FOUNDRY_SESSION_FILE/u
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

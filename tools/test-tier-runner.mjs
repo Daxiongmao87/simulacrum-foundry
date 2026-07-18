@@ -4,15 +4,22 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  playwrightResultsPath,
+  resolveFoundryEnvironment,
+} from '../tests/e2e/fixtures/agentic-foundry-inputs.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
+const RESOLVED_ENVIRONMENT = resolveFoundryEnvironment({
+  environment: process.env,
+  localPath: TEST_ENV_PATH,
+});
 const PLAYWRIGHT = join(ROOT, 'node_modules', '.bin', 'playwright');
 const RESULTS_DIR = process.env.ADP_TEST_OUTCOME_FILE
   ? join(dirname(dirname(process.env.ADP_TEST_OUTCOME_FILE)), 'tier-results')
   : join(ROOT, 'artifacts', 'test-results');
-const PLAYWRIGHT_RESULTS = process.env.ADP_ARTIFACT_DIR
-  ? join(resolve(process.env.ADP_ARTIFACT_DIR), 'reports', 'results.json')
-  : join(ROOT, 'tests/e2e/reports/results.json');
+const PLAYWRIGHT_RESULTS = playwrightResultsPath(RESOLVED_ENVIRONMENT, ROOT);
 
 const tier = process.argv[2];
 const definitions = {
@@ -87,16 +94,16 @@ function playwrightStep(grep) {
     args,
     env: {
       TEST_FOUNDRY_VERSIONS:
-        process.env.ADP_FOUNDRY_VERSION ||
-        process.env.TEST_FOUNDRY_VERSIONS ||
-        process.env.TEST_FOUNDRY_VERSION ||
+        RESOLVED_ENVIRONMENT.ADP_FOUNDRY_VERSION ||
+        RESOLVED_ENVIRONMENT.TEST_FOUNDRY_VERSIONS ||
+        RESOLVED_ENVIRONMENT.TEST_FOUNDRY_VERSION ||
         '13.351,14.364',
       TEST_SYSTEM_IDS:
-        process.env.ADP_GAME_SYSTEM ||
-        process.env.TEST_SYSTEM_IDS ||
-        process.env.TEST_SYSTEM_ID ||
+        RESOLVED_ENVIRONMENT.ADP_GAME_SYSTEM ||
+        RESOLVED_ENVIRONMENT.TEST_SYSTEM_IDS ||
+        RESOLVED_ENVIRONMENT.TEST_SYSTEM_ID ||
         'dnd5e',
-      TEST_TMPFS_PATH: process.env.TEST_TMPFS_PATH || '/dev/shm',
+      TEST_TMPFS_PATH: RESOLVED_ENVIRONMENT.TEST_TMPFS_PATH || '/dev/shm',
     },
   };
 }
@@ -185,11 +192,9 @@ async function writeAgenticDeliveryOutcome(commandExitCode, completedSteps, outp
     throw new Error('Agentic Delivery test-outcome filename is invalid');
   }
 
-  const counts = isPlaywrightTier() ? await playwrightCounts(commandExitCode) : textCounts(
-    commandExitCode,
-    completedSteps,
-    outputs
-  );
+  const counts = isPlaywrightTier()
+    ? await playwrightCounts(commandExitCode)
+    : textCounts(commandExitCode, completedSteps, outputs);
   const status = commandExitCode === 0 && counts.failed === 0 ? 'passed' : 'failed';
   const outcome = {
     schema_version: 1,

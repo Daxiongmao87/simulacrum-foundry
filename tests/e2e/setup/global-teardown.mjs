@@ -9,8 +9,9 @@ import { existsSync, readFileSync, rmSync, readdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import {
-  loadFoundryEnvironment,
+  externalBrokerConfiguration,
   removeGovernedRuntimeRoot,
+  resolveFoundryEnvironment,
 } from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,15 +25,12 @@ const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
  */
 export default async function globalTeardown() {
   console.log('============================================================');
-  const env = {
-    ...loadFoundryEnvironment({
-      environment: process.env,
-      localPath: TEST_ENV_PATH,
-    }),
-    ...process.env,
-  };
+  const env = resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: TEST_ENV_PATH,
+  });
 
-  if (env.ADP_FOUNDRY_ENDPOINT) {
+  if (externalBrokerConfiguration(env)) {
     console.log('[teardown] External broker mode: lifecycle cleanup remains broker-owned.');
     return;
   }

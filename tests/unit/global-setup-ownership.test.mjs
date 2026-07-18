@@ -65,6 +65,42 @@ test('global setup failure removes governed runtime state and redacts the input 
   );
 });
 
+test('global setup honors a file-sourced runtime owner before validation', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'simulacrum-file-global-setup-'));
+  const artifactRoot = join(root, 'artifacts');
+  const environmentFile = join(root, 'foundry-test-env');
+  const distributionFile = join(root, 'foundry-v13.zip');
+  const previousEnvironment = new Map(ENVIRONMENT_KEYS.map(key => [key, process.env[key]]));
+
+  t.after(async () => {
+    for (const [key, value] of previousEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await mkdir(artifactRoot);
+  await writeFile(distributionFile, 'not-read-before-license-validation');
+  await writeFile(
+    environmentFile,
+    [
+      `ADP_ARTIFACT_DIR=${artifactRoot}`,
+      'AGENTIC_DELIVERY_RUN_ID=file-global-setup-test',
+      `AGENTIC_DELIVERY_INPUT_FOUNDRY_V13_351_ZIP=${distributionFile}`,
+      'TEST_SYSTEM_ID=dnd5e',
+      'TEST_FOUNDRY_VERSION=13.351',
+    ].join('\n')
+  );
+
+  for (const key of ENVIRONMENT_KEYS) delete process.env[key];
+  process.env.AGENTIC_DELIVERY_INPUT_FOUNDRY_TEST_ENV = environmentFile;
+
+  await assert.rejects(globalSetup(), /FOUNDRY_LICENSE_KEY/u);
+
+  assert.equal(existsSync(join(artifactRoot, '.foundry-runtime')), false);
+});
+
 test('global teardown preserves an unowned runtime child', async t => {
   const root = await mkdtemp(join(tmpdir(), 'simulacrum-global-teardown-'));
   const artifactRoot = join(root, 'artifacts');

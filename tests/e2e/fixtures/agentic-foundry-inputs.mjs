@@ -73,6 +73,36 @@ export function loadFoundryEnvironment({ environment = process.env, localPath } 
   );
 }
 
+export function resolveFoundryEnvironment({ environment = process.env, localPath } = {}) {
+  return {
+    ...loadFoundryEnvironment({ environment, localPath }),
+    ...environment,
+  };
+}
+
+export function externalBrokerConfiguration(environment) {
+  const baseUrl = environment.ADP_FOUNDRY_ENDPOINT;
+  if (!baseUrl) return null;
+
+  for (const name of ['ADP_FOUNDRY_SESSION_FILE', 'ADP_FOUNDRY_VERSION', 'ADP_GAME_SYSTEM']) {
+    if (!environment[name]) {
+      throw new Error(`External Foundry provider requires ${name}`);
+    }
+  }
+  return {
+    baseUrl,
+    sessionPath: environment.ADP_FOUNDRY_SESSION_FILE,
+    foundryVersion: environment.ADP_FOUNDRY_VERSION,
+    systemId: environment.ADP_GAME_SYSTEM,
+  };
+}
+
+export function playwrightResultsPath(environment, repositoryRoot) {
+  return environment.ADP_ARTIFACT_DIR
+    ? join(resolve(environment.ADP_ARTIFACT_DIR), 'reports', 'results.json')
+    : join(resolve(repositoryRoot), 'tests/e2e/reports/results.json');
+}
+
 export function findFoundryDistribution(
   version,
   { environment = process.env, vendorDirectory } = {}

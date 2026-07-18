@@ -2,20 +2,20 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
-import { loadFoundryEnvironment } from './fixtures/agentic-foundry-inputs.mjs';
+import {
+  playwrightResultsPath,
+  resolveFoundryEnvironment,
+} from './fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
 const TEST_ENV_PATH = join(__dirname, '.env.test');
 
 function loadEnv() {
-  return {
-    ...loadFoundryEnvironment({
-      environment: process.env,
-      localPath: TEST_ENV_PATH,
-    }),
-    ...process.env,
-  };
+  return resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: TEST_ENV_PATH,
+  });
 }
 
 /**
@@ -107,9 +107,7 @@ const projects = buildProjects(systemIds, foundryVersions);
 const artifactRoot = env.ADP_ARTIFACT_DIR ? resolve(env.ADP_ARTIFACT_DIR) : null;
 const reportRoot = artifactRoot || join(ROOT, 'tests/e2e/reports');
 const outputRoot = artifactRoot ? join(artifactRoot, 'raw') : join(ROOT, 'tests/e2e/test-results');
-const jsonReportPath = artifactRoot
-  ? join(artifactRoot, 'reports', 'results.json')
-  : join(reportRoot, 'results.json');
+const jsonReportPath = playwrightResultsPath(env, ROOT);
 
 console.log(`[config] Testing with systems: ${systemIds.join(', ')}`);
 console.log(`[config] Testing with Foundry versions: ${foundryVersions.join(', ')}`);

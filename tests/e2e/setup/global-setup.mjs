@@ -19,10 +19,11 @@ import {
   validateInstalledSystemPackage,
 } from '../fixtures/package-install.mjs';
 import {
+  externalBrokerConfiguration,
   findFoundryDistribution,
-  loadFoundryEnvironment,
-  selectFoundryRuntimeRoot,
   removeGovernedRuntimeRoot,
+  resolveFoundryEnvironment,
+  selectFoundryRuntimeRoot,
 } from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,13 +33,10 @@ const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
 let systemCacheRoot = join(ROOT, '.foundry-system-cache');
 
 function loadEnv() {
-  return {
-    ...loadFoundryEnvironment({
-      environment: process.env,
-      localPath: TEST_ENV_PATH,
-    }),
-    ...process.env,
-  };
+  return resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: TEST_ENV_PATH,
+  });
 }
 
 /**
@@ -75,21 +73,12 @@ export default async function globalSetup() {
   console.log('[setup] Simulacrum E2E Test Setup (Validation Only)');
   console.log('============================================================');
 
-  if (process.env.ADP_FOUNDRY_ENDPOINT) {
-    for (const name of [
-      'ADP_FOUNDRY_ENDPOINT',
-      'ADP_FOUNDRY_SESSION_FILE',
-      'ADP_FOUNDRY_VERSION',
-      'ADP_GAME_SYSTEM',
-    ]) {
-      if (!process.env[name]) throw new Error(`External Foundry provider requires ${name}`);
-    }
+  // 1. Load and validate environment
+  const env = loadEnv();
+  if (externalBrokerConfiguration(env)) {
     console.log('[setup] External broker mode: licensed stores and lifecycle are provider-owned.');
     return;
   }
-
-  // 1. Load and validate environment
-  const env = loadEnv();
   let governedRuntimeRoot = null;
   try {
     if (env.ADP_ARTIFACT_DIR) {
@@ -97,13 +86,18 @@ export default async function globalSetup() {
         artifactRoot: env.ADP_ARTIFACT_DIR,
         requestedPath: env.TEST_TMPFS_PATH,
         fallbackRoot: ROOT,
+        ownerId: env.AGENTIC_DELIVERY_RUN_ID,
       });
       systemCacheRoot = join(governedRuntimeRoot, 'system-cache');
     }
     await completeGlobalSetup(env);
   } catch (error) {
     if (governedRuntimeRoot) {
-      removeGovernedRuntimeRoot(governedRuntimeRoot, env.ADP_ARTIFACT_DIR);
+      removeGovernedRuntimeRoot(
+        governedRuntimeRoot,
+        env.ADP_ARTIFACT_DIR,
+        env.AGENTIC_DELIVERY_RUN_ID
+      );
     }
     throw error;
   }

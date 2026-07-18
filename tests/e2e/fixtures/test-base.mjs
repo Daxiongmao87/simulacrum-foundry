@@ -17,18 +17,18 @@ import * as foundrySetup from './foundry-setup.mjs';
 import { scanAccessibility } from './accessibility.mjs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { loadFoundryEnvironment } from './agentic-foundry-inputs.mjs';
+import {
+  externalBrokerConfiguration,
+  resolveFoundryEnvironment,
+} from './agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadEnv() {
-  return {
-    ...loadFoundryEnvironment({
-      environment: process.env,
-      localPath: join(__dirname, '../.env.test'),
-    }),
-    ...process.env,
-  };
+  return resolveFoundryEnvironment({
+    environment: process.env,
+    localPath: join(__dirname, '../.env.test'),
+  });
 }
 
 /**
@@ -145,10 +145,16 @@ export const test = base.extend({
       console.log(`[fixture] Starting isolated Foundry for: ${testId}`);
 
       let serverInfo = null;
+      const broker = externalBrokerConfiguration(testEnv);
 
       try {
-        serverInfo = process.env.ADP_FOUNDRY_ENDPOINT
-          ? await foundrySetup.setupBrokerFoundry({ testId, systemId, foundryVersion })
+        serverInfo = broker
+          ? await foundrySetup.setupBrokerFoundry({
+              testId,
+              systemId,
+              foundryVersion,
+              broker,
+            })
           : await foundrySetup.setupIsolatedFoundry({
               testId,
               systemId,
