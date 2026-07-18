@@ -4,7 +4,7 @@
 
 - [x] Governed Foundry setup selects an executable, operation-owned external runtime root and rejects a writable but non-executable requested root.
 - [x] The exact correction head reaches its intended Foundry 13.351/dnd5e world for the common accessibility and sidebar-smoke cases.
-- [x] The packaged module requests no missing demo asset or optional build metadata, and the sidebar smoke records no browser errors.
+- [x] The packaged module requests no missing demo asset or optional build metadata; the sidebar smoke reports no unexpected browser error and explicitly classifies an unavailable optional model endpoint.
 - [x] A missing world or unavailable broker fails with a precise readiness error, and every success or failure cleans its owned Foundry and Chromium resources.
 - [x] Governed tests read deployment-mounted environment, license, and distribution files directly; no credential or licensed byte is staged in a Git worktree, committed content, or retained browser artifact.
 
