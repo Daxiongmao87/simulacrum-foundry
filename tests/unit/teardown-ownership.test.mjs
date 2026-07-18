@@ -8,6 +8,7 @@ import test from 'node:test';
 import globalTeardown, { isOwnedTestDirectory } from '../e2e/setup/global-teardown.mjs';
 import { loadFoundryEnvironment } from '../e2e/fixtures/agentic-foundry-inputs.mjs';
 import { getTestBasePath, isFoundryPortFree } from '../e2e/fixtures/foundry-setup.mjs';
+import { makeExecutableTempRoot } from '../utils/executable-temp-root.mjs';
 
 test('teardown ownership requires the exact valid marker', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'simulacrum-teardown-'));
@@ -61,7 +62,7 @@ test('Foundry port polling observes a live listener and its closure', async t =>
 });
 
 test('per-test runtime selection honors a file-sourced artifact root', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'simulacrum-file-runtime-root-'));
+  const root = await makeExecutableTempRoot('simulacrum-file-runtime-root-');
   const artifactRoot = join(root, 'artifacts');
   const environmentFile = join(root, 'foundry-test-env');
   t.after(() => rm(root, { recursive: true, force: true }));

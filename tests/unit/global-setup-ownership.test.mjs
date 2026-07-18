@@ -8,6 +8,7 @@ import test from 'node:test';
 import globalSetup from '../e2e/setup/global-setup.mjs';
 import globalTeardown from '../e2e/setup/global-teardown.mjs';
 import { selectFoundryRuntimeRoot } from '../e2e/fixtures/agentic-foundry-inputs.mjs';
+import { makeExecutableTempRoot } from '../utils/executable-temp-root.mjs';
 
 const ENVIRONMENT_KEYS = [
   'ADP_ARTIFACT_DIR',
@@ -23,7 +24,7 @@ const ENVIRONMENT_KEYS = [
 ];
 
 test('global setup failure removes governed runtime state and redacts the input path', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'simulacrum-global-setup-'));
+  const root = await makeExecutableTempRoot('simulacrum-global-setup-');
   const artifactRoot = join(root, 'artifacts');
   const environmentFile = join(root, 'foundry-test-env');
   const distributionFile = join(root, 'foundry-v13.zip');
@@ -66,7 +67,7 @@ test('global setup failure removes governed runtime state and redacts the input 
 });
 
 test('global setup honors a file-sourced runtime owner before validation', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'simulacrum-file-global-setup-'));
+  const root = await makeExecutableTempRoot('simulacrum-file-global-setup-');
   const artifactRoot = join(root, 'artifacts');
   const environmentFile = join(root, 'foundry-test-env');
   const distributionFile = join(root, 'foundry-v13.zip');
