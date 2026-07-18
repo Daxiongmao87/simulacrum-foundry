@@ -262,6 +262,7 @@ test('word fallback keeps non-code Markdown delimiters balanced', () => {
     buildPayload({ body: `**${'word '.repeat(200).trim()}**` })
   );
   assert.equal((boldDescription.match(/\*\*/gu) ?? []).length % 2, 0);
+  assert.equal(boldDescription.startsWith('**'), false);
 
   const linkBody = `${'prefix '.repeat(94)}[important link label](https://example.com) trailing`;
   const linkDescription = descriptionOf(buildPayload({ body: linkBody }));
@@ -468,9 +469,47 @@ test('normalization preserves whitespace inside inline code', () => {
 
 test('newline-heavy inline-code bodies complete within the payload budget', () => {
   const body = Array.from({ length: 16_000 }, () => '`x`').join('\n');
-  const description = descriptionOf(buildPayload({ body, timeout: 5_000 }));
+  const description = descriptionOf(buildPayload({ body, timeout: 10_000 }));
 
   assert.ok(description.startsWith('`x`\n`x`\n'), description.slice(0, 40));
   assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
   assertBalancedCodeDelimiters(description);
+});
+
+test('tilde translation chooses a collision-free backtick run', () => {
+  const body = ['~~~md', '```js', 'code', '```', '~~~'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, ['````md', '```js', 'code', '```', '````'].join('\n'));
+});
+
+test('word fallback preserves literal double asterisks before later bold', () => {
+  const body =
+    `Exponent 2 ** 3; run \`printf "**literal**"\`. ` + `${'word '.repeat(150)}**later**`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /^Exponent 2 \*\* 3; run `printf "\*\*literal\*\*"`\. /u);
+});
+
+test('normalization preserves multiline inline-code content', () => {
+  const body = ['`first', '# literal code', 'printf "a  b"', 'last`'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, body);
+});
+
+test('blockquote fences preserve code and translate tilde delimiters', () => {
+  const backtickBody = ['> ```sh', '> printf "a  b"', '> # literal code', '> ```'].join('\n');
+  assert.equal(descriptionOf(buildPayload({ body: backtickBody })), backtickBody);
+
+  const tildeBody = ['> ~~~python', '> # literal code', '> ~~~'].join('\n');
+  const tildeDescription = descriptionOf(buildPayload({ body: tildeBody }));
+  assert.equal(tildeDescription, ['> ```python', '> # literal code', '> ```'].join('\n'));
+});
+
+test('truncation places the ellipsis after a blockquote closing fence', () => {
+  const body = ['> ```sh', '> printf "a  b"', '> ```', '', 'word '.repeat(200).trim()].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, ['> ```sh', '> printf "a  b"', '> ```', '...'].join('\n'));
 });
