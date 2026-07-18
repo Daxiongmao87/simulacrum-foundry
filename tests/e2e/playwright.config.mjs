@@ -2,45 +2,20 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { loadFoundryEnvironment } from './fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
 const TEST_ENV_PATH = join(__dirname, '.env.test');
 
-/**
- * Load environment variables from .env.test
- */
 function loadEnv() {
-  const fileEnv = {};
-
-  if (!existsSync(TEST_ENV_PATH)) {
-    return { ...process.env };
-  }
-
-  const envContent = readFileSync(TEST_ENV_PATH, 'utf-8');
-
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    fileEnv[key] = value;
-  }
-
-  return { ...fileEnv, ...process.env };
+  return {
+    ...loadFoundryEnvironment({
+      environment: process.env,
+      localPath: TEST_ENV_PATH,
+    }),
+    ...process.env,
+  };
 }
 
 /**

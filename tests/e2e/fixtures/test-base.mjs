@@ -15,46 +15,20 @@ import { randomUUID } from 'node:crypto';
 import * as helpers from './foundry-helpers.mjs';
 import * as foundrySetup from './foundry-setup.mjs';
 import { scanAccessibility } from './accessibility.mjs';
-import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { loadFoundryEnvironment } from './agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/**
- * Load environment from .env.test
- */
 function loadEnv() {
-  const envPath = join(__dirname, '../.env.test');
-  if (!existsSync(envPath)) {
-    if (process.env.ADP_FOUNDRY_ENDPOINT) return { ...process.env };
-    throw new Error('Missing tests/e2e/.env.test - copy from .env.test.example');
-  }
-
-  const content = readFileSync(envPath, 'utf-8');
-  const env = {};
-
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    env[key] = value;
-  }
-
-  return env;
+  return {
+    ...loadFoundryEnvironment({
+      environment: process.env,
+      localPath: join(__dirname, '../.env.test'),
+    }),
+    ...process.env,
+  };
 }
 
 /**

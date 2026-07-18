@@ -6,8 +6,9 @@
  */
 
 import { existsSync, readFileSync, rmSync, readdirSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { removeGovernedRuntimeRoot } from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
@@ -26,13 +27,16 @@ export default async function globalTeardown() {
   console.log('[teardown] Simulacrum E2E Test Teardown');
   console.log('============================================================');
 
+  const artifactRoot = process.env.ADP_ARTIFACT_DIR ? resolve(process.env.ADP_ARTIFACT_DIR) : null;
+  const cleanupRoot = artifactRoot ? join(artifactRoot, '.foundry-runtime') : ROOT;
+
   // Clean up any orphaned test directories
   console.log('[teardown] Cleaning up orphaned test directories...');
   try {
-    const rootContents = readdirSync(ROOT);
+    const rootContents = existsSync(cleanupRoot) ? readdirSync(cleanupRoot) : [];
     for (const item of rootContents) {
       if (item.startsWith('.foundry-test-') || item.startsWith('.foundry-data-')) {
-        const itemPath = join(ROOT, item);
+        const itemPath = join(cleanupRoot, item);
         const marker = readOwnershipMarker(itemPath);
         if (!marker) {
           console.log(`[teardown] Preserving unowned directory: ${item}`);
@@ -62,7 +66,7 @@ export default async function globalTeardown() {
   // Also clean up legacy single test directories if they exist
   const legacyDirs = ['.foundry-test', '.foundry-test-data'];
   for (const dir of legacyDirs) {
-    const dirPath = join(ROOT, dir);
+    const dirPath = join(cleanupRoot, dir);
     if (existsSync(dirPath) && isOwnedTestDirectory(dirPath)) {
       console.log(`[teardown] Removing legacy directory: ${dir}`);
       try {
@@ -71,6 +75,10 @@ export default async function globalTeardown() {
         console.warn(`[teardown] Failed to remove ${dir}: ${e.message}`);
       }
     }
+  }
+
+  if (artifactRoot) {
+    removeGovernedRuntimeRoot(cleanupRoot, artifactRoot);
   }
 
   console.log('============================================================');

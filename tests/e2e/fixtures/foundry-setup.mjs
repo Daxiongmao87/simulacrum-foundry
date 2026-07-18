@@ -12,17 +12,8 @@
  * Each test is completely independent.
  */
 
-import { execSync, spawn } from 'child_process';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-  cpSync,
-} from 'fs';
+import { execFileSync, spawn } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, cpSync } from 'fs';
 import { dirname, isAbsolute, join } from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
@@ -33,6 +24,7 @@ import {
   validateInstalledSystemPackage,
 } from './package-install.mjs';
 import { completeUserManagementIfPresent } from './foundry-helpers.mjs';
+import { findFoundryDistribution, selectFoundryRuntimeRoot } from './agentic-foundry-inputs.mjs';
 import {
   pollUntil,
   pollForElement,
@@ -44,7 +36,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const FOUNDRY_VENDOR_DIR = join(ROOT, 'vendor/foundry');
-const SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
+const LOCAL_SYSTEM_CACHE_DIR = join(ROOT, '.foundry-system-cache');
 const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
 
 /**
@@ -96,7 +88,9 @@ async function dismissUsageDataDialog(page, logPrefix = 'setup') {
 
 async function ensureUsageDialogGone(page, dialogSelector) {
   await pollUntilGone(page, dialogSelector, { timeout: 5000 }).catch(async () => {
-    await page.locator(dialogSelector).evaluateAll(dialogs => dialogs.forEach(dialog => dialog.remove()));
+    await page
+      .locator(dialogSelector)
+      .evaluateAll(dialogs => dialogs.forEach(dialog => dialog.remove()));
   });
   await pollUntilGone(page, dialogSelector, { timeout: 2000 });
 }
@@ -135,60 +129,31 @@ async function dismissTourOverlay(page) {
   await pollUntilGone(page, '.tour-overlay, .tour', { timeout: 2000 }).catch(() => {});
 }
 
-/**
- * Find the Foundry zip file
- */
-function findFoundryZip(foundryVersion) {
-  if (!existsSync(FOUNDRY_VENDOR_DIR)) {
-    throw new Error(`Missing ${FOUNDRY_VENDOR_DIR}`);
-  }
-
-  const files = execSync(`ls -1 "${FOUNDRY_VENDOR_DIR}"`, { encoding: 'utf-8' })
-    .split('\n')
-    .filter(f => f.toLowerCase().endsWith('.zip'));
-
-  const expectedZip = `FoundryVTT-Node-${foundryVersion}.zip`;
-  const matchingZip = files.find(f => f === expectedZip);
-  if (matchingZip) return join(FOUNDRY_VENDOR_DIR, matchingZip);
-
-  if (files.length === 0) {
-    throw new Error(`No .zip file found in ${FOUNDRY_VENDOR_DIR}`);
-  }
-
-  throw new Error(
-    `Foundry ${foundryVersion} zip not found. Expected ${expectedZip}; available: ${files.join(', ')}`
-  );
+function findFoundryZip(foundryVersion, environment) {
+  return findFoundryDistribution(foundryVersion, {
+    environment,
+    vendorDirectory: FOUNDRY_VENDOR_DIR,
+  });
 }
 
 function getSystemCacheDir(foundryVersion) {
-  return join(SYSTEM_CACHE_DIR, foundryVersion);
+  const cacheRoot = process.env.ADP_ARTIFACT_DIR
+    ? join(getTestBasePath(), 'system-cache')
+    : LOCAL_SYSTEM_CACHE_DIR;
+  return join(cacheRoot, foundryVersion);
 }
 
 /**
- * Get the base path for test directories.
- * Uses tmpfs if TEST_TMPFS_PATH is set for faster I/O.
+ * Get the executable base path for isolated Foundry runtime directories.
+ * Governed runs use an operation-owned directory outside the Git worktree.
  * @returns {string} Base path for test directories
  */
 function getTestBasePath() {
-  const tmpfsPath = process.env.TEST_TMPFS_PATH;
-  if (tmpfsPath && existsSync(tmpfsPath)) {
-    // mkdtemp creates an exact current-invocation path and fails on collision.
-    let probeDirectory = null;
-    try {
-      probeDirectory = mkdtempSync(join(tmpfsPath, '.simulacrum-write-check-'));
-      rmSync(probeDirectory, { recursive: true });
-      probeDirectory = null;
-      console.log(`[setup] Using tmpfs path: ${tmpfsPath}`);
-      return tmpfsPath;
-    } catch (e) {
-      if (probeDirectory && existsSync(probeDirectory)) {
-        // This exact path was returned by the current mkdtempSync invocation.
-        rmSync(probeDirectory, { recursive: true });
-      }
-      console.warn(`[setup] tmpfs path ${tmpfsPath} not writable, falling back to project dir`);
-    }
-  }
-  return ROOT;
+  return selectFoundryRuntimeRoot({
+    artifactRoot: process.env.ADP_ARTIFACT_DIR || null,
+    requestedPath: process.env.TEST_TMPFS_PATH || null,
+    fallbackRoot: ROOT,
+  });
 }
 
 /**
@@ -229,7 +194,7 @@ export async function setupIsolatedFoundry(options) {
 
   console.log(`[setup:${testId}] Creating isolated Foundry instance`);
   if (basePath !== ROOT) {
-    console.log(`[setup:${testId}] Using tmpfs: ${basePath}`);
+    console.log(`[setup:${testId}] Using external runtime root: ${basePath}`);
   }
 
   // 1. A nonce-based operation identity must never collide with pre-existing state.
@@ -254,13 +219,13 @@ export async function setupIsolatedFoundry(options) {
   writeOwnershipMarker(dataDir, ownership);
 
   // 3. Extract Foundry
-  const foundryZip = findFoundryZip(foundryVersion);
+  const foundryZip = findFoundryZip(foundryVersion, env);
   console.log(`[setup:${testId}] Extracting Foundry ${foundryVersion}...`);
-  execSync(`unzip -q "${foundryZip}" -d "${testDir}"`, { stdio: 'pipe' });
+  execFileSync('unzip', ['-q', foundryZip, '-d', testDir], { stdio: 'pipe' });
 
   // 4. Package and deploy module
   console.log(`[setup:${testId}] Packaging module...`);
-  execSync('node tools/package-module.js', { cwd: ROOT, stdio: 'pipe' });
+  execFileSync('node', ['tools/package-module.js'], { cwd: ROOT, stdio: 'pipe' });
 
   // Deploy by copying the module directory (faster than unzipping)
   const moduleTargetDir = join(modulesDir, 'simulacrum');
