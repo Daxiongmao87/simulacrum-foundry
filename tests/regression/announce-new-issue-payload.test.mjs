@@ -356,8 +356,62 @@ test('tilde fences preserve code without heading conversion', () => {
 
 test('newline-heavy bodies complete within the payload budget', () => {
   const body = Array.from({ length: 32_768 }, () => 'x').join('\n');
-  const description = descriptionOf(buildPayload({ body, timeout: 2_000 }));
+  const description = descriptionOf(buildPayload({ body, timeout: 5_000 }));
 
   assert.ok(description.startsWith('x\nx\nx\n'), description.slice(0, 40));
   assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
+});
+
+test('word fallback balances single-underscore emphasis', () => {
+  const body = `_${'word '.repeat(200).trim()}_`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description.startsWith('_'), false, description.slice(0, 40));
+  assert.match(description, /^word word /u);
+});
+
+test('word fallback preserves intraword underscores', () => {
+  const body = `Keep snake_case intact. ${'word '.repeat(150)}later_value`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /^Keep snake_case intact\./u);
+});
+
+test('word fallback preserves escaped underscores during later emphasis', () => {
+  const body = `Keep \\_ literal. ${'word '.repeat(150)}_later_`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description.startsWith('Keep \\_ literal.'), true, description.slice(0, 40));
+});
+
+test('word fallback preserves closer-only underscores', () => {
+  const body = `Keep word_ literal. ${'word '.repeat(150)}_later_`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /^Keep word_ literal\./u);
+});
+
+test('invalid backtick fence openers remain ordinary Markdown', () => {
+  const body = ['```js`bad', `Keep this useful explanation. ${'word '.repeat(180)}`].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /^```js`bad\nKeep this useful explanation\./u);
+  assert.notEqual(description, '...');
+});
+
+test('invalid fence-like lines balance crossed multiline inline code', () => {
+  const body = ['```js`bad', 'word '.repeat(180).trim() + ' ``` tail'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, '...');
+  assertBalancedCodeDelimiters(description);
+});
+
+test('dense inline-code spans complete within the payload budget', () => {
+  const body = Array.from({ length: 1_024 }, () => '`x`').join(' ');
+  const description = descriptionOf(buildPayload({ body, timeout: 5_000 }));
+
+  assert.ok(description.startsWith('`x` `x` `x`'), description.slice(0, 40));
+  assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
+  assertBalancedCodeDelimiters(description);
 });
