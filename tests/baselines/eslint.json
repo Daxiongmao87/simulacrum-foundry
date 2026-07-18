@@ -332,12 +332,6 @@
       "count": 1
     },
     {
-      "path": "tests/integration/test-gemini-openai.js",
-      "rule_id": "max-lines-per-function",
-      "message": "Async function 'testToolCalling' has too many lines (53). Maximum allowed is 50.",
-      "count": 1
-    },
-    {
       "path": "tools/build-packs.js",
       "rule_id": "no-unused-vars",
       "message": "'cpSync' is defined but never used.",

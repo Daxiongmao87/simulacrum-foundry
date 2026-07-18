@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Integration test for Google Gemini OpenAI-compatible endpoint
+ * Manual diagnostic for the Google Gemini OpenAI-compatible endpoint.
  *
  * Usage:
- *   1. Copy .env.example to .env in this directory
- *   2. Add your GEMINI_API_KEY to .env
- *   3. Run: node tests/integration/test-gemini-openai.js
+ *   1. Copy gemini.env.example to .env.gemini in this directory.
+ *   2. Add your GEMINI_API_KEY to .env.gemini.
+ *   3. Run: npm run diagnostic:gemini
  *
  * Or pass the API key directly:
- *   GEMINI_API_KEY=your-key node tests/integration/test-gemini-openai.js
+ *   GEMINI_API_KEY=your-key npm run diagnostic:gemini
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -17,9 +17,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env file if it exists
+// Load the diagnostic-only environment file if it exists.
 function loadEnv() {
-  const envPath = join(__dirname, '.env');
+  const envPath = join(__dirname, '.env.gemini');
   if (!existsSync(envPath)) {
     return {};
   }
@@ -38,8 +38,10 @@ function loadEnv() {
     let value = trimmed.slice(eqIndex + 1).trim();
 
     // Remove quotes
-    if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       value = value.slice(1, -1);
     }
 
@@ -61,9 +63,12 @@ const YELLOW = '\x1b[33m';
 const RESET = '\x1b[0m';
 
 function log(status, message) {
-  const icon = status === 'pass' ? `${GREEN}✓${RESET}` :
-               status === 'fail' ? `${RED}✗${RESET}` :
-               `${YELLOW}→${RESET}`;
+  const icon =
+    status === 'pass'
+      ? `${GREEN}✓${RESET}`
+      : status === 'fail'
+        ? `${RED}✗${RESET}`
+        : `${YELLOW}→${RESET}`;
   console.log(`${icon} ${message}`);
 }
 
@@ -73,7 +78,7 @@ async function testListModels() {
   const response = await fetch(`${BASE_URL}/models`, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${API_KEY}`,
       'Content-Type': 'application/json',
     },
   });
@@ -93,7 +98,13 @@ async function testListModels() {
   const modelExists = data.data.some(m => m.id === MODEL || m.id === `models/${MODEL}`);
   if (!modelExists) {
     log('fail', `Model "${MODEL}" not found in available models`);
-    log('info', `Available models: ${data.data.slice(0, 5).map(m => m.id).join(', ')}...`);
+    log(
+      'info',
+      `Available models: ${data.data
+        .slice(0, 5)
+        .map(m => m.id)
+        .join(', ')}...`
+    );
     throw new Error(`Model "${MODEL}" not available`);
   }
 
@@ -107,14 +118,12 @@ async function testChatCompletion() {
   const response = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model: MODEL,
-      messages: [
-        { role: 'user', content: 'Say "Hello, Simulacrum!" and nothing else.' }
-      ],
+      messages: [{ role: 'user', content: 'Say "Hello, Simulacrum!" and nothing else.' }],
       max_tokens: 50,
     }),
   });
@@ -161,14 +170,12 @@ async function testToolCalling() {
   const response = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model: MODEL,
-      messages: [
-        { role: 'user', content: 'What is the weather in Tokyo?' }
-      ],
+      messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
       tools,
       tool_choice: 'auto',
       max_tokens: 200,
@@ -191,12 +198,10 @@ async function testToolCalling() {
   } else {
     throw new Error('Unexpected response format');
   }
-
-  return data;
 }
 
 async function main() {
-  console.log('\n=== Gemini OpenAI-Compatible Endpoint Tests ===\n');
+  console.log('\n=== Gemini OpenAI-Compatible Endpoint Diagnostic ===\n');
   console.log(`Base URL: ${BASE_URL}`);
   console.log(`Model: ${MODEL}`);
   console.log('');
@@ -204,8 +209,8 @@ async function main() {
   if (!API_KEY) {
     log('fail', 'GEMINI_API_KEY not set');
     console.log('\nSet it via:');
-    console.log('  1. Create tests/integration/.env with GEMINI_API_KEY=your-key');
-    console.log('  2. Or run: GEMINI_API_KEY=your-key node tests/integration/test-gemini-openai.js');
+    console.log('  1. Create tools/diagnostics/.env.gemini with GEMINI_API_KEY=your-key');
+    console.log('  2. Or run: GEMINI_API_KEY=your-key npm run diagnostic:gemini');
     process.exit(1);
   }
 
