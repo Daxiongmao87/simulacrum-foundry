@@ -8,6 +8,7 @@
 - [x] A missing world or unavailable broker fails with a precise readiness error, and every success or failure cleans its owned Foundry and Chromium resources.
 - [x] Teardown proves the owned Foundry listener has closed before reporting the port reusable.
 - [x] Global-setup failures remove the governed runtime root and retained logs expose only logical distribution identity, never the deployment mount path.
+- [x] Governed runtime creation and recursive cleanup require an exact current-run ownership marker; pre-existing or unmarked children are preserved fail-closed.
 - [x] Governed tests read deployment-mounted environment, license, and distribution files directly; no credential or licensed byte is staged in a Git worktree, committed content, or retained browser artifact.
 
 ## Verification
@@ -18,5 +19,6 @@
 - [x] Pass the focused runtime-root regression and the complete repository-owned unit tier.
 - [x] Run the 13.351/dnd5e accessibility and sidebar-smoke cases first, including precise unavailable-world/broker and cleanup checks.
 - [x] Add failing regressions for listener polling, global-setup failure cleanup, and distribution-path redaction before correcting the review findings.
+- [x] Add failing regressions proving a pre-existing unowned runtime child survives selection plus direct and global cleanup attempts.
 - [x] Pass the review regression set and complete repository-owned unit tier after correcting every review finding.
 - [x] Reproduce the missing demo-asset and optional-build-metadata requests, then pass the existing zero-unexpected-browser-error sidebar smoke.

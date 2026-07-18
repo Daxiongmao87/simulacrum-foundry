@@ -13,6 +13,7 @@ import { removeGovernedRuntimeRoot } from '../fixtures/agentic-foundry-inputs.mj
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../../..');
 const OWNERSHIP_MARKER = '.simulacrum-e2e-owned.json';
+const RUNTIME_OWNER_MARKER = '.simulacrum-runtime-owner.json';
 
 /**
  * Global Teardown - Clean up orphaned test directories
@@ -29,6 +30,8 @@ export default async function globalTeardown() {
 
   const artifactRoot = process.env.ADP_ARTIFACT_DIR ? resolve(process.env.ADP_ARTIFACT_DIR) : null;
   const cleanupRoot = artifactRoot ? join(artifactRoot, '.foundry-runtime') : ROOT;
+  const legacyDirs = ['.foundry-test', '.foundry-test-data'];
+  let cleanupSafe = true;
 
   // Clean up any orphaned test directories
   console.log('[teardown] Cleaning up orphaned test directories...');
@@ -37,13 +40,16 @@ export default async function globalTeardown() {
     for (const item of rootContents) {
       if (item.startsWith('.foundry-test-') || item.startsWith('.foundry-data-')) {
         const itemPath = join(cleanupRoot, item);
+        if (!existsSync(itemPath)) continue;
         const marker = readOwnershipMarker(itemPath);
         if (!marker) {
+          cleanupSafe = false;
           console.log(`[teardown] Preserving unowned directory: ${item}`);
           continue;
         }
         const targets = verifiedOperationTargets(marker);
         if (!targets) {
+          cleanupSafe = false;
           console.log(`[teardown] Preserving incompletely-owned operation: ${item}`);
           continue;
         }
@@ -54,36 +60,57 @@ export default async function globalTeardown() {
           try {
             rmSync(target, { recursive: true, force: true });
           } catch (e) {
+            cleanupSafe = false;
             console.warn(`[teardown] Failed to remove ${target}: ${e.message}`);
           }
         }
+      } else if (
+        artifactRoot &&
+        item !== RUNTIME_OWNER_MARKER &&
+        item !== 'system-cache' &&
+        !legacyDirs.includes(item)
+      ) {
+        cleanupSafe = false;
+        console.log(`[teardown] Preserving unexpected runtime entry: ${item}`);
       }
     }
   } catch (e) {
+    cleanupSafe = false;
     console.warn(`[teardown] Error scanning for orphaned directories: ${e.message}`);
   }
 
   // Also clean up legacy single test directories if they exist
-  const legacyDirs = ['.foundry-test', '.foundry-test-data'];
   for (const dir of legacyDirs) {
     const dirPath = join(cleanupRoot, dir);
-    if (existsSync(dirPath) && isOwnedTestDirectory(dirPath)) {
-      console.log(`[teardown] Removing legacy directory: ${dir}`);
-      try {
-        rmSync(dirPath, { recursive: true, force: true });
-      } catch (e) {
-        console.warn(`[teardown] Failed to remove ${dir}: ${e.message}`);
-      }
+    if (!existsSync(dirPath)) continue;
+    if (!isOwnedTestDirectory(dirPath)) {
+      cleanupSafe = false;
+      console.log(`[teardown] Preserving unowned legacy directory: ${dir}`);
+      continue;
+    }
+    console.log(`[teardown] Removing legacy directory: ${dir}`);
+    try {
+      rmSync(dirPath, { recursive: true, force: true });
+    } catch (e) {
+      cleanupSafe = false;
+      console.warn(`[teardown] Failed to remove ${dir}: ${e.message}`);
     }
   }
 
   if (artifactRoot) {
-    removeGovernedRuntimeRoot(cleanupRoot, artifactRoot);
+    if (cleanupSafe) {
+      removeGovernedRuntimeRoot(cleanupRoot, artifactRoot);
+    } else {
+      console.log('[teardown] Preserving governed runtime root with unowned content.');
+    }
   }
 
   console.log('============================================================');
   console.log('[teardown] Cleanup complete');
   console.log('============================================================');
+  if (artifactRoot && !cleanupSafe) {
+    throw new Error('refusing to remove unowned runtime content');
+  }
 }
 
 export function isOwnedTestDirectory(directory) {

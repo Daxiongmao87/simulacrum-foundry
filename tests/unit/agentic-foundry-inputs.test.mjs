@@ -93,6 +93,7 @@ test('governed runtime storage fails closed when the artifact mount is not execu
           requestedPath: null,
           fallbackRoot,
           executableProbe: () => false,
+          ownerId: 'non-executable-runtime-test',
         }),
       /governed Foundry runtime root is not executable/u
     );
@@ -142,6 +143,7 @@ test('governed runtime cleanup removes only its exact external runtime root', as
       requestedPath: null,
       fallbackRoot,
       executableProbe: () => true,
+      ownerId: 'governed-runtime-cleanup-test',
     });
     await writeFile(join(runtimeRoot, 'licensed-runtime-byte'), 'temporary');
 
@@ -149,10 +151,42 @@ test('governed runtime cleanup removes only its exact external runtime root', as
       () => removeGovernedRuntimeRoot(fallbackRoot, artifactRoot),
       /refusing to remove an unowned Foundry runtime root/u
     );
-    removeGovernedRuntimeRoot(runtimeRoot, artifactRoot);
+    removeGovernedRuntimeRoot(runtimeRoot, artifactRoot, 'governed-runtime-cleanup-test');
 
     assert.equal(existsSync(runtimeRoot), false);
     assert.equal(existsSync(artifactRoot), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('governed runtime refuses to adopt or remove a pre-existing unowned child', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'simulacrum-runtime-unowned-'));
+  const artifactRoot = join(root, 'artifacts');
+  const runtimeRoot = join(artifactRoot, '.foundry-runtime');
+  const unownedChild = join(runtimeRoot, 'pre-existing-unowned');
+
+  try {
+    await mkdir(runtimeRoot, { recursive: true });
+    await writeFile(unownedChild, 'preserve');
+
+    assert.throws(
+      () =>
+        selectFoundryRuntimeRoot({
+          artifactRoot,
+          requestedPath: null,
+          fallbackRoot: root,
+          executableProbe: () => true,
+          ownerId: 'current-run',
+        }),
+      /valid current-run ownership marker/u
+    );
+    assert.equal(existsSync(unownedChild), true);
+    assert.throws(
+      () => removeGovernedRuntimeRoot(runtimeRoot, artifactRoot, 'current-run'),
+      /valid current-run ownership marker/u
+    );
+    assert.equal(existsSync(unownedChild), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -7,7 +7,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -21,6 +23,9 @@ const DISTRIBUTIONS = Object.freeze({
     filename: 'FoundryVTT-Node-14.364.zip',
   },
 });
+
+const RUNTIME_OWNER_MARKER = '.simulacrum-runtime-owner.json';
+const RUNTIME_OWNER = 'simulacrum-foundry-e2e-runtime';
 
 function requireAbsoluteRegularFile(path, description) {
   if (!isAbsolute(path)) {
@@ -107,11 +112,10 @@ export function probeExecutableDirectory(directory) {
   }
 }
 
-function requireAbsoluteDirectory(path, description, { create = false } = {}) {
+function requireAbsoluteDirectory(path, description) {
   if (!isAbsolute(path)) {
     throw new Error(`${description} must be an absolute path`);
   }
-  if (create) mkdirSync(path, { recursive: true, mode: 0o700 });
 
   let status;
   try {
@@ -125,22 +129,93 @@ function requireAbsoluteDirectory(path, description, { create = false } = {}) {
   return path;
 }
 
+function requireRuntimeOwnerId(ownerId) {
+  if (typeof ownerId !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/u.test(ownerId)) {
+    throw new Error('governed Foundry runtime owner ID is unavailable or invalid');
+  }
+  return ownerId;
+}
+
+function readRuntimeOwnership(runtimeRoot) {
+  const markerPath = join(runtimeRoot, RUNTIME_OWNER_MARKER);
+  try {
+    requireAbsoluteRegularFile(markerPath, 'governed Foundry runtime ownership marker');
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8'));
+    if (
+      marker.schema_version !== 1 ||
+      marker.owner !== RUNTIME_OWNER ||
+      typeof marker.run_id !== 'string' ||
+      Object.keys(marker).length !== 3
+    ) {
+      return null;
+    }
+    return marker;
+  } catch {
+    return null;
+  }
+}
+
+function requireOwnedRuntimeRoot(runtimeRoot, ownerId) {
+  const marker = readRuntimeOwnership(runtimeRoot);
+  if (!marker || marker.run_id !== requireRuntimeOwnerId(ownerId)) {
+    throw new Error('governed Foundry runtime root lacks a valid current-run ownership marker');
+  }
+}
+
+function claimGovernedRuntimeRoot(runtimeRoot, ownerId) {
+  const runId = requireRuntimeOwnerId(ownerId);
+  let created = false;
+  try {
+    mkdirSync(runtimeRoot, { mode: 0o700 });
+    created = true;
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+  }
+
+  if (!created) {
+    requireAbsoluteDirectory(runtimeRoot, 'governed Foundry runtime root');
+    requireOwnedRuntimeRoot(runtimeRoot, runId);
+    return;
+  }
+
+  const markerPath = join(runtimeRoot, RUNTIME_OWNER_MARKER);
+  try {
+    writeFileSync(
+      markerPath,
+      `${JSON.stringify({
+        schema_version: 1,
+        owner: RUNTIME_OWNER,
+        run_id: runId,
+      })}\n`,
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 }
+    );
+  } catch (error) {
+    rmSync(markerPath, { force: true });
+    try {
+      rmdirSync(runtimeRoot);
+    } catch {
+      // Preserve a non-empty root rather than deleting content not proven to be ours.
+    }
+    throw error;
+  }
+  requireOwnedRuntimeRoot(runtimeRoot, runId);
+}
+
 export function selectFoundryRuntimeRoot({
   artifactRoot,
   requestedPath,
   fallbackRoot,
   executableProbe = probeExecutableDirectory,
+  ownerId = process.env.AGENTIC_DELIVERY_RUN_ID,
 } = {}) {
   if (artifactRoot) {
     const governedRoot = join(
       requireAbsoluteDirectory(artifactRoot, 'artifact root'),
       '.foundry-runtime'
     );
-    requireAbsoluteDirectory(governedRoot, 'governed Foundry runtime root', {
-      create: true,
-    });
+    claimGovernedRuntimeRoot(governedRoot, ownerId);
     if (!executableProbe(governedRoot)) {
-      removeGovernedRuntimeRoot(governedRoot, artifactRoot);
+      removeGovernedRuntimeRoot(governedRoot, artifactRoot, ownerId);
       throw new Error('governed Foundry runtime root is not executable');
     }
     return governedRoot;
@@ -161,7 +236,11 @@ export function selectFoundryRuntimeRoot({
   return fallbackRoot;
 }
 
-export function removeGovernedRuntimeRoot(runtimeRoot, artifactRoot) {
+export function removeGovernedRuntimeRoot(
+  runtimeRoot,
+  artifactRoot,
+  ownerId = process.env.AGENTIC_DELIVERY_RUN_ID
+) {
   const expected = resolve(artifactRoot, '.foundry-runtime');
   if (resolve(runtimeRoot) !== expected) {
     throw new Error('refusing to remove an unowned Foundry runtime root');
@@ -172,5 +251,6 @@ export function removeGovernedRuntimeRoot(runtimeRoot, artifactRoot) {
   if (status.isSymbolicLink() || !status.isDirectory()) {
     throw new Error('refusing to remove an invalid Foundry runtime root');
   }
+  requireOwnedRuntimeRoot(expected, ownerId);
   rmSync(expected, { recursive: true });
 }
