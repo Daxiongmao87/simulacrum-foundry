@@ -21,20 +21,29 @@ jobs:
         run: |
           jq --arg repository "$REPOSITORY" '
             def heading_marker: "\u001e";
-            def normalization_limit: 4096;
             def visible_length: gsub(heading_marker; "") | length;
+            def backtick_fence_prefix:
+              startswith("```") or
+              startswith(" ```") or
+              startswith("  ```") or
+              startswith("   ```");
+            def tilde_fence_prefix:
+              startswith("~~~") or
+              startswith(" ~~~") or
+              startswith("  ~~~") or
+              startswith("   ~~~");
             def invalid_backtick_fence_open:
-              if test("^ {0,3}`{3,}") then
+              if backtick_fence_prefix then
                 capture("^ {0,3}(?<delimiter>`{3,})(?<info>.*)$")
                 | (.info | contains("`"))
               else
                 false
               end;
             def fence_open:
-              if test("^ {0,3}`{3,}") then
+              if backtick_fence_prefix then
                 invalid_backtick_fence_open | not
               else
-                test("^ {0,3}~{3,}")
+                tilde_fence_prefix
               end;
             def fence_close: test("^ {0,3}(?:`{3,}|~{3,})[ \t]*$");
             def fence_delimiter:
@@ -48,17 +57,149 @@ jobs:
               else
                 false
               end;
+            def repeated_backticks($length):
+              [range(0; $length) | "`"] | join("");
+            def discord_fence_line:
+              if fence_character == "~" then
+                capture(
+                  "^(?<indent> {0,3})(?<delimiter>~{3,})(?<suffix>.*)$"
+                ) as $fence
+                | $fence.indent +
+                  repeated_backticks(($fence.delimiter | length)) +
+                  $fence.suffix
+              else
+                .
+              end;
+            def mask_escaped_markdown:
+              . as $content
+              | [
+                  foreach ($content | explode[]) as $char (
+                    {backslashes: 0, output: 0};
+                    if (
+                      (
+                        [40, 41, 42, 60, 62, 91, 93, 95, 96, 126]
+                        | index($char)
+                      ) != null and
+                      ((.backslashes % 2) == 1)
+                    ) then
+                      .output = 32
+                      | .backslashes = 0
+                    else
+                      .output = $char
+                      | if $char == 92 then
+                          .backslashes += 1
+                        else
+                          .backslashes = 0
+                        end
+                    end;
+                    .output
+                  )
+                ]
+              | implode;
+            def inline_code_ranges:
+              [match("`+"; "g")] as $runs
+              | (
+                  reduce $runs[] as $run (
+                    {};
+                    ($run.length | tostring) as $key
+                    | .[$key] = ((.[$key] // 0) + 1)
+                  )
+                ) as $counts
+              | [
+                  foreach $runs[] as $run (
+                    {
+                      remaining: $counts,
+                      open: null,
+                      completed: null
+                    };
+                    ($run.length | tostring) as $key
+                    | .remaining[$key] -= 1
+                    | .completed = null
+                    | if .open != null then
+                        if $run.length == .open.length then
+                          .completed = {
+                            start: .open.offset,
+                            end: ($run.offset + $run.length)
+                          }
+                          | .open = null
+                        else
+                          .
+                        end
+                      elif .remaining[$key] > 0 then
+                        .open = $run
+                      else
+                        .
+                      end;
+                    select(.completed != null) | .completed
+                  )
+                ];
+            def collapsed_horizontal_whitespace:
+              gsub("[ \t]+"; " ");
+            def normalize_inline_whitespace:
+              . as $content
+              | (
+                  $content
+                  | mask_escaped_markdown
+                  | inline_code_ranges
+                ) as $ranges
+              | if ($ranges | length) == 0 then
+                  $content
+                  | collapsed_horizontal_whitespace
+                  | sub(" +$"; "")
+                else
+                  (
+                    [
+                      range(0; ($ranges | length)) as $index
+                      | (
+                          if $index == 0 then
+                            0
+                          else
+                            $ranges[($index - 1)].end
+                          end
+                        ) as $cursor
+                      | (
+                          (
+                            $content[$cursor:$ranges[$index].start]
+                            | collapsed_horizontal_whitespace
+                          ),
+                          $content[$ranges[$index].start:$ranges[$index].end]
+                        )
+                    ] +
+                    [
+                      (
+                        $content[$ranges[-1].end:]
+                        | collapsed_horizontal_whitespace
+                      )
+                    ]
+                  )
+                  | join("")
+                  | sub(" +$"; "")
+                end;
             def normalized_line($convert_heading):
-              if test("^[ \t]*$") then
+              if . == "" then
                 ""
-              elif test("^(    |\t)") then
+              elif (contains(" ") or contains("\t")) and test("^[ \t]*$") then
+                ""
+              elif startswith("    ") or startswith("\t") then
                 .
               else
-                capture("^(?<indent>[ \t]*)(?<content>.*)$") as $line
+                (
+                  if startswith(" ") or startswith("\t") then
+                    capture("^(?<indent>[ \t]*)(?<content>.*)$")
+                  else
+                    {indent: "", content: .}
+                  end
+                ) as $line
                 | (
                     $line.content
-                    | gsub("[ \t]+"; " ")
-                    | sub(" +$"; "")
+                    | if (contains(" ") or contains("\t")) | not then
+                        .
+                      elif contains("`") then
+                        normalize_inline_whitespace
+                      else
+                        collapsed_horizontal_whitespace
+                        | sub(" +$"; "")
+                      end
                   ) as $content
                 | if $convert_heading and ($content | test("^#{1,6}( |$)")) then
                     (
@@ -75,49 +216,48 @@ jobs:
                     $line.indent + $content
                   end
               end;
-            def append_normalized_line($line):
-              if .done then
-                .
-              else
-                (if (.lines | length) == 0 then 0 else 1 end) as $separator
-                | (normalization_limit - .size - $separator) as $room
-                | if $room < 0 then
-                    .done = true
-                  elif ($line | length) > $room then
-                    if $room > 0 then .lines += [$line[0:$room]] else . end
-                    | .size = normalization_limit
-                    | .done = true
-                  else
-                    .lines += [$line]
-                    | .size += ($separator + ($line | length))
-                  end
-              end;
             def normalized:
               gsub("\r\n"; "\n")
               | gsub("\r"; "\n")
               | split("\n")
-              | reduce .[] as $line (
-                  {
-                    lines: [],
-                    size: 0,
-                    done: false,
-                    in_fence: false,
-                    fence_character: "",
-                    fence_length: 0,
-                    blank_count: 0
-                  };
-                  if .done then
-                    .
-                  else
-                    ($line | fence_open) as $opens_fence
+              | [
+                  foreach .[] as $line (
+                    {
+                      in_fence: false,
+                      fence_character: "",
+                      fence_length: 0,
+                      blank_count: 0,
+                      emit: false,
+                      output: ""
+                    };
+                    .emit = false
+                    | ($line | fence_open) as $opens_fence
                     | if .in_fence then
                         (.fence_character) as $required_character
                         | (.fence_length) as $required_length
-                        | append_normalized_line($line)
+                        | .output = (
+                            if $required_character == "~" and
+                                (
+                                  $line
+                                  | valid_fence_close(
+                                      $required_character;
+                                      $required_length
+                                    )
+                                )
+                            then
+                              $line | discord_fence_line
+                            else
+                              $line
+                            end
+                          )
+                        | .emit = true
                         | .blank_count = 0
                         | if (
                             $line
-                            | valid_fence_close($required_character; $required_length)
+                            | valid_fence_close(
+                                $required_character;
+                                $required_length
+                              )
                           ) then
                             .in_fence = false
                             | .fence_character = ""
@@ -126,7 +266,8 @@ jobs:
                             .
                           end
                       elif $opens_fence then
-                        append_normalized_line($line)
+                        .output = ($line | discord_fence_line)
+                        | .emit = true
                         | .in_fence = true
                         | .fence_character = ($line | fence_character)
                         | .fence_length = ($line | fence_length)
@@ -135,19 +276,21 @@ jobs:
                         ($line | normalized_line(true)) as $normalized
                         | if $normalized == "" then
                             if .blank_count == 0 then
-                              append_normalized_line("")
+                              .output = ""
+                              | .emit = true
                               | .blank_count = 1
                             else
                               .
                             end
                           else
-                            append_normalized_line($normalized)
+                            .output = $normalized
+                            | .emit = true
                             | .blank_count = 0
                           end
-                      end
-                  end
-                )
-              | .lines
+                      end;
+                    select(.emit) | .output
+                  )
+                ]
               | join("\n")
               | sub("^\n+"; "")
               | sub("\n+$"; "");
@@ -245,112 +388,93 @@ jobs:
                 )
               | if .in_fence then .lines[0:.fence_start] else .lines end
               | join("\n");
-            def mask_escaped_markdown:
-              . as $content
-              | [
-                  foreach ($content | explode[]) as $char (
-                    {backslashes: 0, output: 0};
-                    if (
-                      (([42, 60, 62, 91, 93, 95, 96, 126] | index($char)) != null) and
-                      ((.backslashes % 2) == 1)
-                    ) then
-                      .output = 32
-                      | .backslashes = 0
-                    else
-                      .output = $char
-                      | if $char == 92 then
-                          .backslashes += 1
-                        else
-                          .backslashes = 0
-                        end
-                    end;
-                    .output
-                  )
-                ]
-              | implode;
             def mask_fenced_ticks:
-              split("\n")
-              | reduce .[] as $line (
-                  {
-                    lines: [],
-                    in_fence: false,
-                    fence_character: "",
-                    fence_length: 0
-                  };
-                  ($line | fence_open) as $opens_fence
-                  | if .in_fence then
-                      (.fence_character) as $required_character
-                      | (.fence_length) as $required_length
-                      | .lines += [($line | gsub("."; " "))]
-                      | if (
-                          $line
-                          | valid_fence_close($required_character; $required_length)
-                        ) then
-                          .in_fence = false
-                          | .fence_character = ""
-                          | .fence_length = 0
+              if (contains("```") or contains("~~~")) | not then
+                if contains("\\") then mask_escaped_markdown else . end
+              else
+                split("\n")
+                | [
+                    foreach .[] as $line (
+                      {
+                        in_fence: false,
+                        fence_character: "",
+                        fence_length: 0,
+                        output: ""
+                      };
+                      ($line | fence_open) as $opens_fence
+                      | if .in_fence then
+                          (.fence_character) as $required_character
+                          | (.fence_length) as $required_length
+                          | .output = ($line | gsub("."; " "))
+                          | if (
+                              $line
+                              | valid_fence_close(
+                                  $required_character;
+                                  $required_length
+                                )
+                            ) then
+                              .in_fence = false
+                              | .fence_character = ""
+                              | .fence_length = 0
+                            else
+                              .
+                            end
+                        elif $opens_fence then
+                          .output = ($line | gsub("."; " "))
+                          | .in_fence = true
+                          | .fence_character = ($line | fence_character)
+                          | .fence_length = ($line | fence_length)
                         else
-                          .
-                        end
-                    elif $opens_fence then
-                      .lines += [($line | gsub("."; " "))]
-                      | .in_fence = true
-                      | .fence_character = ($line | fence_character)
-                      | .fence_length = ($line | fence_length)
-                    else
-                      .lines += [($line | mask_escaped_markdown)]
-                    end
-                )
-              | .lines
-              | join("\n");
-            def inline_code_ranges:
-              [
-                foreach match("`+"; "g") as $run (
-                  {open: null, completed: null};
-                  .completed = null
-                  | if .open == null then
-                      .open = $run
-                    elif $run.length == .open.length then
-                      .completed = {
-                        start: .open.offset,
-                        end: ($run.offset + $run.length)
-                      }
-                      | .open = null
-                    else
-                      .
-                    end;
-                  select(.completed != null) | .completed
-                )
-              ];
+                          .output = (
+                            if $line | contains("\\") then
+                              $line | mask_escaped_markdown
+                            else
+                              $line
+                            end
+                          )
+                        end;
+                      .output
+                    )
+                  ]
+                | join("\n")
+              end;
             def mask_completed_inline_code:
-              . as $content
-              | ($content | mask_fenced_ticks) as $analysis
-              | ($analysis | inline_code_ranges) as $ranges
-              | if ($ranges | length) == 0 then
-                  $analysis
-                else
-                  ($analysis | explode) as $chars
-                  | [
-                      foreach range(0; ($chars | length)) as $index (
-                        {range_index: 0};
-                        until(
-                          (.range_index >= ($ranges | length)) or
-                            ($index < $ranges[.range_index].end);
-                          .range_index += 1
-                        );
-                        if (
-                          (.range_index < ($ranges | length)) and
-                          ($index >= $ranges[.range_index].start) and
-                          ($index < $ranges[.range_index].end)
-                        ) then
-                          32
-                        else
-                          $chars[$index]
-                        end
-                      )
-                    ]
-                  | implode
-                end;
+              if (
+                contains("`") or
+                contains("~") or
+                contains("\\")
+              ) | not then
+                .
+              else
+                . as $content
+                | ($content | mask_fenced_ticks) as $analysis
+                | ($analysis | inline_code_ranges) as $ranges
+                | if ($ranges | length) == 0 then
+                    $analysis
+                  else
+                    ($analysis | explode) as $chars
+                    | [
+                        foreach range(0; ($chars | length)) as $index (
+                          {range_index: 0};
+                          until(
+                            (.range_index >= ($ranges | length)) or
+                              ($index < $ranges[.range_index].end);
+                            .range_index += 1
+                          );
+                          if (
+                            (.range_index < ($ranges | length)) and
+                            ($index >= $ranges[.range_index].start) and
+                            ($index < $ranges[.range_index].end)
+                          ) then
+                            32
+                          else
+                            $chars[$index]
+                          end
+                        )
+                      ]
+                    | implode
+                  end
+              end;
             def crossed_inline_code_opener($prefix_length):
               inline_code_ranges
               | map(
@@ -362,13 +486,17 @@ jobs:
               | if length == 0 then null else .[0].start end;
             def without_unclosed_inline_code($full_content):
               . as $content
-              | ($content | length) as $prefix_length
-              | (
-                  $full_content
-                  | mask_fenced_ticks
-                  | crossed_inline_code_opener($prefix_length)
-                ) as $open
-              | if $open == null then $content else $content[0:$open] end;
+              | if ($full_content | contains("`") | not) then
+                  $content
+                else
+                  ($content | length) as $prefix_length
+                  | (
+                      $full_content
+                      | mask_fenced_ticks
+                      | crossed_inline_code_opener($prefix_length)
+                    ) as $open
+                  | if $open == null then $content else $content[0:$open] end
+                end;
             def character_at($chars; $index):
               if ($index < 0) or ($index >= ($chars | length)) then
                 ""
@@ -450,75 +578,198 @@ jobs:
                 end
               )
               | .crossed;
+            def asterisk_delimiters:
+              (. | explode) as $chars
+              | [
+                  match("\\*+"; "g")
+                  | . as $run
+                  | (character_at($chars; ($run.offset - 1))) as $previous
+                  | (
+                      character_at(
+                        $chars;
+                        ($run.offset + $run.length)
+                      )
+                    ) as $next
+                  | ($previous | whitespace_or_boundary) as $previous_whitespace
+                  | ($next | whitespace_or_boundary) as $next_whitespace
+                  | ($previous | punctuation_character) as $previous_punctuation
+                  | ($next | punctuation_character) as $next_punctuation
+                  | (
+                      ($next_whitespace | not) and
+                      (
+                        ($next_punctuation | not) or
+                        $previous_whitespace or
+                        $previous_punctuation
+                      )
+                    ) as $left_flanking
+                  | (
+                      ($previous_whitespace | not) and
+                      (
+                        ($previous_punctuation | not) or
+                        $next_whitespace or
+                        $next_punctuation
+                      )
+                    ) as $right_flanking
+                  | {
+                      offset: $run.offset,
+                      length: $run.length,
+                      can_open: $left_flanking,
+                      can_close: $right_flanking
+                    }
+                  | select(.can_open or .can_close)
+                ];
+            def crossed_single_asterisk_opener($prefix_length):
+              reduce (
+                asterisk_delimiters[]
+                | select(.length == 1)
+              ) as $delimiter (
+                {open: null, crossed: null};
+                if .crossed != null then
+                  .
+                elif $delimiter.can_close and (.open != null) then
+                  (.open) as $open
+                  | .open = null
+                  | if ($open < $prefix_length) and
+                      ($delimiter.offset >= $prefix_length) then
+                      .crossed = $open
+                    else
+                      .
+                    end
+                elif $delimiter.can_open then
+                  .open = $delimiter.offset
+                else
+                  .
+                end
+              )
+              | .crossed;
             def remove_at($index; $size):
               .[0:$index] + .[($index + $size):];
             def without_unclosed_single_underscore($full_content):
               . as $content
-              | ($content | length) as $prefix_length
-              | (
-                  $full_content
-                  | mask_completed_inline_code
-                  | crossed_single_underscore_opener($prefix_length)
-                ) as $opener
-              | if $opener == null then $content else $content | remove_at($opener; 1) end;
+              | if ($full_content | contains("_") | not) then
+                  $content
+                else
+                  ($content | length) as $prefix_length
+                  | (
+                      $full_content
+                      | mask_completed_inline_code
+                      | crossed_single_underscore_opener($prefix_length)
+                    ) as $opener
+                  | if $opener == null then
+                      $content
+                    else
+                      $content | remove_at($opener; 1)
+                    end
+                end;
+            def without_unclosed_single_asterisk($full_content):
+              . as $content
+              | if ($full_content | contains("*") | not) then
+                  $content
+                else
+                  ($content | length) as $prefix_length
+                  | (
+                      $full_content
+                      | mask_completed_inline_code
+                      | crossed_single_asterisk_opener($prefix_length)
+                    ) as $opener
+                  | if $opener == null then
+                      $content
+                    else
+                      $content | remove_at($opener; 1)
+                    end
+                end;
             def without_unclosed_marker($marker; $full_content):
               . as $content
-              | ($content | mask_completed_inline_code) as $markdown
-              | ($full_content | mask_completed_inline_code) as $full_markdown
-              | (($markdown | split($marker) | length) - 1) as $count
-              | (($full_markdown | split($marker) | length) - 1) as $full_count
-              | if (($count % 2) == 1) and ($full_count > $count) then
-                  (($markdown | rindex($marker)) // ($content | length)) as $index
-                  | $content | remove_at($index; ($marker | length))
-                else
+              | if ($full_content | contains($marker) | not) then
                   $content
-                end;
-            def without_unclosed_link($full_content):
-              . as $content
-              | ($content | mask_completed_inline_code) as $markdown
-              | ($full_content | mask_completed_inline_code) as $full_markdown
-              | (($markdown | rindex("[")) // -1) as $label_open
-              | (($markdown | rindex("]")) // -1) as $label_close
-              | if $label_open > $label_close then
-                  (($full_markdown[$label_open:] | index("]")) // -1) as $future_close
-                  | if $future_close > 0 then $content[0:$label_open] else $content end
                 else
-                  (($markdown | rindex("](")) // -1) as $destination_open
-                  | (($markdown | rindex(")")) // -1) as $destination_close
-                  | if $destination_open > $destination_close then
-                      (
-                        ($markdown[0:$destination_open] | rindex("["))
-                        // $destination_open
-                      ) as $link_open
-                      | (
-                          ($full_markdown[($destination_open + 2):] | index(")"))
-                          // -1
-                        ) as $future_close
-                      | if $future_close >= 0 then $content[0:$link_open] else $content end
+                  ($content | mask_completed_inline_code) as $markdown
+                  | ($full_content | mask_completed_inline_code) as $full_markdown
+                  | (($markdown | split($marker) | length) - 1) as $count
+                  | (($full_markdown | split($marker) | length) - 1) as $full_count
+                  | if (($count % 2) == 1) and ($full_count > $count) then
+                      (($markdown | rindex($marker)) // ($content | length)) as $index
+                      | $content | remove_at($index; ($marker | length))
                     else
                       $content
                     end
                 end;
+            def matching_parenthesis_close($open):
+              (. | explode) as $chars
+              | reduce range(($open + 1); ($chars | length)) as $index (
+                  {depth: 1, close: null};
+                  if .close != null then
+                    .
+                  elif $chars[$index] == 40 then
+                    .depth += 1
+                  elif $chars[$index] == 41 then
+                    .depth -= 1
+                    | if .depth == 0 then .close = $index else . end
+                  else
+                    .
+                  end
+                )
+              | .close;
+            def without_unclosed_link($full_content):
+              . as $content
+              | if ($full_content | contains("[") | not) then
+                  $content
+                else
+                  ($content | mask_completed_inline_code) as $markdown
+                  | ($full_content | mask_completed_inline_code) as $full_markdown
+                  | (($markdown | rindex("[")) // -1) as $label_open
+                  | (($markdown | rindex("]")) // -1) as $label_close
+                  | if $label_open > $label_close then
+                      (($full_markdown[$label_open:] | index("]")) // -1) as $future_close
+                      | if $future_close > 0 then $content[0:$label_open] else $content end
+                    else
+                      (($markdown | rindex("](")) // -1) as $destination_open
+                      | if $destination_open >= 0 then
+                          (
+                            ($markdown[0:$destination_open] | rindex("["))
+                            // $destination_open
+                          ) as $link_open
+                          | (
+                              $full_markdown
+                              | matching_parenthesis_close(
+                                  ($destination_open + 1)
+                                )
+                            ) as $destination_close
+                          | if ($destination_close != null) and
+                              ($destination_close >= ($content | length)) then
+                              $content[0:$link_open]
+                            else
+                              $content
+                            end
+                        else
+                          $content
+                        end
+                    end
+                end;
             def without_unclosed_autolink($full_content):
               . as $content
-              | ($content | mask_completed_inline_code) as $markdown
-              | ($full_content | mask_completed_inline_code) as $full_markdown
-              | "<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>]*|[^ <>@]+@[^ <>]*|/?[A-Za-z][A-Za-z0-9-]*[ \t]+[^>]*|/[A-Za-z][A-Za-z0-9-]*|!--[^>]*)$" as $opener
-              | if ($markdown | test($opener)) then
-                  ($markdown | match($opener).offset) as $open
-                  | (($full_markdown[$open:] | index(">")) // -1) as $future_close
-                  | if $future_close > 0 then $content[0:$open] else $content end
-                else
+              | if ($full_content | contains("<") | not) then
                   $content
+                else
+                  ($content | mask_completed_inline_code) as $markdown
+                  | ($full_content | mask_completed_inline_code) as $full_markdown
+                  | "<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>]*|[^ <>@]+@[^ <>]*|/?[A-Za-z][A-Za-z0-9-]*[ \t]+[^>]*|/[A-Za-z][A-Za-z0-9-]*|!--[^>]*)$" as $opener
+                  | if ($markdown | test($opener)) then
+                      ($markdown | match($opener).offset) as $open
+                      | (($full_markdown[$open:] | index(">")) // -1) as $future_close
+                      | if $future_close > 0 then $content[0:$open] else $content end
+                    else
+                      $content
+                    end
                 end;
             def non_code_safe($full_content):
               without_unclosed_link($full_content)
               | without_unclosed_autolink($full_content)
               | without_unclosed_single_underscore($full_content)
+              | without_unclosed_single_asterisk($full_content)
               | without_unclosed_marker("**"; $full_content)
               | without_unclosed_marker("__"; $full_content)
               | without_unclosed_marker("~~"; $full_content)
-              | without_unclosed_marker("*"; $full_content)
               | sub("[ \n]+$"; "");
             def with_ellipsis:
               if test("(^|\n) {0,3}(?:`{3,}|~{3,})[ \t]*$") then

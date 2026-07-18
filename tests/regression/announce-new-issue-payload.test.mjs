@@ -347,11 +347,14 @@ test('word fallback preserves literal unmatched brackets', () => {
   assert.match(description, /Valid range \[0, 1\) and preserve this explanation\./u);
 });
 
-test('tilde fences preserve code without heading conversion', () => {
+test('tilde fences translate without changing code content', () => {
   const body = ['~~~python', '# not a heading', 'value = `literal`', '~~~'].join('\n');
   const description = descriptionOf(buildPayload({ body }));
 
-  assert.equal(description, body);
+  assert.equal(
+    description,
+    ['```python', '# not a heading', 'value = `literal`', '```'].join('\n')
+  );
 });
 
 test('newline-heavy bodies complete within the payload budget', () => {
@@ -412,6 +415,62 @@ test('dense inline-code spans complete within the payload budget', () => {
   const description = descriptionOf(buildPayload({ body, timeout: 5_000 }));
 
   assert.ok(description.startsWith('`x` `x` `x`'), description.slice(0, 40));
+  assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
+  assertBalancedCodeDelimiters(description);
+});
+
+test('word fallback tracks nested link destination parentheses', () => {
+  const crossedBody = `[x](https://example.test/(inner)/${'a'.repeat(800)})`;
+  const crossedDescription = descriptionOf(buildPayload({ body: crossedBody }));
+  assert.equal(crossedDescription, '...');
+
+  const completedBody = '[x](https://example.test/(inner)/tail)';
+  assert.equal(descriptionOf(buildPayload({ body: completedBody })), completedBody);
+
+  const escapedBody = String.raw`[x](https://example.test/\(inner\)/tail)`;
+  assert.equal(descriptionOf(buildPayload({ body: escapedBody })), escapedBody);
+});
+
+test('word fallback preserves literal asterisks before later emphasis', () => {
+  const body = `Multiply 5 * 3 ${'word '.repeat(150)}*later*`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /^Multiply 5 \* 3 /u);
+
+  const crossedDescription = descriptionOf(
+    buildPayload({ body: `*${'word '.repeat(200).trim()}*` })
+  );
+  assert.equal((crossedDescription.match(/\*/gu) ?? []).length % 2, 0);
+});
+
+test('delimiter repair retains context beyond the normalization prefix', () => {
+  const words = 'word '.repeat(1_000).trim();
+  const boldDescription = descriptionOf(buildPayload({ body: `**${words}**` }));
+  const inlineDescription = descriptionOf(buildPayload({ body: `\`${words}\`` }));
+
+  assert.equal((boldDescription.match(/\*\*/gu) ?? []).length % 2, 0);
+  assertBalancedCodeDelimiters(inlineDescription);
+});
+
+test('unmatched backtick runs do not block later code spans', () => {
+  const body = `\` literal \`\`${'word '.repeat(200).trim()}\`\``;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, '` literal...');
+});
+
+test('normalization preserves whitespace inside inline code', () => {
+  const body = 'Run   `printf "a  b"`   now.';
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, 'Run `printf "a  b"` now.');
+});
+
+test('newline-heavy inline-code bodies complete within the payload budget', () => {
+  const body = Array.from({ length: 16_000 }, () => '`x`').join('\n');
+  const description = descriptionOf(buildPayload({ body, timeout: 5_000 }));
+
+  assert.ok(description.startsWith('`x`\n`x`\n'), description.slice(0, 40));
   assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
   assertBalancedCodeDelimiters(description);
 });
