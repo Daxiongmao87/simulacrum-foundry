@@ -11,15 +11,11 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
-const RESOLVED_ENVIRONMENT = resolveFoundryEnvironment({
-  environment: process.env,
-  localPath: TEST_ENV_PATH,
-});
+let resolvedFoundryEnvironment = null;
 const PLAYWRIGHT = join(ROOT, 'node_modules', '.bin', 'playwright');
 const RESULTS_DIR = process.env.ADP_TEST_OUTCOME_FILE
   ? join(dirname(dirname(process.env.ADP_TEST_OUTCOME_FILE)), 'tier-results')
   : join(ROOT, 'artifacts', 'test-results');
-const PLAYWRIGHT_RESULTS = playwrightResultsPath(RESOLVED_ENVIRONMENT, ROOT);
 
 const tier = process.argv[2];
 const definitions = {
@@ -34,10 +30,10 @@ const definitions = {
   component: [{ nodeTests: 'tests/component' }],
   security: [{ nodeTests: 'tests/security' }],
   package: [{ nodeTests: 'tests/package' }],
-  ui: [playwrightStep('@ui')],
-  accessibility: [playwrightStep('@accessibility')],
-  'foundry-smoke': [playwrightStep('@smoke')],
-  foundry: [playwrightStep(null)],
+  ui: [{ playwrightGrep: '@ui' }],
+  accessibility: [{ playwrightGrep: '@accessibility' }],
+  'foundry-smoke': [{ playwrightGrep: '@smoke' }],
+  foundry: [{ playwrightGrep: null }],
 };
 
 if (!Object.hasOwn(definitions, tier)) {
@@ -87,28 +83,46 @@ console.log(
 process.exit(exitCode);
 
 function playwrightStep(grep) {
+  const environment = foundryEnvironment();
   const args = ['test', '--config=tests/e2e/playwright.config.mjs'];
   if (grep) args.push('--grep', grep);
+  const childEnvironment = {
+    TEST_FOUNDRY_VERSIONS:
+      environment.ADP_FOUNDRY_VERSION ||
+      environment.TEST_FOUNDRY_VERSIONS ||
+      environment.TEST_FOUNDRY_VERSION ||
+      '13.351,14.364',
+    TEST_SYSTEM_IDS:
+      environment.ADP_GAME_SYSTEM ||
+      environment.TEST_SYSTEM_IDS ||
+      environment.TEST_SYSTEM_ID ||
+      'dnd5e',
+    TEST_TMPFS_PATH: environment.TEST_TMPFS_PATH || '/dev/shm',
+  };
+  for (const name of ['ADP_ARTIFACT_DIR', 'AGENTIC_DELIVERY_RUN_ID']) {
+    if (environment[name]) childEnvironment[name] = environment[name];
+  }
   return {
     command: PLAYWRIGHT,
     args,
-    env: {
-      TEST_FOUNDRY_VERSIONS:
-        RESOLVED_ENVIRONMENT.ADP_FOUNDRY_VERSION ||
-        RESOLVED_ENVIRONMENT.TEST_FOUNDRY_VERSIONS ||
-        RESOLVED_ENVIRONMENT.TEST_FOUNDRY_VERSION ||
-        '13.351,14.364',
-      TEST_SYSTEM_IDS:
-        RESOLVED_ENVIRONMENT.ADP_GAME_SYSTEM ||
-        RESOLVED_ENVIRONMENT.TEST_SYSTEM_IDS ||
-        RESOLVED_ENVIRONMENT.TEST_SYSTEM_ID ||
-        'dnd5e',
-      TEST_TMPFS_PATH: RESOLVED_ENVIRONMENT.TEST_TMPFS_PATH || '/dev/shm',
-    },
+    env: childEnvironment,
   };
 }
 
+function foundryEnvironment() {
+  if (!resolvedFoundryEnvironment) {
+    resolvedFoundryEnvironment = resolveFoundryEnvironment({
+      environment: process.env,
+      localPath: TEST_ENV_PATH,
+    });
+  }
+  return resolvedFoundryEnvironment;
+}
+
 async function normalizeStep(definition) {
+  if (Object.hasOwn(definition, 'playwrightGrep')) {
+    return playwrightStep(definition.playwrightGrep);
+  }
   if (!definition.nodeTests) return definition;
   const files = await findTests(join(ROOT, definition.nodeTests));
   if (files.length === 0) {
@@ -257,7 +271,9 @@ function parseNodeSummary(output) {
 }
 
 async function playwrightCounts(commandExitCode) {
-  const value = JSON.parse(await readFile(PLAYWRIGHT_RESULTS, 'utf8'));
+  const value = JSON.parse(
+    await readFile(playwrightResultsPath(foundryEnvironment(), ROOT), 'utf8')
+  );
   const tests = [];
   collectPlaywrightTests(value, tests);
 

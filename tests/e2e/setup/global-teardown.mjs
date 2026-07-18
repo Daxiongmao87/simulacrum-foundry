@@ -12,6 +12,7 @@ import {
   externalBrokerConfiguration,
   removeGovernedRuntimeRoot,
   resolveFoundryEnvironment,
+  validateGovernedRuntimeRoot,
 } from '../fixtures/agentic-foundry-inputs.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,9 @@ export default async function globalTeardown() {
 
   const artifactRoot = env.ADP_ARTIFACT_DIR ? resolve(env.ADP_ARTIFACT_DIR) : null;
   const cleanupRoot = artifactRoot ? join(artifactRoot, '.foundry-runtime') : ROOT;
+  if (artifactRoot) {
+    validateGovernedRuntimeRoot(cleanupRoot, artifactRoot, env.AGENTIC_DELIVERY_RUN_ID);
+  }
   const legacyDirs = ['.foundry-test', '.foundry-test-data'];
   let cleanupSafe = true;
 

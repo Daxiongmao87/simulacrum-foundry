@@ -22,7 +22,7 @@ function loadEnv() {
  * Parse comma-separated system IDs
  */
 function parseSystemIds(env) {
-  const systemIdsRaw = env.TEST_SYSTEM_IDS || env.TEST_SYSTEM_ID || 'dnd5e';
+  const systemIdsRaw = env.ADP_GAME_SYSTEM || env.TEST_SYSTEM_IDS || env.TEST_SYSTEM_ID || 'dnd5e';
   return systemIdsRaw
     .split(',')
     .map(s => s.trim())
@@ -33,7 +33,11 @@ function parseSystemIds(env) {
  * Parse comma-separated Foundry versions.
  */
 function parseFoundryVersions(env) {
-  const versionsRaw = env.TEST_FOUNDRY_VERSIONS || env.TEST_FOUNDRY_VERSION || '13.351,14.364';
+  const versionsRaw =
+    env.ADP_FOUNDRY_VERSION ||
+    env.TEST_FOUNDRY_VERSIONS ||
+    env.TEST_FOUNDRY_VERSION ||
+    '13.351,14.364';
   return versionsRaw
     .split(',')
     .map(v => v.trim())

@@ -272,21 +272,34 @@ export function selectFoundryRuntimeRoot({
   return fallbackRoot;
 }
 
+function governedRuntimeRootExists(runtimeRoot, artifactRoot, ownerId, operation) {
+  const expected = resolve(artifactRoot, '.foundry-runtime');
+  if (resolve(runtimeRoot) !== expected) {
+    throw new Error(`refusing to ${operation} an unowned Foundry runtime root`);
+  }
+  if (!existsSync(expected)) return false;
+
+  const status = lstatSync(expected);
+  if (status.isSymbolicLink() || !status.isDirectory()) {
+    throw new Error(`refusing to ${operation} an invalid Foundry runtime root`);
+  }
+  requireOwnedRuntimeRoot(expected, ownerId);
+  return true;
+}
+
+export function validateGovernedRuntimeRoot(
+  runtimeRoot,
+  artifactRoot,
+  ownerId = process.env.AGENTIC_DELIVERY_RUN_ID
+) {
+  return governedRuntimeRootExists(runtimeRoot, artifactRoot, ownerId, 'inspect');
+}
+
 export function removeGovernedRuntimeRoot(
   runtimeRoot,
   artifactRoot,
   ownerId = process.env.AGENTIC_DELIVERY_RUN_ID
 ) {
-  const expected = resolve(artifactRoot, '.foundry-runtime');
-  if (resolve(runtimeRoot) !== expected) {
-    throw new Error('refusing to remove an unowned Foundry runtime root');
-  }
-  if (!existsSync(expected)) return;
-
-  const status = lstatSync(expected);
-  if (status.isSymbolicLink() || !status.isDirectory()) {
-    throw new Error('refusing to remove an invalid Foundry runtime root');
-  }
-  requireOwnedRuntimeRoot(expected, ownerId);
-  rmSync(expected, { recursive: true });
+  if (!governedRuntimeRootExists(runtimeRoot, artifactRoot, ownerId, 'remove')) return;
+  rmSync(resolve(runtimeRoot), { recursive: true });
 }

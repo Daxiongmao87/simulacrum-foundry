@@ -1,5 +1,11 @@
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
-import { basename, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { resolveFoundryEnvironment } from '../fixtures/agentic-foundry-inputs.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const TEST_ENV_PATH = join(ROOT, 'tests/e2e/.env.test');
 
 const CATEGORY_BY_NAME = [
   [/screenshot/iu, 'screenshots'],
@@ -12,9 +18,11 @@ const CATEGORY_BY_NAME = [
 
 export default class AgenticArtifactReporter {
   constructor() {
-    this.root = process.env.ADP_ARTIFACT_DIR
-      ? resolve(process.env.ADP_ARTIFACT_DIR)
-      : null;
+    const environment = resolveFoundryEnvironment({
+      environment: process.env,
+      localPath: TEST_ENV_PATH,
+    });
+    this.root = environment.ADP_ARTIFACT_DIR ? resolve(environment.ADP_ARTIFACT_DIR) : null;
   }
 
   async onTestEnd(test, result) {
