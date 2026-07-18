@@ -21,10 +21,21 @@ jobs:
         run: |
           jq --arg repository "$REPOSITORY" '
             def heading_marker: "\u001e";
+            def normalization_limit: 4096;
             def visible_length: gsub(heading_marker; "") | length;
-            def fence_open: test("^[ \t]*`{3,}");
-            def fence_close: test("^[ \t]*`{3,}[ \t]*$");
-            def fence_length: capture("^[ \t]*(?<delimiter>`{3,})").delimiter | length;
+            def fence_open: test("^ {0,3}(?:`{3,}|~{3,})");
+            def fence_close: test("^ {0,3}(?:`{3,}|~{3,})[ \t]*$");
+            def fence_delimiter:
+              capture("^ {0,3}(?<delimiter>`{3,}|~{3,})").delimiter;
+            def fence_character: fence_delimiter[0:1];
+            def fence_length: fence_delimiter | length;
+            def valid_fence_close($required_character; $required_length):
+              if fence_close then
+                (fence_character == $required_character) and
+                (fence_length >= $required_length)
+              else
+                false
+              end;
             def normalized_line($convert_heading):
               if test("^[ \t]*$") then
                 ""
@@ -52,43 +63,77 @@ jobs:
                     $line.indent + $content
                   end
               end;
+            def append_normalized_line($line):
+              if .done then
+                .
+              else
+                (if (.lines | length) == 0 then 0 else 1 end) as $separator
+                | (normalization_limit - .size - $separator) as $room
+                | if $room < 0 then
+                    .done = true
+                  elif ($line | length) > $room then
+                    if $room > 0 then .lines += [$line[0:$room]] else . end
+                    | .size = normalization_limit
+                    | .done = true
+                  else
+                    .lines += [$line]
+                    | .size += ($separator + ($line | length))
+                  end
+              end;
             def normalized:
               gsub("\r\n"; "\n")
               | gsub("\r"; "\n")
               | split("\n")
               | reduce .[] as $line (
-                  {lines: [], in_fence: false, fence_length: 0, blank_count: 0};
-                  ($line | fence_open) as $opens_fence
-                  | ($line | fence_close) as $closes_fence
-                  | if .in_fence then
-                      .lines += [$line]
-                      | .blank_count = 0
-                      | (.fence_length) as $required_length
-                      | if $closes_fence and (($line | fence_length) >= $required_length) then
-                          .in_fence = false
-                          | .fence_length = 0
-                        else
-                          .
-                        end
-                    elif $opens_fence then
-                      .lines += [$line]
-                      | .in_fence = true
-                      | .fence_length = ($line | fence_length)
-                      | .blank_count = 0
-                    else
-                      ($line | normalized_line(true)) as $normalized
-                      | if $normalized == "" then
-                          if .blank_count == 0 then
-                            .lines += [""]
-                            | .blank_count = 1
+                  {
+                    lines: [],
+                    size: 0,
+                    done: false,
+                    in_fence: false,
+                    fence_character: "",
+                    fence_length: 0,
+                    blank_count: 0
+                  };
+                  if .done then
+                    .
+                  else
+                    ($line | fence_open) as $opens_fence
+                    | if .in_fence then
+                        (.fence_character) as $required_character
+                        | (.fence_length) as $required_length
+                        | append_normalized_line($line)
+                        | .blank_count = 0
+                        | if (
+                            $line
+                            | valid_fence_close($required_character; $required_length)
+                          ) then
+                            .in_fence = false
+                            | .fence_character = ""
+                            | .fence_length = 0
                           else
                             .
                           end
-                        else
-                          .lines += [$normalized]
-                          | .blank_count = 0
-                        end
-                    end
+                      elif $opens_fence then
+                        append_normalized_line($line)
+                        | .in_fence = true
+                        | .fence_character = ($line | fence_character)
+                        | .fence_length = ($line | fence_length)
+                        | .blank_count = 0
+                      else
+                        ($line | normalized_line(true)) as $normalized
+                        | if $normalized == "" then
+                            if .blank_count == 0 then
+                              append_normalized_line("")
+                              | .blank_count = 1
+                            else
+                              .
+                            end
+                          else
+                            append_normalized_line($normalized)
+                            | .blank_count = 0
+                          end
+                      end
+                  end
                 )
               | .lines
               | join("\n")
@@ -154,14 +199,24 @@ jobs:
             def without_unclosed_fence:
               split("\n")
               | reduce .[] as $line (
-                  {lines: [], in_fence: false, fence_length: 0, fence_start: 0};
+                  {
+                    lines: [],
+                    in_fence: false,
+                    fence_character: "",
+                    fence_length: 0,
+                    fence_start: 0
+                  };
                   ($line | fence_open) as $opens_fence
-                  | ($line | fence_close) as $closes_fence
                   | if .in_fence then
-                      .lines += [$line]
+                      (.fence_character) as $required_character
                       | (.fence_length) as $required_length
-                      | if $closes_fence and (($line | fence_length) >= $required_length) then
+                      | .lines += [$line]
+                      | if (
+                          $line
+                          | valid_fence_close($required_character; $required_length)
+                        ) then
                           .in_fence = false
+                          | .fence_character = ""
                           | .fence_length = 0
                         else
                           .
@@ -170,6 +225,7 @@ jobs:
                       .fence_start = (.lines | length)
                       | .lines += [$line]
                       | .in_fence = true
+                      | .fence_character = ($line | fence_character)
                       | .fence_length = ($line | fence_length)
                     else
                       .lines += [$line]
@@ -177,16 +233,15 @@ jobs:
                 )
               | if .in_fence then .lines[0:.fence_start] else .lines end
               | join("\n");
-            def mask_escaped_ticks:
+            def mask_escaped_markdown:
               explode
               | reduce .[] as $char (
                   {chars: [], backslashes: 0};
-                  if $char == 96 then
-                    if (.backslashes % 2) == 1 then
-                      .chars += [32]
-                    else
-                      .chars += [$char]
-                    end
+                  if (
+                    (([42, 60, 62, 91, 93, 95, 96, 126] | index($char)) != null) and
+                    ((.backslashes % 2) == 1)
+                  ) then
+                    .chars += [32]
                     | .backslashes = 0
                   else
                     .chars += [$char]
@@ -202,14 +257,23 @@ jobs:
             def mask_fenced_ticks:
               split("\n")
               | reduce .[] as $line (
-                  {lines: [], in_fence: false, fence_length: 0};
+                  {
+                    lines: [],
+                    in_fence: false,
+                    fence_character: "",
+                    fence_length: 0
+                  };
                   ($line | fence_open) as $opens_fence
-                  | ($line | fence_close) as $closes_fence
                   | if .in_fence then
-                      .lines += [($line | gsub("`"; " "))]
+                      (.fence_character) as $required_character
                       | (.fence_length) as $required_length
-                      | if $closes_fence and (($line | fence_length) >= $required_length) then
+                      | .lines += [($line | gsub("`"; " "))]
+                      | if (
+                          $line
+                          | valid_fence_close($required_character; $required_length)
+                        ) then
                           .in_fence = false
+                          | .fence_character = ""
                           | .fence_length = 0
                         else
                           .
@@ -217,9 +281,10 @@ jobs:
                     elif $opens_fence then
                       .lines += [($line | gsub("`"; " "))]
                       | .in_fence = true
+                      | .fence_character = ($line | fence_character)
                       | .fence_length = ($line | fence_length)
                     else
-                      .lines += [($line | mask_escaped_ticks)]
+                      .lines += [($line | mask_escaped_markdown)]
                     end
                 )
               | .lines
@@ -265,23 +330,27 @@ jobs:
               | if $open == null then $content else $content[0:$open.offset] end;
             def remove_at($index; $size):
               .[0:$index] + .[($index + $size):];
-            def without_unclosed_marker($marker):
+            def without_unclosed_marker($marker; $full_content):
               . as $content
               | ($content | mask_completed_inline_code) as $markdown
+              | ($full_content | mask_completed_inline_code) as $full_markdown
               | (($markdown | split($marker) | length) - 1) as $count
-              | if ($count % 2) == 1 then
+              | (($full_markdown | split($marker) | length) - 1) as $full_count
+              | if (($count % 2) == 1) and ($full_count > $count) then
                   (($markdown | rindex($marker)) // ($content | length)) as $index
                   | $content | remove_at($index; ($marker | length))
                 else
                   $content
                 end;
-            def without_unclosed_link:
+            def without_unclosed_link($full_content):
               . as $content
               | ($content | mask_completed_inline_code) as $markdown
+              | ($full_content | mask_completed_inline_code) as $full_markdown
               | (($markdown | rindex("[")) // -1) as $label_open
               | (($markdown | rindex("]")) // -1) as $label_close
               | if $label_open > $label_close then
-                  $content[0:$label_open]
+                  (($full_markdown[$label_open:] | index("]")) // -1) as $future_close
+                  | if $future_close > 0 then $content[0:$label_open] else $content end
                 else
                   (($markdown | rindex("](")) // -1) as $destination_open
                   | (($markdown | rindex(")")) // -1) as $destination_close
@@ -290,31 +359,37 @@ jobs:
                         ($markdown[0:$destination_open] | rindex("["))
                         // $destination_open
                       ) as $link_open
-                      | $content[0:$link_open]
+                      | (
+                          ($full_markdown[($destination_open + 2):] | index(")"))
+                          // -1
+                        ) as $future_close
+                      | if $future_close >= 0 then $content[0:$link_open] else $content end
                     else
                       $content
                     end
                 end;
-            def without_unclosed_autolink:
+            def without_unclosed_autolink($full_content):
               . as $content
               | ($content | mask_completed_inline_code) as $markdown
+              | ($full_content | mask_completed_inline_code) as $full_markdown
               | "<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>]*|[^ <>@]+@[^ <>]*|/?[A-Za-z][A-Za-z0-9-]*[ \t]+[^>]*|/[A-Za-z][A-Za-z0-9-]*|!--[^>]*)$" as $opener
               | if ($markdown | test($opener)) then
                   ($markdown | match($opener).offset) as $open
-                  | $content[0:$open]
+                  | (($full_markdown[$open:] | index(">")) // -1) as $future_close
+                  | if $future_close > 0 then $content[0:$open] else $content end
                 else
                   $content
                 end;
-            def non_code_safe:
-              without_unclosed_link
-              | without_unclosed_autolink
-              | without_unclosed_marker("**")
-              | without_unclosed_marker("__")
-              | without_unclosed_marker("~~")
-              | without_unclosed_marker("*")
+            def non_code_safe($full_content):
+              without_unclosed_link($full_content)
+              | without_unclosed_autolink($full_content)
+              | without_unclosed_marker("**"; $full_content)
+              | without_unclosed_marker("__"; $full_content)
+              | without_unclosed_marker("~~"; $full_content)
+              | without_unclosed_marker("*"; $full_content)
               | sub("[ \n]+$"; "");
             def with_ellipsis:
-              if test("(^|\n)[ \t]*`{3,}[ \t]*$") then
+              if test("(^|\n) {0,3}(?:`{3,}|~{3,})[ \t]*$") then
                 . + "\n..."
               else
                 (sub("\\.+$"; "")) + "..."
@@ -333,7 +408,7 @@ jobs:
               | if ($paragraphs | length) > 0 then
                   $paragraphs
                 else
-                  $body | word_prefix($limit) | markdown_safe | non_code_safe
+                  $body | word_prefix($limit) | markdown_safe | non_code_safe($body)
                 end;
             def bounded($limit):
               . as $body

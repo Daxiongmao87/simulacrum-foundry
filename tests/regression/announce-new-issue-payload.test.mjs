@@ -28,7 +28,7 @@ function extractJqFilter(source) {
   return source.slice(filterStart, filterEnd).replace(/^\n/u, '');
 }
 
-function buildPayload({ body = issue181Body, title = 'Feature request' } = {}) {
+function buildPayload({ body = issue181Body, title = 'Feature request', timeout } = {}) {
   const event = {
     issue: {
       number: 181,
@@ -45,6 +45,7 @@ function buildPayload({ body = issue181Body, title = 'Feature request' } = {}) {
   const result = spawnSync('jq', ['--arg', 'repository', REPOSITORY, jqFilter], {
     input: JSON.stringify(event),
     encoding: 'utf8',
+    timeout,
   });
 
   assert.equal(result.status, 0, result.stderr || 'jq payload generation failed');
@@ -327,4 +328,36 @@ test('word fallback excludes heading markers from its slice budget', () => {
   const description = descriptionOf(buildPayload({ body }));
 
   assert.equal(description.length, 698);
+});
+
+test('word fallback preserves escaped and literal asterisks', () => {
+  const escapedBody = `Use \\* literally and preserve this explanation. ${'word '.repeat(180)}`;
+  const escapedDescription = descriptionOf(buildPayload({ body: escapedBody }));
+  assert.match(escapedDescription, /Use \\\* literally and preserve this explanation\./u);
+
+  const literalBody = `Multiply 5 * 3 and preserve this explanation. ${'word '.repeat(180)}`;
+  const literalDescription = descriptionOf(buildPayload({ body: literalBody }));
+  assert.match(literalDescription, /Multiply 5 \* 3 and preserve this explanation\./u);
+});
+
+test('word fallback preserves literal unmatched brackets', () => {
+  const body = `Valid range [0, 1) and preserve this explanation. ${'word '.repeat(180)}`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.match(description, /Valid range \[0, 1\) and preserve this explanation\./u);
+});
+
+test('tilde fences preserve code without heading conversion', () => {
+  const body = ['~~~python', '# not a heading', 'value = `literal`', '~~~'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, body);
+});
+
+test('newline-heavy bodies complete within the payload budget', () => {
+  const body = Array.from({ length: 32_768 }, () => 'x').join('\n');
+  const description = descriptionOf(buildPayload({ body, timeout: 2_000 }));
+
+  assert.ok(description.startsWith('x\nx\nx\n'), description.slice(0, 40));
+  assert.ok(description.length <= SUMMARY_LIMIT, `description length: ${description.length}`);
 });
