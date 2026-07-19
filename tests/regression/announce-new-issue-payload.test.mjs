@@ -580,3 +580,29 @@ test('word fallback removes the outer opener of a nested link label', () => {
   assert.match(protectedDescription, /^Keep `\[literal\]` and \\\[escaped\\\]\. /u);
   assert.equal(protectedDescription.includes('[outer'), false);
 });
+
+test('tilde translation drops backtick-bearing info strings', () => {
+  const body = ['> ~~~lang`option', '> # literal code', '> ~~~'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, ['> ```', '> # literal code', '> ```'].join('\n'));
+});
+
+test('nested link-label pairing completes within the payload budget', () => {
+  const depth = 340;
+  const body =
+    `Intro ${'['.repeat(depth)}` +
+    `${'word '.repeat(12_500).trim()}` +
+    `${']'.repeat(depth)}(https://example.com)`;
+  const description = descriptionOf(buildPayload({ body, timeout: 10_000 }));
+
+  assert.equal(description, 'Intro...');
+});
+
+test('word fallback repairs crossed longer asterisk runs', () => {
+  const crossed = descriptionOf(buildPayload({ body: `****${'word '.repeat(180).trim()}****` }));
+  assert.equal(crossed.startsWith('****'), false);
+
+  const completed = '****complete****';
+  assert.equal(descriptionOf(buildPayload({ body: completed })), completed);
+});

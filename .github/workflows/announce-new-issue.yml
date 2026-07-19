@@ -270,7 +270,13 @@ jobs:
                   | $parts.container +
                     $list_prefix +
                     repeated_backticks($output_length) +
-                    $fence.suffix
+                    (
+                      if ($fence.suffix | contains("`")) then
+                        ""
+                      else
+                        $fence.suffix
+                      end
+                    )
                 else
                   .
                 end;
@@ -1039,9 +1045,9 @@ jobs:
                     }
                   | select(.can_open or .can_close)
                 ];
-            def crossed_asterisk_opener($required_length; $prefix_length):
+            def crossed_asterisk_opener($delimiters; $required_length; $prefix_length):
               reduce (
-                asterisk_delimiters[]
+                $delimiters[]
                 | select(.length == $required_length)
               ) as $delimiter (
                 {open: null, crossed: null};
@@ -1096,15 +1102,13 @@ jobs:
                 else
                   ($content | length) as $prefix_length
                   | ($full_content | mask_completed_inline_code) as $markdown
+                  | ($markdown | asterisk_delimiters) as $delimiters
                   | [
-                      1, 2, 3
-                      | . as $required_length
-                      | (
-                          $markdown
-                          | crossed_asterisk_opener(
-                              $required_length;
-                              $prefix_length
-                            )
+                      ($delimiters | map(.length) | unique[]) as $required_length
+                      | crossed_asterisk_opener(
+                          $delimiters;
+                          $required_length;
+                          $prefix_length
                         )
                       | select(. != null)
                     ] as $openers
@@ -1167,45 +1171,27 @@ jobs:
                   end
                 )
               | .stack;
-            def matching_bracket_close($open):
+            def bracket_pair_indexes:
               (. | explode) as $chars
-              | reduce range(($open + 1); ($chars | length)) as $index (
-                  {depth: 1, close: null};
-                  if .close != null then
-                    .
-                  elif $chars[$index] == 91 then
-                    .depth += 1
-                  elif $chars[$index] == 93 then
-                    .depth -= 1
-                    | if .depth == 0 then
-                        .close = $index
-                      else
-                        .
-                      end
-                  else
-                    .
-                  end
-                )
-              | .close;
-            def matching_bracket_open($close):
-              (. | explode) as $chars
-              | reduce range(0; ($close + 1)) as $index (
-                  {stack: [], open: null};
+              | reduce range(0; ($chars | length)) as $index (
+                  {
+                    stack: [],
+                    closes: {},
+                    opens: {}
+                  };
                   if $chars[$index] == 91 then
                     .stack += [$index]
                   elif ($chars[$index] == 93) and
                       ((.stack | length) > 0) then
-                    if $index == $close then
-                      .open = .stack[-1]
-                    else
-                      .
-                    end
+                    (.stack[-1]) as $open
                     | .stack = .stack[0:-1]
+                    | .closes[($open | tostring)] = $index
+                    | .opens[($index | tostring)] = $open
                   else
                     .
                   end
                 )
-              | .open;
+              | del(.stack);
             def without_unclosed_link($full_content):
               . as $content
               | if ($full_content | contains("[") | not) then
@@ -1214,12 +1200,12 @@ jobs:
                   ($content | mask_completed_inline_code) as $markdown
                   | ($full_content | mask_completed_inline_code) as $full_markdown
                   | ($full_markdown | explode) as $full_chars
+                  | ($full_markdown | bracket_pair_indexes) as $brackets
                   | ($markdown | unmatched_bracket_openers) as $label_openers
                   | [
                       $label_openers[] as $label_open
                       | (
-                          $full_markdown
-                          | matching_bracket_close($label_open)
+                          $brackets.closes[($label_open | tostring)]
                         ) as $label_close
                       | select(
                           ($label_close != null) and
@@ -1240,10 +1226,7 @@ jobs:
                       (($markdown | rindex("](")) // -1) as $destination_open
                       | if $destination_open >= 0 then
                           (
-                            $markdown
-                            | matching_bracket_open(
-                                $destination_open
-                              )
+                            $brackets.opens[($destination_open | tostring)]
                           ) as $link_open
                           | (
                               $full_markdown
