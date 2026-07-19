@@ -6,7 +6,8 @@ on:
   issues:
     types: [opened]
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   announce:
@@ -15,52 +16,18 @@ jobs:
     timeout-minutes: 2
 
     steps:
+      - name: Checkout formatter
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Build Discord payload
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
-          jq --arg repository "$REPOSITORY" '
-            def normalized:
-              gsub("[[:space:]]+"; " ")
-              | sub("^ "; "")
-              | sub(" $"; "");
-            def summary:
-              (. // "" | normalized) as $body
-              | if ($body | length) == 0 then
-                  "_No description provided._"
-                elif ($body | length) > 700 then
-                  $body[0:697] + "..."
-                else
-                  $body
-                end;
-            {
-              username: "GitHub Issues",
-              allowed_mentions: {parse: []},
-              embeds: [{
-                title: (
-                  .issue.title
-                  | if length > 256 then .[0:253] + "..." else . end
-                ),
-                url: .issue.html_url,
-                description: (.issue.body | summary),
-                color: 5814783,
-                author: {
-                  name: ("Opened by @" + .issue.user.login),
-                  url: .issue.user.html_url,
-                  icon_url: .issue.user.avatar_url
-                },
-                fields: [{
-                  name: "Issue",
-                  value: (
-                    "[Open issue #" + (.issue.number | tostring) + "](" +
-                    .issue.html_url + ")"
-                  ),
-                  inline: false
-                }],
-                footer: {text: $repository}
-              }]
-            }
-          ' "$GITHUB_EVENT_PATH" > discord-payload.json
+          node .github/scripts/build-issue-announcement.mjs \
+            "$GITHUB_EVENT_PATH" \
+            discord-payload.json
 
       - name: Send Discord announcement
         env:
