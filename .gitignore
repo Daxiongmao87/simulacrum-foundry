@@ -5,6 +5,7 @@ reference/
 CLAUDE.md
 
 # Specification documents (development-only)
+spec/
 specs/
 !tests/e2e/specs/
 !tests/e2e/specs/**
