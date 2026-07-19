@@ -71,7 +71,196 @@ jobs:
               end;
             def repeated_backticks($length):
               [range(0; $length) | "`"] | join("");
-            def discord_fence_line($output_length):
+            def repeated_spaces($length):
+              [range(0; $length) | " "] | join("");
+            def blockquote_parts:
+              capture(
+                "^(?<container>(?: {0,3}>[ \t]?)*)(?<content>.*)$"
+              )
+              | {
+                  container: (.container // ""),
+                  content: (.content // "")
+                };
+            def list_marker_parts:
+              blockquote_parts as $parts
+              | (
+                  $parts.content
+                  | if test(
+                      "^(?: {0,3})(?:[-+*]|[0-9]{1,9}[.)])[ \t]{1,4}"
+                    ) then
+                      capture(
+                        "^(?<indent> {0,3})(?<marker>(?:[-+*]|[0-9]{1,9}[.)]))(?<spacing>[ \t]{1,4})(?<content>.*)$"
+                      )
+                    else
+                      null
+                    end
+                ) as $marker
+              | if $marker == null then
+                  null
+                else
+                  {
+                    blockquote: $parts.container,
+                    continuation_length: (
+                      ($marker.indent | length) +
+                      ($marker.marker | length) +
+                      ($marker.spacing | length)
+                    ),
+                    prefix: (
+                      $marker.indent +
+                      $marker.marker +
+                      $marker.spacing
+                    ),
+                    content: $marker.content
+                  }
+                end;
+            def list_continuation_fence_line(
+              $line;
+              $parts;
+              $active_indent;
+              $active_blockquote
+            ):
+              if ($active_indent > 0) and
+                  ($active_blockquote == ($parts.container // "")) and
+                  (
+                    ($parts.content // "")
+                    | startswith(
+                        repeated_spaces($active_indent)
+                      )
+                  ) then
+                {
+                  source: $line,
+                  detection: (
+                    $parts.container +
+                    $parts.content[$active_indent:]
+                  ),
+                  list_prefix: (
+                    $parts.content[0:$active_indent]
+                  )
+                }
+              else
+                null
+              end;
+            def list_aware_fence_lines:
+              . as $lines
+              | if (
+                  $lines
+                  | join("\n")
+                  | test(
+                      "(^|\n)(?: {0,3}>[ \t]?)* {0,3}(?:[-+*]|[0-9]{1,9}[.)])[ \t]{1,4}"
+                    )
+                  | not
+                ) then
+                  $lines
+                  | map({
+                      source: .,
+                      detection: .,
+                      list_prefix: ""
+                    })
+                else
+                  [
+                    foreach $lines[] as $line (
+                      {
+                        list_indent: 0,
+                        blockquote: "",
+                        in_fence: false,
+                        fence_character: "",
+                        fence_length: 0,
+                        item: null
+                      };
+                      ($line | blockquote_parts) as $parts
+                      | (.list_indent) as $active_indent
+                      | (.blockquote // "") as $active_blockquote
+                      | if .in_fence then
+                          (.fence_character) as $required_character
+                          | (.fence_length) as $required_length
+                          | (
+                              $line
+                              | list_continuation_fence_line(
+                                  $line;
+                                  $parts;
+                                  $active_indent;
+                                  $active_blockquote
+                                )
+                            ) as $continued
+                          | .item = (
+                              $continued
+                              // {
+                                source: $line,
+                                detection: $line,
+                                list_prefix: ""
+                              }
+                            )
+                          | if (
+                              .item.detection
+                              | valid_fence_close(
+                                  $required_character;
+                                  $required_length
+                                )
+                            ) then
+                              .in_fence = false
+                              | .fence_character = ""
+                              | .fence_length = 0
+                            else
+                              .
+                            end
+                        else
+                          ($line | list_marker_parts) as $marker
+                          | (
+                              $line
+                              | list_continuation_fence_line(
+                                  $line;
+                                  $parts;
+                                  $active_indent;
+                                  $active_blockquote
+                                )
+                            ) as $continued
+                          | if $marker != null then
+                              .list_indent = $marker.continuation_length
+                              | .blockquote = $marker.blockquote
+                              | .item = {
+                                  source: $line,
+                                  detection: (
+                                    $marker.blockquote +
+                                    $marker.content
+                                  ),
+                                  list_prefix: $marker.prefix
+                                }
+                            elif $continued != null then
+                              .item = $continued
+                            elif (($parts.content // "") | test("^[ \t]*$")) then
+                              .item = {
+                                source: $line,
+                                detection: $line,
+                                list_prefix: ""
+                              }
+                            else
+                              .list_indent = 0
+                              | .blockquote = ""
+                              | .item = {
+                                  source: $line,
+                                  detection: $line,
+                                  list_prefix: ""
+                                }
+                            end
+                          | if (.item.detection | fence_open) then
+                              .in_fence = true
+                              | .fence_character = (
+                                  .item.detection
+                                  | fence_character
+                                )
+                              | .fence_length = (
+                                  .item.detection
+                                  | fence_length
+                                )
+                            else
+                              .
+                            end
+                        end;
+                      .item
+                    )
+                  ]
+                end;
+            def discord_fence_line($output_length; $list_prefix):
               fence_parts as $parts
               | if ($parts.content | startswith("~~~")) then
                   (
@@ -79,6 +268,7 @@ jobs:
                     | capture("^(?<delimiter>~{3,})(?<suffix>.*)$")
                   ) as $fence
                   | $parts.container +
+                    $list_prefix +
                     repeated_backticks($output_length) +
                     $fence.suffix
                 else
@@ -88,6 +278,7 @@ jobs:
               ([match("`+"; "g").length] | max) // 0;
             def tilde_fence_translations:
               . as $lines
+              | ($lines | list_aware_fence_lines) as $fence_lines
               | [
                   foreach range(0; ($lines | length)) as $index (
                     {
@@ -98,9 +289,9 @@ jobs:
                       max_backticks: 0,
                       completed: null
                     };
-                    ($lines[$index]) as $line
+                    ($fence_lines[$index]) as $line
                     | .completed = null
-                    | ($line | fence_open) as $opens_fence
+                    | ($line.detection | fence_open) as $opens_fence
                     | if .in_fence then
                         (.fence_character) as $required_character
                         | (.fence_length) as $required_length
@@ -108,7 +299,10 @@ jobs:
                             .max_backticks = (
                               [
                                 .max_backticks,
-                                ($line | maximum_backtick_run)
+                                (
+                                  $line.detection
+                                  | maximum_backtick_run
+                                )
                               ]
                               | max
                             )
@@ -116,7 +310,7 @@ jobs:
                             .
                           end
                         | if (
-                            $line
+                            $line.detection
                             | valid_fence_close(
                                 $required_character;
                                 $required_length
@@ -147,8 +341,14 @@ jobs:
                           end
                       elif $opens_fence then
                         .in_fence = true
-                        | .fence_character = ($line | fence_character)
-                        | .fence_length = ($line | fence_length)
+                        | .fence_character = (
+                            $line.detection
+                            | fence_character
+                          )
+                        | .fence_length = (
+                            $line.detection
+                            | fence_length
+                          )
                         | if .fence_character == "~" then
                             .open_line = $index
                             | .max_backticks = 0
@@ -204,6 +404,7 @@ jobs:
                 if contains("\\") then mask_escaped_markdown else . end
               else
                 split("\n")
+                | list_aware_fence_lines
                 | [
                     foreach .[] as $line (
                       {
@@ -212,13 +413,16 @@ jobs:
                         fence_length: 0,
                         output: ""
                       };
-                      ($line | fence_open) as $opens_fence
+                      ($line.detection | fence_open) as $opens_fence
                       | if .in_fence then
                           (.fence_character) as $required_character
                           | (.fence_length) as $required_length
-                          | .output = ($line | gsub("."; " "))
+                          | .output = (
+                              $line.source
+                              | gsub("."; " ")
+                            )
                           | if (
-                              $line
+                              $line.detection
                               | valid_fence_close(
                                   $required_character;
                                   $required_length
@@ -231,16 +435,26 @@ jobs:
                               .
                             end
                         elif $opens_fence then
-                          .output = ($line | gsub("."; " "))
+                          .output = (
+                            $line.source
+                            | gsub("."; " ")
+                          )
                           | .in_fence = true
-                          | .fence_character = ($line | fence_character)
-                          | .fence_length = ($line | fence_length)
+                          | .fence_character = (
+                              $line.detection
+                              | fence_character
+                            )
+                          | .fence_length = (
+                              $line.detection
+                              | fence_length
+                            )
                         else
                           .output = (
-                            if $line | contains("\\") then
-                              $line | mask_escaped_markdown
+                            if $line.source | contains("\\") then
+                              $line.source
+                              | mask_escaped_markdown
                             else
-                              $line
+                              $line.source
                             end
                           )
                         end;
@@ -406,7 +620,7 @@ jobs:
                     | if ($heading | length) == 0 then
                         ""
                       else
-                        heading_marker + "**" + $heading + "**"
+                        $line.indent + heading_marker + "**" + $heading + "**"
                       end
                   else
                     $line.indent + $content
@@ -416,6 +630,7 @@ jobs:
               gsub("\r\n"; "\n")
               | gsub("\r"; "\n") as $content
               | ($content | split("\n")) as $lines
+              | ($lines | list_aware_fence_lines) as $fence_lines
               | ($lines | tilde_fence_translations) as $tilde_translations
               | (
                   $content
@@ -442,18 +657,22 @@ jobs:
                       emit: false,
                       output: ""
                     };
-                    ($lines[$index]) as $line
+                    ($fence_lines[$index]) as $fence_line
+                    | ($fence_line.source) as $line
                     | (
                         $tilde_translations[($index | tostring)]
                         // null
                       ) as $translation_length
                     | .emit = false
-                    | ($line | fence_open) as $opens_fence
+                    | (
+                        $fence_line.detection
+                        | fence_open
+                      ) as $opens_fence
                     | if .in_fence then
                         (.fence_character) as $required_character
                         | (.fence_length) as $required_length
                         | (
-                            $line
+                            $fence_line.detection
                             | valid_fence_close(
                                 $required_character;
                                 $required_length
@@ -463,9 +682,10 @@ jobs:
                             if $required_character == "~" and
                                 $closes_fence and
                                 ($translation_length != null) then
-                              $line
+                              $fence_line.detection
                               | discord_fence_line(
-                                  $translation_length
+                                  $translation_length;
+                                  $fence_line.list_prefix
                                 )
                             else
                               $line
@@ -482,11 +702,15 @@ jobs:
                           end
                       elif $opens_fence then
                         .output = (
-                          if ($line | fence_character) == "~" and
+                          if (
+                            $fence_line.detection
+                            | fence_character
+                          ) == "~" and
                               ($translation_length != null) then
-                            $line
+                            $fence_line.detection
                             | discord_fence_line(
-                                $translation_length
+                                $translation_length;
+                                $fence_line.list_prefix
                               )
                           else
                             $line
@@ -494,8 +718,14 @@ jobs:
                         )
                         | .emit = true
                         | .in_fence = true
-                        | .fence_character = ($line | fence_character)
-                        | .fence_length = ($line | fence_length)
+                        | .fence_character = (
+                            $fence_line.detection
+                            | fence_character
+                          )
+                        | .fence_length = (
+                            $fence_line.detection
+                            | fence_length
+                          )
                         | .blank_count = 0
                       else
                         (
@@ -584,6 +814,7 @@ jobs:
               | if $cut > 0 then $slice[0:$cut] else $slice end;
             def without_unclosed_fence:
               split("\n")
+              | list_aware_fence_lines
               | reduce .[] as $line (
                   {
                     lines: [],
@@ -592,14 +823,17 @@ jobs:
                     fence_length: 0,
                     fence_start: 0
                   };
-                  ($line | fence_open) as $opens_fence
+                  ($line.detection | fence_open) as $opens_fence
                   | if .in_fence then
                       (.fence_character) as $required_character
                       | (.fence_length) as $required_length
-                      | .lines += [$line]
+                      | .lines += [$line.source]
                       | if (
-                          $line
-                          | valid_fence_close($required_character; $required_length)
+                          $line.detection
+                          | valid_fence_close(
+                              $required_character;
+                              $required_length
+                            )
                         ) then
                           .in_fence = false
                           | .fence_character = ""
@@ -609,12 +843,18 @@ jobs:
                         end
                     elif $opens_fence then
                       .fence_start = (.lines | length)
-                      | .lines += [$line]
+                      | .lines += [$line.source]
                       | .in_fence = true
-                      | .fence_character = ($line | fence_character)
-                      | .fence_length = ($line | fence_length)
+                      | .fence_character = (
+                          $line.detection
+                          | fence_character
+                        )
+                      | .fence_length = (
+                          $line.detection
+                          | fence_length
+                        )
                     else
-                      .lines += [$line]
+                      .lines += [$line.source]
                     end
                 )
               | if .in_fence then .lines[0:.fence_start] else .lines end
@@ -857,7 +1097,7 @@ jobs:
                   ($content | length) as $prefix_length
                   | ($full_content | mask_completed_inline_code) as $markdown
                   | [
-                      1, 2
+                      1, 2, 3
                       | . as $required_length
                       | (
                           $markdown
@@ -913,6 +1153,59 @@ jobs:
                   end
                 )
               | .close;
+            def unmatched_bracket_openers:
+              (. | explode) as $chars
+              | reduce range(0; ($chars | length)) as $index (
+                  {stack: []};
+                  if $chars[$index] == 91 then
+                    .stack += [$index]
+                  elif ($chars[$index] == 93) and
+                      ((.stack | length) > 0) then
+                    .stack = .stack[0:-1]
+                  else
+                    .
+                  end
+                )
+              | .stack;
+            def matching_bracket_close($open):
+              (. | explode) as $chars
+              | reduce range(($open + 1); ($chars | length)) as $index (
+                  {depth: 1, close: null};
+                  if .close != null then
+                    .
+                  elif $chars[$index] == 91 then
+                    .depth += 1
+                  elif $chars[$index] == 93 then
+                    .depth -= 1
+                    | if .depth == 0 then
+                        .close = $index
+                      else
+                        .
+                      end
+                  else
+                    .
+                  end
+                )
+              | .close;
+            def matching_bracket_open($close):
+              (. | explode) as $chars
+              | reduce range(0; ($close + 1)) as $index (
+                  {stack: [], open: null};
+                  if $chars[$index] == 91 then
+                    .stack += [$index]
+                  elif ($chars[$index] == 93) and
+                      ((.stack | length) > 0) then
+                    if $index == $close then
+                      .open = .stack[-1]
+                    else
+                      .
+                    end
+                    | .stack = .stack[0:-1]
+                  else
+                    .
+                  end
+                )
+              | .open;
             def without_unclosed_link($full_content):
               . as $content
               | if ($full_content | contains("[") | not) then
@@ -920,17 +1213,37 @@ jobs:
                 else
                   ($content | mask_completed_inline_code) as $markdown
                   | ($full_content | mask_completed_inline_code) as $full_markdown
-                  | (($markdown | rindex("[")) // -1) as $label_open
-                  | (($markdown | rindex("]")) // -1) as $label_close
-                  | if $label_open > $label_close then
-                      (($full_markdown[$label_open:] | index("]")) // -1) as $future_close
-                      | if $future_close > 0 then $content[0:$label_open] else $content end
+                  | ($full_markdown | explode) as $full_chars
+                  | ($markdown | unmatched_bracket_openers) as $label_openers
+                  | [
+                      $label_openers[] as $label_open
+                      | (
+                          $full_markdown
+                          | matching_bracket_close($label_open)
+                        ) as $label_close
+                      | select(
+                          ($label_close != null) and
+                          ($label_close >= ($content | length)) and
+                          (
+                            $full_chars[($label_close + 1)]
+                            == 40
+                          )
+                        )
+                      | {
+                          open: $label_open,
+                          close: $label_close
+                        }
+                    ] as $crossed_labels
+                  | if ($crossed_labels | length) > 0 then
+                      $content[0:$crossed_labels[0].open]
                     else
                       (($markdown | rindex("](")) // -1) as $destination_open
                       | if $destination_open >= 0 then
                           (
-                            ($markdown[0:$destination_open] | rindex("["))
-                            // $destination_open
+                            $markdown
+                            | matching_bracket_open(
+                                $destination_open
+                              )
                           ) as $link_open
                           | (
                               $full_markdown
@@ -938,7 +1251,8 @@ jobs:
                                   ($destination_open + 1)
                                 )
                             ) as $destination_close
-                          | if ($destination_close != null) and
+                          | if ($link_open != null) and
+                              ($destination_close != null) and
                               ($destination_close >= ($content | length)) then
                               $content[0:$link_open]
                             else
@@ -974,7 +1288,16 @@ jobs:
               | without_unclosed_marker("~~"; $full_content)
               | sub("[ \n]+$"; "");
             def with_ellipsis:
-              if (split("\n")[-1] | fence_close) then
+              if (
+                split("\n")
+                | list_aware_fence_lines
+                | if length == 0 then
+                    false
+                  else
+                    .[-1].detection
+                    | fence_close
+                  end
+              ) then
                 . + "\n..."
               else
                 (sub("\\.+$"; "")) + "..."

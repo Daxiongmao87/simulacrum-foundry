@@ -513,3 +513,70 @@ test('truncation places the ellipsis after a blockquote closing fence', () => {
 
   assert.equal(description, ['> ```sh', '> printf "a  b"', '> ```', '...'].join('\n'));
 });
+
+test('list continuation indentation exposes nested fenced blocks', () => {
+  const body = [
+    '10. item',
+    '    ```js',
+    `    const literal = "\`\`\`"; ${'word '.repeat(180).trim()}`,
+    '    ```',
+  ].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, '10. item...');
+
+  const completedListFence = ['10. item', '    ```js', '    value = 1;', '    ```'].join('\n');
+  assert.equal(descriptionOf(buildPayload({ body: completedListFence })), completedListFence);
+
+  const topLevelIndented = ['    ```js', '    value = 1;', '    ```'].join('\n');
+  assert.equal(descriptionOf(buildPayload({ body: topLevelIndented })), topLevelIndented);
+});
+
+test('list markers inside fenced code do not alter fence state', () => {
+  const body = ['```md', '- ```', '# literal  code', '```'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, body);
+});
+
+test('converted headings retain list continuation indentation', () => {
+  const body = ['- Parent', '  # Nested heading', '  Nested text'].join('\n');
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description, ['- Parent', '  **Nested heading**', '  Nested text'].join('\n'));
+});
+
+test('word fallback repairs crossed compound asterisk emphasis', () => {
+  const crossed = descriptionOf(buildPayload({ body: `***${'word '.repeat(180).trim()}***` }));
+  assert.equal(crossed.startsWith('***'), false);
+
+  const literalBody = `Rule *** here; run \`echo "***literal***"\`. ${'word '.repeat(
+    150
+  )}***later***`;
+  const literal = descriptionOf(buildPayload({ body: literalBody }));
+  assert.match(literal, /^Rule \*\*\* here; run `echo "\*\*\*literal\*\*\*"`\. /u);
+
+  const escapedBody = `Keep \\*** literally. ${'word '.repeat(150)}***later***`;
+  const escaped = descriptionOf(buildPayload({ body: escapedBody }));
+  assert.match(escaped, /^Keep \\\*\*\* literally\. /u);
+});
+
+test('word fallback removes the outer opener of a nested link label', () => {
+  const body =
+    `Intro ${'word '.repeat(90)}` +
+    `[outer [inner ${'tail '.repeat(100).trim()}] label](https://example.com)`;
+  const description = descriptionOf(buildPayload({ body }));
+
+  assert.equal(description.includes('['), false);
+  assert.match(description, /\.\.\.$/u);
+
+  const completed = '[outer [inner] label](https://example.com)';
+  assert.equal(descriptionOf(buildPayload({ body: completed })), completed);
+
+  const protectedBody =
+    `Keep \`[literal]\` and \\[escaped\\]. ${'word '.repeat(70)}` +
+    `[outer [inner ${'tail '.repeat(100).trim()}] label](https://example.com)`;
+  const protectedDescription = descriptionOf(buildPayload({ body: protectedBody }));
+  assert.match(protectedDescription, /^Keep `\[literal\]` and \\\[escaped\\\]\. /u);
+  assert.equal(protectedDescription.includes('[outer'), false);
+});
