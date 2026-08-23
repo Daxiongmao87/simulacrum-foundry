@@ -21,6 +21,7 @@ const EntryType = Object.freeze({
   TOOL_CALL: 'tool_call',
   TOOL_RESULT: 'tool_result',
   SYSTEM: 'system',
+  LOOP_EVENT: 'loop_event',
 });
 
 /**
@@ -225,6 +226,25 @@ class InteractionLogger {
         success,
         durationMs,
       },
+    });
+  }
+
+  /**
+   * Log a correlated tool-loop lifecycle event for stall diagnostics (#178)
+   * @param {string} loopId - Correlated loop identifier
+   * @param {string} event - Event name, e.g. 'loop_started', 'loop_ended'
+   * @param {object} [details] - Small serializable details object
+   */
+  logLoopEvent(loopId, event, details = {}) {
+    if (!this.enabled || !loopId) return;
+
+    this._addEntry({
+      id: this._generateId(),
+      timestamp: new Date().toISOString(),
+      type: EntryType.LOOP_EVENT,
+      loopId,
+      event,
+      details: details || {},
     });
   }
 

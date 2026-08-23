@@ -63,7 +63,7 @@ class ConversationEngine {
       const callId = `${RETRY_STATUS_CALL_PREFIX}-${Date.now()}-${nextAttempt}`;
       const label = buildRetryLabel(nextAttempt, MAX_PRE_TOOL_ATTEMPTS);
 
-      emitProcessStatus('start', callId, label);
+      emitProcessStatus('start', callId, { label });
       try {
         if (delayMs) {
           await delayWithSignal(delayMs, signal);
@@ -123,6 +123,22 @@ class ConversationEngine {
       onToolResult: onToolResult || null,
     });
 
+    // Surface the repeat-limit terminal so the loop never ends silently (#178)
+    if (finalResponse?._toolLimitReachedError) {
+      const limitMessage = {
+        role: 'assistant',
+        content:
+          'Tool execution limit reached. The autonomous loop stopped at the configured iteration limit.',
+        display:
+          '⚠️ **Tool execution limit reached**\n\nSend another message to continue the task.',
+        _fromToolLoop: true,
+      };
+      this.conversationManager.addMessage('assistant', limitMessage.content);
+      if (onAssistantMessage) {
+        await onAssistantMessage(limitMessage);
+      }
+      return limitMessage;
+    }
     // If loop produced a distinct final message and it wasn't already emitted by the loop handler, emit to UI
     if (finalResponse && finalResponse.content && onAssistantMessage && !finalResponse._emitted) {
       await onAssistantMessage({

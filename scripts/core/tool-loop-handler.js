@@ -62,13 +62,48 @@ export function retrieveToolJustification(toolCallId) {
  */
 export async function processToolCallLoop(options) {
   const callId = `tool-loop-${foundry.utils.randomID()}`;
+  const loopId = callId;
+  const context = { ...options, loopId };
+
+  let terminalReason = 'unknown';
 
   try {
-    emitProcessStatus('start', callId, 'Thinking...', 'agentic-loop');
-    return await _runLoopIteration(options);
+    emitProcessStatus('start', callId, { label: 'Thinking...', toolName: 'agentic-loop' });
+    interactionLogger.logLoopEvent(loopId, 'loop_started', {
+      initialToolCalls: options.initialResponse?.toolCalls?.length ?? 0,
+    });
+
+    const result = await _runLoopIteration(context);
+
+    // Audit: every loop exit must carry an explicit terminal reason (#178).
+    if (result?._terminalReason) {
+      terminalReason = result._terminalReason;
+    } else {
+      logger.error('Loop exited without terminal reason', { loopId });
+      terminalReason = 'unknown';
+      if (result) result._terminalReason = 'unknown';
+    }
+
+    return result;
+  } catch (error) {
+    terminalReason = _classifyLoopError(error);
+    throw error;
   } finally {
-    emitProcessStatus('end', callId);
+    interactionLogger.logLoopEvent(loopId, 'loop_ended', { reason: terminalReason });
+    emitProcessStatus('end', callId, { reason: terminalReason });
   }
+}
+
+/**
+ * Classify a loop error into a terminal reason string for timeline correlation.
+ * @param {Error} error - The error thrown by the loop
+ * @returns {string} 'cancelled' or 'error:<ErrorName>'
+ */
+function _classifyLoopError(error) {
+  if (error?.name === 'AbortError' || /cancel/i.test(error?.message || '')) {
+    return 'cancelled';
+  }
+  return `error:${error?.name || 'Error'}`;
 }
 
 // --- Internal Loop Logic ---
@@ -89,8 +124,13 @@ async function _runLoopIteration(context) {
   const CIRCUIT_BREAKER_THRESHOLD = 3;
   let lastResponseContent = null;
   let consecutiveRepeats = 0;
+  let terminalReason = 'unknown';
 
   while (repeatCount < REPEAT_LIMIT) {
+    interactionLogger.logLoopEvent(context.loopId, 'loop_iteration_advanced', {
+      repeatCount,
+    });
+
     if (context.signal?.aborted) throw new Error('Process was cancelled');
 
     // Circuit breaker check: detect if AI is generating same text-only response repeatedly
@@ -122,6 +162,7 @@ async function _runLoopIteration(context) {
             display: currentContent,
             toolCalls: [],
             _circuitBreakerTriggered: true,
+            _terminalReason: 'circuit_breaker',
           };
         }
       } else {
@@ -200,8 +241,14 @@ async function _runLoopIteration(context) {
     });
 
     // Handle cycle outcome
-    if (cycleResult.action === 'return') return cycleResult.value;
-    if (cycleResult.action === 'break') break;
+    if (cycleResult.action === 'return') {
+      cycleResult.value._terminalReason = cycleResult.reason || 'unknown';
+      return cycleResult.value;
+    }
+    if (cycleResult.action === 'break') {
+      terminalReason = cycleResult.reason || 'unknown';
+      break;
+    }
 
     // Update state for next iteration
     currentResponse = cycleResult.response;
@@ -211,13 +258,16 @@ async function _runLoopIteration(context) {
 
   // Handle Repeat Limit if loop finished naturally without break
   if (repeatCount >= REPEAT_LIMIT) {
-    return _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
+    const value = _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
+    value._terminalReason = 'repeat_limit';
+    return value;
   }
 
   // NOTE: We do NOT need to call _notifyAssistantMessage here.
   // The content was already notified at the start of the final iteration (Line 50)
   // or will be handled by the caller. Invoking it here causes duplicates.
 
+  currentResponse._terminalReason = terminalReason;
   return currentResponse;
 }
 
@@ -237,7 +287,8 @@ async function _processLoopCycle(currentResponse, context, state) {
   if (isToolCallFailure(currentResponse)) {
     toolFailureAttempts++;
     if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
-      return { action: 'return', value: await _runToolFailureFallback(context) };
+      const value = await _runToolFailureFallback(context);
+      return { action: 'return', value, reason: 'tool_failure_fallback' };
     }
     const response = await _handleToolRefusal(currentResponse, context, toolFailureAttempts);
     return { action: 'continue', response, repeatCount, toolFailureAttempts };
@@ -249,7 +300,7 @@ async function _processLoopCycle(currentResponse, context, state) {
     // Instead of breaking, ask AI to use end_loop tool
     repeatCount++;
     if (repeatCount >= REPEAT_LIMIT) {
-      return { action: 'break' }; // Safety valve
+      return { action: 'break', reason: 'repeat_limit' };
     }
 
     // PERSIST FIX: Save the AI's text content as a visible message BEFORE adding correction.
@@ -267,6 +318,9 @@ To exit this loop, call the \`end_loop\` tool. Your text response is already dis
 
 You cannot respond without a tool call. Either continue with the next tool in your plan, or call end_loop to finish.`;
     await appendEmptyContentCorrection(context.conversationManager, correctionMessage);
+    interactionLogger.logLoopEvent(context.loopId, 'continuation_requested', {
+      reason: 'text_only_correction',
+    });
     const response = await _getNextAIResponse([], context);
     return { action: 'continue', response, repeatCount, toolFailureAttempts };
   }
@@ -329,6 +383,12 @@ You cannot respond without a tool call. Either continue with the next tool in yo
     throw execError;
   }
 
+  interactionLogger.logLoopEvent(context.loopId, 'tool_results_committed', {
+    committed: toolResults.length,
+    successful: toolResults.filter(r => r.success).length,
+    toolNames: toolResults.map(r => r.toolName),
+  });
+
   // 5. Handle Execution Failures
   if (toolResults.some(r => !r.success)) {
     repeatCount++;
@@ -350,7 +410,7 @@ You cannot respond without a tool call. Either continue with the next tool in yo
       manageTaskTool.currentTask = null;
     }
 
-    return { action: 'break' };
+    return { action: 'break', reason: 'end_loop' };
   }
 
   // 6. Legacy Mode Notification
@@ -359,6 +419,10 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   }
 
   // 7. Get Next Response (with retry on transient API errors)
+  interactionLogger.logLoopEvent(context.loopId, 'continuation_requested', {
+    reason: 'after_tool_results',
+    toolResults: toolResults.length,
+  });
   for (let apiAttempt = 0; apiAttempt < MAX_TOOL_FAILURE_ATTEMPTS; apiAttempt++) {
     try {
       const response = await _getNextAIResponse(toolResults, context);
@@ -368,8 +432,13 @@ You cannot respond without a tool call. Either continue with the next tool in yo
         `API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`,
         error
       );
+      // Cancellation is not transient — propagate immediately without retry sleep.
+      if (_classifyLoopError(error) === 'cancelled') {
+        throw error;
+      }
       if (apiAttempt + 1 >= MAX_TOOL_FAILURE_ATTEMPTS) {
-        return { action: 'return', value: await _runToolFailureFallback(context) };
+        const value = await _runToolFailureFallback(context);
+        return { action: 'return', value, reason: 'tool_failure_fallback' };
       }
       const delayMs = getRetryDelayMs(apiAttempt);
       await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -924,10 +993,31 @@ async function _chatWithAI(messages, systemPrompt, context) {
   const sysMsg = { role: 'system', content: systemPrompt };
   const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messages]);
 
-  const raw =
-    currentToolSupport !== true
-      ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-      : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_started', {
+    mode: currentToolSupport === true ? 'native' : 'fallback',
+  });
+  const startedAt = Date.now();
+
+  let raw;
+  try {
+    raw =
+      currentToolSupport !== true
+        ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+        : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+  } catch (error) {
+    if (_classifyLoopError(error) === 'cancelled') {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_aborted');
+    } else {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_failed', {
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_finished', {
+    ms: Date.now() - startedAt,
+  });
 
   const normalized = normalizeAIResponse(raw);
 
@@ -996,6 +1086,9 @@ async function _notifyAssistantMessage(response, context) {
         role: 'assistant',
         content: response.content || undefined,
         _fromToolLoop: true,
+      });
+      interactionLogger.logLoopEvent(context.loopId, 'assistant_emitted', {
+        hasContent: Boolean(content),
       });
       context.lastEmittedContent = content;
     }
