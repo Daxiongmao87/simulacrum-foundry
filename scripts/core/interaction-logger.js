@@ -319,6 +319,8 @@ class InteractionLogger {
       return this._formatToolCallLine(entry, time);
     } else if (entry.type === EntryType.TOOL_RESULT) {
       return this._formatToolResultLine(entry, time);
+    } else if (entry.type === EntryType.LOOP_EVENT) {
+      return this._formatLoopEventLine(entry, time);
     }
     return '';
   }
@@ -344,6 +346,19 @@ class InteractionLogger {
   _formatToolResultLine(entry, time) {
     const ok = entry.metadata?.success !== false ? 'OK' : 'FAIL';
     return `[${time}] Result [${ok}]: ${(entry.content || '').substring(0, 300)}\n`;
+  }
+
+  /**
+   * Format a LOOP_EVENT entry as a log line.
+   * @param {object} entry Log entry
+   * @param {string} time Formatted timestamp
+   * @returns {string} Formatted line
+   */
+  _formatLoopEventLine(entry, time) {
+    const details = Object.keys(entry.details || {}).length
+      ? ` ${JSON.stringify(entry.details)}`
+      : '';
+    return `[${time}] [loop ${entry.loopId}] ${entry.event}${details}\n`;
   }
 
   /**

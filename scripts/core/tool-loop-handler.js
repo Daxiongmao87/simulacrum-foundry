@@ -441,7 +441,7 @@ You cannot respond without a tool call. Either continue with the next tool in yo
         return { action: 'return', value, reason: 'tool_failure_fallback' };
       }
       const delayMs = getRetryDelayMs(apiAttempt);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await delayWithSignal(delayMs, context.signal);
     }
   }
 }
@@ -1121,8 +1121,27 @@ async function _runToolFailureFallback(context) {
     context.conversationManager.addMessage('system', instruction);
   }
   const systemPrompt = await context.getSystemPrompt();
-  const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, {
-    signal: context.signal,
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_started', {
+    mode: 'tool_failure_fallback',
+  });
+  const startedAt = Date.now();
+  let raw;
+  try {
+    raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, {
+      signal: context.signal,
+    });
+  } catch (error) {
+    if (_classifyLoopError(error) === 'cancelled') {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_aborted');
+    } else {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_failed', {
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_finished', {
+    ms: Date.now() - startedAt,
   });
   const fallback = normalizeAIResponse(raw);
   const text =

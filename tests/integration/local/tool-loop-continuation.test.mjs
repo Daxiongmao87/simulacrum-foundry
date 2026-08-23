@@ -268,6 +268,43 @@ test(
 );
 
 test(
+  'abort during retry delay: loop rejects promptly instead of sleeping out the delay',
+  async () => {
+    const controller = new AbortController();
+    const { promise, entriesBefore } = startLoop(
+      initialResponse2,
+      ['fail', 'hang'],
+      { failMessage: 'boom' },
+      controller
+    );
+    let abortedAt = 0;
+    setTimeout(() => {
+      abortedAt = Date.now();
+      controller.abort();
+    }, 200);
+
+    let error;
+    try {
+      await promise;
+    } catch (err) {
+      error = err;
+    }
+
+    assert.ok(error, 'loop must reject when cancelled, not resolve silently');
+    assert.ok(
+      error.name === 'AbortError' || /cancel/i.test(error.message),
+      'rejection is classified as cancellation'
+    );
+    assert.ok(
+      Date.now() - abortedAt < 500,
+      `loop rejected promptly after abort (${Date.now() - abortedAt}ms), not after the 1000ms retry delay`
+    );
+    assert.equal(loggedLoopEndedReason(entriesBefore), 'cancelled');
+  },
+  { timeout: 20000 }
+);
+
+test(
   'api failure: typed terminal fallback with visible content',
   async () => {
     const { promise, conversation, entriesBefore } = startLoop(
@@ -297,6 +334,16 @@ test(
     const last = conversation.messages[conversation.messages.length - 1];
     assert.equal(last.role, 'system');
     assert.equal(loggedLoopEndedReason(entriesBefore), 'tool_failure_fallback');
+    // The fallback provider request must appear in the loop timeline (#178 review).
+    const newEntries = interactionLogger._entries.slice(entriesBefore);
+    const fallbackStarted = newEntries.findIndex(
+      e => e.event === 'api_request_started' && e.details?.mode === 'tool_failure_fallback'
+    );
+    assert.ok(fallbackStarted >= 0, 'fallback request logged as api_request_started');
+    assert.ok(
+      newEntries.some((e, i) => i > fallbackStarted && e.event === 'api_request_finished'),
+      'fallback request logged as api_request_finished'
+    );
   },
   { timeout: 20000 }
 );
