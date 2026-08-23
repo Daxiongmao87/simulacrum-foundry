@@ -132,6 +132,7 @@ class ConversationEngine {
         display:
           '⚠️ **Tool execution limit reached**\n\nSend another message to continue the task.',
         _fromToolLoop: true,
+        _terminalReason: finalResponse._terminalReason || 'repeat_limit',
       };
       this.conversationManager.addMessage('assistant', limitMessage.content);
       if (onAssistantMessage) {

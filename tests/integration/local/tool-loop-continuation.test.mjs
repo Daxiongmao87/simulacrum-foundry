@@ -347,6 +347,34 @@ test(
   },
   { timeout: 20000 }
 );
+test(
+  'repeat limit: failed tool executions exhaust the limit and value carries repeat_limit',
+  async () => {
+    const originalGet = globalThis.game.settings.get;
+    const originalExecute = toolRegistry.executeTool;
+    globalThis.game.settings.get = (scope, key) =>
+      key === 'toolLoopLimit' ? 2 : originalGet(scope, key);
+    toolRegistry.executeTool = async name =>
+      name === 'failing_tool'
+        ? { result: { error: 'simulated failure', toolName: name } }
+        : originalExecute(name);
+    try {
+      const { promise, entriesBefore } = startLoop(
+        normalizeAIResponse(rawToolCall('call_l1', 'failing_tool', {})),
+        [rawToolCall('call_l2', 'failing_tool', {}), rawText('unused after limit')]
+      );
+      const result = await promise;
+
+      assert.ok(result._toolLimitReachedError, 'limit flag set on returned value');
+      assert.equal(result._terminalReason, 'repeat_limit');
+      assert.equal(loggedLoopEndedReason(entriesBefore), 'repeat_limit');
+    } finally {
+      globalThis.game.settings.get = originalGet;
+      toolRegistry.executeTool = originalExecute;
+    }
+  },
+  { timeout: 20000 }
+);
 
 test('terminal reason coverage: exercised reasons are all in the known set', async () => {
   assert.ok(KNOWN_REASONS.length > 0);
