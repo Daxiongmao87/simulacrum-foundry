@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - test: integration coverage for the tool-loop continuation guarantee (Fixes #178)
 - ci: 1000-line file-size gate with a frozen baseline for grandfathered over-cap files
 
+### Changed
+
+- refactor: extract tool execution into tool-execution.js, bringing tool-loop-handler.js
+  back under the 1000-line cap (#147)
+
 ### Fixed
 
 - core: instrument tool-loop state transitions and guarantee an explicit terminal

@@ -6,7 +6,7 @@ import {
   getToolContentSummary,
 } from '../utils/message-utils.js';
 import { MarkdownRenderer } from '../lib/markdown-renderer.js';
-import { retrieveToolJustification } from './tool-loop-handler.js';
+import { retrieveToolJustification } from './tool-execution.js';
 /**
  * ChatHandler - Single source of truth for all chat conversation flow
  * Orchestrates between AI, tools, conversation state, and UI
