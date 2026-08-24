@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - diag: record correlated tool-loop lifecycle events (loopId timeline, API request
   boundaries, terminal reason) in the interaction log export (Fixes #178)
 - test: integration coverage for the tool-loop continuation guarantee (Fixes #178)
+- ci: 1000-line file-size gate with a frozen baseline for grandfathered over-cap files
 
 ### Fixed
 

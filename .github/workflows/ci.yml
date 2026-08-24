@@ -106,3 +106,5 @@ jobs:
       - name: Dead code check (baseline diff)
         if: steps.changed.outputs.config_changed == 'false' && steps.changed.outputs.run_deadcode == 'true'
         run: .github/scripts/dead-code-diff.sh "${{ github.event.pull_request.base.sha }}"
+      - name: File-size gate (1000-line cap)
+        run: npm run check:file-size

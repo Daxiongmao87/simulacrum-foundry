@@ -17,7 +17,10 @@ const PLAYWRIGHT_RESULTS = process.env.ADP_ARTIFACT_DIR
 const tier = process.argv[2];
 const definitions = {
   policy: [{ command: process.execPath, args: ['tools/test-policy-check.mjs'] }],
-  static: [{ command: process.execPath, args: ['tools/eslint-baseline-check.mjs'] }],
+  static: [
+    { command: process.execPath, args: ['tools/eslint-baseline-check.mjs'] },
+    { command: process.execPath, args: ['tools/file-size-check.mjs'] },
+  ],
   unit: [{ nodeTests: 'tests/unit' }],
   regression: [
     { command: process.execPath, args: ['tests/utils/test-compaction-budget.mjs'] },
@@ -185,11 +188,9 @@ async function writeAgenticDeliveryOutcome(commandExitCode, completedSteps, outp
     throw new Error('Agentic Delivery test-outcome filename is invalid');
   }
 
-  const counts = isPlaywrightTier() ? await playwrightCounts(commandExitCode) : textCounts(
-    commandExitCode,
-    completedSteps,
-    outputs
-  );
+  const counts = isPlaywrightTier()
+    ? await playwrightCounts(commandExitCode)
+    : textCounts(commandExitCode, completedSteps, outputs);
   const status = commandExitCode === 0 && counts.failed === 0 ? 'passed' : 'failed';
   const outcome = {
     schema_version: 1,
