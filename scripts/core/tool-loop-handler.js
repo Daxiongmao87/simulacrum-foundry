@@ -25,6 +25,8 @@ import {
 import { emitProcessStatus, emitRetryStatus, SimulacrumHooks } from './hook-manager.js';
 import { interactionLogger } from './interaction-logger.js';
 import { executeToolCalls, storeToolJustification } from './tool-execution.js';
+// Re-export for existing importers (chat-handler); the store lives in tool-execution.js.
+export { retrieveToolJustification } from './tool-execution.js';
 
 const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
