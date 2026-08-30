@@ -21,6 +21,7 @@ const EntryType = Object.freeze({
   TOOL_CALL: 'tool_call',
   TOOL_RESULT: 'tool_result',
   SYSTEM: 'system',
+  LOOP_EVENT: 'loop_event',
 });
 
 /**
@@ -229,6 +230,25 @@ class InteractionLogger {
   }
 
   /**
+   * Log a correlated tool-loop lifecycle event for stall diagnostics (#178)
+   * @param {string} loopId - Correlated loop identifier
+   * @param {string} event - Event name, e.g. 'loop_started', 'loop_ended'
+   * @param {object} [details] - Small serializable details object
+   */
+  logLoopEvent(loopId, event, details = {}) {
+    if (!this.enabled || !loopId) return;
+
+    this._addEntry({
+      id: this._generateId(),
+      timestamp: new Date().toISOString(),
+      type: EntryType.LOOP_EVENT,
+      loopId,
+      event,
+      details: details || {},
+    });
+  }
+
+  /**
    * Get all log entries
    * @returns {Array} Log entries
    */
@@ -278,23 +298,67 @@ class InteractionLogger {
     log += `\n--- Conversation ---\n`;
 
     for (const entry of this._entries) {
-      const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '??:??:??';
-      if (entry.type === EntryType.USER) {
-        log += `[${time}] User: ${entry.content || ''}\n`;
-      } else if (entry.type === EntryType.ASSISTANT) {
-        log += `[${time}] Assistant: ${(entry.content || '').substring(0, 500)}\n`;
-      } else if (entry.type === EntryType.TOOL_CALL) {
-        const tn = entry.metadata?.toolName || 'unknown';
-        const args = entry.metadata?.arguments ? JSON.stringify(entry.metadata.arguments) : '';
-        log += `[${time}] Tool: ${tn}(${args.substring(0, 300)})\n`;
-      } else if (entry.type === EntryType.TOOL_RESULT) {
-        const ok = entry.metadata?.success !== false ? 'OK' : 'FAIL';
-        const content = (entry.content || '').substring(0, 300);
-        log += `[${time}] Result [${ok}]: ${content}\n`;
-      }
+      log += this._formatEntryLine(entry);
     }
 
     return log;
+  }
+
+  /**
+   * Format a single log entry as a conversation log line.
+   * @param {object} entry Log entry
+   * @returns {string} Formatted line (empty for non-conversation entries)
+   */
+  _formatEntryLine(entry) {
+    const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '??:??:??';
+    if (entry.type === EntryType.USER) {
+      return `[${time}] User: ${entry.content || ''}\n`;
+    } else if (entry.type === EntryType.ASSISTANT) {
+      return `[${time}] Assistant: ${(entry.content || '').substring(0, 500)}\n`;
+    } else if (entry.type === EntryType.TOOL_CALL) {
+      return this._formatToolCallLine(entry, time);
+    } else if (entry.type === EntryType.TOOL_RESULT) {
+      return this._formatToolResultLine(entry, time);
+    } else if (entry.type === EntryType.LOOP_EVENT) {
+      return this._formatLoopEventLine(entry, time);
+    }
+    return '';
+  }
+
+  /**
+   * Format a TOOL_CALL entry as a log line.
+   * @param {object} entry Log entry
+   * @param {string} time Formatted timestamp
+   * @returns {string} Formatted line
+   */
+  _formatToolCallLine(entry, time) {
+    const toolName = entry.metadata?.toolName || 'unknown';
+    const args = entry.metadata?.arguments ? JSON.stringify(entry.metadata.arguments) : '';
+    return `[${time}] Tool: ${toolName}(${args.substring(0, 300)})\n`;
+  }
+
+  /**
+   * Format a TOOL_RESULT entry as a log line.
+   * @param {object} entry Log entry
+   * @param {string} time Formatted timestamp
+   * @returns {string} Formatted line
+   */
+  _formatToolResultLine(entry, time) {
+    const ok = entry.metadata?.success !== false ? 'OK' : 'FAIL';
+    return `[${time}] Result [${ok}]: ${(entry.content || '').substring(0, 300)}\n`;
+  }
+
+  /**
+   * Format a LOOP_EVENT entry as a log line.
+   * @param {object} entry Log entry
+   * @param {string} time Formatted timestamp
+   * @returns {string} Formatted line
+   */
+  _formatLoopEventLine(entry, time) {
+    const details = Object.keys(entry.details || {}).length
+      ? ` ${JSON.stringify(entry.details)}`
+      : '';
+    return `[${time}] [loop ${entry.loopId}] ${entry.event}${details}\n`;
   }
 
   /**
@@ -355,7 +419,7 @@ class InteractionLogDownloader extends FormApplication {
   }
 
   /** @override */
-  async _render(force, options) {
+  async _render(_force, _options) {
     // Don't actually render - just trigger download and close
     interactionLogger.downloadAsFile();
     ui?.notifications?.info(`Exported ${interactionLogger.entryCount} interaction log entries`);

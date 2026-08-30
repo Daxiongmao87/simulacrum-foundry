@@ -61,14 +61,17 @@ export function emitHook(hookName, payload) {
  * Emit process status update
  * @param {string} state - 'start' or 'end'
  * @param {string} callId - Unique call identifier
- * @param {string|null} [label] - Optional label for start state
- * @param {string|null} [toolName] - Optional tool name
+ * @param {object} [details] - Optional state details
+ * @param {string|null} [details.label] - Optional label for start state
+ * @param {string|null} [details.toolName] - Optional tool name for start state
+ * @param {string|null} [details.reason] - Optional terminal reason, end payload only
  */
-export function emitProcessStatus(state, callId, label = null, toolName = null) {
+export function emitProcessStatus(state, callId, details = {}) {
+  const { label = null, toolName = null, reason = null } = details;
   const payload =
     state === 'start'
       ? { state, callId, label, toolName: toolName || 'process' }
-      : { state, callId };
+      : { state, callId, ...(reason ? { reason } : {}) };
   emitHook(SimulacrumHooks.PROCESS_STATUS, payload);
 }
 

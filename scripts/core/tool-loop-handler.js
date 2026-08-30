@@ -8,7 +8,6 @@
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { toolRegistry } from './tool-registry.js';
-import { performPostToolVerification } from './tool-verification.js';
 import { COMPACTION_STATUS, MAX_COMPACTION_ROUNDS } from './conversation.js';
 import {
   sanitizeMessagesForFallback,
@@ -22,53 +21,64 @@ import {
   buildRetryLabel,
   getRetryDelayMs,
   delayWithSignal,
-  throwIfAborted,
 } from '../utils/retry-helpers.js';
 import { emitProcessStatus, emitRetryStatus, SimulacrumHooks } from './hook-manager.js';
-import { toolPermissionManager, PermissionState } from './tool-permission-manager.js';
 import { interactionLogger } from './interaction-logger.js';
+import { executeToolCalls, storeToolJustification } from './tool-execution.js';
+// Re-export for existing importers (chat-handler); the store lives in tool-execution.js.
+export { retrieveToolJustification } from './tool-execution.js';
 
 const logger = createLogger('ToolLoop');
 const MAX_TOOL_FAILURE_ATTEMPTS = 3;
 const TOOL_RETRY_STATUS_PREFIX = 'tool-retry';
-
-// Store justifications keyed by toolCallId for retrieval when result is ready
-const toolJustifications = new Map();
-
-/**
- * Store justification for a tool call (for later retrieval when result is ready)
- * @param {string} toolCallId - The tool call ID
- * @param {string} justification - The justification text
- */
-export function storeToolJustification(toolCallId, justification) {
-  if (toolCallId && justification) {
-    toolJustifications.set(toolCallId, justification);
-  }
-}
-
-/**
- * Retrieve and remove justification for a tool call
- * @param {string} toolCallId - The tool call ID
- * @returns {string} The justification or empty string
- */
-export function retrieveToolJustification(toolCallId) {
-  const justification = toolJustifications.get(toolCallId) || '';
-  toolJustifications.delete(toolCallId);
-  return justification;
-}
 
 /**
  * Execute tools from an AI response and continue autonomous loop
  */
 export async function processToolCallLoop(options) {
   const callId = `tool-loop-${foundry.utils.randomID()}`;
+  const loopId = callId;
+  const context = { ...options, loopId };
+
+  let terminalReason = 'unknown';
 
   try {
-    emitProcessStatus('start', callId, 'Thinking...', 'agentic-loop');
-    return await _runLoopIteration(options);
+    emitProcessStatus('start', callId, { label: 'Thinking...', toolName: 'agentic-loop' });
+    interactionLogger.logLoopEvent(loopId, 'loop_started', {
+      initialToolCalls: options.initialResponse?.toolCalls?.length ?? 0,
+    });
+
+    const result = await _runLoopIteration(context);
+
+    // Audit: every loop exit must carry an explicit terminal reason (#178).
+    if (result?._terminalReason) {
+      terminalReason = result._terminalReason;
+    } else {
+      logger.error('Loop exited without terminal reason', { loopId });
+      terminalReason = 'unknown';
+      if (result) result._terminalReason = 'unknown';
+    }
+
+    return result;
+  } catch (error) {
+    terminalReason = _classifyLoopError(error);
+    throw error;
   } finally {
-    emitProcessStatus('end', callId);
+    interactionLogger.logLoopEvent(loopId, 'loop_ended', { reason: terminalReason });
+    emitProcessStatus('end', callId, { reason: terminalReason });
   }
+}
+
+/**
+ * Classify a loop error into a terminal reason string for timeline correlation.
+ * @param {Error} error - The error thrown by the loop
+ * @returns {string} 'cancelled' or 'error:<ErrorName>'
+ */
+function _classifyLoopError(error) {
+  if (error?.name === 'AbortError' || /cancel/i.test(error?.message || '')) {
+    return 'cancelled';
+  }
+  return `error:${error?.name || 'Error'}`;
 }
 
 // --- Internal Loop Logic ---
@@ -89,8 +99,13 @@ async function _runLoopIteration(context) {
   const CIRCUIT_BREAKER_THRESHOLD = 3;
   let lastResponseContent = null;
   let consecutiveRepeats = 0;
+  let terminalReason = 'unknown';
 
   while (repeatCount < REPEAT_LIMIT) {
+    interactionLogger.logLoopEvent(context.loopId, 'loop_iteration_advanced', {
+      repeatCount,
+    });
+
     if (context.signal?.aborted) throw new Error('Process was cancelled');
 
     // Circuit breaker check: detect if AI is generating same text-only response repeatedly
@@ -122,6 +137,7 @@ async function _runLoopIteration(context) {
             display: currentContent,
             toolCalls: [],
             _circuitBreakerTriggered: true,
+            _terminalReason: 'circuit_breaker',
           };
         }
       } else {
@@ -200,8 +216,14 @@ async function _runLoopIteration(context) {
     });
 
     // Handle cycle outcome
-    if (cycleResult.action === 'return') return cycleResult.value;
-    if (cycleResult.action === 'break') break;
+    if (cycleResult.action === 'return') {
+      cycleResult.value._terminalReason = cycleResult.reason || 'unknown';
+      return cycleResult.value;
+    }
+    if (cycleResult.action === 'break') {
+      terminalReason = cycleResult.reason || 'unknown';
+      break;
+    }
 
     // Update state for next iteration
     currentResponse = cycleResult.response;
@@ -211,13 +233,16 @@ async function _runLoopIteration(context) {
 
   // Handle Repeat Limit if loop finished naturally without break
   if (repeatCount >= REPEAT_LIMIT) {
-    return _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
+    const value = _handleRepeatLimit(context, currentResponse, repeatCount, REPEAT_LIMIT);
+    value._terminalReason = 'repeat_limit';
+    return value;
   }
 
   // NOTE: We do NOT need to call _notifyAssistantMessage here.
   // The content was already notified at the start of the final iteration (Line 50)
   // or will be handled by the caller. Invoking it here causes duplicates.
 
+  currentResponse._terminalReason = terminalReason;
   return currentResponse;
 }
 
@@ -237,7 +262,8 @@ async function _processLoopCycle(currentResponse, context, state) {
   if (isToolCallFailure(currentResponse)) {
     toolFailureAttempts++;
     if (toolFailureAttempts >= MAX_TOOL_FAILURE_ATTEMPTS) {
-      return { action: 'return', value: await _runToolFailureFallback(context) };
+      const value = await _runToolFailureFallback(context);
+      return { action: 'return', value, reason: 'tool_failure_fallback' };
     }
     const response = await _handleToolRefusal(currentResponse, context, toolFailureAttempts);
     return { action: 'continue', response, repeatCount, toolFailureAttempts };
@@ -249,7 +275,7 @@ async function _processLoopCycle(currentResponse, context, state) {
     // Instead of breaking, ask AI to use end_loop tool
     repeatCount++;
     if (repeatCount >= REPEAT_LIMIT) {
-      return { action: 'break' }; // Safety valve
+      return { action: 'break', reason: 'repeat_limit' };
     }
 
     // PERSIST FIX: Save the AI's text content as a visible message BEFORE adding correction.
@@ -267,6 +293,9 @@ To exit this loop, call the \`end_loop\` tool. Your text response is already dis
 
 You cannot respond without a tool call. Either continue with the next tool in your plan, or call end_loop to finish.`;
     await appendEmptyContentCorrection(context.conversationManager, correctionMessage);
+    interactionLogger.logLoopEvent(context.loopId, 'continuation_requested', {
+      reason: 'text_only_correction',
+    });
     const response = await _getNextAIResponse([], context);
     return { action: 'continue', response, repeatCount, toolFailureAttempts };
   }
@@ -282,7 +311,7 @@ You cannot respond without a tool call. Either continue with the next tool in yo
     // Strip transient UI-only fields (justification, response) from stored tool_calls
     // to reduce token accumulation in conversation history. These fields are already
     // consumed for display before this point (justification for pending cards, response
-    // for message content). Original toolCalls are preserved for _executeToolCalls below.
+    // for message content). Original toolCalls are preserved for executeToolCalls below.
     const sanitizedToolCalls = _sanitizeToolCallsForHistory(currentResponse.toolCalls);
     context.conversationManager.addMessage(
       'assistant',
@@ -297,7 +326,7 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   // 4. Execute Tools - wrapped in try/catch to handle abort and maintain message parity
   let toolResults;
   try {
-    toolResults = await _executeToolCalls(currentResponse.toolCalls, context);
+    toolResults = await executeToolCalls(currentResponse.toolCalls, context);
   } catch (execError) {
     // If execution was aborted/cancelled after we added the assistant message with tool_calls,
     // we MUST add stub tool responses for ALL tool calls to maintain message parity.
@@ -329,6 +358,12 @@ You cannot respond without a tool call. Either continue with the next tool in yo
     throw execError;
   }
 
+  interactionLogger.logLoopEvent(context.loopId, 'tool_results_committed', {
+    committed: toolResults.length,
+    successful: toolResults.filter(r => r.success).length,
+    toolNames: toolResults.map(r => r.toolName),
+  });
+
   // 5. Handle Execution Failures
   if (toolResults.some(r => !r.success)) {
     repeatCount++;
@@ -350,7 +385,7 @@ You cannot respond without a tool call. Either continue with the next tool in yo
       manageTaskTool.currentTask = null;
     }
 
-    return { action: 'break' };
+    return { action: 'break', reason: 'end_loop' };
   }
 
   // 6. Legacy Mode Notification
@@ -359,6 +394,10 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   }
 
   // 7. Get Next Response (with retry on transient API errors)
+  interactionLogger.logLoopEvent(context.loopId, 'continuation_requested', {
+    reason: 'after_tool_results',
+    toolResults: toolResults.length,
+  });
   for (let apiAttempt = 0; apiAttempt < MAX_TOOL_FAILURE_ATTEMPTS; apiAttempt++) {
     try {
       const response = await _getNextAIResponse(toolResults, context);
@@ -368,11 +407,16 @@ You cannot respond without a tool call. Either continue with the next tool in yo
         `API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`,
         error
       );
+      // Cancellation is not transient — propagate immediately without retry sleep.
+      if (_classifyLoopError(error) === 'cancelled') {
+        throw error;
+      }
       if (apiAttempt + 1 >= MAX_TOOL_FAILURE_ATTEMPTS) {
-        return { action: 'return', value: await _runToolFailureFallback(context) };
+        const value = await _runToolFailureFallback(context);
+        return { action: 'return', value, reason: 'tool_failure_fallback' };
       }
       const delayMs = getRetryDelayMs(apiAttempt);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await delayWithSignal(delayMs, context.signal);
     }
   }
 }
@@ -407,364 +451,6 @@ async function _handleToolRefusal(response, context, attempts) {
   } finally {
     emitRetryStatus('end', retryCallId);
   }
-}
-
-/* eslint-disable max-depth */ // Refactor tracked in #147
-// eslint-disable-next-line complexity, max-lines-per-function, max-statements -- Refactor tracked in #147
-async function _executeToolCalls(toolCalls, context) {
-  const { onToolResult, signal, currentToolSupport, conversationManager } = context;
-  const results = [];
-
-  for (const toolCall of toolCalls) {
-    throwIfAborted(signal);
-
-    const toolName = toolCall?.function?.name || toolCall?.name;
-    const toolArgs = toolCall?.function?.arguments ?? toolCall?.arguments;
-    let result = null;
-    let isSuccess = false;
-    let error = null;
-    let executionStart = 0;
-
-    try {
-      const parseOutcome = _parseToolCallArguments(toolArgs, toolName);
-      if (parseOutcome.error) {
-        await _recordInvalidArgsResult({
-          toolCall,
-          toolName,
-          toolArgs,
-          parseError: parseOutcome.error,
-          currentToolSupport,
-          conversationManager,
-          onToolResult,
-          results,
-        });
-        continue;
-      }
-      const parsedArgs = parseOutcome.parsedArgs;
-
-      executionStart = Date.now();
-
-      // Log tool call before execution (must happen before any early-exit so rejections appear in logs)
-      interactionLogger.logToolCall(toolName, parsedArgs, toolCall.id);
-
-      // Warn if justification is missing — the AI-facing schema marks it required, but
-      // models (especially smaller ones) may skip it. Log a warning but still execute.
-      if (
-        !parsedArgs.justification ||
-        typeof parsedArgs.justification !== 'string' ||
-        !parsedArgs.justification.trim()
-      ) {
-        logger.warn(`Tool call "${toolName}" missing justification parameter`);
-      }
-
-      // Permission check for destructive tools
-      if (toolPermissionManager.isDestructive(toolName)) {
-        const permission = toolPermissionManager.getPermission(toolName);
-
-        if (permission === PermissionState.DENY) {
-          // Tool is blacklisted - deny without prompting
-          result = {
-            error:
-              game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
-              'Tool is blacklisted and cannot be executed',
-            denied: true,
-            toolName,
-          };
-          isSuccess = false;
-
-          if (currentToolSupport === true) {
-            conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-            await conversationManager.save();
-          }
-
-          const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
-          results.push(resultObj);
-          if (onToolResult) {
-            await onToolResult({
-              role: 'tool',
-              content: JSON.stringify(result),
-              toolCallId: toolCall.id,
-              toolName,
-            });
-          }
-          continue;
-        }
-
-        if (permission === PermissionState.ASK) {
-          // Need to prompt user for confirmation
-          const confirmResult = await _promptToolConfirmation(
-            toolName,
-            parsedArgs,
-            toolCall.id,
-            context
-          );
-
-          if (confirmResult === 'deny') {
-            result = {
-              error:
-                game.i18n?.localize('SIMULACRUM.ToolConfirmation.Denied') ||
-                'Tool execution denied by user',
-              denied: true,
-              toolName,
-            };
-            isSuccess = false;
-
-            if (currentToolSupport === true) {
-              conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-              await conversationManager.save();
-            }
-
-            const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
-            results.push(resultObj);
-            if (onToolResult) {
-              await onToolResult({
-                role: 'tool',
-                content: JSON.stringify(result),
-                toolCallId: toolCall.id,
-                toolName,
-              });
-            }
-            continue;
-          }
-
-          if (confirmResult === 'blacklist') {
-            await toolPermissionManager.setPermission(toolName, PermissionState.DENY);
-            result = {
-              error:
-                game.i18n?.localize('SIMULACRUM.ToolConfirmation.Blacklisted') ||
-                'Tool is blacklisted and cannot be executed',
-              denied: true,
-              toolName,
-            };
-            isSuccess = false;
-
-            if (currentToolSupport === true) {
-              conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-              await conversationManager.save();
-            }
-
-            const resultObj = { toolCall, toolName, result, success: isSuccess, error: null };
-            results.push(resultObj);
-            if (onToolResult) {
-              await onToolResult({
-                role: 'tool',
-                content: JSON.stringify(result),
-                toolCallId: toolCall.id,
-                toolName,
-              });
-            }
-            continue;
-          }
-
-          if (confirmResult === 'always') {
-            await toolPermissionManager.setPermission(toolName, PermissionState.ALLOW);
-            // Continue to execute below
-          }
-          // confirmResult === 'allow' -> Continue to execute normally
-        }
-        // permission === ALLOW -> Continue to execute normally
-      }
-
-      // Execute the tool
-      const execution = await toolRegistry.executeTool(toolName, parsedArgs);
-      result = execution.result;
-
-      isSuccess = !result.error;
-
-      // Context Compaction: Store large outputs in buffer, inject reference
-      // IMPORTANT: Store BEFORE truncation so read_tool_output can access full content
-      let resultForConversation = result;
-      const resultStr = JSON.stringify(result);
-      const TOKEN_THRESHOLD = 1000; // ~4000 chars
-      const estimatedTokens = Math.ceil(resultStr.length / 4);
-
-      if (
-        toolName !== 'read_tool_output' &&
-        estimatedTokens > TOKEN_THRESHOLD &&
-        conversationManager.toolOutputBuffer
-      ) {
-        // Store the FULL content before truncation (preserves newlines for pagination)
-        const contentToStore = typeof result.content === 'string' ? result.content : resultStr;
-        conversationManager.toolOutputBuffer.set(toolCall.id, contentToStore);
-
-        // Create compact reference
-        const lines = contentToStore.split('\n');
-        const preview = lines.slice(0, 5).join('\n');
-
-        resultForConversation = {
-          _compacted: true,
-          display: result.display || null, // Preserve display for formatted rendering on refresh
-          total_lines: lines.length,
-          total_chars: resultStr.length,
-          preview: preview.substring(0, 500),
-          access: `Use read_tool_output(tool_call_id="${toolCall.id}", start_line, end_line) to read full content`,
-        };
-      } else {
-        // For smaller outputs AND read_tool_output results, truncate for conversation context
-        _truncateInitialResult(result, toolName);
-      }
-
-      if (currentToolSupport === true) {
-        conversationManager.addMessage(
-          'tool',
-          JSON.stringify(resultForConversation),
-          null,
-          toolCall.id
-        );
-        await conversationManager.save();
-      }
-
-      if (isSuccess) {
-        try {
-          await performPostToolVerification(toolName, parsedArgs, result, onToolResult);
-        } catch (e) {
-          logger.warn(`Post-verification failed: ${toolName}`, e);
-        }
-      }
-    } catch (err) {
-      if (isDebugEnabled()) logger.debug(`Tool execution error caught: ${err.message}`);
-      error = err;
-      logger.error(`Tool execution failed for ${toolName}:`, err);
-      result = { error: err.message, toolName, arguments: toolArgs };
-      if (currentToolSupport === true) {
-        conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-        await conversationManager.save();
-      }
-    }
-
-    const resultObj = { toolCall, toolName, result, success: isSuccess, error };
-    results.push(resultObj);
-
-    // Log tool result with execution duration
-    const durationMs = executionStart > 0 ? Date.now() - executionStart : 0;
-    interactionLogger.logToolResult(toolCall.id, result, isSuccess, durationMs);
-
-    if (onToolResult) {
-      await onToolResult({
-        role: 'tool',
-        content: JSON.stringify(result),
-        toolCallId: toolCall.id,
-        toolName,
-      });
-    }
-  }
-  return results;
-}
-/* eslint-enable max-depth */
-
-function _parseToolCallArguments(toolArgs, toolName) {
-  if (typeof toolArgs !== 'string') {
-    if (toolArgs && toolArgs.__simulacrumParseError === true) {
-      return { parsedArgs: null, error: toolArgs.parseError || 'malformed tool call arguments' };
-    }
-    // Already parsed object - validate it is a true object (not null/array)
-    if (toolArgs === null || Array.isArray(toolArgs) || typeof toolArgs !== 'object') {
-      return { parsedArgs: null, error: 'Arguments must be a JSON object' };
-    }
-    return { parsedArgs: toolArgs, error: null };
-  }
-  const outcome = repairToolCallArguments(toolArgs);
-  if (!outcome.ok) return { parsedArgs: null, error: outcome.parseError };
-  if (outcome.repaired) {
-    logger.warn(
-      `Tool call "${toolName}" had malformed JSON arguments; recovered via narrow repair.`
-    );
-  }
-  const parsed = outcome.argsObject;
-  if (parsed && parsed.__simulacrumParseError === true) {
-    return { parsedArgs: null, error: parsed.parseError || 'malformed tool call arguments' };
-  }
-
-  // Validate parsed result is an object (not null, array, or other literal)
-  if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
-    return { parsedArgs: null, error: 'Arguments must be a JSON object' };
-  }
-
-  return { parsedArgs: parsed, error: null };
-}
-
-async function _recordInvalidArgsResult(opts) {
-  const {
-    toolCall,
-    toolName,
-    toolArgs,
-    parseError,
-    currentToolSupport,
-    conversationManager,
-    onToolResult,
-    results,
-  } = opts;
-  const errMsg = `Tool call arguments for "${toolName}" must be a single JSON object but could not be recovered (${parseError}). Retry with a single complete JSON object containing all required arguments; do not truncate the output.`;
-  logger.warn(errMsg);
-  interactionLogger.logToolCall(
-    toolName,
-    { __simulacrumParseError: true, parseError },
-    toolCall.id
-  );
-  const result = {
-    error: errMsg,
-    toolName,
-    invalidArgs: true,
-    arguments: typeof toolArgs === 'string' ? toolArgs.slice(0, 500) : toolArgs,
-  };
-  if (currentToolSupport === true) {
-    conversationManager.addMessage('tool', JSON.stringify(result), null, toolCall.id);
-    await conversationManager.save();
-  }
-  results.push({ toolCall, toolName, result, success: false, error: null });
-  interactionLogger.logToolResult(toolCall.id, result, false, 0);
-  if (onToolResult) {
-    await onToolResult({
-      role: 'tool',
-      content: JSON.stringify(result),
-      toolCallId: toolCall.id,
-      toolName,
-    });
-  }
-}
-
-/**
- * Prompt user for tool execution confirmation via inline UI
- * @param {string} toolName - Name of the tool
- * @param {object} parsedArgs - Tool arguments
- * @param {string} toolCallId - Tool call ID
- * @param {object} context - Execution context
- * @returns {Promise<'allow'|'deny'|'always'|'blacklist'>}
- */
-async function _promptToolConfirmation(toolName, parsedArgs, toolCallId, context) {
-  const meta = toolPermissionManager.getDestructiveToolMeta(toolName);
-
-  // Emit a hook that the UI can listen to
-  return new Promise(resolve => {
-    const hookId = Hooks.on('simulacrumToolConfirmationResponse', (responseToolCallId, action) => {
-      if (responseToolCallId === toolCallId) {
-        Hooks.off('simulacrumToolConfirmationResponse', hookId);
-        resolve(action);
-      }
-    });
-
-    // Emit request for confirmation UI
-    Hooks.callAll('simulacrumToolConfirmationRequest', {
-      toolName,
-      toolCallId,
-      displayName: meta?.displayName || toolName,
-      explainerText: meta?.explainer || 'This tool can modify your game data.',
-      justification: parsedArgs.justification,
-      toolArgs: JSON.stringify(parsedArgs, null, 2),
-    });
-
-    // Handle cancellation via signal
-    if (context.signal) {
-      context.signal.addEventListener(
-        'abort',
-        () => {
-          Hooks.off('simulacrumToolConfirmationResponse', hookId);
-          resolve('deny');
-        },
-        { once: true }
-      );
-    }
-  });
 }
 
 // eslint-disable-next-line no-unused-vars
@@ -867,24 +553,6 @@ function _sanitizeToolCallsForHistory(toolCalls) {
   });
 }
 
-function _truncateInitialResult(result, toolName) {
-  const MAX_OUTPUT_CHARS = 10000;
-  if (typeof result.content === 'string' && result.content.length > MAX_OUTPUT_CHARS) {
-    const truncatedContent = result.content.substring(0, MAX_OUTPUT_CHARS);
-    const lineCount = truncatedContent.split('\n').length;
-
-    // Add pagination hint for read_document tool
-    const paginationHint =
-      toolName === 'read_document'
-        ? ` Use startLine/endLine parameters to read specific sections (e.g., if search found match at line 500, use startLine: 480, endLine: 520).`
-        : '';
-
-    result.content =
-      truncatedContent +
-      `\n... [Output truncated at ${MAX_OUTPUT_CHARS} characters, showing ~${lineCount} lines.${paginationHint}]`;
-  }
-}
-
 function _getConversationMessages(context) {
   return context.conversationManager.getMessages?.() ?? context.conversationManager.messages ?? [];
 }
@@ -924,10 +592,31 @@ async function _chatWithAI(messages, systemPrompt, context) {
   const sysMsg = { role: 'system', content: systemPrompt };
   const fallbackMsgs = sanitizeMessagesForFallback([sysMsg, ...messages]);
 
-  const raw =
-    currentToolSupport !== true
-      ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
-      : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_started', {
+    mode: currentToolSupport === true ? 'native' : 'fallback',
+  });
+  const startedAt = Date.now();
+
+  let raw;
+  try {
+    raw =
+      currentToolSupport !== true
+        ? await aiClient.chat(fallbackMsgs, toolsToSend, { signal })
+        : await aiClient.chatWithSystem(messages, () => systemPrompt, toolsToSend, { signal });
+  } catch (error) {
+    if (_classifyLoopError(error) === 'cancelled') {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_aborted');
+    } else {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_failed', {
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_finished', {
+    ms: Date.now() - startedAt,
+  });
 
   const normalized = normalizeAIResponse(raw);
 
@@ -997,6 +686,9 @@ async function _notifyAssistantMessage(response, context) {
         content: response.content || undefined,
         _fromToolLoop: true,
       });
+      interactionLogger.logLoopEvent(context.loopId, 'assistant_emitted', {
+        hasContent: Boolean(content),
+      });
       context.lastEmittedContent = content;
     }
     // Flag as emitted to prevent duplication in ConversationEngine
@@ -1028,8 +720,27 @@ async function _runToolFailureFallback(context) {
     context.conversationManager.addMessage('system', instruction);
   }
   const systemPrompt = await context.getSystemPrompt();
-  const raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, {
-    signal: context.signal,
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_started', {
+    mode: 'tool_failure_fallback',
+  });
+  const startedAt = Date.now();
+  let raw;
+  try {
+    raw = await context.aiClient.chatWithSystem(msgs, () => systemPrompt, null, {
+      signal: context.signal,
+    });
+  } catch (error) {
+    if (_classifyLoopError(error) === 'cancelled') {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_aborted');
+    } else {
+      interactionLogger.logLoopEvent(context.loopId, 'api_request_failed', {
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+  interactionLogger.logLoopEvent(context.loopId, 'api_request_finished', {
+    ms: Date.now() - startedAt,
   });
   const fallback = normalizeAIResponse(raw);
   const text =

@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-06-20
 
+### Added
+
+- diag: record correlated tool-loop lifecycle events (loopId timeline, API request
+  boundaries, terminal reason) in the interaction log export (Fixes #178)
+- test: integration coverage for the tool-loop continuation guarantee (Fixes #178)
+- ci: 1000-line file-size gate with a frozen baseline for grandfathered over-cap files
+
+### Changed
+
+- refactor: extract tool execution into tool-execution.js, bringing tool-loop-handler.js
+  back under the 1000-line cap (#147)
+
 ### Fixed
 
+- core: instrument tool-loop state transitions and guarantee an explicit terminal
+  reason on every loop exit (Fixes #178)
+- core: propagate cancellations from the continuation path immediately instead of
+  retrying them as transient API errors (Fixes #178)
+- core: surface the repeat-limit terminal as a visible assistant message on the
+  main chat path instead of ending silently (Fixes #178)
 - release: advertise Foundry VTT 14 compatibility (#168)
 
 ## [1.1.0] - 2026-06-20

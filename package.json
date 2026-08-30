@@ -5,6 +5,7 @@
   "description": "An AI-powered assistant for FoundryVTT campaign document management",
   "main": "scripts/simulacrum.js",
   "scripts": {
+    "check:file-size": "node tools/file-size-check.mjs",
     "lint": "eslint scripts/ --fix",
     "lint:check": "eslint scripts/",
     "lint:json": "eslint . --ext .json --fix",

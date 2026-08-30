@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "path": "scripts/core/document-api.js",
+      "lines": 1636
+    },
+    {
+      "path": "scripts/ui/simulacrum-sidebar-tab.js",
+      "lines": 1489
+    },
+    {
+      "path": "tests/e2e/fixtures/foundry-helpers.mjs",
+      "lines": 1181
+    }
+  ]
+}

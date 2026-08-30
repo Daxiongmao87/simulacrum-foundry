@@ -3,6 +3,10 @@ reference/
 
 # Development guidance files (local only)
 CLAUDE.md
+.gemini/*
+.claude/*
+.omp/*
+.agents/*
 
 # Specification documents (development-only)
 spec/
@@ -107,6 +111,7 @@ temp/
 # High-level architecture and vision documents
 architecture-overview.txt
 AGENTS.md
+RULES.md
 GEMINI.md
 VISION.md
 QWEN.md
