@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-08-30
 
-### Added
-
-- diag: record correlated tool-loop lifecycle events (loopId timeline, API request
-  boundaries, terminal reason) in the interaction log export (Fixes #178)
-- test: integration coverage for the tool-loop continuation guarantee (Fixes #178)
-- ci: 1000-line file-size gate with a frozen baseline for grandfathered over-cap files
-
-### Changed
-
-- refactor: extract tool execution into tool-execution.js, bringing tool-loop-handler.js
-  back under the 1000-line cap (#147)
-
 ### Fixed
 
 - typed terminal reasons and correlated loop timeline (#178) (#202)
@@ -26,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not from a colliding OpenRouter basename cross-reference, so the field shows the
   correct derived limit (Fixes #185)
 - test: unit + visual e2e coverage for the context-limit derivation precedence
-- release: advertise Foundry VTT 14 compatibility (#168)
 
 ## [1.1.0] - 2026-06-20
 
