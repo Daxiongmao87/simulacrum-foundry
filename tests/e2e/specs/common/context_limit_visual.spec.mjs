@@ -36,8 +36,11 @@ test('@visual @context-limit #185 context-limit field shows derived meta.n_ctx v
   // Reset the model service caches (which module validation populated with the
   // real endpoint's data) so the mock fetch below is actually consulted, then
   // re-populate so the context-limit input re-renders with the derived value.
+  // Every call is awaited: the awaits on fetchModels()/fetchOpenRouterModels()
+  // block until the caches are repopulated, and reset() is awaited defensively
+  // so the ordering holds even if it is ever made async.
   await simulacrumPage.evaluate(async () => {
-    globalThis.modelService.reset();
+    await globalThis.modelService.reset();
     await globalThis.modelService.fetchModels();
     await globalThis.modelService.fetchOpenRouterModels();
     ui.simulacrum._saveModelSelection('codex/gpt-5.6-terra');
