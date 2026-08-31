@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-06-20
+## [Unreleased] - 2026-08-30
 
 ### Added
 
@@ -21,16 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- core: instrument tool-loop state transitions and guarantee an explicit terminal
-  reason on every loop exit (Fixes #178)
-- core: propagate cancellations from the continuation path immediately instead of
-  retrying them as transient API errors (Fixes #178)
+- typed terminal reasons and correlated loop timeline (#178) (#202)
 - core: derive the context-limit value from the primary provider metadata (meta.n_ctx),
   not from a colliding OpenRouter basename cross-reference, so the field shows the
   correct derived limit (Fixes #185)
 - test: unit + visual e2e coverage for the context-limit derivation precedence
-- core: surface the repeat-limit terminal as a visible assistant message on the
-  main chat path instead of ending silently (Fixes #178)
 - release: advertise Foundry VTT 14 compatibility (#168)
 
 ## [1.1.0] - 2026-06-20
