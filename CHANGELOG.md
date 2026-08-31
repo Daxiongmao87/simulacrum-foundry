@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reason on every loop exit (Fixes #178)
 - core: propagate cancellations from the continuation path immediately instead of
   retrying them as transient API errors (Fixes #178)
+- core: derive the context-limit value from the primary provider metadata (meta.n_ctx),
+  not from a colliding OpenRouter basename cross-reference, so the field shows the
+  correct derived limit (Fixes #185)
+- test: unit + visual e2e coverage for the context-limit derivation precedence
 - core: surface the repeat-limit terminal as a visible assistant message on the
   main chat path instead of ending silently (Fixes #178)
 - release: advertise Foundry VTT 14 compatibility (#168)
