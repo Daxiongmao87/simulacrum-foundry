@@ -5,15 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-08-30
+## [Unreleased] - 2026-09-01
 
 ### Fixed
 
+- derive context-limit from primary meta.n_ctx not OpenRouter basename cross-reference (Fixes #185) (#203)
 - typed terminal reasons and correlated loop timeline (#178) (#202)
-- core: derive the context-limit value from the primary provider metadata (meta.n_ctx),
-  not from a colliding OpenRouter basename cross-reference, so the field shows the
-  correct derived limit (Fixes #185)
-- test: unit + visual e2e coverage for the context-limit derivation precedence
 
 ## [1.1.0] - 2026-06-20
 
