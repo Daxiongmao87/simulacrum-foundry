@@ -24,6 +24,7 @@ const CONTEXT_LIMIT_KEYS = [
   'max_context_length', // Alternative naming
   'top_provider.context_length', // OpenRouter nested
   'max_model_len', // vLLM style
+  'meta.n_ctx', // provider / llama.cpp-style nested context field
 ];
 
 class ModelService {
@@ -425,6 +426,21 @@ class ModelService {
     this.#cachedBaseURL = null;
     this.#cachedApiKey = null;
     logger.debug('Model cache invalidated');
+  }
+  /**
+   * Fully reset all cached state so the next fetch re-populates from the
+   * current endpoints. Distinct from invalidateCache(), which leaves the
+   * OpenRouter fetch guard (and thus the OpenRouter cross-reference) intact.
+   */
+  reset() {
+    this.#cachedModels = [];
+    this.#cachedModelMetadata.clear();
+    this.#cachedBaseURL = null;
+    this.#cachedApiKey = null;
+    this.#openRouterCache.clear();
+    this.#openRouterFetchPromise = null;
+    this.#openRouterFetched = false;
+    logger.debug('Model cache fully reset');
   }
 
   /**

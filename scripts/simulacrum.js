@@ -340,6 +340,11 @@ Hooks.once('init', async () => {
     window.SimulacrumCore = SimulacrumCore;
   }
 
+  // Expose modelService on window for UI/components needing direct cache reset
+  if (typeof window !== 'undefined') {
+    window.modelService = modelService;
+  }
+
   logger.info('Settings registered');
 });
 

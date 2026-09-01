@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - typed terminal reasons and correlated loop timeline (#178) (#202)
+- core: derive the context-limit value from the primary provider metadata (meta.n_ctx),
+  not from a colliding OpenRouter basename cross-reference, so the field shows the
+  correct derived limit (Fixes #185)
+- test: unit + visual e2e coverage for the context-limit derivation precedence
 
 ## [1.1.0] - 2026-06-20
 
