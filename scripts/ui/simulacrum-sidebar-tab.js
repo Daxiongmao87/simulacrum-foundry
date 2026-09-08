@@ -329,12 +329,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     header.dataset.listenerAttached = 'true';
   }
 
-  _render(optionsOrForce) {
-    const options =
-      typeof optionsOrForce === 'boolean' ? { force: optionsOrForce } : optionsOrForce || {};
-    return Promise.resolve(super.render(options));
-  }
-
   render(...args) {
     let options = {};
     if (typeof args[0] === 'boolean') {
@@ -344,6 +338,36 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
     const result = super.render(options);
     return Promise.resolve(result);
+  }
+
+  /**
+   * Preserve the unsent composer draft across re-renders of the `input` part.
+   *
+   * Foundry's part-state sync restores focus, scroll, and disclosure state but
+   * not input values, and the composer textarea is stateless in the template.
+   * Without this, any render that includes the `input` part (full renders,
+   * popout toggles, conversation load, processing toggles) wipes unsent text.
+   *
+   * @override
+   */
+  _preSyncPartState(partId, newElement, priorElement, state) {
+    super._preSyncPartState(partId, newElement, priorElement, state);
+    if (partId !== 'input') return;
+    const prior = priorElement.querySelector('textarea[name="message"]');
+    if (prior) state.messageDraft = prior.value;
+  }
+
+  /**
+   * Restore the composer draft captured in `_preSyncPartState`.
+   * @override
+   */
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    if (partId !== 'input') return;
+    if (state.messageDraft) {
+      const input = newElement.querySelector('textarea[name="message"]');
+      if (input) input.value = state.messageDraft;
+    }
   }
 
   popOut() {
@@ -670,16 +694,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       this.#startProcessingInterval();
     } else {
       this.#stopProcessingInterval();
-      const textarea = this.element?.querySelector('textarea[name="message"]');
-      const preservedText = textarea?.value || '';
       this.#needsScroll = true;
       this.render({ parts: ['log', 'input'] });
-      if (preservedText) {
-        requestAnimationFrame(() => {
-          const restored = this.element?.querySelector('textarea[name="message"]');
-          if (restored) restored.value = preservedText;
-        });
-      }
     }
   }
 
