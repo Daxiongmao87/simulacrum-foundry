@@ -125,6 +125,16 @@ function _registerCoreSettings() {
     restricted: true,
   });
 
+  game.settings.register('simulacrum', 'contextLimitModel', {
+    name: 'Manual Context Limit Model',
+    hint: 'Model the manually saved context limit applies to. Managed by the sidebar context input.',
+    scope: 'world',
+    config: false, // Managed via sidebar input
+    type: String,
+    default: '',
+    restricted: true,
+  });
+
   game.settings.register('simulacrum', 'temperature', {
     name: 'Response Temperature',
     hint: 'Controls randomness in AI responses (0.0-1.0).',
