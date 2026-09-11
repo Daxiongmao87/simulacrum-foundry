@@ -1399,12 +1399,21 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     if (limit) {
       // Update fallback setting and associate it with the current model so
       // the manual value takes precedence over derived metadata on refresh (#184)
+      const prevLimit = game.settings.get('simulacrum', 'fallbackContextLimit');
       await game.settings.set('simulacrum', 'fallbackContextLimit', limit);
-      await game.settings.set(
-        'simulacrum',
-        'contextLimitModel',
-        game.settings.get('simulacrum', 'model') || ''
-      );
+      try {
+        await game.settings.set(
+          'simulacrum',
+          'contextLimitModel',
+          game.settings.get('simulacrum', 'model') || ''
+        );
+      } catch (err) {
+        // Keep the pair consistent: if the association write fails, restore
+        // the previous limit so the manual value cannot stick to the wrong
+        // model
+        await game.settings.set('simulacrum', 'fallbackContextLimit', prevLimit);
+        throw err;
+      }
       this.logger.info(`Context limit updated to: ${limit}`);
     }
   }

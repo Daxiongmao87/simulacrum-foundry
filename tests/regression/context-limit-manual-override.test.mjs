@@ -12,6 +12,17 @@
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
 
+// Foundry base-class stubs — must exist before the sidebar tab module is
+// imported (it resolves its base class at module scope). Same contract as
+// the stubs in composer-draft-preservation.test.mjs.
+globalThis.AbstractSidebarTab ??= class AbstractSidebarTab {};
+globalThis.HandlebarsApplicationMixin ??= Base => class extends Base {};
+globalThis.FormApplication ??= class FormApplication {};
+globalThis.foundry ??= { applications: {} };
+
+// When true, the next contextLimitModel settings write fails — used to
+// exercise the partial-write rollback in _saveContextLimit.
+let failContextLimitModel = false;
 import { modelService } from '../../scripts/core/model-service.js';
 
 const settingsStore = {};
@@ -23,6 +34,9 @@ before(() => {
     settings: {
       get: (_module, key) => (key in settingsStore ? settingsStore[key] : undefined),
       set: async (_module, key, value) => {
+        if (key === 'contextLimitModel' && failContextLimitModel) {
+          throw new Error('settings write failed');
+        }
         settingsStore[key] = value;
       },
     },
@@ -80,4 +94,34 @@ test('manual association with non-positive limit falls back to derived', () => {
     limit: 1050000,
     source: 'derived',
   });
+});
+
+test('association write failure rolls back the limit write (pair stays consistent)', async () => {
+  const { SimulacrumSidebarTab } = await import('../../scripts/ui/simulacrum-sidebar-tab.js');
+  settingsStore.fallbackContextLimit = 32000;
+  settingsStore.contextLimitModel = 'codex/model-a';
+  settingsStore.model = 'codex/model-a';
+  const instance = {
+    logger: { info: () => {} },
+    _parseContextLimit: SimulacrumSidebarTab.prototype._parseContextLimit,
+  };
+  failContextLimitModel = true;
+  try {
+    await assert.rejects(
+      () => SimulacrumSidebarTab.prototype._saveContextLimit.call(instance, '272k'),
+      /settings write failed/
+    );
+  } finally {
+    failContextLimitModel = false;
+  }
+  assert.equal(
+    settingsStore.fallbackContextLimit,
+    32000,
+    'the limit write must be rolled back when the association write fails'
+  );
+  assert.equal(
+    settingsStore.contextLimitModel,
+    'codex/model-a',
+    'the association must be untouched on failure'
+  );
 });
