@@ -454,18 +454,12 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   _getFormattedContextLimit(modelId) {
     if (!modelId) return '32k';
 
-    // Check for derived limit first
-    const { limit, source } = modelService.getContextLimit(modelId);
-
-    this.logger.debug(`Derived limit for ${modelId}: ${limit} (source: ${source})`);
-
-    if (limit > 0 && (source === 'derived' || source === 'openrouter')) {
-      return this._formatLimitValue(limit);
-    }
-
-    // Use stored fallback if no derived limit
+    // modelService resolves the effective limit: a manual value saved for
+    // this exact model wins over derived metadata, then derived, then the
+    // stored value — so a refresh shows what the runtime actually uses (#184)
     const storedLimit = game.settings.get('simulacrum', 'fallbackContextLimit');
-    return this._formatLimitValue(storedLimit);
+    const { limit } = modelService.getContextLimit(modelId, storedLimit);
+    return this._formatLimitValue(limit);
   }
 
   /**
@@ -1403,8 +1397,14 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
   async _saveContextLimit(value) {
     const limit = this._parseContextLimit(value);
     if (limit) {
-      // Update fallback setting
+      // Update fallback setting and associate it with the current model so
+      // the manual value takes precedence over derived metadata on refresh (#184)
       await game.settings.set('simulacrum', 'fallbackContextLimit', limit);
+      await game.settings.set(
+        'simulacrum',
+        'contextLimitModel',
+        game.settings.get('simulacrum', 'model') || ''
+      );
       this.logger.info(`Context limit updated to: ${limit}`);
     }
   }
