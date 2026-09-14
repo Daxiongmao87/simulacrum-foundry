@@ -109,3 +109,41 @@ test('compactHistory propagates the cancellation signal to the AI call', async (
   );
   assert.ok(Date.now() - started < 250, 'abort must settle compaction promptly');
 });
+
+test('AIClient.chat bounds body consumption when the endpoint stalls after headers', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => {
+    // Headers arrive; the JSON body never does unless the signal aborts.
+    const stalledBody = new Promise((resolve, reject) => {
+      const onAbort = () => {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        reject(err);
+      };
+      if (options?.signal?.aborted) {
+        onAbort();
+        return;
+      }
+      options?.signal?.addEventListener('abort', onAbort, { once: true });
+    });
+    return Promise.resolve({ ok: true, status: 200, json: () => stalledBody });
+  };
+  const client = new AIClient({
+    apiKey: 'test-key',
+    baseURL: 'http://localhost:9999/v1',
+    model: 'test-model',
+  });
+  const started = Date.now();
+  const deadline = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('TEST_DEADLINE: body read never settled')), 5000)
+  );
+  try {
+    await assert.rejects(
+      Promise.race([client.chat([{ role: 'user', content: 'hi' }], null, {}), deadline]),
+      err => err.name === 'NetworkError' && /timed out/i.test(err.message)
+    );
+    assert.ok(Date.now() - started < 5000, 'body timeout must fire promptly');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

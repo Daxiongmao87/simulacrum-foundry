@@ -379,16 +379,18 @@ export class AIClient {
     const { maxRetries: MAX_RETRIES, initialDelayMs: INITIAL_DELAY_MS } = DEFAULT_RETRY_CONFIG;
     const signal = options.signal;
 
+    // Per-request timeout: a wedged endpoint must not hang the loop forever (#178).
+    // The timer aborts the fetch and its body consumption; a timeout is terminal
+    // for this call (a hung request is not fixed by backoff) and surfaces as a
+    // typed NetworkError the loop classifies as non-retryable.
+    const timeoutMs = this._getRequestTimeoutMs();
+    let timerController = null;
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       // Check for cancellation at the start of each iteration
       throwIfAborted(signal);
 
-      // Per-request timeout: a wedged endpoint must not hang the loop forever (#178).
-      // The timer aborts only this fetch attempt; a timeout is terminal for this
-      // call (a hung request is not fixed by backoff) and surfaces as a typed
-      // NetworkError the loop classifies as non-retryable.
-      const timeoutMs = this._getRequestTimeoutMs();
-      const timerController = new AbortController();
+      timerController = new AbortController();
       let timedOut = false;
       const timer =
         timeoutMs > 0
@@ -500,22 +502,49 @@ export class AIClient {
       }
     }
 
-    if (!response.ok) {
-      let errorText;
-      try {
-        const errorData = await response.json();
-        errorText = errorData.message || JSON.stringify(errorData);
-      } catch {
+    // The per-attempt timer cleared when fetch resolved; re-arm the same
+    // controller so the budget also bounds body consumption. A server can
+    // return headers and then stall the body, which would otherwise hang
+    // past the timeout (#178).
+    let bodyTimedOut = false;
+    const bodyTimer =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            bodyTimedOut = true;
+            timerController.abort();
+          }, timeoutMs)
+        : null;
+    let data;
+    try {
+      if (!response.ok) {
+        let errorText;
         try {
-          errorText = await response.text();
-        } catch {
-          errorText = 'API error';
+          const errorData = await response.json();
+          errorText = errorData.message || JSON.stringify(errorData);
+        } catch (error) {
+          if (bodyTimedOut) {
+            throw new NetworkError(`AI request timed out after ${(timeoutMs / 1000).toFixed(0)}s`);
+          }
+          try {
+            errorText = await response.text();
+          } catch {
+            errorText = 'API error';
+          }
         }
+        throw new APIError(`${response.status} - ${errorText}`);
       }
-      throw new APIError(`${response.status} - ${errorText}`);
-    }
 
-    const data = await response.json();
+      data = await response.json();
+    } catch (error) {
+      if (bodyTimedOut) {
+        throw new NetworkError(`AI request timed out after ${(timeoutMs / 1000).toFixed(0)}s`);
+      }
+      throw error;
+    } finally {
+      if (bodyTimer) {
+        clearTimeout(bodyTimer);
+      }
+    }
 
     if (isDebugEnabled()) {
       const logger = createLogger('AIDiagnostics');

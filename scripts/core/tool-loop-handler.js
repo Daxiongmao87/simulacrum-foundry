@@ -72,11 +72,14 @@ export async function processToolCallLoop(options) {
 /**
  * Classify a loop error into a terminal reason string for timeline correlation.
  * @param {Error} error - The error thrown by the loop
- * @returns {string} 'cancelled' or 'error:<ErrorName>'
+ * @returns {string} 'cancelled', 'request_timeout', or 'error:<ErrorName>'
  */
 function _classifyLoopError(error) {
   if (error?.name === 'AbortError' || /cancel/i.test(error?.message || '')) {
     return 'cancelled';
+  }
+  if (error?.name === 'NetworkError' && /timed out/i.test(error?.message || '')) {
+    return 'request_timeout';
   }
   return `error:${error?.name || 'Error'}`;
 }
@@ -407,8 +410,10 @@ You cannot respond without a tool call. Either continue with the next tool in yo
         `API Error during loop cycle (attempt ${apiAttempt + 1}/${MAX_TOOL_FAILURE_ATTEMPTS}):`,
         error
       );
-      // Cancellation is not transient — propagate immediately without retry sleep.
-      if (_classifyLoopError(error) === 'cancelled') {
+      // Cancellation and request timeouts are terminal: a wedged endpoint is
+      // not fixed by backoff, so no retry sleep and no fallback request.
+      const loopError = _classifyLoopError(error);
+      if (loopError === 'cancelled' || loopError === 'request_timeout') {
         throw error;
       }
       if (apiAttempt + 1 >= MAX_TOOL_FAILURE_ATTEMPTS) {
