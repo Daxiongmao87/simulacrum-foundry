@@ -1,0 +1,111 @@
+/**
+ * Regression tests for #178: the tool loop must never hang forever on a
+ * wedged AI endpoint, and a user cancellation must reach the compaction
+ * summarization calls.
+ *
+ * Mechanism pinned here:
+ *   1. AIClient.chat() awaited fetch with no timeout - a server that
+ *      accepts the connection and never responds hung the whole turn
+ *      (and the sidebar input) indefinitely.
+ *   2. ConversationManager.compactHistory() dropped any cancellation
+ *      signal, so a multi-round compaction burst could not be aborted.
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+// Shim Foundry settings BEFORE importing the modules under test.
+globalThis.game = {
+  settings: {
+    get: (scope, key) => (key === 'requestTimeout' ? 150 : 0),
+  },
+};
+globalThis.FormApplication = class {};
+
+const { AIClient } = await import('../../scripts/core/ai-client.js');
+const { ConversationManager, COMPACTION_STATUS } =
+  await import('../../scripts/core/conversation.js');
+
+/**
+ * Emulate a hung server: the fetch promise settles only if its signal
+ * aborts, mirroring real fetch abort semantics.
+ */
+function hungFetch(options) {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      const err = new Error('The operation was aborted.');
+      err.name = 'AbortError';
+      reject(err);
+    };
+    if (options?.signal?.aborted) {
+      onAbort();
+      return;
+    }
+    options?.signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+test('AIClient.chat rejects with a typed timeout when the endpoint hangs', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => hungFetch(options);
+
+  try {
+    const client = new AIClient({
+      apiKey: 'test-key',
+      baseURL: 'http://localhost:9999/v1',
+      model: 'test-model',
+    });
+
+    const started = Date.now();
+    // The deadline race makes the pre-fix failure (never settles) fail
+    // fast and cleanly instead of hanging the test suite.
+    const deadline = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('TEST_DEADLINE: hung request never settled')), 5000)
+    );
+    await assert.rejects(
+      Promise.race([client.chat([{ role: 'user', content: 'hi' }], null, {}), deadline]),
+      err => err.name === 'NetworkError' && /timed out/i.test(err.message)
+    );
+    assert.ok(Date.now() - started < 5000, 'timeout must fire promptly');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('compactHistory propagates the cancellation signal to the AI call', async () => {
+  const manager = new ConversationManager('user-1', 'world-1', 100);
+  manager.addMessage('user', 'x'.repeat(4000)); // over the 100-token budget
+
+  const captured = {};
+  const fakeClient = {
+    chat: (messages, tools, options = {}) => {
+      Object.assign(captured, options);
+      return new Promise((resolve, reject) => {
+        const onAbort = () => {
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        if (options.signal?.aborted) {
+          onAbort();
+          return;
+        }
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        setTimeout(() => resolve({ choices: [{ message: { content: 'summary' } }] }), 300);
+      });
+    },
+  };
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 50);
+  const started = Date.now();
+  const status = await manager.compactHistory(fakeClient, 0, controller.signal);
+
+  assert.equal(captured.signal, controller.signal, 'signal must reach the AI call');
+  assert.equal(
+    status,
+    COMPACTION_STATUS.FAILED,
+    'aborted compaction must report FAILED, not compact or hang'
+  );
+  assert.ok(Date.now() - started < 250, 'abort must settle compaction promptly');
+});

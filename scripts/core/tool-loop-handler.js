@@ -466,8 +466,16 @@ async function _getNextAIResponse(toolResults, context) {
       let promptOverhead = conversationManager.estimatePromptOverhead(systemPrompt);
 
       while (rounds < MAX_COMPACTION_ROUNDS) {
-        const compactionStatus = await conversationManager.compactHistory(aiClient, promptOverhead);
+        const compactionStatus = await conversationManager.compactHistory(
+          aiClient,
+          promptOverhead,
+          context.signal
+        );
         rounds++;
+        interactionLogger.logLoopEvent(context.loopId, 'compaction_round', {
+          round: rounds,
+          status: compactionStatus,
+        });
         if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
         if (compactionStatus === COMPACTION_STATUS.FAILED) break;
 

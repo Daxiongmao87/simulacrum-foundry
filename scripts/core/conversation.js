@@ -237,9 +237,10 @@ class ConversationManager {
    * Compact history using AI-driven summarization
    * @param {object} aiClient - AI client for summarization calls
    * @param {number} [overhead=0] - Token overhead to reserve (e.g. system prompt tokens)
+   * @param {AbortSignal|null} [signal=null] - Cancellation signal for the summarization call
    * @returns {Promise<string>} Compaction status
    */
-  async compactHistory(aiClient, overhead = 0) {
+  async compactHistory(aiClient, overhead = 0, signal = null) {
     if (this.sessionTokens <= this._getCompactionThreshold(overhead)) {
       return COMPACTION_STATUS.WITHIN_BUDGET;
     }
@@ -257,6 +258,7 @@ class ConversationManager {
     try {
       const response = await aiClient.chat([{ role: 'user', content: prompt }], null, {
         isBackground: true,
+        ...(signal ? { signal } : {}),
       });
 
       const newSummary = response?.choices?.[0]?.message?.content || '';

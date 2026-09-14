@@ -7,7 +7,7 @@
  */
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
-import { SimulacrumError, APIError } from '../utils/errors.js';
+import { SimulacrumError, APIError, NetworkError } from '../utils/errors.js';
 import { normalizeAIResponse, normalizeToolCallArguments } from '../utils/ai-normalization.js';
 import { emitRetryStatus } from './hook-manager.js';
 import {
@@ -32,6 +32,31 @@ export { AIProvider, MockAIProvider, OpenAIProvider };
 export const AI_ERROR_CODES = Object.freeze({
   TOOL_CALL_FAILURE: 'TOOL_CALL_FAILURE',
 });
+
+/**
+ * Default per-request timeout for AI chat calls, in milliseconds.
+ * A wedged local endpoint must not hang the tool loop forever (#178);
+ * the configured `requestTimeout` setting overrides this.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 300000;
+
+/**
+ * Combine multiple abort signals into one that aborts when any input aborts.
+ * @param {...AbortSignal} signals - Input signals (null/undefined ignored)
+ * @returns {AbortSignal} Combined signal
+ */
+function _combineAbortSignals(...signals) {
+  const controller = new AbortController();
+  for (const sig of signals) {
+    if (!sig) continue;
+    if (sig.aborted) {
+      controller.abort();
+      break;
+    }
+    sig.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return controller.signal;
+}
 
 /**
  * AI Client - Main abstraction layer for interacting with various AI providers
@@ -126,6 +151,25 @@ export class AIClient {
       }
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
+  }
+
+  /**
+   * Get the configured per-request timeout for AI chat calls.
+   * @returns {number} Timeout in milliseconds (0 disables the timeout)
+   * @private
+   */
+  _getRequestTimeoutMs() {
+    try {
+      if (typeof game !== 'undefined' && game?.settings?.get) {
+        const value = game.settings.get('simulacrum', 'requestTimeout');
+        if (typeof value === 'number' && value >= 0) {
+          return value;
+        }
+      }
+    } catch {
+      // Ignore settings access errors (e.g. during tests)
+    }
+    return DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /**
@@ -339,6 +383,23 @@ export class AIClient {
       // Check for cancellation at the start of each iteration
       throwIfAborted(signal);
 
+      // Per-request timeout: a wedged endpoint must not hang the loop forever (#178).
+      // The timer aborts only this fetch attempt; a timeout is terminal for this
+      // call (a hung request is not fixed by backoff) and surfaces as a typed
+      // NetworkError the loop classifies as non-retryable.
+      const timeoutMs = this._getRequestTimeoutMs();
+      const timerController = new AbortController();
+      let timedOut = false;
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              timedOut = true;
+              timerController.abort();
+            }, timeoutMs)
+          : null;
+      const fetchSignal =
+        timeoutMs > 0 ? _combineAbortSignals(timerController.signal, signal) : signal;
+
       const headers = {
         'Content-Type': 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -381,7 +442,7 @@ export class AIClient {
           method: 'POST',
           headers,
           body: stringifiedBody,
-          signal,
+          signal: fetchSignal,
         });
 
         if (response.ok) {
@@ -412,6 +473,11 @@ export class AIClient {
           break;
         }
       } catch (error) {
+        if (timedOut) {
+          const logger = createLogger('AIClient');
+          logger.error(`AI request timed out after ${timeoutMs}ms (attempt ${attempt + 1})`);
+          throw new NetworkError(`AI request timed out after ${(timeoutMs / 1000).toFixed(0)}s`);
+        }
         // Check for abort error first - do NOT retry if user cancelled
         if (isAbortError(error, signal)) {
           throw createAbortError();
@@ -429,6 +495,8 @@ export class AIClient {
         );
         await executeRetryDelay(delay, signal, retryCallId);
         emitRetryStatus('end', retryCallId);
+      } finally {
+        clearTimeout(timer);
       }
     }
 

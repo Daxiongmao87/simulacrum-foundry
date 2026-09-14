@@ -457,7 +457,8 @@ class SimulacrumCore {
       while (rounds < MAX_COMPACTION_ROUNDS) {
         const compactionStatus = await this.conversationManager.compactHistory(
           this.aiClient,
-          promptOverhead
+          promptOverhead,
+          options.signal
         );
         rounds++;
         if (compactionStatus === COMPACTION_STATUS.WITHIN_BUDGET) break;
