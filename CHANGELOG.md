@@ -5,10 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-09-10
+## [Unreleased] - 2026-09-14
 
 ### Fixed
 
+- preserve manual context limit across refresh for the selected model (Fixes #184) (#208)
 - preserve composer draft across sidebar re-renders (Fixes #206) (#207)
 - derive context-limit from primary meta.n_ctx not OpenRouter basename cross-reference (Fixes #185) (#203)
 - typed terminal reasons and correlated loop timeline (#178) (#202)
