@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- bound AI requests with a cancellable request timeout so a wedged endpoint cannot stall the tool loop forever; user cancellation now also reaches the compaction summarization call (Fixes #178)
 - preserve manual context limit across refresh for the selected model (Fixes #184) (#208)
 - preserve composer draft across sidebar re-renders (Fixes #206) (#207)
 - derive context-limit from primary meta.n_ctx not OpenRouter basename cross-reference (Fixes #185) (#203)
