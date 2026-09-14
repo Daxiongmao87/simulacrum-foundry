@@ -6,7 +6,7 @@
     },
     {
       "path": "scripts/ui/simulacrum-sidebar-tab.js",
-      "lines": 1505
+      "lines": 1514
     },
     {
       "path": "tests/e2e/fixtures/foundry-helpers.mjs",

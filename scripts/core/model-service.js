@@ -308,13 +308,43 @@ class ModelService {
   }
 
   /**
+   * Get the manually saved context limit for a model, if any.
+   * The manual limit (fallbackContextLimit setting) is associated with the
+   * model it was set on via the contextLimitModel setting and takes
+   * precedence over derived metadata until the model changes.
+   * @param {string} modelId - Model ID to look up
+   * @returns {number} Manual limit if set for this exact model, else 0
+   * @private
+   */
+  _getManualContextLimit(modelId) {
+    if (typeof game === 'undefined' || !game?.settings?.get) return 0;
+    try {
+      const manualModel = game.settings.get(MODULE_ID, 'contextLimitModel');
+      const limit = game.settings.get(MODULE_ID, 'fallbackContextLimit');
+      if (manualModel && manualModel === modelId && limit > 0) return limit;
+    } catch {
+      /* settings unavailable */
+    }
+    return 0;
+  }
+
+  /**
    * Get context limit for a model, deriving from metadata or using fallback
-   * Priority: Primary provider metadata → OpenRouter cross-reference → User fallback
+   * Priority: Manual override for this model → Primary provider metadata →
+   * OpenRouter cross-reference → User fallback
    * @param {string} modelId - Model ID to look up
    * @param {number} [fallback=32000] - Fallback value if not derivable
-   * @returns {{ limit: number, source: 'derived' | 'openrouter' | 'fallback' }} Context limit and source
+   * @returns {{ limit: number, source: 'manual' | 'derived' | 'openrouter' | 'fallback' }} Context limit and source
    */
   getContextLimit(modelId, fallback = 32000) {
+    // A manually saved limit for this exact model wins over derived metadata
+    // so a user-entered value survives refresh/re-render (#184)
+    const manual = this._getManualContextLimit(modelId);
+    if (manual > 0) {
+      logger.debug(`Manual context limit for ${modelId}: ${manual}`);
+      return { limit: manual, source: 'manual' };
+    }
+
     // First try primary provider metadata
     const metadata = this._findModelById(modelId);
     if (metadata && typeof metadata === 'object') {
