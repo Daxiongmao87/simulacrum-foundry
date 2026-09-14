@@ -385,11 +385,13 @@ export class AIClient {
     // typed NetworkError the loop classifies as non-retryable.
     const timeoutMs = this._getRequestTimeoutMs();
     let timerController = null;
+    let attemptStartedAt = 0;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       // Check for cancellation at the start of each iteration
       throwIfAborted(signal);
 
+      attemptStartedAt = Date.now();
       timerController = new AbortController();
       let timedOut = false;
       const timer =
@@ -502,17 +504,19 @@ export class AIClient {
       }
     }
 
-    // The per-attempt timer cleared when fetch resolved; re-arm the same
-    // controller so the budget also bounds body consumption. A server can
+    // The per-attempt timer cleared when fetch resolved; bound the body
+    // read to the same attempt deadline (remaining budget only) so one
+    // request never consumes more than one timeout (#178). A server can
     // return headers and then stall the body, which would otherwise hang
-    // past the timeout (#178).
+    // past the timeout.
+    const bodyRemainingMs = Math.max(0, timeoutMs - (Date.now() - attemptStartedAt));
     let bodyTimedOut = false;
     const bodyTimer =
       timeoutMs > 0
         ? setTimeout(() => {
             bodyTimedOut = true;
             timerController.abort();
-          }, timeoutMs)
+          }, bodyRemainingMs)
         : null;
     let data;
     try {

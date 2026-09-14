@@ -49,25 +49,32 @@ test('AIClient.chat rejects with a typed timeout when the endpoint hangs', async
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (url, options) => hungFetch(options);
 
-  try {
-    const client = new AIClient({
-      apiKey: 'test-key',
-      baseURL: 'http://localhost:9999/v1',
-      model: 'test-model',
-    });
+  const client = new AIClient({
+    apiKey: 'test-key',
+    baseURL: 'http://localhost:9999/v1',
+    model: 'test-model',
+  });
 
-    const started = Date.now();
-    // The deadline race makes the pre-fix failure (never settles) fail
-    // fast and cleanly instead of hanging the test suite.
-    const deadline = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('TEST_DEADLINE: hung request never settled')), 5000)
+  const started = Date.now();
+  // The deadline race makes the pre-fix failure (never settles) fail
+  // fast and cleanly instead of hanging the test suite. The timer is
+  // cleared after the race so a winning timeout does not keep the
+  // event loop alive for the full 5s.
+  let deadlineTimer;
+  const deadline = new Promise((_, reject) => {
+    deadlineTimer = setTimeout(
+      () => reject(new Error('TEST_DEADLINE: hung request never settled')),
+      5000
     );
+  });
+  try {
     await assert.rejects(
       Promise.race([client.chat([{ role: 'user', content: 'hi' }], null, {}), deadline]),
       err => err.name === 'NetworkError' && /timed out/i.test(err.message)
     );
     assert.ok(Date.now() - started < 5000, 'timeout must fire promptly');
   } finally {
+    clearTimeout(deadlineTimer);
     globalThis.fetch = originalFetch;
   }
 });
@@ -134,9 +141,13 @@ test('AIClient.chat bounds body consumption when the endpoint stalls after heade
     model: 'test-model',
   });
   const started = Date.now();
-  const deadline = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('TEST_DEADLINE: body read never settled')), 5000)
-  );
+  let deadlineTimer;
+  const deadline = new Promise((_, reject) => {
+    deadlineTimer = setTimeout(
+      () => reject(new Error('TEST_DEADLINE: body read never settled')),
+      5000
+    );
+  });
   try {
     await assert.rejects(
       Promise.race([client.chat([{ role: 'user', content: 'hi' }], null, {}), deadline]),
@@ -144,6 +155,57 @@ test('AIClient.chat bounds body consumption when the endpoint stalls after heade
     );
     assert.ok(Date.now() - started < 5000, 'body timeout must fire promptly');
   } finally {
+    clearTimeout(deadlineTimer);
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a request that gets headers near the deadline consumes one budget, not two', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) =>
+    new Promise(resolve => {
+      // Headers arrive at 120ms into the 150ms test budget; then the
+      // body stalls until the signal aborts.
+      setTimeout(() => {
+        const stalledBody = new Promise((_, reject) => {
+          const onAbort = () => {
+            const err = new Error('The operation was aborted.');
+            err.name = 'AbortError';
+            reject(err);
+          };
+          if (options?.signal?.aborted) {
+            onAbort();
+            return;
+          }
+          options?.signal?.addEventListener('abort', onAbort, { once: true });
+        });
+        resolve({ ok: true, status: 200, json: () => stalledBody });
+      }, 120);
+    });
+  const client = new AIClient({
+    apiKey: 'test-key',
+    baseURL: 'http://localhost:9999/v1',
+    model: 'test-model',
+  });
+  const started = Date.now();
+  let deadlineTimer;
+  const deadline = new Promise((_, reject) => {
+    deadlineTimer = setTimeout(
+      () => reject(new Error('TEST_DEADLINE: near-deadline request never settled')),
+      5000
+    );
+  });
+  try {
+    await assert.rejects(
+      Promise.race([client.chat([{ role: 'user', content: 'hi' }], null, {}), deadline]),
+      err => err.name === 'NetworkError' && /timed out/i.test(err.message)
+    );
+    // Pre-fix, the body phase re-armed a full fresh budget, so this
+    // request settled at ~270ms (120ms headers + 150ms body). One
+    // deadline means it must settle by the original ~150ms.
+    assert.ok(Date.now() - started < 200, 'one request must not exceed one timeout budget');
+  } finally {
+    clearTimeout(deadlineTimer);
     globalThis.fetch = originalFetch;
   }
 });
