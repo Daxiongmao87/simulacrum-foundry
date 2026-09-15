@@ -332,6 +332,7 @@ Hooks.once('init', async () => {
       'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
       'modules/simulacrum/templates/simulacrum/sidebar-input.hbs',
       'modules/simulacrum/templates/simulacrum/message.hbs',
+      'modules/simulacrum/templates/simulacrum/message-queue.hbs',
     ];
     // Ensure loadTemplates exists in the Foundry environment
     if (typeof loadTemplates === 'function') {

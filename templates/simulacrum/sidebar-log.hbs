@@ -13,6 +13,18 @@
     {{> "modules/simulacrum/templates/simulacrum/message.hbs" this}}
     {{/each}}
 
+    {{!-- Queued user prompts, in submission order (#174) --}}
+    {{#if pendingQueue.length}}
+    {{#each pendingQueue}}
+    <li class="chat-message message simulacrum-queued-message" data-queue-position="{{this.position}}">
+        <div class="message-content simulacrum-queue-content">
+            <span class="simulacrum-queue-position">{{this.position}}</span>
+            <span class="simulacrum-queued-message-content">{{this.content}}</span>
+        </div>
+    </li>
+    {{/each}}
+    {{/if}}
+
     {{!-- Pending tool confirmations --}}
     {{#each pendingConfirmations}}
     <li class="chat-message message flexcol tool-confirmation-message" data-tool-call-id="{{this.toolCallId}}">
