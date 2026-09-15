@@ -265,6 +265,18 @@ function registerAPISettings() {
     restricted: true,
   });
 
+  game.settings.register(MODULE_ID, 'requestTimeout', {
+    name: 'AI Request Timeout',
+    hint: 'Maximum time in milliseconds a single AI request may take before it is aborted. Set to 0 to disable. Default is 300000 (5 minutes).',
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: 300000,
+    minimum: 0,
+    step: 5000,
+    restricted: true,
+  });
+
   game.settings.register(MODULE_ID, 'toolLoopLimit', {
     name: 'Autonomous Tool Loop Limit',
     hint: 'Maximum number of consecutive tool steps the AI can take autonomously. Set to 0 for infinite (no limit). Default is 100.',
@@ -320,6 +332,7 @@ Hooks.once('init', async () => {
       'modules/simulacrum/templates/simulacrum/sidebar-log.hbs',
       'modules/simulacrum/templates/simulacrum/sidebar-input.hbs',
       'modules/simulacrum/templates/simulacrum/message.hbs',
+      'modules/simulacrum/templates/simulacrum/message-queue.hbs',
     ];
     // Ensure loadTemplates exists in the Foundry environment
     if (typeof loadTemplates === 'function') {

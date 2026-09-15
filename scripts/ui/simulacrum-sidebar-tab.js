@@ -4,9 +4,7 @@
  */
 
 /* eslint-disable max-lines */
-// TODO(#141): Split this file. At 1000+ LOC it exceeds the 500-line limit; the
-// split is out of scope for the #134 race-condition fix. Only `max-lines` is
-// suppressed here — all per-method rules remain enforced.
+// #141: over the 500-line soft limit; only `max-lines` suppressed.
 
 import { createLogger, isDebugEnabled } from '../utils/logger.js';
 import { SidebarEventHandlers } from './sidebar-event-handlers.js';
@@ -19,6 +17,7 @@ import { modelService } from '../core/model-service.js';
 import { formatPendingToolCall, formatToolCallDisplay } from '../utils/message-utils.js';
 import { emitProcessCancelled, SimulacrumHooks } from '../core/hook-manager.js';
 import { SequentialQueue } from '../utils/sequential-queue.js';
+import { SidebarMessageQueue } from './sidebar-message-queue.js';
 
 // Stable base class resolution for FoundryVTT v13 with fallback safety
 const AbstractSidebarTab =
@@ -91,6 +90,10 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     this.chatHandler = null;
     this.logger = createLogger('SimulacrumSidebarTab');
     this._messageQueue = new SequentialQueue();
+    // Prompts sent while the agent is busy are queued here (#174) and drained
+    // sequentially after each response.
+    this._sidebarQueue = new SidebarMessageQueue(this);
+    this.messageQueue = this._sidebarQueue.messageQueue;
 
     // Sync when conversation is loaded (race condition fix)
     Hooks.on('simulacrumConversationLoaded', async () => {
@@ -370,10 +373,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     }
   }
 
-  popOut() {
-    return this.renderPopout();
-  }
-
   async renderPopout() {
     const popout = await super.renderPopout();
     const originalClose = popout.close.bind(popout);
@@ -419,31 +418,30 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     const processActive = this.#isProcessing || this._activeProcesses.size > 0 || this.#isRetrying;
     const processLabel = this._getProcessLabel();
 
-    if (isDebugEnabled()) {
-      this.logger.debug(
-        '_prepareContext processActive:',
-        processActive,
-        'isProcessing:',
-        this.#isProcessing
-      );
-    }
-
+    if (isDebugEnabled()) this.logger.debug(`processActive: ${processActive}`);
     return {
       ...context,
       messages: this.messages,
+      pendingQueue: this._sidebarQueue.getPendingQueue(),
       isGM: game.user.isGM,
       user: displayUser,
       isAtBottom: this.#isAtBottom,
       processActive,
       processLabel,
       processIsRetrying: this.#isRetrying,
-      disableInput:
-        !this.isPopout &&
-        !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
-        !this._popoutClosing,
+      disableInput: this._isSidebarInputDisabled(),
       currentModel: game.settings.get('simulacrum', 'model') || '',
       contextLimit: this._getFormattedContextLimit(game.settings.get('simulacrum', 'model')),
     };
+  }
+
+  /** Inline sidebar input is hidden while a popout is rendered. */
+  _isSidebarInputDisabled() {
+    return (
+      !this.isPopout &&
+      !!ui.sidebar.popouts[this.constructor.tabName]?.rendered &&
+      !this._popoutClosing
+    );
   }
 
   /**
@@ -809,6 +807,8 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
       } else {
         chatLog.appendChild(messageEl);
       }
+      // A new message changes where the queue block belongs: refresh it so it
+      // stays pinned just above the process-status line, not below the log.
     }
     this._scrollToBottom();
   }
@@ -1142,12 +1142,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
     await SidebarEventHandlers.handleCancelProcess(this, event, target);
   }
 
-  _activateListeners(html) {
-    super._activateListeners(html);
-    // Basic listeners that don't fit in parts or needed globally?
-    // Most are in _attachPartListeners now.
-  }
-
   _attachPartListeners(partId, element, options) {
     super._attachPartListeners?.(partId, element, options);
 
@@ -1159,6 +1153,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         : element.querySelector('.chat-scroll');
 
       if (scroll) {
+        // Queue actions live in the log part (the queue block renders in
+        // .chat-log), so they are delegated here, not from the input form.
+        scroll.addEventListener('click', e => this._sidebarQueue.handleQueueActionClick(e));
         scroll.addEventListener('scroll', _e => {
           this._updateJumpToBottomVisibility(scroll);
         });
@@ -1182,6 +1179,7 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         form.dataset.simulacrumBound = '1';
         form.addEventListener('submit', event => {
           event.preventDefault();
+          this.setBusyFlag(false);
           const input = form.querySelector('textarea[name="message"]');
           if (input) this._onSendMessage(event, input);
         });
