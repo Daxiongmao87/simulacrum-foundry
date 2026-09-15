@@ -107,6 +107,32 @@ test('queued prompts replay through the send path and drain after completion', a
   assert.equal(app.messageQueue.queue.length, 0);
 });
 
+test('Stop leaves the queue intact and a manual send resumes it (FIFO preserved)', async () => {
+  const app = makeIdleApp();
+  const processed = [];
+  app.messageQueue = new MessageQueueManager();
+  app.setBusyFlag = () => {};
+  app.isCurrentProcess = () => true;
+  app.chatHandler.processUserMessage = async message => {
+    processed.push(message);
+  };
+
+  // Queue two prompts while busy, then simulate a Stop (aborted signal: the
+  // queue is left untouched by the send path).
+  const busyApp = makeBusyApp();
+  busyApp.messageQueue = app.messageQueue;
+  await SidebarEventHandlers.handleSendMessage(busyApp, {}, makeTextarea('q1'));
+  await SidebarEventHandlers.handleSendMessage(busyApp, {}, makeTextarea('q2'));
+
+  const { SidebarMessageQueue } = await import('../../../scripts/ui/sidebar-message-queue.js');
+  const seam = new SidebarMessageQueue(app);
+  seam.messageQueue = app.messageQueue;
+  await seam.requestDrain();
+
+  assert.deepEqual(processed, ['q1', 'q2']);
+  assert.equal(app.messageQueue.queue.length, 0);
+});
+
 test('entry point preloads the message queue template', async () => {
   const entry = await readFile(resolve(ROOT, 'scripts/simulacrum.js'), 'utf8');
   assert.match(entry, /modules\/simulacrum\/templates\/simulacrum\/message-queue\.hbs/u);
@@ -123,5 +149,6 @@ test('log template renders the pending queue in order and wires discard actions'
   );
   assert.match(queueTemplate, /data-queue-action="discard"/u);
   assert.match(queueTemplate, /data-queue-action="discardAll"/u);
+  assert.match(queueTemplate, /data-queue-action="send"/u);
   assert.match(queueTemplate, /\{\{this\.position\}\}/u);
 });

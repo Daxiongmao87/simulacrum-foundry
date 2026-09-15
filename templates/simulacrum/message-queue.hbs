@@ -6,6 +6,8 @@
             <span class="simulacrum-queue-title">
                 <i class="fa-solid fa-hourglass-half"></i> Queued messages ({{messages.length}})
             </span>
+            <button type="button" class="ui-control simulacrum-queue-action-icon fa-solid fa-paper-plane"
+                data-tooltip aria-label="Send queued messages" data-queue-action="send"></button>
             <button type="button" class="ui-control simulacrum-queue-action-icon fa-solid fa-trash"
                 data-tooltip aria-label="Discard all queued messages" data-queue-action="discardAll"></button>
         </div>

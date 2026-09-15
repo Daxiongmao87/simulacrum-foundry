@@ -1153,6 +1153,9 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
         : element.querySelector('.chat-scroll');
 
       if (scroll) {
+        // Queue actions live in the log part (the queue block renders in
+        // .chat-log), so they are delegated here, not from the input form.
+        scroll.addEventListener('click', e => this._sidebarQueue.handleQueueActionClick(e));
         scroll.addEventListener('scroll', _e => {
           this._updateJumpToBottomVisibility(scroll);
         });
@@ -1180,8 +1183,6 @@ export class SimulacrumSidebarTab extends HandlebarsApplicationMixin(AbstractSid
           const input = form.querySelector('textarea[name="message"]');
           if (input) this._onSendMessage(event, input);
         });
-
-        form.addEventListener('click', event => this._sidebarQueue.handleQueueActionClick(event));
       }
 
       const input = element.querySelector('textarea[name="message"]');

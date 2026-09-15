@@ -50,7 +50,7 @@ export class SidebarMessageQueue {
     return this.messageQueue.peek().map((content, index) => ({ position: index + 1, content }));
   }
 
-  /** Handle discard / discard-all clicks on the rendered queue block. */
+  /** Handle discard / discard-all / send clicks on the rendered queue block. */
   handleQueueActionClick(event) {
     const actionEl = event.target.closest?.('[data-queue-action]');
     if (!actionEl) return;
@@ -58,6 +58,17 @@ export class SidebarMessageQueue {
       this.messageQueue.removeMessage(actionEl.dataset.queueId);
     } else if (actionEl.dataset.queueAction === 'discardAll') {
       this.messageQueue.clearAll();
+    } else if (actionEl.dataset.queueAction === 'send') {
+      this.requestDrain();
     }
+  }
+
+  /**
+   * Manual resume after a Stop: run the next queued prompt through the send
+   * path (which chains the rest of the queue on completion).
+   */
+  async requestDrain() {
+    if (this.app.isProcessing()) return;
+    await this.messageQueue.drain(this.app);
   }
 }
