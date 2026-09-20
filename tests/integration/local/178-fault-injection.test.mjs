@@ -18,6 +18,18 @@
 // changes): a scripted local endpoint (answer sequence + hang point), the
 // requestTimeout world setting, a loop-layer emit fault (B3), and a UI-layer
 // drop (B4).
+//
+// PHASE 3 (B3 fix): the #178 invariant "successful non-terminal tool call ->
+// assistant turn" is now STRUCTURAL in the loop: the continuation turn is
+// persisted to the conversation store BEFORE the fallible emit path runs, and a
+// throw in the emit path records a correlated loop_event (assistant_emit_fault)
+// without killing the loop - the turn is delivered/retried and can never vanish
+// silently. B3 below asserts the flip (turn survives the emit-path fault).
+// baseline/B1/B2/B4 keep their Phase 2 documented behavior.
+//
+// Every case also asserts the loop timeline was AUTO-CAPTURED at loop_ended
+// (per-occurrence capture in the interaction logger, in addition to the
+// existing user-flag interactionLog save).
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -68,6 +80,22 @@ function timelineNames(timeline) {
   return timeline.map(e => e.event);
 }
 
+// #178 gap closure: the per-loopId timeline must be auto-captured at loop_ended.
+function assertAutoCaptured(result, expectedReason) {
+  assert.ok(result.capturedTimeline, `loop timeline auto-captured at loop_ended (loopId=${result.loopId})`);
+  assert.equal(result.capturedTimeline.loopId, result.loopId, 'captured timeline belongs to this loop');
+  assert.equal(result.capturedTimeline.reason, expectedReason, 'captured reason matches the loop_ended event');
+  assert.equal(
+    result.capturedTimeline.eventNames[result.capturedTimeline.eventNames.length - 1],
+    'loop_ended',
+    'capture includes the loop_ended entry'
+  );
+  assert.ok(
+    result.capturedTimeline.entries.every(e => e.type === 'loop_event' && e.loopId === result.loopId),
+    'capture is scoped to this loopId'
+  );
+}
+
 function tracePath(result, extra = {}) {
   return writeTimelineTrace(
     OUT_DIR,
@@ -109,6 +137,7 @@ test('baseline (no fault): successful tool call -> continuation -> assistant tur
       entriesBefore,
     });
     const path = tracePath(result, { case: 'baseline' });
+    assertAutoCaptured(result, 'end_loop');
 
     const names = timelineNames(result.timeline);
     assert.ok(names.includes('loop_started'), 'loop_started present');
@@ -153,6 +182,7 @@ test('B1: after tool_results_committed, is continuation_requested guaranteed? (t
       entriesBefore,
     });
     const path = tracePath(result, { case: 'B1' });
+    assertAutoCaptured(result, 'end_loop');
     const names = timelineNames(result.timeline);
 
     // DIAGNOSIS: in tool-loop-handler.js, after a successful non-end_loop tool
@@ -196,6 +226,7 @@ test('B2: api_request_started then endpoint hangs -> #209 bounded timeout, termi
     });
     const wallMs = Date.now() - started;
     const path = tracePath(result, { case: 'B2', wallMs });
+    assertAutoCaptured(result, 'request_timeout');
     const names = timelineNames(result.timeline);
 
     assert.ok(names.includes('api_request_started'), 'api_request_started present');
@@ -229,7 +260,7 @@ test('B2: api_request_started then endpoint hangs -> #209 bounded timeout, termi
   }
 }, { timeout: 20000 });
 
-test('B3: continuation returns a valid turn but the turn is lost (loop_ended WITHOUT assistant_emitted)', async () => {
+test('B3 (FIXED): continuation returns a valid turn, emit path throws -> the turn SURVIVES (invariant holds structurally)', async () => {
   const llm = await startScriptedLLM([
     { kind: 'ok', body: FIRST_TOOL_CALL },
     { kind: 'ok', body: CONTINUATION_TEXT }, // second request returns a VALID assistant turn
@@ -237,42 +268,57 @@ test('B3: continuation returns a valid turn but the turn is lost (loop_ended WIT
   try {
     const conversation = makeConversation();
     const entriesBefore = interactionLogger._entries.length;
+    // Same Phase 2 fault: the loop-layer assistant emit (handleToolResult) throws
+    // ONLY for the continuation text turn, after request 2 returned a valid turn.
     const result = await runRealChain({
       message: 'List my documents',
       baseURL: llm.baseURL,
       signal: new AbortController().signal,
       conversationManager: conversation,
       entriesBefore,
-      // Injected fault in the continuation/emit path: the loop-layer assistant
-      // emit (handleToolResult) throws BEFORE assistant_emitted is logged.
-      // Injected fault in the continuation/emit path: the loop-layer assistant
-      // emit (handleToolResult) throws ONLY for the continuation text turn, i.e.
-      // AFTER request 2 returned a valid turn and AFTER the loop re-entered the
-      // iteration. This models the turn being lost in the emit path.
       emitFault: tr => tr?.role === 'assistant' && tr?.content === 'All done. I listed your documents.',
     });
     const path = tracePath(result, { case: 'B3' });
     const names = timelineNames(result.timeline);
-
     assert.ok(names.includes('api_request_finished'), 'continuation request finished (valid turn returned)');
-    // The valid turn was produced by the model (request 2 finished) yet the loop
-    // ended WITHOUT emitting it (assistant_emitted for that turn is absent).
-    const emitted = eventsOf(result.timeline, 'assistant_emitted');
-    assert.ok(
-      !emitted.some(e => e.details?.hasContent === true),
-      'no assistant_emitted WITH content: the valid continuation turn was lost'
-    );
-    const end = eventsOf(result.timeline, 'loop_ended');
-    assert.equal(end.length, 1, 'loop_ended present');
-    assert.notEqual(end[0].details.reason, 'end_loop', 'loop ended abnormally, not via end_loop');
-    assert.match(String(end[0].details.reason), /error|INJECTED/i, 'loop_ended reflects the emitted-path fault');
 
+    // (b) The emit fault is RECORDED (correlated loop event), not swallowed.
+    const emitFaults = eventsOf(result.timeline, 'assistant_emit_fault');
+    assert.ok(emitFaults.length >= 1, 'assistant_emit_fault loop event recorded (fault is visible)');
+    assert.equal(emitFaults[0].details.hasContent, true, 'faulted emission was a content-bearing turn');
+    assert.match(String(emitFaults[0].details.message), /INJECTED_EMIT_FAULT/, 'fault event carries the fault message');
+
+    // The loop does NOT die from the emit fault: typed terminal reason, never error:*.
+    const end = eventsOf(result.timeline, 'loop_ended');
+    assert.equal(end.length, 1, 'exactly one loop_ended');
+    assert.equal(end[0].details.reason, 'circuit_breaker', 'typed loop_ended (circuit_breaker), NOT an emit-path error');
+    assert.ok(names.indexOf('assistant_emit_fault') < names.lastIndexOf('loop_ended'), 'fault event precedes loop_ended');
+
+    // (c) The model's valid turn never vanishes:
+    //   1. persisted BEFORE the emit fault (conversation store, survives reload)
+    const storeTurn = conversation.messages.some(
+      m => m.role === 'assistant' && m.content === 'All done. I listed your documents.'
+    );
+    assert.ok(storeTurn, 'valid turn persisted in the conversation store (persist-before-emit)');
+    //   2. delivered: the faulted turn stays _emitted=false, so the engine's
+    //      final-response path re-delivers it via onAssistantMessage.
     const finalTurn = result.uiSeen.find(u => u.content === 'All done. I listed your documents.');
-    assert.ok(!finalTurn, 'valid continuation turn did NOT reach the UI');
+    assert.ok(finalTurn, 'valid continuation turn reached the UI (retried/re-emitted, not lost)');
+
+    // (a) The invariant: after the successful non-terminal tool result the loop
+    // kept producing assistant turns.
+    const committed = names.indexOf('tool_results_committed');
+    assert.ok(committed >= 0, 'tool_results_committed present');
+    assert.ok(
+      names.slice(committed + 1).filter(n => n === 'api_request_started').length >= 2,
+      'the loop kept producing assistant turns after the successful tool call'
+    );
+
+    assertAutoCaptured(result, 'circuit_breaker');
 
     console.log(`[B3] loopId=${result.loopId} trace=${path}`);
     console.log(`[B3] events: ${names.join(' -> ')}`);
-    console.log(`[B3] loop_ended reason: ${end[0].details.reason}; valid turn lost: ${!finalTurn}`);
+    console.log(`[B3] loop_ended reason: ${end[0].details.reason}; emit faults: ${emitFaults.length}; turn persisted+delivered: ${storeTurn && Boolean(finalTurn)}`);
   } finally {
     llm.close();
   }
@@ -297,6 +343,7 @@ test('B4: assistant_emitted fires but the UI emission is lost (render/emit layer
       uiDrop: m => m?.role === 'assistant' && m?.content === 'All done. I listed your documents.',
     });
     const path = tracePath(result, { case: 'B4' });
+    assertAutoCaptured(result, 'circuit_breaker');
     const names = timelineNames(result.timeline);
 
     assert.ok(eventsOf(result.timeline, 'assistant_emitted').length >= 1, 'assistant_emitted fired (loop layer)');

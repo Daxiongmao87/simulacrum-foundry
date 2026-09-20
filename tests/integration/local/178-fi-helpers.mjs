@@ -220,6 +220,12 @@ export async function runRealChain(opts) {
   const loopId = loopIds[loopIds.length - 1] || null;
   const timeline = slice.filter(e => e.loopId === loopId);
 
+  // #178 auto-capture: the per-loopId timeline captured at loop_ended by the logger.
+  const capturedTimeline =
+    loopId && typeof interactionLogger.getCapturedLoopTimeline === 'function'
+      ? interactionLogger.getCapturedLoopTimeline(loopId)
+      : null;
+
   return {
     result,
     thrown,
@@ -229,6 +235,7 @@ export async function runRealChain(opts) {
     notifications,
     loopId,
     timeline,
+    capturedTimeline,
     conversationMessages: opts.conversationManager.messages.map(m => ({
       role: m.role,
       content: m.content,
