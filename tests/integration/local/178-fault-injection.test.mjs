@@ -370,3 +370,51 @@ test('B4: assistant_emitted fires but the UI emission is lost (render/emit layer
     llm.close();
   }
 }, { timeout: 20000 });
+test('B5: an orphaned manage_task is cleared when the loop terminates abnormally', async () => {
+  // #178: interrupted or failed loops must not orphan task state. The loop only
+  // cleared currentTask on end_loop; repeat_limit / circuit_breaker /
+  // tool_failure_fallback / cancellation left it stranded. Verify the loop exit
+  // now clears an active task regardless of why it terminated.
+  const manageTaskTool = toolRegistry.getTool('manage_task');
+  assert.ok(manageTaskTool, 'manage_task registered');
+  // Seed an active task, then drive a loop that terminates abnormally: the
+  // first response enters the loop, identical STOP responses trip the breaker
+  // (no end_loop is ever reached).
+  manageTaskTool.currentTask = {
+    name: 'orphaned',
+    goal: 'g',
+    steps: [{ title: 'Step 1', description: 's', status: 'pending' }],
+  };
+  const llm = await startScriptedLLM([
+    { kind: 'ok', body: FIRST_TOOL_CALL },
+    { kind: 'ok', body: rawText('STOP') },
+    { kind: 'ok', body: rawText('STOP') },
+    { kind: 'ok', body: rawText('STOP') },
+    { kind: 'ok', body: rawText('STOP') },
+  ]);
+  try {
+    const conversation = makeConversation();
+    const entriesBefore = interactionLogger._entries.length;
+    const result = await runRealChain({
+      message: 'go',
+      baseURL: llm.baseURL,
+      signal: new AbortController().signal,
+      conversationManager: conversation,
+      entriesBefore,
+    });
+    const path = tracePath(result, { case: 'B5' });
+    const end = eventsOf(result.timeline, 'loop_ended');
+    assert.equal(end.length, 1, 'exactly one loop_ended');
+    const reason = end[0].details.reason;
+    assert.notEqual(reason, 'end_loop', 'terminated abnormally (not end_loop)');
+    // The orphaned task state must be cleared by the loop exit:
+    assert.equal(
+      manageTaskTool.currentTask,
+      null,
+      'orphaned task must be cleared on abnormal termination'
+    );
+    console.log(`[B5] loopId=${result.loopId} reason=${reason} orphan cleared; trace=${path}`);
+  } finally {
+    llm.close();
+  }
+}, { timeout: 20000 });

@@ -64,9 +64,35 @@ export async function processToolCallLoop(options) {
     terminalReason = _classifyLoopError(error);
     throw error;
   } finally {
+    // #178: a terminated loop must never strand an active task. Clear it here —
+    // the single exit choke point every path flows through (end_loop, repeat_limit,
+    // circuit_breaker, tool_failure_fallback, or cancellation).
+    clearOrphanedTask();
     interactionLogger.logLoopEvent(loopId, 'loop_ended', { reason: terminalReason });
     emitProcessStatus('end', callId, { reason: terminalReason });
   }
+}
+
+/**
+ * #178: drop orphaned manage_task state when a loop terminates.
+ *
+ * Called from the single exit choke point in processToolCallLoop's finally block,
+ * so every termination path (end_loop, repeat_limit, circuit_breaker,
+ * tool_failure_fallback, or cancellation) closes the task tracker instead of
+ * leaving currentTask stranded for a later run. Closes the §1.2 requirement that
+ * interrupted or failed loops never orphan task state.
+ *
+ * @returns {boolean} true if an active task was cleared
+ */
+function clearOrphanedTask() {
+  const manageTaskTool = toolRegistry.getTool('manage_task');
+  if (manageTaskTool?.currentTask) {
+    if (isDebugEnabled()) logger.debug('loop terminated; clearing orphaned task');
+    Hooks.callAll(SimulacrumHooks.TASK_FINISHED);
+    manageTaskTool.currentTask = null;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -409,14 +435,6 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   );
   if (endLoopResult) {
     if (isDebugEnabled()) logger.debug('end_loop tool detected; terminating loop');
-
-    // Auto-close task tracker if manage_task has an active task
-    const manageTaskTool = toolRegistry.getTool('manage_task');
-    if (manageTaskTool?.currentTask) {
-      if (isDebugEnabled()) logger.debug('end_loop: closing orphaned task tracker');
-      Hooks.callAll(SimulacrumHooks.TASK_FINISHED);
-      manageTaskTool.currentTask = null;
-    }
 
     return { action: 'break', reason: 'end_loop' };
   }
