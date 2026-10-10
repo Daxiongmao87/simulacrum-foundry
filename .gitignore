@@ -67,6 +67,7 @@ artifacts/test-results/
 # Additional test-related directories and files
 .foundry-system-cache/
 test-results/
+tests/integration/local/178-timelines/ # fault-injection loop trace output
 workspace/
 nohup.out
 

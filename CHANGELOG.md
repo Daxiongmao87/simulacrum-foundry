@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - bound AI requests with a cancellable request timeout so a wedged endpoint cannot stall the tool loop forever; user cancellation now also reaches the compaction summarization call (Fixes #178)
-- structural fix for #178 emit-path stalls: a successful non-terminal tool call's continuation turn is now persisted to the conversation BEFORE the fallible UI emit path runs, a throw in that emit path records a correlated `assistant_emit_fault` loop event without killing the loop (the turn is delivered/retried and can no longer vanish silently), and each loop's timeline is auto-captured to a per-loop user flag at `loop_ended` so every occurrence is durable without a manual export (#178)
 - preserve manual context limit across refresh for the selected model (Fixes #184) (#208)
 - preserve composer draft across sidebar re-renders (Fixes #206) (#207)
 - derive context-limit from primary meta.n_ctx not OpenRouter basename cross-reference (Fixes #185) (#203)
