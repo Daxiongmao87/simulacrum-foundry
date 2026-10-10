@@ -64,9 +64,35 @@ export async function processToolCallLoop(options) {
     terminalReason = _classifyLoopError(error);
     throw error;
   } finally {
+    // #178: a terminated loop must never strand an active task. Clear it here —
+    // the single exit choke point every path flows through (end_loop, repeat_limit,
+    // circuit_breaker, tool_failure_fallback, or cancellation).
+    clearOrphanedTask();
     interactionLogger.logLoopEvent(loopId, 'loop_ended', { reason: terminalReason });
     emitProcessStatus('end', callId, { reason: terminalReason });
   }
+}
+
+/**
+ * #178: drop orphaned manage_task state when a loop terminates.
+ *
+ * Called from the single exit choke point in processToolCallLoop's finally block,
+ * so every termination path (end_loop, repeat_limit, circuit_breaker,
+ * tool_failure_fallback, or cancellation) closes the task tracker instead of
+ * leaving currentTask stranded for a later run. Closes the §1.2 requirement that
+ * interrupted or failed loops never orphan task state.
+ *
+ * @returns {boolean} true if an active task was cleared
+ */
+function clearOrphanedTask() {
+  const manageTaskTool = toolRegistry.getTool('manage_task');
+  if (manageTaskTool?.currentTask) {
+    if (isDebugEnabled()) logger.debug('loop terminated; clearing orphaned task');
+    Hooks.callAll(SimulacrumHooks.TASK_FINISHED);
+    manageTaskTool.currentTask = null;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -167,6 +193,27 @@ async function _runLoopIteration(context) {
     const hasTools =
       Array.isArray(currentResponse.toolCalls) && currentResponse.toolCalls.length > 0;
 
+    // #178 B3 FIX (persist-before-emit): a content-bearing TEXT-ONLY response is the
+    // continuation turn a successful non-terminal tool call must produce. Persist it to
+    // the conversation store BEFORE the fallible UI emit path runs, so a throw in the
+    // emit path can never destroy the model's valid turn (a durable copy already exists).
+    // The text-only branch in _processLoopCycle skips re-saving when _persisted is set,
+    // so each distinct turn is saved exactly once.
+    if (hasContent && !hasTools) {
+      if (currentResponse.content !== context.lastPersistedContent) {
+        try {
+          await _persistTextTurn(currentResponse, context);
+          context.lastPersistedContent = currentResponse.content;
+        } catch (persistError) {
+          interactionLogger.logLoopEvent(context.loopId, 'turn_persist_fault', {
+            error: persistError.name,
+            message: persistError.message,
+          });
+          logger.warn('Continuation turn persistence failed; loop continues:', persistError);
+        }
+      }
+    }
+
     if (hasContent || hasTools) {
       await _notifyAssistantMessage(currentResponse, context);
     }
@@ -195,11 +242,21 @@ async function _runLoopIteration(context) {
 
         // Emit pending tool state via callback (Closed Loop)
         if (context.onToolPending) {
-          context.onToolPending({
-            toolCallId,
-            toolName,
-            justification,
-          });
+          // #178: the pending-tool UI path is fallible; a throw must not kill the loop.
+          try {
+            context.onToolPending({
+              toolCallId,
+              toolName,
+              justification,
+            });
+          } catch (pendingError) {
+            interactionLogger.logLoopEvent(context.loopId, 'tool_pending_emit_fault', {
+              toolName,
+              toolCallId,
+              error: pendingError.name,
+              message: pendingError.message,
+            });
+          }
         }
 
         // Emit hook for UI to render pending tool card (Backwards Compatibility / Observability)
@@ -284,10 +341,9 @@ async function _processLoopCycle(currentResponse, context, state) {
     // PERSIST FIX: Save the AI's text content as a visible message BEFORE adding correction.
     // This ensures the text is available on reload (live display already shows it via _notifyAssistantMessage).
     // Only save if there's actual text content (not just whitespace).
-    if (currentResponse.content && currentResponse.content.trim().length > 0) {
-      context.conversationManager.addMessage('assistant', currentResponse.content);
-      await context.conversationManager.save();
-    }
+    // #178 B3 FIX: the turn was already persisted at iteration start
+    // (persist-before-emit); this only covers responses that skip that path.
+    await _persistTextTurn(currentResponse, context);
 
     // Send comprehensive correction message with loop context and exit options
     const correctionMessage = `LOOP CONTEXT: You are currently in an autonomous tool execution loop. Text-only responses are rejected - you MUST respond with a tool call.
@@ -379,14 +435,6 @@ You cannot respond without a tool call. Either continue with the next tool in yo
   );
   if (endLoopResult) {
     if (isDebugEnabled()) logger.debug('end_loop tool detected; terminating loop');
-
-    // Auto-close task tracker if manage_task has an active task
-    const manageTaskTool = toolRegistry.getTool('manage_task');
-    if (manageTaskTool?.currentTask) {
-      if (isDebugEnabled()) logger.debug('end_loop: closing orphaned task tracker');
-      Hooks.callAll(SimulacrumHooks.TASK_FINISHED);
-      manageTaskTool.currentTask = null;
-    }
 
     return { action: 'break', reason: 'end_loop' };
   }
@@ -686,6 +734,48 @@ function _extractToolResponse(toolCalls) {
   return responses.join('\n\n');
 }
 
+// #178 B3 FIX: the assistant emit path (ChatHandler.handleToolResult: markdown render,
+// display formatting, permission UI, the onAssistantMessage callback) is fallible.
+// Returns true when the turn reached the UI; on a throw it records the correlated
+// `assistant_emit_fault` loop event and returns false so the loop can continue. The
+// turn itself was already persisted BEFORE this call, and `_emitted` stays unset so a
+// later iteration re-emits it and the ConversationEngine final-response path re-delivers
+// a faulted final turn.
+// #178 B3 FIX: persist a content-bearing text-only assistant turn exactly once
+// (deduplicated by content via the _persisted flag). Runs BEFORE the fallible
+// UI emit path so a throw there can never destroy the model's valid turn.
+async function _persistTextTurn(response, context) {
+  if (!response.content || response.content.trim().length === 0 || response._persisted) {
+    return;
+  }
+  context.conversationManager.addMessage('assistant', response.content);
+  await context.conversationManager.save();
+  response._persisted = true;
+}
+
+async function _emitAssistantTurn(response, content, context) {
+  try {
+    // Pass content (even if empty) to UI. SidebarEventHandlers/ChatHandler must handle empty accordingly.
+    await context.onToolResult({
+      role: 'assistant',
+      content: response.content || undefined,
+      _fromToolLoop: true,
+    });
+    return true;
+  } catch (emitError) {
+    interactionLogger.logLoopEvent(context.loopId, 'assistant_emit_fault', {
+      hasContent: Boolean(content),
+      error: emitError.name,
+      message: emitError.message,
+    });
+    logger.error('Assistant emit path failed; loop continues (turn already persisted)', {
+      loopId: context.loopId,
+      emitError,
+    });
+    return false;
+  }
+}
+
 async function _notifyAssistantMessage(response, context) {
   if (context.onToolResult && !response._parseError) {
     // Deduplicate identical content within the same loop to prevent UI spam
@@ -693,19 +783,20 @@ async function _notifyAssistantMessage(response, context) {
 
     // We emit if content is new OR if it's the first emission (even if empty) to serve as tool anchor
     if (content !== context.lastEmittedContent || !response._emitted) {
-      // Pass content (even if empty) to UI. SidebarEventHandlers/ChatHandler must handle empty accordingly.
-      await context.onToolResult({
-        role: 'assistant',
-        content: response.content || undefined,
-        _fromToolLoop: true,
-      });
-      interactionLogger.logLoopEvent(context.loopId, 'assistant_emitted', {
-        hasContent: Boolean(content),
-      });
+      // #178 B3 FIX: a throw in the emit path must not kill the loop (see _emitAssistantTurn).
+      const emitted = await _emitAssistantTurn(response, content, context);
+      if (emitted) {
+        interactionLogger.logLoopEvent(context.loopId, 'assistant_emitted', {
+          hasContent: Boolean(content),
+        });
+      }
       context.lastEmittedContent = content;
+      // Faulted turns stay UNEMITTED: that is the retry hook (re-emit on repeat, and the
+      // ConversationEngine final-response path re-delivers a faulted final turn).
+      response._emitted = emitted;
+    } else {
+      response._emitted = true;
     }
-    // Flag as emitted to prevent duplication in ConversationEngine
-    response._emitted = true;
   }
 }
 

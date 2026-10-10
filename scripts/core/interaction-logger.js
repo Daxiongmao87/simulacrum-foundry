@@ -35,6 +35,19 @@ class InteractionLogger {
     this._enabled = true; // Enabled by default
     this._maxEntries = 5000; // FIFO limit to prevent memory issues
     this._saveDebounceTimer = null;
+    // #178: per-occurrence loop timeline captures, written at loop_ended (additive;
+    // the existing debounced full-log user-flag save is untouched).
+    this._loopTimelines = new Map();
+  }
+
+  /**
+   * Get persistence key for a captured per-loop timeline (#178 auto-capture).
+   * @param {string} loopId
+   * @returns {string}
+   * @private
+   */
+  _getLoopTimelineFlagKey(loopId) {
+    return `loopTimeline:${game?.world?.id || 'unknown'}:${loopId}`;
   }
 
   /**
@@ -148,6 +161,63 @@ class InteractionLogger {
 
     // Trigger debounced save
     this._debouncedSave();
+
+    // #178: auto-capture the per-loopId timeline the moment the loop ends, so every
+    // occurrence is durable without a user-triggered export.
+    if (entry.type === EntryType.LOOP_EVENT && entry.event === 'loop_ended' && entry.loopId) {
+      this._captureLoopTimeline(entry);
+    }
+  }
+
+  /**
+   * Capture the complete loop timeline for one loopId into the registry and persist it
+   * to a per-loop user flag (fire-and-forget). Runs at loop_ended so the capture always
+   * includes the loop_ended entry itself. Failures are non-fatal.
+   * @param {object} endedEntry - The loop_ended entry being logged
+   * @private
+   */
+  _captureLoopTimeline(endedEntry) {
+    try {
+      const loopId = endedEntry.loopId;
+      if (this._loopTimelines.has(loopId)) return; // capture once per loop
+
+      const entries = this._entries.filter(
+        e => e.type === EntryType.LOOP_EVENT && e.loopId === loopId
+      );
+      const record = {
+        loopId,
+        reason: endedEntry.details?.reason ?? 'unknown',
+        capturedAt: new Date().toISOString(),
+        eventNames: entries.map(e => e.event),
+        entries,
+      };
+      this._loopTimelines.set(loopId, record);
+
+      if (typeof game !== 'undefined' && game?.user && typeof game.user.setFlag === 'function') {
+        game.user.setFlag('simulacrum', this._getLoopTimelineFlagKey(loopId), record).catch(e => {
+          logger.warn('Failed to persist captured loop timeline', e);
+        });
+      }
+    } catch (e) {
+      logger.warn('Failed to capture loop timeline at loop_ended', e);
+    }
+  }
+
+  /**
+   * Get the auto-captured timeline for one loopId (captured at loop_ended).
+   * @param {string} loopId
+   * @returns {object|null}
+   */
+  getCapturedLoopTimeline(loopId) {
+    return this._loopTimelines.get(loopId) ?? null;
+  }
+
+  /**
+   * Get all auto-captured loop timelines.
+   * @returns {Array<object>}
+   */
+  getCapturedLoopTimelines() {
+    return [...this._loopTimelines.values()];
   }
 
   /**
@@ -270,6 +340,7 @@ class InteractionLogger {
   async clear() {
     this._entries = [];
     this._sessionStart = new Date().toISOString();
+    this._loopTimelines.clear();
     await this.save();
     logger.info('Interaction log cleared');
   }
